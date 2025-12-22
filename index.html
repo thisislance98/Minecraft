@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel World - Minecraft Clone</title>
+    <link rel="stylesheet" href="/src/styles/index.css">
+</head>
+
+<body>
+    <div id="game-container"></div>
+
+    <div id="crosshair"></div>
+
+    <!-- Damage overlay for visual feedback -->
+    <div id="damage-overlay"></div>
+
+    <!-- HMR Update Notifications -->
+    <div id="hmr-notifications"></div>
+
+    <!-- Status Bars Container -->
+    <div id="status-bars">
+        <div id="health-bar">
+            <div id="health-hearts"></div>
+        </div>
+        <div id="hunger-bar">
+            <div id="hunger-drumsticks"></div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div id="hotbar">
+            <!-- Dynamically generated -->
+        </div>
+    </div>
+
+    <div id="inventory-screen" class="hidden">
+        <div class="inventory-container">
+            <div class="inventory-label">Crafting</div>
+            <div class="crafting-grid">
+                <!-- 2x2 Crafting preview placeholder -->
+                <div class="crafting-slot"></div>
+                <div class="crafting-slot"></div>
+                <div class="crafting-slot"></div>
+                <div class="crafting-slot"></div>
+                <div class="crafting-arrow">➜</div>
+                <div class="crafting-result"></div>
+            </div>
+
+            <div class="inventory-label">Inventory</div>
+            <div id="main-inventory-grid" class="inventory-grid">
+                <!-- Dynamically generated 27 slots -->
+            </div>
+
+            <div class="inventory-label">Hotbar</div>
+            <div id="hotbar-inventory-grid" class="inventory-grid">
+                <!-- Dynamically generated 9 slots -->
+            </div>
+        </div>
+    </div>
+
+    <div id="drag-icon" class="hidden"></div>
+
+    <div id="fps-counter">FPS: <span id="fps">0</span></div>
+    <button id="multiplayer-btn"
+        style="position: fixed; top: 10px; right: 200px; padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; cursor: pointer; z-index: 100;">Multiplayer</button>
+
+    <div id="debug">
+        <p>v1.0.520</p>
+        <p>Position: <span id="position">0, 0, 0</span></p>
+        <p>Blocks: <span id="block-count">0</span></p>
+    </div>
+
+    <!-- Toggleable Debug Panel for Performance Isolation -->
+    <div id="debug-panel" class="hidden">
+        <h3>Debug Settings</h3>
+        <label><input type="checkbox" id="dbg-animals" checked> Update Animals</label>
+        <label><input type="checkbox" id="dbg-chunks" checked> Update Chunks</label>
+        <label><input type="checkbox" id="dbg-env" checked> Day/Night Cycle</label>
+        <label><input type="checkbox" id="dbg-particles" checked> Particles (Fire/etc)</label>
+        <p class="hint">Press 'P' to toggle panel</p>
+    </div>
+
+    <div id="block-indicator">
+        Selected: <span id="selected-block">Grass</span>
+    </div>
+
+    <!-- AI Chat Side Panel -->
+    <div id="chat-panel" class="hidden">
+        <div class="chat-header">
+            <div class="chat-title">AI ASSISTANT</div>
+            <button id="close-chat">×</button>
+        </div>
+        <div id="chat-messages">
+            <!-- Messages will be added here -->
+            <div class="message ai">
+                <div class="message-content">Hello! How can I help you today? Press 'T' to toggle this panel.</div>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+            <button id="send-chat">Send</button>
+        </div>
+    </div>
+
+
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

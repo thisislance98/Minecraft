@@ -1,0 +1,7 @@
+USER REQUEST: ncaught (in promise) SecurityError: The user has exited the lock before this request was completed.
+
+INSTRUCTIONS:
+1. Analyze the request and the provided files: @src/game/Player.js @src/game/VoxelGame.jsx @src/controls/Controls.js @src/game/animals/Turtle.js @src/game/Studio.js
+2. YOU MUST APPLY THE CHANGES NOW using the @file edit syntax.
+3. DO NOT JUST TALK. PERFORM THE EDIT ON THE FILES.
+4. Return a VERY brief summary of what you actually changed.

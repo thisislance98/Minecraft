@@ -1,24 +1,36 @@
 import * as THREE from 'three';
-import { Chunk } from './Chunk.js';
-import { Player } from './Player.js';
-import { Agent } from './Agent.js';
-import { Inventory } from './Inventory.js';
-import { InventoryManager } from './InventoryManager.js';
-import { SpawnManager } from './SpawnManager.js';
-import { UIManager } from './UIManager.js';
-import { Arrow } from './Arrow.js';
-import { EntityManager } from './EntityManager.js';
-import { InputManager } from './InputManager.js';
-import { PhysicsManager } from './PhysicsManager.js';
-import { GameState } from './GameState.js';
+import { Chunk } from '../world/Chunk.js';
+import { Player } from './entities/Player.js';
+import { Agent } from './entities/Agent.js';
+import { Drop } from './entities/Drop.js';
+import { Inventory } from './ui/Inventory.js';
+import { InventoryManager } from './systems/InventoryManager.js';
+import { ItemManager } from './systems/ItemManager.js';
+import { SpawnManager } from './systems/SpawnManager.js';
+import { UIManager } from './systems/UIManager.js';
+import { Arrow } from './entities/projectiles/Arrow.js';
+import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
+import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
+import { LevitationProjectile } from './entities/projectiles/LevitationProjectile.js';
+import { FloatingBlock } from './entities/FloatingBlock.js';
+import { EntityManager } from './systems/EntityManager.js';
+import { InputManager } from './systems/InputManager.js';
+import { PhysicsManager } from './systems/PhysicsManager.js';
+import { GameState } from './core/GameState.js';
 import { WorldGenerator } from '../world/WorldGenerator.js';
-import { AssetManager } from './AssetManager.js';
-import { Environment } from './Environment.js';
-import { Studio } from './Studio.js';
-import { WeatherSystem } from './WeatherSystem.js';
-import { Dragon } from './Dragon.js';
-import { ColyseusManager } from './ColyseusManager.js';
-import { RemotePlayer } from './RemotePlayer.js';
+import { AssetManager } from './core/AssetManager.js';
+import { Environment } from './systems/Environment.js';
+import { Studio } from './systems/Studio.js';
+import { WeatherSystem } from './systems/WeatherSystem.js';
+import { Dragon } from './entities/animals/Dragon.js';
+import { ColyseusManager } from './systems/ColyseusManager.js';
+import { RemotePlayer } from './entities/RemotePlayer.js';
+import { WorldParticleSystem } from './systems/WorldParticleSystem.js';
+import { SoundManager } from './systems/SoundManager.js';
+import { StructureGenerator } from '../world/StructureGenerator.js';
+import { Config } from './core/Config.js';
+import { OmniProjectile } from './entities/projectiles/OmniProjectile.js';
+import { SpellSystem } from './systems/SpellSystem.js';
 
 export class VoxelGame {
     constructor() {
@@ -37,8 +49,8 @@ export class VoxelGame {
 
         // World data - chunk based
         this.chunks = new Map();
-        this.chunkSize = 16;
-        this.renderDistance = 4;
+        this.chunkSize = Config.WORLD.CHUNK_SIZE;
+        this.renderDistance = Config.WORLD.RENDER_DISTANCE;
         this.generatedChunks = new Set();
 
         // For raycasting - we need to track individual block positions
@@ -60,7 +72,8 @@ export class VoxelGame {
         this.blockMaterialIndices = this.assetManager.blockMaterialIndices;
 
         // Physics
-        this.gravity = 0.0064;
+        // Physics
+        this.gravity = Config.WORLD.GRAVITY;
 
         // Game State (Centralized)
         this.gameState = new GameState(this);
@@ -71,6 +84,7 @@ export class VoxelGame {
         // Sub-modules
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
+        this.itemManager = new ItemManager(this);
         this.inventory = new Inventory(this, this.inventoryManager); // Inventory is now UI
         this.player = new Player(this);
         this.agent = new Agent(this);
@@ -93,11 +107,15 @@ export class VoxelGame {
         this.studio = new Studio(this);
         this.animals = [];
         this.spawnManager = new SpawnManager(this);
+        this.worldParticleSystem = new WorldParticleSystem(this);
+        this.soundManager = new SoundManager(this);
+        this.soundManager.init();
+        this.spellSystem = new SpellSystem(this);
 
         this.spawnPlayer();
 
         this.camera.position.copy(this.player.position);
-        this.camera.position.y += 1.6; // Eye height
+        this.camera.position.y += Config.PLAYER.EYE_HEIGHT; // Eye height
 
         // State - Migrated to GameState
         // this.selectedBlock = 'grass';
@@ -164,6 +182,31 @@ export class VoxelGame {
         // Spawn Initial Animals
         this.spawnAnimals();
 
+        // Generate Castle near spawn
+        const castleX = Math.floor(this.spawnPoint.x) + 40;
+        const castleZ = Math.floor(this.spawnPoint.z);
+        const castleY = this.worldGen.getTerrainHeight(castleX, castleZ);
+
+        console.log(`Generating Castle at ${castleX}, ${castleY}, ${castleZ}`);
+
+        // We need an instance of StructureGenerator?
+        // WorldGenerator has one? No, StructureGenerator takes worldGenerator.
+        // It seems StructureGenerator is not instantiated in VoxelGame normally?
+        // It's usually called by WorldGenerator or Chunk?
+        // Let's check usage. 
+        // WorldGenerator uses StructureGenerator.
+        // But we want to manually place one.
+
+        // Quick fix: Instantiate one here just for this.
+        if (this.worldGen.structureGen) {
+            this.worldGen.structureGen.generateCastle(castleX, castleY, castleZ);
+        } else {
+            const sg = new StructureGenerator(this, this.worldGen);
+            sg.generateCastle(castleX, castleY, castleZ);
+            // Re-update chunks around castle
+            this.updateChunks();
+        }
+
         // Spawn some kangaroos near the player for immediate viewing
         this.spawnManager.spawnKangaroosNearPlayer();
 
@@ -179,6 +222,15 @@ export class VoxelGame {
 
         // Projectiles
         this.projectiles = [];
+
+        // Drops
+        this.drops = [];
+
+        // Shrunk Blocks
+        this.shrunkBlocks = [];
+
+        // Floating Blocks
+        this.floatingBlocks = [];
 
         // Start game loop
         this.lastTime = performance.now();
@@ -356,28 +408,20 @@ export class VoxelGame {
 
     onRightClickDown() {
         const item = this.inventory.getSelectedItem();
-        if (item && item.item === 'bow') {
-            console.log('Drawing bow...');
-            // In future: Start draw animation/timer
-            return true; // Handled
+        if (item && item.item) {
+            // Retrieve item ID
+            const itemId = item.item;
+            const handled = this.itemManager.handleItemDown(itemId);
+            if (handled) return true;
         }
         return false;
     }
 
     onRightClickUp() {
         const item = this.inventory.getSelectedItem();
-        if (item && item.item === 'bow') {
-            const camDir = new THREE.Vector3();
-            this.camera.getWorldDirection(camDir);
-
-            // Spawn slightly in front of head
-            const spawnPos = this.camera.position.clone().add(camDir.clone().multiplyScalar(0.5));
-            const velocity = camDir.clone().multiplyScalar(2.0); // Speed 2.0 (faster than animals?)
-            // Add slight arc up?
-            velocity.y += 0.1;
-
-            this.spawnArrow(spawnPos, velocity);
-            return true;
+        if (item && item.item) {
+            const handled = this.itemManager.handleItemUp(item.item);
+            if (handled) return true;
         }
         return false;
     }
@@ -387,6 +431,48 @@ export class VoxelGame {
         this.projectiles.push(arrow);
         this.scene.add(arrow.mesh);
         console.log('Arrow fired!');
+    }
+
+    spawnMagicProjectile(pos, vel) {
+        const projectile = new MagicProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Magic Fired!');
+    }
+
+    spawnShrinkProjectile(pos, vel) {
+        const projectile = new ShrinkProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Shrink Magic Fired!');
+    }
+
+    spawnLevitationProjectile(pos, vel) {
+        const projectile = new LevitationProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Levitation Magic Fired!');
+    }
+
+    spawnOmniProjectile(pos, vel, effects) {
+        const projectile = new OmniProjectile(this, pos, vel, effects);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Omni Magic Fired!');
+    }
+
+    spawnDrop(x, y, z, blockType) {
+        if (!blockType || blockType === 'air' || blockType === 'water') return;
+
+        // Leaf logic: Chance to drop
+        if (blockType.includes('leaves')) {
+            if (Math.random() > 0.2) return;
+        }
+
+        // Center the drop in the block
+        const drop = new Drop(this, x + 0.5, y + 0.5, z + 0.5, blockType);
+        this.drops.push(drop);
+        this.scene.add(drop.mesh);
     }
 
     getBlockKey(x, y, z) {
@@ -638,8 +724,11 @@ export class VoxelGame {
         const deltaTime = (now - this.lastTime) / 1000;
         this.lastTime = now;
 
+        // UI Update (Speech bubbles)
+        this.uiManager.update(deltaTime);
+
         if (this.controls.isLocked) {
-            this.player.update(this.controls.keys, deltaTime);
+            this.player.update(deltaTime);
             this.physicsManager.update();
 
             // Throttle chunk checking (expensive)
@@ -689,6 +778,40 @@ export class VoxelGame {
             }
         }
 
+        // Update Drops
+        for (let i = this.drops.length - 1; i >= 0; i--) {
+            const drop = this.drops[i];
+            const alive = drop.update(deltaTime);
+            if (!alive) {
+                this.scene.remove(drop.mesh);
+                this.drops.splice(i, 1);
+            }
+        }
+
+        // Update Shrunk Blocks
+        if (this.shrunkBlocks) {
+            for (let i = this.shrunkBlocks.length - 1; i >= 0; i--) {
+                const sb = this.shrunkBlocks[i];
+                const alive = sb.update(deltaTime);
+                if (!alive) {
+                    this.scene.remove(sb.mesh);
+                    this.shrunkBlocks.splice(i, 1);
+                }
+            }
+        }
+
+        // Update Floating Blocks
+        if (this.floatingBlocks) {
+            for (let i = this.floatingBlocks.length - 1; i >= 0; i--) {
+                const fb = this.floatingBlocks[i];
+                const alive = fb.update(deltaTime);
+                if (!alive) {
+                    this.scene.remove(fb.mesh);
+                    this.floatingBlocks.splice(i, 1);
+                }
+            }
+        }
+
         // Frustum culling for performance
         this.updateFrustumCulling();
 
@@ -699,6 +822,10 @@ export class VoxelGame {
 
         if (this.weatherSystem) {
             this.weatherSystem.update(deltaTime, this.player.position);
+        }
+
+        if (this.worldParticleSystem) {
+            this.worldParticleSystem.update(deltaTime, this.player.position);
         }
 
         // Animate water textures

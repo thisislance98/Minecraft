@@ -43,13 +43,7 @@ export class TerrainGenerator {
             desertFactor = 1;
         }
 
-        // River Factor
-        const riverNoise = Math.abs(this.noise.get2D(x, z, 0.002, 1));
-        const riverWidth = 0.02;
-        let riverFactor = 0;
-        if (riverNoise < riverWidth) {
-            riverFactor = (riverWidth - riverNoise) / riverWidth;
-        }
+
 
         // -- Combine --
         let height = baseNoise * 10 + 35; // Base height ~35
@@ -66,11 +60,42 @@ export class TerrainGenerator {
             height = height * (1 - mountainFactor) + mountainHeight * mountainFactor;
         }
 
-        // Apply Rivers (Carve down)
-        if (riverFactor > 0) {
-            // Carve down to sea level
-            const riverDepth = 10 * riverFactor;
-            height -= riverDepth;
+        // Apply Rivers (Carve down with Domain Warping)
+        // Domain Warp: Offset the coordinate lookup for natural winding
+        const warpX = this.noise.get2D(x, z, 0.005, 1) * 40; // Low freq warp
+        const warpZ = this.noise.get2D(z + 500, x + 500, 0.005, 1) * 40;
+
+        const riverNoise = Math.abs(this.noise.get2D(x + warpX, z + warpZ, 0.002, 1));
+        const riverWidth = 0.08; // Wider checking area for smoother transition
+        const deepRiverWidth = 0.01; // The actual deep water part
+
+        if (riverNoise < riverWidth) {
+            // Calculate river depth factor (0 at banks, 1 at center)
+            // Use smoothstart / squared for nicer curve
+            let riverFactor = (riverWidth - riverNoise) / riverWidth;
+
+            // Make center deeper and banks smoother
+            // riverFactor goes 0 -> 1. 
+            // Square it for a gentle ease-in from the banks (concave slope)
+            riverFactor = Math.pow(riverFactor, 2);
+
+            // Carve
+            // Max depth
+            const riverDepth = 25 * riverFactor;
+
+            // If we are in mountain, we carve deeper to ensure we hit water
+            // But let's just subtract relative to sea level mostly
+            // If terrain is very high (mountain), we need to carve A LOT to get to sea level (30)
+
+            // Logic: Target height for river center is slightly below sea level
+            // Current height could be anything.
+
+            // let's blend current height towards river bed height based on factor
+            const riverBedHeight = this.seaLevel - 5;
+
+            // simple subtraction might not be enough for mountains
+            // let's interpolate
+            height = height * (1 - riverFactor) + riverBedHeight * riverFactor;
         }
 
         return Math.floor(height);

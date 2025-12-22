@@ -37,15 +37,17 @@
 
     <div id="inventory-screen" class="hidden">
         <div class="inventory-container">
-            <div class="inventory-label">Crafting</div>
-            <div class="crafting-grid">
-                <!-- 2x2 Crafting preview placeholder -->
-                <div class="crafting-slot"></div>
-                <div class="crafting-slot"></div>
-                <div class="crafting-slot"></div>
-                <div class="crafting-slot"></div>
-                <div class="crafting-arrow">➜</div>
-                <div class="crafting-result"></div>
+            <div id="crafting-area">
+                <div class="inventory-label">Crafting</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="crafting-grid">
+                        <!-- Dynamically generated 9 slots -->
+                    </div>
+                    <div class="crafting-arrow">➜</div>
+                    <div class="crafting-result-container">
+                        <div class="crafting-result"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="inventory-label">Inventory</div>
@@ -67,7 +69,7 @@
         style="position: fixed; top: 10px; right: 200px; padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; cursor: pointer; z-index: 100;">Multiplayer</button>
 
     <div id="debug">
-        <p>v1.0.520</p>
+        <p>v1.0.522</p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>

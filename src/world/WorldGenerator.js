@@ -2,13 +2,14 @@ import { NoiseGenerator } from '../utils/NoiseGenerator.js';
 import { BiomeManager } from './BiomeManager.js';
 import { TerrainGenerator } from './TerrainGenerator.js';
 import { StructureGenerator } from './StructureGenerator.js';
+import { Config } from '../game/core/Config.js';
 
 export class WorldGenerator {
     constructor(game) {
         this.game = game;
         // Keep noise for structure generation (trees, etc)
         this.noise = new NoiseGenerator();
-        this.seaLevel = 30; // Global water level
+        this.seaLevel = Config.WORLD.SEA_LEVEL; // Global water level
 
         // Components
         this.biomeManager = new BiomeManager();
@@ -100,13 +101,13 @@ export class WorldGenerator {
                             // Let's rewrite for clarity and priority (rarest first)
 
                             const oreRand = Math.random();
-                            if (wy < 8 && oreRand < 0.005) { // 0.5% Diamond
+                            if (wy < 8 && oreRand < Config.GENERATION.ORE_DIAMOND) { // Diamond
                                 type = 'diamond_ore';
-                            } else if (wy < 15 && oreRand < 0.015) { // 1% Gold
+                            } else if (wy < 15 && oreRand < Config.GENERATION.ORE_GOLD) { // Gold
                                 type = 'gold_ore';
-                            } else if (wy < this.seaLevel && oreRand < 0.04) { // 2.5% Iron
+                            } else if (wy < this.seaLevel && oreRand < Config.GENERATION.ORE_IRON) { // Iron
                                 type = 'iron_ore';
-                            } else if (oreRand < 0.07) { // 3% Coal
+                            } else if (oreRand < Config.GENERATION.ORE_COAL) { // Coal
                                 type = 'coal_ore';
                             }
                         }

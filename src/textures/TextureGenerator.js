@@ -43,7 +43,12 @@ const palettes = {
     planks: ['#8a6543', '#9a7553', '#7a5533', '#6b4423'],
     painting: { frame: ['#3e2723', '#4e342e'], canvas: ['#ffffff', '#f0f0f0', '#e0e0e0', '#d0d0d0', '#c0c0c0'] },
     bed_top: { pillow: ['#ffffff', '#f0f0f0'], blanket: ['#d32f2f', '#c62828', '#b71c1c'] },
-    bed_side: { wood: ['#6b4423', '#7a5533'], blanket: ['#d32f2f', '#c62828'] }
+    bed_top: { pillow: ['#ffffff', '#f0f0f0'], blanket: ['#d32f2f', '#c62828', '#b71c1c'] },
+    bed_side: { wood: ['#6b4423', '#7a5533'], blanket: ['#d32f2f', '#c62828'] },
+    stone_brick: ['#696969', '#757575', '#575757'], // Darker gray bricks
+    bookshelf: { wood: ['#8a6543', '#6b4423'], pages: ['#f0f0f0', '#e0e0e0'], covers: ['#d32f2f', '#1976d2', '#388e3c', '#fbc02d', '#7b1fa2'] },
+    gold_block: ['#FFD700', '#FFC107', '#FFEA00', '#FDD835'],
+    tapestry: ['#880E4F', '#AD1457', '#C2185B'] // Deep reds/purples
 };
 
 export function generateTexture(type, size = 16) {
@@ -467,13 +472,118 @@ export function generateTexture(type, size = 16) {
             ctx.fillRect(0, 14, size, 2);
             break;
         }
+
+        case 'stone_brick':
+            ctx.fillStyle = '#696969';
+            ctx.fillRect(0, 0, size, size);
+            // Draw bricks (similar to brick but gray palette)
+            for (let row = 0; row < 4; row++) {
+                const offset = row % 2 === 0 ? 0 : 4;
+                for (let col = 0; col < 2; col++) {
+                    const bx = col * 8 + offset;
+                    const by = row * 4;
+                    ctx.fillStyle = palettes.stone_brick[Math.floor(seededRandom(seed++) * palettes.stone_brick.length)];
+                    ctx.fillRect(bx % size, by, 7, 3);
+                    // Mortar implicit by background
+                }
+            }
+            break;
+
+        case 'bookshelf': {
+            const { wood, pages, covers } = palettes.bookshelf;
+            // Wood Top/Bottom
+            ctx.fillStyle = wood[0];
+            ctx.fillRect(0, 0, size, size);
+            // Shelves
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, 7, size, 2);
+            ctx.fillRect(0, 14, size, 2);
+
+            // Books
+            for (let row = 0; row < 2; row++) {
+                const y = row * 7 + 2;
+                let x = 1;
+                while (x < size - 1) {
+                    const width = 2 + Math.floor(seededRandom(seed++) * 2); // 2 or 3 px wide
+                    if (x + width > size - 1) break;
+
+                    const color = covers[Math.floor(seededRandom(seed++) * covers.length)];
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x, y, width, 5);
+
+                    // Pages?
+                    if (width > 2) {
+                        ctx.fillStyle = pages[0];
+                        ctx.fillRect(x + 1, y + 1, width - 2, 3);
+                    }
+
+                    x += width + 1; // 1px gap
+                }
+            }
+            break;
+        }
+
+        case 'gold_block':
+            ctx.fillStyle = palettes.gold_block[0];
+            ctx.fillRect(0, 0, size, size);
+            // Shiny border
+            ctx.fillStyle = palettes.gold_block[1];
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, 0, 2, size);
+            ctx.fillStyle = palettes.gold_block[2];
+            ctx.fillRect(0, size - 2, size, 2);
+            ctx.fillRect(size - 2, 0, 2, size);
+            // Center shine
+            ctx.fillStyle = palettes.gold_block[3];
+            ctx.fillRect(4, 4, 8, 8);
+            break;
+
+        case 'tapestry': {
+            // Woven pattern
+            const colors = palettes.tapestry;
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(0, 0, size, size);
+
+            // Simple cross pattern
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(2, 2, size - 4, size - 4);
+
+            ctx.fillStyle = colors[2];
+            // Central emblem
+            ctx.fillRect(6, 6, 4, 4);
+            // Fringes at bottom
+            for (let i = 0; i < size; i += 2) {
+                ctx.fillRect(i, size - 2, 1, 2);
+            }
+            break;
+        }
+
+        case 'levitation_wand':
+        case 'wand':
+        case 'shrink_wand':
+            ctx.clearRect(0, 0, size, size);
+            // Stick
+            ctx.fillStyle = '#8B4513';
+            // Draw diagonal stick
+            for (let i = 0; i < 10; i++) {
+                ctx.fillRect(i + 4, size - (i + 4), 2, 2);
+            }
+            // Tip
+            if (type === 'levitation_wand') ctx.fillStyle = '#00FFFF'; // Cyan
+            else if (type === 'shrink_wand') ctx.fillStyle = '#00FF00'; // Green
+            else ctx.fillStyle = '#FF00FF'; // Magenta
+
+            // Draw tip at top right
+            ctx.fillRect(11, 2, 4, 4);
+            ctx.fillRect(12, 3, 2, 2);
+            break;
     }
 
     return canvas;
 }
 
 export function generateHotbarIcons() {
-    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass'];
+    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf'];
     blocks.forEach(block => {
         const canvas = document.getElementById(`slot-${block}`);
         if (canvas) {

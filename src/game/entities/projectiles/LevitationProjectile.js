@@ -28,12 +28,12 @@ export class LevitationProjectile {
 
         // Core
         const geometry = new THREE.SphereGeometry(0.2, 8, 8);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00FFFF }); // Cyan
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFFF00 }); // Yellow
         const sphere = new THREE.Mesh(geometry, material);
         group.add(sphere);
 
         // Glow
-        const light = new THREE.PointLight(0x00FFFF, 1, 5);
+        const light = new THREE.PointLight(0xFFFF00, 1, 5);
         group.add(light);
 
         return group;
@@ -71,7 +71,7 @@ export class LevitationProjectile {
 
     spawnTrailParticle() {
         const geo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xE0FFFF, transparent: true, opacity: 0.6 }); // Light Cyan
+        const mat = new THREE.MeshBasicMaterial({ color: 0xFFFFE0, transparent: true, opacity: 0.6 }); // Light Yellow
         const part = new THREE.Mesh(geo, mat);
 
         part.position.copy(this.position);
@@ -207,10 +207,10 @@ export class LevitationProjectile {
     }
 
     spawnExplosionParticles(pos) {
-        // Cyan sparkles
+        // Yellow sparkles
         const particleCount = 20;
         const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00FFFF });
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFFF00 });
 
         for (let i = 0; i < particleCount; i++) {
             const mesh = new THREE.Mesh(geometry, material);
@@ -253,7 +253,7 @@ class LevitationExplosion {
 
         const particleCount = 50;
         const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00FFFF, transparent: true });
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFFF00, transparent: true });
 
         for (let i = 0; i < particleCount; i++) {
             const mesh = new THREE.Mesh(geometry, material.clone());

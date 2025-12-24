@@ -166,6 +166,12 @@ export class OmniProjectile {
         if (hasLevitate) {
             this.levitateBlocks(center, radius);
         }
+
+        // 4. Special Effects (Tornado)
+        const hasTornado = this.effects.some(e => e.type === 'tornado');
+        if (hasTornado) {
+            this.game.spawnTornado(center);
+        }
     }
 
     applyEffectsToEntity(entity) {

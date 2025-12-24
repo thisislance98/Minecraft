@@ -6,8 +6,8 @@ export class InventoryManager {
     constructor(game) {
         this.game = game;
 
-        // 36 Slots: 0-8 Hotbar, 9-35 Storage
-        this.slots = new Array(36).fill(null).map(() => ({ item: null, count: 0, type: null }));
+        // 63 Slots: 0-8 Hotbar, 9-62 Storage (6 rows of 9)
+        this.slots = new Array(63).fill(null).map(() => ({ item: null, count: 0, type: null }));
         // Crafting Grid: 9 slots (100-108)
         this.craftingSlots = new Array(9).fill(null).map(() => ({ item: null, count: 0, type: null }));
         // Crafting Result: 1 slot (109)
@@ -45,11 +45,19 @@ export class InventoryManager {
         this.addItemToSlot(5, 'omni_wand', 1, 'wand');
 
         // Add some materials for testing
-        this.addItemToSlot(6, 'log', 10, 'block');
+        this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
         this.addItemToSlot(7, 'wood', 10, 'block');
-        this.addItemToSlot(8, 'stick', 10, 'item');
+        this.addItemToSlot(8, 'giant_wand', 1, 'wand');
         this.addItemToSlot(9, 'flying_broom', 1, 'flying_broom');
-        this.addItemToSlot(10, 'levitation_wand', 1, 'wand');
+        this.addItemToSlot(10, 'log', 10, 'block');
+        this.addItemToSlot(11, 'ride_wand', 1, 'ride_wand');
+        this.addItemToSlot(12, 'capture_wand', 1, 'wand');
+        this.addItemToSlot(13, 'trampoline', 64, 'block');
+        this.addItemToSlot(14, 'water_bucket', 16, 'water_bucket');
+        this.addItemToSlot(15, 'brick', 64, 'block');
+        this.addItemToSlot(16, 'glass', 64, 'block');
+        this.addItemToSlot(17, 'stick', 10, 'item');
+
     }
 
     // --- Slot Accessors for Crafting ---
@@ -57,14 +65,14 @@ export class InventoryManager {
     // Result Slot: 109
 
     getSlot(index) {
-        if (index >= 0 && index < 36) return this.slots[index];
+        if (index >= 0 && index < 63) return this.slots[index];
         if (index >= 100 && index < 109) return this.craftingSlots[index - 100];
         if (index === 109) return this.craftingResult;
         return null;
     }
 
     setSlot(index, slotData) {
-        if (index >= 0 && index < 36) {
+        if (index >= 0 && index < 63) {
             this.slots[index] = slotData;
         } else if (index >= 100 && index < 109) {
             this.craftingSlots[index - 100] = slotData;
@@ -87,7 +95,26 @@ export class InventoryManager {
 
     selectSlot(index) {
         if (index >= 0 && index < 9) {
+            // Deselect previous
+            const prevSlot = this.slots[this.selectedSlot];
+            if (prevSlot && prevSlot.item) {
+                const prevItemInstance = this.game.itemManager.getItem(prevSlot.item);
+                if (prevItemInstance && prevItemInstance.onDeselect) {
+                    prevItemInstance.onDeselect(this.game, this.game.player);
+                }
+            }
+
             this.selectedSlot = index;
+
+            // Select new
+            const newSlot = this.slots[this.selectedSlot];
+            if (newSlot && newSlot.item) {
+                const newItemInstance = this.game.itemManager.getItem(newSlot.item);
+                if (newItemInstance && newItemInstance.onSelect) {
+                    newItemInstance.onSelect(this.game, this.game.player);
+                }
+            }
+
             return true;
         }
         return false;

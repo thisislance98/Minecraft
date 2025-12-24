@@ -19,6 +19,7 @@ export class Player {
         this.speed = Config.PLAYER.SPEED;
         this.sprintMultiplier = Config.PLAYER.SPRINT_MULTIPLIER;
         this.jumpForce = Config.PLAYER.JUMP_FORCE;
+        this.isDead = false;
 
         // Health and Hunger
         this.health = Config.PLAYER.MAX_HEALTH;       // Max 20 (displayed as 10 hearts)
@@ -254,8 +255,11 @@ export class Player {
         this.createBow();
         this.createSword();
         this.createWand();
+        this.createLevitationWand();
         this.createShrinkWand();
+        this.createGrowthWand();
         this.createOmniWand();
+        this.createRideWand();
         this.createBroom();
         this.createFoodModels();
         this.updateHeldItemVisibility();
@@ -289,6 +293,34 @@ export class Player {
         this.wand.visible = false;
     }
 
+    createLevitationWand() {
+        const wandGroup = new THREE.Group();
+
+        // Handle (Stick)
+        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
+        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.renderOrder = 999;
+        handle.position.y = -0.2;
+        wandGroup.add(handle);
+
+        // Tip (Gem) - Yellow
+        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const tipMat = new THREE.MeshBasicMaterial({ color: 0xFFFF00, depthTest: false }); // Yellow
+        const tip = new THREE.Mesh(tipGeo, tipMat);
+        tip.renderOrder = 999;
+        tip.position.y = -0.42;
+        wandGroup.add(tip);
+
+        // Position handled by toolAttachment
+        wandGroup.position.set(0, 0, 0);
+        wandGroup.rotation.set(0, 0, 0);
+
+        this.toolAttachment.add(wandGroup);
+        this.levitationWand = wandGroup;
+        this.levitationWand.visible = false;
+    }
+
     createShrinkWand() {
         const wandGroup = new THREE.Group();
 
@@ -318,6 +350,30 @@ export class Player {
         this.shrinkWand.visible = false;
     }
 
+    createGrowthWand() {
+        const wandGroup = new THREE.Group();
+
+        // Handle (Stick)
+        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
+        const handleMat = new THREE.MeshLambertMaterial({ color: 0x3d2b1f, depthTest: false });
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.renderOrder = 999;
+        handle.position.y = -0.2;
+        wandGroup.add(handle);
+
+        // Tip (Gem) - Green
+        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const tipMat = new THREE.MeshBasicMaterial({ color: 0x00FF00, depthTest: false }); // Glowing Green
+        const tip = new THREE.Mesh(tipGeo, tipMat);
+        tip.renderOrder = 999;
+        tip.position.y = -0.42;
+        wandGroup.add(tip);
+
+        this.toolAttachment.add(wandGroup);
+        this.growthWand = wandGroup;
+        this.growthWand.visible = false;
+    }
+
     createOmniWand() {
         const wandGroup = new THREE.Group();
 
@@ -341,6 +397,34 @@ export class Player {
         this.toolAttachment.add(wandGroup);
         this.omniWand = wandGroup;
         this.omniWand.visible = false;
+    }
+
+    createRideWand() {
+        const wandGroup = new THREE.Group();
+
+        // Handle (Stick)
+        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
+        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.renderOrder = 999;
+        handle.position.y = -0.2;
+        wandGroup.add(handle);
+
+        // Tip (Leather/Saddle style)
+        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const tipMat = new THREE.MeshBasicMaterial({ color: 0x8B4513, depthTest: false }); // Saddle Brown
+        const tip = new THREE.Mesh(tipGeo, tipMat);
+        tip.renderOrder = 999;
+        tip.position.y = -0.42;
+        wandGroup.add(tip);
+
+        // Position handled by toolAttachment
+        wandGroup.position.set(0, 0, 0);
+        wandGroup.rotation.set(0, 0, 0);
+
+        this.toolAttachment.add(wandGroup);
+        this.rideWand = wandGroup;
+        this.rideWand.visible = false;
     }
 
     createBroom() {
@@ -532,8 +616,11 @@ export class Player {
         if (this.apple) this.apple.visible = itemType === 'apple';
         if (this.bread) this.bread.visible = itemType === 'bread';
         if (this.wand) this.wand.visible = itemType === 'wand';
+        if (this.levitationWand) this.levitationWand.visible = itemType === 'levitation_wand';
         if (this.shrinkWand) this.shrinkWand.visible = itemType === 'shrink_wand';
+        if (this.growthWand) this.growthWand.visible = itemType === 'growth_wand';
         if (this.omniWand) this.omniWand.visible = itemType === 'omni_wand';
+        if (this.rideWand) this.rideWand.visible = itemType === 'ride_wand';
         if (this.broom) {
             // Only show held broom if we are NOT flying
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
@@ -546,6 +633,9 @@ export class Player {
     }
 
     update(deltaTime) {
+        // Skip update if player is dead
+        if (this.isDead) return;
+
         const input = this.game.inputManager;
         const speed = this.speed * (input.isActionActive('SPRINT') ? this.sprintMultiplier : 1);
 
@@ -982,7 +1072,18 @@ export class Player {
     }
 
     onDeath() {
+        // Set player as dead (prevents movement/input)
+        this.isDead = true;
+
+        // Show death screen via UIManager
+        if (this.game.uiManager) {
+            this.game.uiManager.showDeathScreen();
+        }
+    }
+
+    respawn() {
         // Reset player state
+        this.isDead = false;
         this.health = this.maxHealth;
         this.hunger = this.maxHunger;
 
@@ -994,6 +1095,9 @@ export class Player {
             this.position.set(32, 80, 32);
             this.velocity.set(0, 0, 0);
         }
+
+        // Update HUD
+        this.updateStatusBars();
     }
 
     updateStatusBars() {
@@ -1209,7 +1313,8 @@ export class Player {
                 block.type === 'flower_red' || block.type === 'flower_yellow' ||
                 block.type === 'mushroom_red' || block.type === 'mushroom_brown' ||
                 block.type === 'long_grass' || block.type === 'fern' ||
-                block.type === 'flower_blue' || block.type === 'dead_bush') {
+                block.type === 'flower_blue' || block.type === 'dead_bush' ||
+                block.type === 'door_open') {
                 return false;
             }
             return true;
@@ -1224,6 +1329,19 @@ export class Player {
                 if (velY < 0) {
                     // Falling - check below feet
                     if (isSolid(pos.x + dx, newY, pos.z + dz)) {
+                        // Check for trampoline
+                        const block = this.game.getBlock(pos.x + dx, newY, pos.z + dz);
+                        if (block && block.type === 'trampoline') {
+                            // Bounce logic - Minimum threshold to avoid infinite jitter
+                            if (this.velocity.y < -0.2) {
+                                this.velocity.y = -this.velocity.y * 0.9; // 90% resilience
+                                this.highestY = pos.y; // Reset fall damage calculation
+                                canMoveY = false;
+                                this.onGround = false; // Do not land
+                                return;
+                            }
+                        }
+
                         canMoveY = false;
 
                         // Fall damage check
@@ -1261,6 +1379,40 @@ export class Player {
                 const checkX = velX > 0 ? newX + hw : newX - hw;
                 if (isSolid(checkX, pos.y + dy, pos.z + dz)) {
                     canMoveX = false;
+
+                    // Auto-jump (Step Assist) check
+                    // Only if we are on the ground (or was on ground recently?) 
+                    // Let's allow it if we are on the ground.
+                    if (this.onGround && dy < 1.0) { // Obstacle is low (foot level)
+                        // Check if we can step up (y + 1)
+                        // We need to check if the space at (newX, pos.y + 1) is free
+                        // And also (newX, pos.y + 2) for head clearance
+
+                        let canStepUp = true;
+
+                        // Check clearance at new position, raised by 1.1 (to clear block)
+                        const targetY = pos.y + 1.1;
+
+                        // Check body height at new position
+                        for (let checkDy = 0; checkDy < h; checkDy += 0.5) {
+                            if (isSolid(checkX, targetY + checkDy, pos.z + dz)) {
+                                canStepUp = false;
+                                break;
+                            }
+                        }
+
+                        if (canStepUp) {
+                            // Also check if we hit our head at CURRENT X,Z but higher Y?
+                            // No, assuming current X,Z is clear above.
+
+                            // Perform step up
+                            pos.y += 1.1; // Snap up
+                            canMoveX = true; // Re-enable movement
+                            // Don't set vertical velocity, just snap
+                            this.onGround = true; // Still on "ground"
+                            return; // Stop checking other collision points for this axis, we moved up
+                        }
+                    }
                 }
             }
         }
@@ -1276,6 +1428,26 @@ export class Player {
                 const checkZ = velZ > 0 ? newZ + hw : newZ - hw;
                 if (isSolid(pos.x + dx, pos.y + dy, checkZ)) {
                     canMoveZ = false;
+
+                    // Auto-jump (Step Assist) check Z
+                    if (this.onGround && dy < 1.0) {
+                        let canStepUp = true;
+                        const targetY = pos.y + 1.1;
+
+                        for (let checkDy = 0; checkDy < h; checkDy += 0.5) {
+                            if (isSolid(pos.x + dx, targetY + checkDy, checkZ)) {
+                                canStepUp = false;
+                                break;
+                            }
+                        }
+
+                        if (canStepUp) {
+                            pos.y += 1.1;
+                            canMoveZ = true;
+                            this.onGround = true;
+                            return;
+                        }
+                    }
                 }
             }
         }

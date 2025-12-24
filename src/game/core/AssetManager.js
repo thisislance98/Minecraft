@@ -57,7 +57,11 @@ export class AssetManager {
             'stone_brick': { hardness: 1.5 },
             'bookshelf': { hardness: 1.0 },
             'gold_block': { hardness: 3.0 },
-            'tapestry': { hardness: 0.1 }
+            'gold_block': { hardness: 3.0 },
+            'tapestry': { hardness: 0.1 },
+            'trampoline': { hardness: 0.8 },
+            'door_closed': { hardness: 1.0 },
+            'door_open': { hardness: 1.0 }
         };
     }
 
@@ -165,18 +169,32 @@ export class AssetManager {
         this.registerBlockMaterials('dead_bush', this.getOrCreateMat('dead_bush', true));
 
         // Castle Blocks
-        const stoneBrick = this.getOrCreateMat('stone_brick');
+        const stoneBrick = this.getOrCreateMat('stone_brick', false);
         this.registerBlockMaterials('stone_brick', stoneBrick);
 
-        const goldBlock = this.getOrCreateMat('gold_block');
+        const goldBlock = this.getOrCreateMat('gold_block', false);
         this.registerBlockMaterials('gold_block', goldBlock);
 
-        const tapestry = this.getOrCreateMat('tapestry');
+        const tapestry = this.getOrCreateMat('tapestry', false);
         this.registerBlockMaterials('tapestry', tapestry); // Maybe directional? For now consistent.
 
-        const bookshelfTop = this.getOrCreateMat('wood_top'); // Reuse wood top
-        const bookshelfSide = this.getOrCreateMat('bookshelf');
+        const bookshelfTop = this.getOrCreateMat('wood_top', false); // Reuse wood top
+        const bookshelfSide = this.getOrCreateMat('bookshelf', false);
         this.registerBlockMaterials('bookshelf', [bookshelfSide, bookshelfSide, bookshelfTop, bookshelfTop, bookshelfSide, bookshelfSide]);
+
+        // Trampoline
+        const trampolineTop = this.getOrCreateMat('trampoline_top');
+        const trampolineSide = this.getOrCreateMat('trampoline_side');
+        // Side, Side, Top, Bottom, Side, Side
+        // Use Side for bottom too? Or top for bottom? Frame (side) makes sense for bottom.
+        this.registerBlockMaterials('trampoline', [trampolineSide, trampolineSide, trampolineTop, trampolineSide, trampolineSide, trampolineSide]);
+
+        // Doors
+        const doorClosed = this.getOrCreateMat('door_closed');
+        this.registerBlockMaterials('door_closed', doorClosed);
+
+        const doorOpen = this.getOrCreateMat('door_open', true); // Transparent center
+        this.registerBlockMaterials('door_open', doorOpen);
 
         // Break Stages
         this.breakMaterials = [];

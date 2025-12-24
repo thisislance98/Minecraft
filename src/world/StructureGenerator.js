@@ -467,28 +467,28 @@ export class StructureGenerator {
 
         // Walls (Outer Keep)
         const wallHeight = 8;
-        this.buildWalls(startX, startY, startZ, width, depth, wallHeight, 'stone_brick');
+        this.buildWalls(startX, startY, startZ, width, depth, wallHeight, 'stone');
 
         // Towers at corners
         const towerSize = 5;
         const towerHeight = 12;
-        this.buildTower(startX, startY, startZ, towerSize, towerHeight, 'stone_brick'); // FL
-        this.buildTower(startX + width - towerSize, startY, startZ, towerSize, towerHeight, 'stone_brick'); // FR
-        this.buildTower(startX, startY, startZ + depth - towerSize, towerSize, towerHeight, 'stone_brick'); // BL
-        this.buildTower(startX + width - towerSize, startY, startZ + depth - towerSize, towerSize, towerHeight, 'stone_brick'); // BR
+        this.buildTower(startX, startY, startZ, towerSize, towerHeight, 'stone'); // FL
+        this.buildTower(startX + width - towerSize, startY, startZ, towerSize, towerHeight, 'stone'); // FR
+        this.buildTower(startX, startY, startZ + depth - towerSize, towerSize, towerHeight, 'stone'); // BL
+        this.buildTower(startX + width - towerSize, startY, startZ + depth - towerSize, towerSize, towerHeight, 'stone'); // BR
 
         // Central Keep
         const keepSize = 13;
         const keepHeight = 16;
         const keepX = startX + Math.floor((width - keepSize) / 2);
         const keepZ = startZ + Math.floor((depth - keepSize) / 2);
-        this.buildKeep(keepX, startY, keepZ, keepSize, keepHeight, 'stone_brick');
+        this.buildKeep(keepX, startY, keepZ, keepSize, keepHeight, 'stone');
 
         // Courtyard Decor
         this.decorateCourtyard(startX + towerSize, startY, startZ + towerSize, width - 2 * towerSize, depth - 2 * towerSize);
 
         // Entrance (Main Gate)
-        this.buildGate(startX + Math.floor(width / 2), startY, startZ, 'stone_brick');
+        this.buildGate(startX + Math.floor(width / 2), startY, startZ, 'stone');
     }
 
     buildWalls(x, y, z, width, depth, height, material) {
@@ -517,12 +517,15 @@ export class StructureGenerator {
             for (let j = 0; j < size; j++) {
                 // Walls
                 if (i === 0 || i === size - 1 || j === 0 || j === size - 1) {
+                    const isCorner = (i === 0 || i === size - 1) && (j === 0 || j === size - 1);
+                    const blockType = isCorner ? 'log' : material;
+
                     for (let h = 0; h < height; h++) {
-                        this.game.setBlock(x + i, y + h, z + j, material, true);
+                        this.game.setBlock(x + i, y + h, z + j, blockType, true);
                     }
                     // Battlement
                     if ((i + j) % 2 === 0) {
-                        this.game.setBlock(x + i, y + height, z + j, material, true);
+                        this.game.setBlock(x + i, y + height, z + j, blockType, true);
                     }
                 } else {
                     // Floor at top
@@ -543,15 +546,19 @@ export class StructureGenerator {
 
                     // Walls
                     if (i === 0 || i === size - 1 || j === 0 || j === size - 1) {
-                        // Windows
-                        if (h > 2 && h < height - 2 && (h % 4) === 2 && (i > 2 && i < size - 2 || j > 2 && j < size - 2)) {
-                            if ((i === size / 2 || j === size / 2)) continue; // Don't break center
-                            if (Math.random() < 0.3) {
-                                this.game.setBlock(wx, wy, wz, 'glass', true);
-                                continue;
-                            }
+                        // Check if this is a window position
+                        const isWindowZone = h > 2 && h < height - 2 && (h % 4) === 2 && (i > 2 && i < size - 2 || j > 2 && j < size - 2);
+                        // Check if this is the center column (no windows here)
+                        const isCenterColumn = (i === Math.floor(size / 2) || j === Math.floor(size / 2));
+                        const isCorner = (i === 0 || i === size - 1) && (j === 0 || j === size - 1);
+
+                        if (isCorner) {
+                            this.game.setBlock(wx, wy, wz, 'log', true);
+                        } else if (isWindowZone && !isCenterColumn && Math.random() < 0.3) {
+                            this.game.setBlock(wx, wy, wz, 'glass', true);
+                        } else {
+                            this.game.setBlock(wx, wy, wz, material, true);
                         }
-                        this.game.setBlock(wx, wy, wz, material, true);
                     }
                     // Floors
                     else if (h === 0 || h === 5 || h === 10 || h === height) {

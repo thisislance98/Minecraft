@@ -48,7 +48,12 @@ const palettes = {
     stone_brick: ['#696969', '#757575', '#575757'], // Darker gray bricks
     bookshelf: { wood: ['#8a6543', '#6b4423'], pages: ['#f0f0f0', '#e0e0e0'], covers: ['#d32f2f', '#1976d2', '#388e3c', '#fbc02d', '#7b1fa2'] },
     gold_block: ['#FFD700', '#FFC107', '#FFEA00', '#FDD835'],
-    tapestry: ['#880E4F', '#AD1457', '#C2185B'] // Deep reds/purples
+    tapestry: ['#880E4F', '#AD1457', '#C2185B'], // Deep reds/purples
+    trampoline_top: ['#2E8B57', '#3CB371', '#228B22'], // SeaGreen, MediumSeaGreen, ForestGreen
+    trampoline_side: ['#2F4F4F', '#4682B4', '#2E8B57'], // DarkSlateGray (frame), SteelBlue/Green
+    snow: ['#FFFFFF', '#F0F8FF', '#E8E8E8', '#F5F5F5'], // Various shades of white
+    door_closed: { wood: ['#8B4513', '#A0522D'], handle: ['#C0C0C0', '#808080'] }, // Wood door with handle
+    door_open: { frame: ['#8B4513', '#A0522D'] } // Just the frame
 };
 
 export function generateTexture(type, size = 16) {
@@ -475,7 +480,7 @@ export function generateTexture(type, size = 16) {
 
         case 'stone_brick':
             ctx.fillStyle = '#696969';
-            ctx.fillRect(0, 0, size, size);
+            ctx.fillRect(0, 0, size, size); // Ensure opaque background
             // Draw bricks (similar to brick but gray palette)
             for (let row = 0; row < 4; row++) {
                 const offset = row % 2 === 0 ? 0 : 4;
@@ -577,13 +582,106 @@ export function generateTexture(type, size = 16) {
             ctx.fillRect(11, 2, 4, 4);
             ctx.fillRect(12, 3, 2, 2);
             break;
+
+        case 'trampoline_top':
+            // Dark frame
+            ctx.fillStyle = '#2F4F4F';
+            ctx.fillRect(0, 0, size, size);
+            // Bouncy center (Green mesh)
+            ctx.fillStyle = palettes.trampoline_top[0];
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            // Mesh pattern
+            ctx.fillStyle = palettes.trampoline_top[1];
+            for (let i = 2; i < size - 2; i += 2) {
+                ctx.fillRect(i, 2, 1, size - 4);
+                ctx.fillRect(2, i, size - 4, 1);
+            }
+            // Center target (Bullseye-ish)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(7, 7, 2, 2);
+            ctx.globalAlpha = 1.0;
+            break;
+
+        case 'trampoline_side':
+            // Frame look
+            ctx.fillStyle = palettes.trampoline_side[0]; // Dark frame
+            ctx.fillRect(0, 0, size, size);
+            // Detail (Side of the mesh)
+            ctx.fillStyle = palettes.trampoline_side[2]; // Greenish side
+            ctx.fillRect(2, 4, size - 4, 4);
+            // Legs/Supports?
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(2, 12, 1, 4);
+            ctx.fillRect(13, 12, 1, 4);
+            break;
+
+        case 'snow':
+            // White snow with subtle variations
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.snow[Math.floor(seededRandom(seed++) * palettes.snow.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add some sparkle/shine
+            ctx.fillStyle = '#FFFFFF';
+            for (let i = 0; i < 8; i++) {
+                const sx = Math.floor(seededRandom(seed++) * size);
+                const sy = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(sx, sy, 1, 1);
+            }
+            break;
+
+        case 'door_closed': {
+            const { wood, handle } = palettes.door_closed;
+            // Background
+            ctx.fillStyle = wood[0];
+            ctx.fillRect(0, 0, size, size);
+            // Panels
+            ctx.fillStyle = wood[1];
+            ctx.fillRect(2, 2, 5, 5);
+            ctx.fillRect(9, 2, 5, 5);
+            ctx.fillRect(2, 9, 5, 5);
+            ctx.fillRect(9, 9, 5, 5);
+            // Handle
+            ctx.fillStyle = handle[0];
+            ctx.fillRect(12, 8, 2, 2);
+            break;
+        }
+
+        case 'door_open': {
+            const { frame } = palettes.door_open;
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = frame[0];
+            // Frame only
+            ctx.fillRect(0, 0, 2, size); // Left
+            ctx.fillRect(size - 2, 0, 2, size); // Right
+            ctx.fillRect(0, 0, size, 2); // Top
+            // Optional: Threshold?
+            break;
+        }
+
+        default:
+            // Fallback: Generate a visible debug texture (magenta/pink checkered)
+            // This makes missing textures obvious rather than pure black
+            console.warn(`TextureGenerator: Unknown texture type '${type}', using fallback`);
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    // Checkered magenta/pink pattern
+                    const isLight = (x + y) % 2 === 0;
+                    ctx.fillStyle = isLight ? '#FF00FF' : '#FF69B4';
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
     }
 
     return canvas;
 }
 
 export function generateHotbarIcons() {
-    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf'];
+    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf', 'door_closed'];
     blocks.forEach(block => {
         const canvas = document.getElementById(`slot-${block}`);
         if (canvas) {

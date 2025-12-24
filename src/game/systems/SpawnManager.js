@@ -5,7 +5,7 @@ import {
     Deer, Giraffe, Fish, Turtle, Duck, Squirrel, Monkey, Reindeer, Sheep,
     Goat, Turkey, Mouse, Snake, Zombie, Skeleton, Enderman, Creeper, Kangaroo, Pugasus, Cow, Snowman, Owl, SantaClaus, Unicorn,
     Panda, Camel, Snail, Fox, FennecFox,
-    Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake
+    Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever
 } from '../AnimalRegistry.js';
 /**
  * SpawnManager handles all animal spawning logic.
@@ -37,7 +37,8 @@ export class SpawnManager {
             ],
             BEACH: [
                 { class: Turtle, weight: 0.3, packSize: [1, 2] },
-                { class: Duck, weight: 0.3, packSize: [2, 4] }
+                { class: Duck, weight: 0.3, packSize: [2, 4] },
+                { class: Flamingo, weight: 0.3, packSize: [2, 5] }
             ],
             PLAINS: [
                 { class: Horse, weight: 0.25, packSize: [3, 6] },
@@ -56,7 +57,11 @@ export class SpawnManager {
                 { class: Fox, weight: 0.1, packSize: [1, 2] },
                 { class: Ladybug, weight: 0.15, packSize: [3, 6] },
                 { class: Gymnast, weight: 0.05, packSize: [1, 2] },
-                { class: Raccoon, weight: 0.08, packSize: [1, 2] }
+                { class: Gymnast, weight: 0.05, packSize: [1, 2] },
+                { class: Raccoon, weight: 0.08, packSize: [1, 2] },
+                { class: Raccoon, weight: 0.08, packSize: [1, 2] },
+                { class: WienerDog, weight: 0.15, packSize: [2, 3] },
+                { class: GoldenRetriever, weight: 0.2, packSize: [1, 2] }
             ],
             FOREST: [
                 { class: Wolf, weight: 0.05, packSize: [2, 4] },
@@ -86,7 +91,9 @@ export class SpawnManager {
                 { class: Fox, weight: 0.08, packSize: [1, 3] },
                 { class: Ladybug, weight: 0.1, packSize: [2, 5] },
                 { class: Toucan, weight: 0.08, packSize: [2, 4] },
-                { class: Raccoon, weight: 0.08, packSize: [1, 3] }
+                { class: Toucan, weight: 0.08, packSize: [2, 4] },
+                { class: Raccoon, weight: 0.08, packSize: [1, 3] },
+                { class: GoldenRetriever, weight: 0.1, packSize: [1, 2] }
             ],
             JUNGLE: [
                 { class: Monkey, weight: 0.3, packSize: [3, 6] },
@@ -97,7 +104,8 @@ export class SpawnManager {
                 { class: Snake, weight: 0.2, packSize: [2, 4] },
                 { class: Panda, weight: 0.15, packSize: [1, 2] },
                 { class: Snail, weight: 0.15, packSize: [2, 5] },
-                { class: Toucan, weight: 0.25, packSize: [3, 5] }
+                { class: Toucan, weight: 0.25, packSize: [3, 5] },
+                { class: Flamingo, weight: 0.1, packSize: [2, 4] }
             ],
             DESERT: [
                 { class: Bunny, weight: 0.3, packSize: [1, 3] },
@@ -137,7 +145,11 @@ export class SpawnManager {
             { class: Lampost, weight: 0.04, packSize: [1, 1], biomes: ['PLAINS', 'FOREST', 'SNOW'] }, // Walking Lampost (Narnia vibes)
             { class: Pumpkin, weight: 0.05, packSize: [3, 5], biomes: ['FOREST', 'PLAINS'] }, // Flying Pumpkins
             { class: Lorax, weight: 0.1, packSize: [1, 1], biomes: ['FOREST'] }, // Speaks for the trees!
-            { class: Snowflake, weight: 0.05, packSize: [1, 2], biomes: ['SNOW', 'MOUNTAIN'] }
+            { class: Snowflake, weight: 0.05, packSize: [1, 2], biomes: ['SNOW', 'MOUNTAIN'] },
+            { class: Chimera, weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
+            { class: Chimera, weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
+            { class: WienerDog, weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'DESERT'] },
+            { class: GoldenRetriever, weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] }
         ];
 
         // Hostile mobs (spawn always now for testing)

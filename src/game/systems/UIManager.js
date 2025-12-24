@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DebugPanel } from '../ui/DebugPanel.js';
+import { IdeasButton } from '../ui/IdeasButton.js';
 
 /**
  * UIManager centralizes all HUD/UI updates.
@@ -17,6 +18,9 @@ export class UIManager {
 
         // Debug panel
         this.debugPanel = new DebugPanel(game);
+
+        // Ideas Button
+        this.ideasButton = new IdeasButton(game);
 
         // Chat button
         this.setupChatListener();
@@ -58,7 +62,7 @@ export class UIManager {
         btn.textContent = isMuted ? '🔇' : '🔊';
 
         btn.style.cssText = `
-            position: fixed; top: 10px; right: 10px;
+            position: fixed; top: 10px; right: 80px;
             background: rgba(0,0,0,0.6); color: #fff;
             border: 1px solid rgba(255,255,255,0.2);
             padding: 8px 12px; border-radius: 4px;
@@ -217,6 +221,27 @@ export class UIManager {
             document.body.appendChild(taskList);
         }
 
+        // Suggestions Container
+        const suggestionsDiv = document.createElement('div');
+        suggestionsDiv.id = 'chat-suggestions';
+        suggestionsDiv.style.cssText = `
+            display: flex; gap: 8px; padding: 10px; overflow-x: auto;
+            white-space: nowrap; scrollbar-width: none;
+            border-top: 1px solid rgba(0, 255, 204, 0.2);
+            background: rgba(0, 0, 0, 0.2);
+        `;
+        // Insert before input container, but after task list (or before it? Order implies tasks above suggestions usually)
+        // Let's put it above the input container
+        if (this.chatPanel) {
+            const inputContainer = this.chatPanel.querySelector('.chat-input-container');
+            if (inputContainer) {
+                this.chatPanel.insertBefore(suggestionsDiv, inputContainer);
+            } else {
+                this.chatPanel.appendChild(suggestionsDiv);
+            }
+        }
+        this.suggestionsDiv = suggestionsDiv;
+
         this.taskListDiv = taskList;
         this.taskItemsDiv = taskList.querySelector('#task-items');
     }
@@ -364,8 +389,13 @@ export class UIManager {
     }
 
     updateTask(taskId, status, message) {
+        console.log('[UIManager] updateTask called:', { taskId, status, message });
         const taskEl = document.getElementById(taskId);
-        if (!taskEl) return;
+        if (!taskEl) {
+            console.warn('[UIManager] Task element not found:', taskId);
+            return;
+        }
+        console.log('[UIManager] Found task element, updating to status:', status);
 
         const task = this.tasks.find(t => t.id === taskId);
         if (task) task.status = status;
@@ -391,6 +421,88 @@ export class UIManager {
                 this.tasks = [];
             }, 3000);
         }
+    }
+
+    /**
+     * Show a prominent refresh prompt when changes require browser reload
+     */
+    showRefreshPrompt() {
+        // Remove existing prompt if any
+        const existing = document.getElementById('refresh-prompt');
+        if (existing) existing.remove();
+
+        const prompt = document.createElement('div');
+        prompt.id = 'refresh-prompt';
+        prompt.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 20, 60, 0.95));
+            border: 2px solid #ff9900;
+            border-radius: 16px;
+            padding: 30px 40px;
+            z-index: 3000;
+            text-align: center;
+            font-family: 'VT323', monospace;
+            box-shadow: 0 0 30px rgba(255, 153, 0, 0.3);
+            animation: pulse-glow 2s ease-in-out infinite;
+        `;
+
+        prompt.innerHTML = `
+            <style>
+                @keyframes pulse-glow {
+                    0%, 100% { box-shadow: 0 0 30px rgba(255, 153, 0, 0.3); }
+                    50% { box-shadow: 0 0 50px rgba(255, 153, 0, 0.5); }
+                }
+            </style>
+            <div style="font-size: 48px; margin-bottom: 15px;">🔄</div>
+            <h2 style="color: #ff9900; margin: 0 0 10px 0; font-size: 28px;">Refresh Required</h2>
+            <p style="color: #ccc; margin: 0 0 20px 0; font-size: 18px;">
+                Some changes require a browser refresh to take effect.
+            </p>
+            <button id="refresh-now-btn" style="
+                background: linear-gradient(135deg, #ff9900, #ff6600);
+                border: none;
+                color: white;
+                padding: 12px 30px;
+                font-size: 20px;
+                font-family: 'VT323', monospace;
+                border-radius: 8px;
+                cursor: pointer;
+                margin-right: 10px;
+                transition: all 0.2s;
+            ">Refresh Now</button>
+            <button id="refresh-later-btn" style="
+                background: transparent;
+                border: 1px solid #666;
+                color: #aaa;
+                padding: 12px 20px;
+                font-size: 18px;
+                font-family: 'VT323', monospace;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.2s;
+            ">Later</button>
+        `;
+
+        document.body.appendChild(prompt);
+
+        // Button handlers
+        document.getElementById('refresh-now-btn').onclick = () => {
+            window.location.reload();
+        };
+
+        document.getElementById('refresh-later-btn').onclick = () => {
+            prompt.remove();
+        };
+
+        // Auto-dismiss after 30 seconds
+        setTimeout(() => {
+            if (document.getElementById('refresh-prompt')) {
+                prompt.remove();
+            }
+        }, 30000);
     }
 
     // --- Multiplayer UI ---
@@ -538,6 +650,51 @@ export class UIManager {
         if (text && this.game.agent) {
             this.game.agent.sendTextMessage(text);
             this.chatInput.value = '';
+            // Clear suggestions on sending a message? Maybe desirable.
+            this.clearSuggestions();
+        }
+    }
+
+    showSuggestions(suggestions) {
+        if (!this.suggestionsDiv) return;
+
+        this.suggestionsDiv.innerHTML = '';
+        this.suggestionsDiv.style.display = 'flex';
+
+        suggestions.forEach(text => {
+            const btn = document.createElement('button');
+            btn.textContent = text;
+            btn.style.cssText = `
+                background: rgba(0, 255, 204, 0.1);
+                border: 1px solid #00ffcc;
+                color: #00ffcc;
+                padding: 5px 10px;
+                border-radius: 15px;
+                cursor: pointer;
+                font-family: 'VT323', monospace;
+                font-size: 14px;
+                transition: all 0.2s;
+            `;
+            btn.onmouseover = () => btn.style.background = 'rgba(0, 255, 204, 0.3)';
+            btn.onmouseout = () => btn.style.background = 'rgba(0, 255, 204, 0.1)';
+
+            btn.onclick = () => {
+                if (this.game.agent) {
+                    this.game.agent.sendTextMessage(text);
+                    this.clearSuggestions();
+                }
+            };
+            this.suggestionsDiv.appendChild(btn);
+        });
+
+        // Auto-scroll chat to make room if needed? 
+        // The flex container handles itself.
+    }
+
+    clearSuggestions() {
+        if (this.suggestionsDiv) {
+            this.suggestionsDiv.innerHTML = '';
+            this.suggestionsDiv.style.display = 'none';
         }
     }
 
@@ -564,10 +721,61 @@ export class UIManager {
 
         if (show) {
             this.chatPanel.classList.remove('hidden');
-            this.chatInput.focus();
         } else {
             this.chatPanel.classList.add('hidden');
             this.chatInput.blur();
+        }
+    }
+
+    focusChatInput() {
+        if (this.chatInput) {
+            this.chatInput.focus();
+        }
+    }
+
+    blurChatInput() {
+        if (this.chatInput) {
+            this.chatInput.blur();
+        }
+    }
+
+    updateChatModeIndicator(isTypingMode) {
+        // Create or update a small indicator showing current mode
+        if (!this.chatModeIndicator) {
+            const indicator = document.createElement('div');
+            indicator.id = 'chat-mode-indicator';
+            indicator.style.cssText = `
+                position: absolute;
+                top: 8px;
+                right: 50px;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-family: 'VT323', monospace;
+                font-size: 14px;
+                z-index: 1001;
+            `;
+            if (this.chatPanel) {
+                this.chatPanel.style.position = 'relative'; // Ensure positioning works
+                this.chatPanel.appendChild(indicator);
+            }
+            this.chatModeIndicator = indicator;
+        }
+
+        if (isTypingMode) {
+            this.chatModeIndicator.textContent = '💬 Typing (Tab to move)';
+            this.chatModeIndicator.style.background = 'rgba(0, 255, 204, 0.3)';
+            this.chatModeIndicator.style.color = '#00ffcc';
+        } else {
+            this.chatModeIndicator.textContent = '🎮 Moving (Tab to type)';
+            this.chatModeIndicator.style.background = 'rgba(255, 200, 0, 0.3)';
+            this.chatModeIndicator.style.color = '#ffc800';
+        }
+    }
+
+    removeChatModeIndicator() {
+        if (this.chatModeIndicator) {
+            this.chatModeIndicator.remove();
+            this.chatModeIndicator = null;
         }
     }
 
@@ -745,6 +953,71 @@ export class UIManager {
             }
         }
     }
+
+    // --- Omni Wand Spell Selector ---
+
+    createSpellSelector() {
+        if (this.spellSelector) return;
+        const div = document.createElement('div');
+        div.id = 'spell-selector';
+        div.style.cssText = `
+            position: fixed; right: 20px; top: 50%; transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #a0522d;
+            border-radius: 8px;
+            padding: 10px;
+            color: white;
+            font-family: monospace;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 150px;
+            z-index: 1000;
+        `;
+        document.body.appendChild(div);
+        this.spellSelector = div;
+    }
+
+    updateSpellSelector(spells, currentIndex) {
+        if (!this.spellSelector) this.createSpellSelector();
+        this.spellSelector.innerHTML = '';
+
+        // Header
+        const title = document.createElement('div');
+        title.textContent = 'Spells (Press R)';
+        title.style.cssText = 'text-align: center; border-bottom: 1px solid #777; margin-bottom: 5px; padding-bottom: 5px; color: #ffd700; font-weight: bold;';
+        this.spellSelector.appendChild(title);
+
+        if (!spells || spells.length === 0) {
+            const el = document.createElement('div');
+            el.textContent = "No spells";
+            el.style.color = "#aaa";
+            this.spellSelector.appendChild(el);
+            return;
+        }
+
+        spells.forEach((spell, index) => {
+            const el = document.createElement('div');
+            el.textContent = spell.name;
+            el.style.cssText = `
+                padding: 5px;
+                background: ${index === currentIndex ? 'rgba(255, 215, 0, 0.3)' : 'transparent'};
+                border: 1px solid ${index === currentIndex ? '#ffd700' : 'transparent'};
+                border-radius: 4px;
+            `;
+            if (index === currentIndex) {
+                el.textContent = '> ' + spell.name;
+            }
+            this.spellSelector.appendChild(el);
+        });
+    }
+
+    toggleSpellSelector(show) {
+        if (!this.spellSelector && show) this.createSpellSelector();
+        if (this.spellSelector) {
+            this.spellSelector.style.display = show ? 'flex' : 'none';
+        }
+    }
     // --- Spell Creator UI ---
 
     createSpellCreator() {
@@ -818,12 +1091,79 @@ export class UIManager {
         const text = this.spellInput.value.trim();
         if (!text) return;
 
-        const spell = this.game.spellSystem.parse(text);
-        this.currentWandItem.addSpell(spell);
+        // Use AI to create the spell
+        if (this.game.agent) {
+            const prompt = `Create a new spell for the OmniWandItem.js based on this description: "${text}". Add it to the default spells list in the constructor.`;
+            this.game.agent.sendTextMessage(prompt);
+            this.closeSpellCreator();
+            this.addChatMessage('system', 'Request sent to AI Agent...');
+        } else {
+            console.error("No agent found");
+            this.addChatMessage('system', "Error: AI Agent not found.");
+        }
+    }
 
-        this.currentWandItem.currentSpellIndex = this.currentWandItem.spells.length - 1; // Select it
+    // --- Death Screen ---
 
-        this.addChatMessage('system', `Spell '${spell.name}' created!`);
-        this.closeSpellCreator();
+    createDeathScreen() {
+        if (this.deathScreen) return;
+
+        const screen = document.createElement('div');
+        screen.id = 'death-screen';
+        screen.className = 'hidden';
+        screen.innerHTML = `
+            <div class="death-title">YOU DIED</div>
+            <div class="death-subtitle">Your adventure has come to an end...</div>
+            <button class="death-restart-btn" id="respawn-btn">RESPAWN</button>
+            <div class="death-hint">Press [SPACE] or click to respawn</div>
+        `;
+
+        document.body.appendChild(screen);
+        this.deathScreen = screen;
+
+        // Respawn button click handler
+        const respawnBtn = screen.querySelector('#respawn-btn');
+        respawnBtn.addEventListener('click', () => this.handleRespawn());
+
+        // Keyboard handler for space to respawn
+        this.deathKeyHandler = (e) => {
+            if (e.code === 'Space' && this.deathScreen && !this.deathScreen.classList.contains('hidden')) {
+                e.preventDefault();
+                this.handleRespawn();
+            }
+        };
+        document.addEventListener('keydown', this.deathKeyHandler);
+    }
+
+    showDeathScreen() {
+        if (!this.deathScreen) this.createDeathScreen();
+
+        this.deathScreen.classList.remove('hidden');
+        // Force a reflow to restart animation
+        this.deathScreen.offsetHeight;
+
+        // Unlock pointer so player can click the button
+        if (this.game.inputManager) {
+            this.game.inputManager.unlock();
+        }
+    }
+
+    hideDeathScreen() {
+        if (this.deathScreen) {
+            this.deathScreen.classList.add('hidden');
+        }
+    }
+
+    handleRespawn() {
+        this.hideDeathScreen();
+
+        if (this.game.player) {
+            this.game.player.respawn();
+        }
+
+        // Re-lock pointer for gameplay
+        if (this.game.inputManager) {
+            this.game.inputManager.lock();
+        }
     }
 }

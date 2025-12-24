@@ -67,6 +67,12 @@ export class SoundManager {
             });
     }
 
+    playSound(soundName) {
+        // Placeholder for sound effects
+        console.log(`[SoundManager] Playing sound: ${soundName}`);
+        // Future: Load and play sound buffer
+    }
+
     stopMusic() {
         if (this.backgroundMusic.isPlaying) {
             this.backgroundMusic.stop();

@@ -65,6 +65,13 @@ import { Giraffifant } from './entities/animals/Giraffifant.js';
 import { Penguin } from './entities/animals/Penguin.js';
 import { Dolphin } from './entities/animals/Dolphin.js';
 import { Snowflake } from './entities/animals/Snowflake.js';
+import { Chimera } from './entities/animals/Chimera.js';
+import { Flamingo } from './entities/animals/Flamingo.js';
+import { WienerDog } from './entities/animals/WienerDog.js';
+
+import { GoldenRetriever } from './entities/animals/GoldenRetriever.js';
+import { Cybertruck } from './entities/animals/Cybertruck.js';
+import { Robot } from './entities/animals/Robot.js';
 
 // Export all classes for use by SpawnManager and others
 export {
@@ -74,7 +81,7 @@ export {
     Ladybug, Toucan, Gymnast,
     Fox, FennecFox,
     Panda, Camel, Snail, Owl, Cow, Snowman,
-    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake
+    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Robot, Cybertruck
 };
 
 // Map of class names to classes for potential runtime lookup
@@ -85,7 +92,7 @@ export const AnimalClasses = {
     Ladybug, Toucan, Gymnast,
     Fox, FennecFox,
     Panda, Camel, Snail, Owl, Cow, Snowman,
-    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake
+    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, Robot, Cybertruck
 };
 
 /**
@@ -135,7 +142,7 @@ if (import.meta.hot) {
         './entities/animals/Fox.js', './entities/animals/FennecFox.js',
         './entities/animals/Panda.js', './entities/animals/Camel.js', './entities/animals/Snail.js',
         './entities/animals/Owl.js', './entities/animals/Cow.js', './entities/animals/Snowman.js', './entities/animals/SantaClaus.js', './entities/animals/Unicorn.js',
-        './entities/animals/MagicalCreature.js', './entities/animals/TigerBear.js', './entities/animals/Shark.js', './entities/animals/Raccoon.js', './entities/animals/TRex.js', './entities/animals/MythicalVillager.js', './entities/animals/Lampost.js', './entities/animals/Pumpkin.js', './entities/animals/Lorax.js', './entities/animals/Wizard.js', './entities/animals/Rocketship.js', './entities/animals/Giraffifant.js', './entities/animals/Penguin.js', './entities/animals/Dolphin.js', './entities/animals/Snowflake.js'
+        './entities/animals/MagicalCreature.js', './entities/animals/TigerBear.js', './entities/animals/Shark.js', './entities/animals/Raccoon.js', './entities/animals/TRex.js', './entities/animals/MythicalVillager.js', './entities/animals/Lampost.js', './entities/animals/Pumpkin.js', './entities/animals/Lorax.js', './entities/animals/Wizard.js', './entities/animals/Rocketship.js', './entities/animals/Giraffifant.js', './entities/animals/Penguin.js', './entities/animals/Dolphin.js', './entities/animals/Snowflake.js', './entities/animals/Chimera.js', './entities/animals/Flamingo.js', './entities/animals/WienerDog.js', './entities/animals/GoldenRetriever.js', './entities/animals/Robot.js', './entities/animals/Cybertruck.js'
     ];
 
     import.meta.hot.accept(animalModules, (modules) => {

@@ -83,24 +83,10 @@ export class Drop {
         }
 
         // 2. Move (Simple collision)
-        const nextPos = this.position.clone().add(this.velocity.clone().multiplyScalar(1)); // Velocity is per tick? No, usually per frame but scaled. 
-        // My game loop velocity usage in Player is usually manual.
-        // Let's assume velocity is "units per tick" effectively if we don't multiply by delta, 
-        // but proper physics uses delta.
-        // Player uses custom logic.
-        // Let's attempt simple integration: position += velocity * (deltaTime * 60)?
-        // Or if velocity is already scaled for frame. Player velocity logic:
-        // this.velocity.y -= this.game.gravity;
-        // this.position.y += this.velocity.y;
-        // It doesn't seem to use deltaTime for the position update in Player.js (unless I misread).
-
-        // Checking Player.js again: 
-        // this.velocity.y -= this.game.gravity; 
-        // ... moveWithCollision calls: pos.y = newY ... where newY = pos.y + velY;
-        // It seems velocity is per-frame displacement in Player.js.
-        // I'll stick to that convention.
-
-        this.position.add(this.velocity);
+        // Scale velocity by deltaTime to ensure consistent movement regardless of frame rate
+        // Multiply by 60 to normalize for ~60fps baseline
+        const scaledVelocity = this.velocity.clone().multiplyScalar(deltaTime * 60);
+        this.position.add(scaledVelocity);
 
         // Check collision with ground
         // We can just check the center point against opacity/solid block

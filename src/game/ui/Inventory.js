@@ -209,7 +209,23 @@ export class Inventory {
                 // Swap
                 const temp = { ...slot };
                 this.manager.addItemToSlot(index, this.draggedItem.item, this.draggedItem.count, this.draggedItem.type);
-                this.draggedItem = temp;
+
+                // Attempt to return swapped item to source slot
+                // Only if source was not the crafting result slot (109) and we are dragging (dragStartSlot is valid)
+                if (this.dragStartSlot !== null && this.dragStartSlot !== 109) {
+                    const startSlot = this.manager.getSlot(this.dragStartSlot);
+                    // If start slot is empty, we can perform a clean swap
+                    if (!startSlot || !startSlot.item) {
+                        this.manager.addItemToSlot(this.dragStartSlot, temp.item, temp.count, temp.type);
+                        this.draggedItem = null; // Swap complete, clear cursor
+                    } else {
+                        // Start slot occupied, must hold item on cursor
+                        this.draggedItem = temp;
+                    }
+                } else {
+                    // Invalid source (e.g. from result slot), hold item on cursor
+                    this.draggedItem = temp;
+                }
             }
         }
     }
@@ -332,9 +348,12 @@ export class Inventory {
         // Main Inventory (27 slots: 9-35)
         const mainGrid = document.getElementById('main-inventory-grid');
         mainGrid.innerHTML = '';
-        for (let i = 9; i < 36; i++) {
+        for (let i = 9; i < 63; i++) {
+            // DEBUG: Trace slot creation
+            // console.log(`Creating slot ${i}`); 
             mainGrid.appendChild(this.createSlotElement(i));
         }
+        console.log(`Rendered inventory slots 9-62. Child count: ${mainGrid.children.length}`);
 
         // Hotbar (9 slots: 0-8)
         const hotbarGrid = document.getElementById('hotbar-inventory-grid');
@@ -412,7 +431,10 @@ export class Inventory {
         }
 
         if (slot && slot.item) {
-            const displayName = slot.item.charAt(0).toUpperCase() + slot.item.slice(1);
+            let displayName = 'Unknown';
+            if (typeof slot.item === 'string') {
+                displayName = slot.item.charAt(0).toUpperCase() + slot.item.slice(1);
+            }
             div.setAttribute('data-item-name', displayName);
 
             div.innerHTML += `
@@ -741,6 +763,20 @@ export class Inventory {
                         <circle cx="32" cy="16" r="10" fill="#FF00FF" filter="url(#glow-wand)"/>
                         <circle cx="32" cy="16" r="6" fill="#FFFFFF" opacity="0.5"/>
                     </svg>`,
+            levitation_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-levitation-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="10" fill="#FFFF00" filter="url(#glow-levitation-wand)"/>
+                        <circle cx="32" cy="16" r="6" fill="#FFFFFF" opacity="0.5"/>
+                    </svg>`,
             shrink_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <defs>
                              <filter id="glow-shrink-wand">
@@ -777,12 +813,74 @@ export class Inventory {
                         <circle cx="32" cy="14" r="12" fill="url(#grad-omni)" filter="url(#glow-omni-wand)"/>
                         <circle cx="32" cy="14" r="8" fill="#FFFFFF" opacity="0.6"/>
                     </svg>`,
+            ride_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-ride-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="10" fill="#8B4513" filter="url(#glow-ride-wand)"/>
+                        <circle cx="32" cy="16" r="6" fill="#A0522D" opacity="0.5"/>
+                    </svg>`,
             flying_broom: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <rect x="28" y="4" width="8" height="30" rx="2" fill="#5C4033" stroke="#3e2b1e" stroke-width="2"/>
                         <path d="M22 34 L42 34 L 50 60 L 14 60 Z" fill="#C19A6B" stroke="#967b56" stroke-width="2"/>
                         <path d="M32 34 L32 60 M26 34 L20 60 M38 34 L44 60" stroke="#967b56" stroke-width="2"/>
                         <rect x="26" y="32" width="12" height="4" fill="#8B4513" rx="1"/>
+                    </svg>`,
+            water_bucket: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-bucket" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#666666" />
+                                <stop offset="50%" style="stop-color:#888888" />
+                                <stop offset="100%" style="stop-color:#555555" />
+                            </linearGradient>
+                            <linearGradient id="grad-water-bucket" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#5A8CF0" />
+                                <stop offset="100%" style="stop-color:#2960CC" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M16 16 L12 56 L52 56 L48 16 Z" fill="url(#grad-bucket)" stroke="#444" stroke-width="2"/>
+                        <path d="M14 24 L50 24 L52 56 L12 56 Z" fill="url(#grad-water-bucket)"/>
+                        <path d="M14 24 Q 32 18 50 24" fill="none" stroke="#7FAEF5" stroke-width="3"/>
+                        <path d="M20 8 Q 32 2 44 8" fill="none" stroke="#666" stroke-width="4" stroke-linecap="round"/>
+                        <rect x="14" y="14" width="36" height="6" fill="#777" stroke="#444" stroke-width="1"/>
+                    </svg>`,
+            capture_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-capture-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="10" fill="#FF6600" filter="url(#glow-capture-wand)"/>
+                        <circle cx="32" cy="16" r="6" fill="#FFFFFF" opacity="0.5"/>
+                    </svg>`,
+            giant_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-giant-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="26" y="20" width="12" height="40" rx="3" fill="#444" stroke="#222" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="12" fill="#888" filter="url(#glow-giant-wand)"/>
+                        <path d="M26 16 L38 16" stroke="#444" stroke-width="4"/>
+                        <circle cx="32" cy="16" r="6" fill="#DDD" opacity="0.8"/>
                     </svg>`
+
         };
         return svgs[item] || `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="4" y="4" width="56" height="56" rx="8" fill="#7B5B3C" stroke="#3e2b1e" stroke-width="2"/><rect x="16" y="16" width="32" height="32" rx="4" fill="#A0A0A0" stroke="white" stroke-width="2" opacity="0.5"/></svg>`;
     }

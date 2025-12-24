@@ -30,7 +30,66 @@ export class InputManager {
     setupEventListeners() {
         // Keyboard Down
         document.addEventListener('keydown', (e) => {
-            if (this.game.agent && this.game.agent.isChatOpen) return; // Ignore game inputs when chatting
+            // Escape Key Handler - High Priority
+            if (e.code === 'Escape') {
+                e.preventDefault();
+
+                // 1. Clear Focus from any input elements
+                if (document.activeElement && document.activeElement !== document.body && document.activeElement !== this.game.container) {
+                    document.activeElement.blur();
+                }
+
+                // 2. Close generic UI states
+                if (this.game.agent && this.game.agent.isChatOpen) {
+                    this.game.agent.toggleChat(); // Close Chat
+                    this.game.container.focus(); // Return focus to game
+                    return;
+                }
+
+                if (this.game.gameState.flags.inventoryOpen) {
+                    this.game.toggleInventory(); // Close Inventory
+                    this.game.container.focus(); // Return focus to game
+                    // We don't return here because we might want to also ensure unlocks happen
+                }
+
+                // Close Debug Panel if open (optional, maybe P handles it?)
+                // If we want Esc to close debug panel:
+                const debugPanel = document.getElementById('debug-panel');
+                if (debugPanel && !debugPanel.classList.contains('hidden')) {
+                    this.game.toggleDebugPanel();
+                    this.game.container.focus();
+                }
+
+                // 3. Ensure Pointer is Unlocked (Browser does this natively, but we sync state)
+                this.unlock();
+
+                // 4. Force focus to game container so next click works
+                this.game.container.focus();
+
+                return;
+            }
+
+            // Tab toggles chat open/closed
+            if (e.code === 'Tab') {
+                e.preventDefault();
+                if (this.game.agent) {
+                    this.game.agent.toggleChat();
+                }
+                return;
+            }
+
+            // T for Chat - also opens chat (legacy)
+            if (e.code === 'KeyT') {
+                if (this.game.agent && !this.game.agent.isChatOpen) {
+                    e.preventDefault();
+                    this.game.agent.toggleChat();
+                }
+                return;
+            }
+
+            // Block game inputs when typing in chat input (check if chat input is focused)
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput && document.activeElement === chatInput) return;
 
             this.keys[e.code] = true;
             if (this.bindings[e.code]) {
@@ -49,21 +108,38 @@ export class InputManager {
                 }
             }
 
-            // E for Secondary Action (Place / Interact / Use)
-            if (e.code === 'KeyE' && !this.game.agent.isChatOpen) {
-                // Land if flying (Broom)
+            // Flying Toggle (moved from E) - let's put it on F for (F)ly or something, 
+            // but F is Interact... 
+            // Wait, standard creative flight is Double Jump space.
+            // The broom flight was on E. Let's move Broom dismount/toggle to 'F' (Interact/Dismount).
+            // Current F key:
+            // 17:             'KeyF': 'INTERACT', // or Dismount
+
+            if (e.code === 'KeyF') {
                 if (this.game.player && this.game.player.isFlying) {
                     if (!e.repeat) {
                         this.game.player.toggleFlying();
                     }
-                    return;
                 }
-                this.handleSecondaryAction();
             }
 
-            // R - Unused for now or reload?
-            // User requested E for using things. 
-            // Previous code had R for secondary action. 
+            // E for Inventory
+            if (e.code === 'KeyE') {
+                if (!this.game.agent.isChatOpen) {
+                    this.game.toggleInventory();
+                }
+            }
+
+            // R - Cycle Spells (Omni Wand)
+            if (e.code === 'KeyR' && !this.game.agent.isChatOpen) {
+                const item = this.game.inventory.getSelectedItem();
+                if (item && item.item === 'omni_wand') {
+                    const wandItem = this.game.itemManager.getItem('omni_wand');
+                    if (wandItem) {
+                        wandItem.cycleSpell();
+                    }
+                }
+            }
 
             // Q for break
             if (e.code === 'KeyQ' && this.isLocked) {
@@ -78,12 +154,6 @@ export class InputManager {
                 }
             }
 
-            // T for Chat
-            if (e.code === 'KeyT') {
-                if (this.game.agent) {
-                    this.game.agent.toggleChat();
-                }
-            }
 
             // O for Weather Toggle (Debug)
             if (e.code === 'KeyO') {
@@ -126,9 +196,7 @@ export class InputManager {
             }
 
             if (e.code === 'KeyE') {
-                if (this.isLocked) {
-                    this.game.onRightClickUp();
-                }
+                // Removed specific KeyE up logic as it's now Inventory toggle
             }
         });
 
@@ -151,11 +219,9 @@ export class InputManager {
                     if (this.mouseDownInterval) clearInterval(this.mouseDownInterval);
                     this.mouseDownInterval = setInterval(() => this.handlePrimaryAction(), 250);
 
-                }
-                // Right Click removed
-                /* else if (e.button === 2) { // Right Click
+                } else if (e.button === 2) { // Right Click
                     this.handleSecondaryAction();
-                } */
+                }
             }
         });
 
@@ -168,12 +234,21 @@ export class InputManager {
                     this.mouseDownInterval = null;
                 }
             }
-            // Right click (button 2) release ignored
+            if (e.button === 2) {
+                this.game.onRightClickUp();
+            }
         });
 
         // Pointer Lock
-        this.game.container.addEventListener('click', () => {
+        this.game.container.addEventListener('mousedown', (e) => {
+            // Ensure container has focus so keydowns work immediately
+            this.game.container.focus();
+
+            // Only lock if not already locked
             if (document.pointerLockElement !== this.game.container && !this.game.gameState.flags.inventoryOpen) {
+                // If it's a right click (button 2), we might want to allow it to pass through?
+                // Standard Minecraft: Right click can also lock.
+
                 this.game.container.requestPointerLock().catch((err) => {
                     // Ignore SecurityError when user exits lock before request completes
                     if (err.name !== 'SecurityError') {
@@ -199,6 +274,9 @@ export class InputManager {
                 const direction = e.deltaY > 0 ? 1 : -1;
                 this.game.cycleSlot(direction);
             }
+        });
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
         });
     }
 
@@ -226,7 +304,8 @@ export class InputManager {
         }
 
         // 2. Usable Items (Wand, Bow) - Fire
-        if (item && (item.item === 'bow' || item.item === 'wand' || item.item === 'shrink_wand' || item.item === 'omni_wand')) {
+        if (item && (item.item === 'bow' || item.item === 'wand' || item.item === 'shrink_wand' || item.item === 'omni_wand' || item.item === 'levitation_wand' || item.item === 'giant_wand' || item.item === 'water_bucket')) {
+
             this.game.onRightClickDown();
             return;
         }

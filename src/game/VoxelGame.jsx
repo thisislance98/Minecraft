@@ -12,6 +12,9 @@ import { Arrow } from './entities/projectiles/Arrow.js';
 import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
 import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
 import { LevitationProjectile } from './entities/projectiles/LevitationProjectile.js';
+import { GiantProjectile } from './entities/projectiles/GiantProjectile.js';
+
+import { GrowthProjectile } from './entities/projectiles/GrowthProjectile.js';
 import { FloatingBlock } from './entities/FloatingBlock.js';
 import { EntityManager } from './systems/EntityManager.js';
 import { InputManager } from './systems/InputManager.js';
@@ -31,6 +34,8 @@ import { StructureGenerator } from '../world/StructureGenerator.js';
 import { Config } from './core/Config.js';
 import { OmniProjectile } from './entities/projectiles/OmniProjectile.js';
 import { SpellSystem } from './systems/SpellSystem.js';
+import { Tornado } from './entities/Tornado.js';
+import { WaterSystem } from './systems/WaterSystem.js';
 
 export class VoxelGame {
     constructor() {
@@ -111,6 +116,7 @@ export class VoxelGame {
         this.soundManager = new SoundManager(this);
         this.soundManager.init();
         this.spellSystem = new SpellSystem(this);
+        this.waterSystem = new WaterSystem(this);
 
         this.spawnPlayer();
 
@@ -231,10 +237,23 @@ export class VoxelGame {
 
         // Floating Blocks
         this.floatingBlocks = [];
+        this.targetedFloatingBlocks = [];
+
+
+        // Tornadoes
+        this.tornadoes = [];
 
         // Start game loop
         this.lastTime = performance.now();
         this.animate();
+
+        // Add the new wand to the inventory for testing
+        this.inventory.addItem('growth_wand', 1, 'tool');
+
+
+        this.inventory.addItem('door_closed', 64, 'block');
+
+
 
         // Chat Button Listener & Debug Panel handled by UIManager/InputManager now
     }
@@ -407,6 +426,24 @@ export class VoxelGame {
     }
 
     onRightClickDown() {
+        // 1. Check for Block Interaction (Doors, etc.)
+        const target = this.physicsManager.getTargetBlock();
+        if (target) {
+            const block = this.getBlockWorld(target.x, target.y, target.z);
+            if (block === 'door_closed') {
+                this.setBlock(target.x, target.y, target.z, 'door_open');
+                this.soundManager.playSound('click'); // consistent feedback
+                return true; // Handled
+            } else if (block === 'door_open') {
+                // Check if player is inside the door before closing interaction?
+                // For now, just close it. Collision will handle pushing out or getting stuck.
+                this.setBlock(target.x, target.y, target.z, 'door_closed');
+                this.soundManager.playSound('click');
+                return true; // Handled
+            }
+        }
+
+        // 2. Item Usage
         const item = this.inventory.getSelectedItem();
         if (item && item.item) {
             // Retrieve item ID
@@ -454,11 +491,32 @@ export class VoxelGame {
         console.log('Levitation Magic Fired!');
     }
 
+    spawnGiantProjectile(pos, vel) {
+        const projectile = new GiantProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Giant Magic Fired!');
+    }
+
+
+    spawnGrowthProjectile(pos, vel) {
+        const projectile = new GrowthProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Growth Magic Fired!');
+    }
+
     spawnOmniProjectile(pos, vel, effects) {
         const projectile = new OmniProjectile(this, pos, vel, effects);
         this.projectiles.push(projectile);
         this.scene.add(projectile.mesh);
         console.log('Omni Magic Fired!');
+    }
+
+    spawnTornado(pos) {
+        const tornado = new Tornado(this, pos);
+        this.tornadoes.push(tornado);
+        console.log('Tornado spawned!');
     }
 
     spawnDrop(x, y, z, blockType) {
@@ -788,7 +846,6 @@ export class VoxelGame {
             }
         }
 
-        // Update Shrunk Blocks
         if (this.shrunkBlocks) {
             for (let i = this.shrunkBlocks.length - 1; i >= 0; i--) {
                 const sb = this.shrunkBlocks[i];
@@ -800,6 +857,23 @@ export class VoxelGame {
             }
         }
 
+        // Update Targeted Floating Blocks (Giant build)
+        if (this.targetedFloatingBlocks) {
+            for (let i = this.targetedFloatingBlocks.length - 1; i >= 0; i--) {
+                const tfb = this.targetedFloatingBlocks[i];
+                const alive = tfb.update(deltaTime);
+                if (!alive) {
+                    // Mesh removal is handled by placeBlock, but if it dies otherwise:
+                    if (tfb.mesh && tfb.mesh.parent) {
+                        this.scene.remove(tfb.mesh);
+                    }
+                    this.targetedFloatingBlocks.splice(i, 1);
+                }
+            }
+        }
+
+
+
         // Update Floating Blocks
         if (this.floatingBlocks) {
             for (let i = this.floatingBlocks.length - 1; i >= 0; i--) {
@@ -808,6 +882,17 @@ export class VoxelGame {
                 if (!alive) {
                     this.scene.remove(fb.mesh);
                     this.floatingBlocks.splice(i, 1);
+                }
+            }
+        }
+
+        // Update Tornadoes
+        if (this.tornadoes) {
+            for (let i = this.tornadoes.length - 1; i >= 0; i--) {
+                const t = this.tornadoes[i];
+                const alive = t.update(deltaTime);
+                if (!alive) {
+                    this.tornadoes.splice(i, 1);
                 }
             }
         }
@@ -833,6 +918,11 @@ export class VoxelGame {
             const waterSpeed = 0.2; // Adjust for flow speed
             this.textures.water.offset.x += waterSpeed * deltaTime;
             this.textures.water.offset.y += waterSpeed * 0.5 * deltaTime;
+        }
+
+        // Update water flow system
+        if (this.waterSystem) {
+            this.waterSystem.update(deltaTime);
         }
 
         // Update Remote Players

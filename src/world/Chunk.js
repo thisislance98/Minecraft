@@ -97,7 +97,14 @@ export class Chunk {
                     if (!blockType) continue;
 
                     const materials = this.game.blockMaterialIndices[blockType];
-                    if (!materials) continue;
+                    if (!materials) {
+                        if (!this.loggedMissing) this.loggedMissing = new Set();
+                        if (!this.loggedMissing.has(blockType)) {
+                            console.warn(`Chunk: Missing materials for block type '${blockType}'. Skipping.`);
+                            this.loggedMissing.add(blockType);
+                        }
+                        continue;
+                    }
 
                     const wx = this.cx * this.size + lx;
                     const wy = this.cy * this.size + ly;

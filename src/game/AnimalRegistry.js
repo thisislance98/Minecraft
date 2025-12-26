@@ -68,7 +68,6 @@ import { Snowflake } from './entities/animals/Snowflake.js';
 import { Chimera } from './entities/animals/Chimera.js';
 import { Flamingo } from './entities/animals/Flamingo.js';
 import { WienerDog } from './entities/animals/WienerDog.js';
-
 import { GoldenRetriever } from './entities/animals/GoldenRetriever.js';
 import { Cybertruck } from './entities/animals/Cybertruck.js';
 import { Robot } from './entities/animals/Robot.js';
@@ -93,7 +92,7 @@ export const AnimalClasses = {
     Ladybug, Toucan, Gymnast,
     Fox, FennecFox,
     Panda, Camel, Snail, Owl, Cow, Snowman,
-    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, Robot, Cybertruck, Zebra
+    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Robot, Cybertruck, Zebra
 };
 
 /**
@@ -122,33 +121,64 @@ if (import.meta.hot) {
         if (newModule) {
             // Update the exported classes in-place
             Object.assign(AnimalClasses, newModule.AnimalClasses);
+
+            // Live-update all existing creatures of changed types
+            updateExistingCreatures(newModule.AnimalClasses);
+
             showHMRNotification('AnimalRegistry.js');
             console.log('[HMR] AnimalRegistry updated');
         }
     });
+}
 
-    // Accept updates to all animal modules
-    const animalModules = [
-        './entities/animals/Pig.js', './entities/animals/Horse.js', './entities/animals/Chicken.js',
-        './entities/animals/Bunny.js', './entities/animals/Frog.js', './entities/animals/Wolf.js',
-        './entities/animals/Elephant.js', './entities/animals/Lion.js', './entities/animals/Bear.js',
-        './entities/animals/Tiger.js', './entities/animals/Deer.js', './entities/animals/Giraffe.js',
-        './entities/animals/Fish.js', './entities/animals/Turtle.js', './entities/animals/Duck.js',
-        './entities/animals/Squirrel.js', './entities/animals/Monkey.js', './entities/animals/Reindeer.js',
-        './entities/animals/Sheep.js', './entities/animals/Goat.js', './entities/animals/Turkey.js',
-        './entities/animals/Mouse.js', './entities/animals/Snake.js', './entities/animals/Zombie.js',
-        './entities/animals/Skeleton.js', './entities/animals/Enderman.js', './entities/animals/Creeper.js',
-        './entities/animals/Villager.js', './entities/animals/Pugasus.js', './entities/animals/Kangaroo.js',
-        './entities/animals/Ladybug.js', './entities/animals/Toucan.js', './entities/animals/Gymnast.js',
-        './entities/animals/Fox.js', './entities/animals/FennecFox.js',
-        './entities/animals/Panda.js', './entities/animals/Camel.js', './entities/animals/Snail.js',
-        './entities/animals/Owl.js', './entities/animals/Cow.js', './entities/animals/Snowman.js', './entities/animals/SantaClaus.js', './entities/animals/Unicorn.js',
-        './entities/animals/MagicalCreature.js', './entities/animals/TigerBear.js', './entities/animals/Shark.js', './entities/animals/Raccoon.js', './entities/animals/TRex.js', './entities/animals/MythicalVillager.js', './entities/animals/Lampost.js', './entities/animals/Pumpkin.js', './entities/animals/Lorax.js', './entities/animals/Wizard.js', './entities/animals/Rocketship.js', './entities/animals/Giraffifant.js', './entities/animals/Penguin.js', './entities/animals/Dolphin.js', './entities/animals/Snowflake.js', './entities/animals/Chimera.js', './entities/animals/Flamingo.js', './entities/animals/WienerDog.js', './entities/animals/GoldenRetriever.js', './entities/animals/Robot.js', './entities/animals/Cybertruck.js'
-    ];
+/**
+ * Live-update existing creatures when their class code changes.
+ * Rebuilds the mesh of all existing animals of updated types.
+ */
+function updateExistingCreatures(newClasses) {
+    // Get reference to the game (it's a global singleton)
+    const game = window.__VOXEL_GAME__;
+    if (!game || !game.animals) return;
 
-    import.meta.hot.accept(animalModules, (modules) => {
-        // When any animal module updates, show notification
-        // The actual class updates are handled by the module system
-        console.log('[HMR] Animal module(s) updated');
-    });
+    console.log(`[HMR] Updating ${game.animals.length} existing creatures...`);
+
+    for (const animal of game.animals) {
+        const className = animal.constructor.name;
+        const NewClass = newClasses[className];
+
+        if (NewClass && NewClass !== animal.constructor) {
+            try {
+                // Store current position
+                const pos = animal.mesh.position.clone();
+                const rot = animal.mesh.rotation.clone();
+
+                // Clear old mesh children
+                while (animal.mesh.children.length > 0) {
+                    const child = animal.mesh.children[0];
+                    animal.mesh.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                }
+
+                // Borrow createBody from the new class
+                if (NewClass.prototype.createBody) {
+                    NewClass.prototype.createBody.call(animal);
+                }
+
+                // Restore position
+                animal.mesh.position.copy(pos);
+                animal.mesh.rotation.copy(rot);
+
+                console.log(`[HMR] Updated existing ${className}`);
+            } catch (e) {
+                console.error(`[HMR] Failed to update ${className}:`, e);
+            }
+        }
+    }
 }

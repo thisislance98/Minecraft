@@ -27,7 +27,7 @@ export class ColyseusManager {
     async connect(serverUrl = 'ws://localhost:2567') {
         try {
             this.client = new Client(serverUrl);
-            console.log('[Colyseus] Connected to server');
+            console.log('[Colyseus] Connected to server (Client created)');
             return true;
         } catch (error) {
             console.error('[Colyseus] Connection error:', error);
@@ -55,7 +55,7 @@ export class ColyseusManager {
 
             this.setupRoomHandlers();
 
-            const roomId = this.room?.id || 'unknown';
+            const roomId = this.room?.roomId || 'unknown';
             console.log(`[Colyseus] Room created: ${roomId}`);
             this.game.uiManager?.showNetworkStatus(`Hosting: ${roomId.substring(0, 6)}`);
 
@@ -70,15 +70,21 @@ export class ColyseusManager {
      * Join an existing room
      */
     async joinRoom(roomId) {
+        console.log('[Colyseus] joinRoom called with:', roomId);
         if (!this.client) {
+            console.log('[Colyseus] Client not ready, connecting...');
             await this.connect();
+            console.log('[Colyseus] Connection finished from joinRoom');
+        } else {
+            console.log('[Colyseus] Client already ready');
         }
 
         try {
-            console.log(`[Colyseus] Joining room: ${roomId}`);
+            console.log(`[Colyseus] Attempting joinById: ${roomId}`);
             this.room = await this.client.joinById(roomId, {
                 name: 'Guest'
             });
+            console.log(`[Colyseus] joinById completed, sessionId:`, this.room?.sessionId);
 
             this.sessionId = this.room.sessionId;
             this.connected = true;
@@ -86,7 +92,7 @@ export class ColyseusManager {
             this.setupRoomHandlers();
 
             console.log(`[Colyseus] Joined room: ${roomId}`);
-            this.game.uiManager?.showNetworkStatus('Connected');
+            this.game.uiManager?.showNetworkStatus(`Connected: ${roomId.substring(0, 6)}`);
 
             return roomId;
         } catch (error) {
@@ -96,9 +102,6 @@ export class ColyseusManager {
         }
     }
 
-    /**
-     * Setup room event handlers
-     */
     /**
      * Setup room event handlers
      */
@@ -126,6 +129,16 @@ export class ColyseusManager {
                 return;
             }
 
+            // Handle remote teleport (for testing)
+            if (data.action === 'teleport') {
+                console.log('Moved by remote test:', data);
+                if (this.game.player) {
+                    this.game.player.position.set(data.x, data.y, data.z);
+                    this.game.player.velocity.set(0, 0, 0);
+                }
+                return;
+            }
+
             if (this.onDebugCommand) {
                 this.onDebugCommand(data);
             }
@@ -145,51 +158,113 @@ export class ColyseusManager {
 
         // --- State Synchronization (Subject to Schema Version Mismatch) ---
 
+        // Track if we've already set up player handlers
+        let playerHandlersSetup = false;
+
+        const setupPlayerHandlers = () => {
+            if (playerHandlersSetup) return;
+            if (!this.room.state || !this.room.state.players) return;
+
+            playerHandlersSetup = true;
+            console.log('[Colyseus] Setting up player handlers');
+            console.log('[Colyseus] Players object type:', this.room.state.players?.constructor?.name);
+
+            // First, add any existing players (important for clients joining after host)
+            this.room.state.players.forEach((player, sessionId) => {
+                console.log('[Colyseus] Found existing player:', sessionId);
+                if (sessionId !== this.sessionId && this.onPlayerJoin) {
+                    this.onPlayerJoin(sessionId, player);
+                }
+            });
+
+            // Update initial player count
+            this.updatePlayerCount();
+
+            // Check if onAdd/onRemove are available
+            if (typeof this.room.state.players?.onAdd === 'function') {
+                // STANDARD: Use schema callbacks
+                this.room.state.players.onAdd((player, sessionId) => {
+                    console.log('[Colyseus] Player joined:', sessionId);
+                    if (sessionId !== this.sessionId && this.onPlayerJoin) {
+                        this.onPlayerJoin(sessionId, player);
+                    }
+                    this.updatePlayerCount();
+                });
+
+                this.room.state.players.onRemove((player, sessionId) => {
+                    console.log('[Colyseus] Player left:', sessionId);
+                    if (this.onPlayerLeave) {
+                        this.onPlayerLeave(sessionId);
+                    }
+                    this.updatePlayerCount();
+                });
+            } else {
+                // FALLBACK: Manual sync
+                console.warn('[Colyseus] WARNING: players.onAdd is missing! Using manual sync fallback.');
+                this.manualPlayerSync = true;
+                this.knownPlayers = new Set();
+                this.room.state.players.forEach((_, sessionId) => {
+                    this.knownPlayers.add(sessionId);
+                });
+            }
+
+            // Listen for block changes (assuming this schema part is standard)
+            if (this.room.state.blockChanges?.onAdd) {
+                this.room.state.blockChanges.onAdd((blockChange) => {
+                    if (this.onBlockChange) {
+                        this.onBlockChange(
+                            blockChange.x,
+                            blockChange.y,
+                            blockChange.z,
+                            blockChange.blockType
+                        );
+                    }
+                });
+            }
+        };
+
         this.room.onStateChange((state) => {
-            // console.log('[Colyseus] State updated');
-        });
+            // console.log('[Colyseus] State updated, players:', state?.players?.size);
 
-        // Guard against undefined state (version mismatch or early call)
-        if (!this.room.state || !this.room.state.players) {
-            console.warn('[Colyseus] Room state not ready, skipping player handlers');
-            return;
-        }
+            // Try to set up player handlers when state becomes available
+            setupPlayerHandlers();
 
-        // Listen for new players
-        this.room.state.players.onAdd((player, sessionId) => {
-            console.log('[Colyseus] Player joined:', sessionId);
+            // Always update player count on state change
+            this.updatePlayerCount();
 
-            // Don't create remote player for ourselves
-            if (sessionId !== this.sessionId && this.onPlayerJoin) {
-                this.onPlayerJoin(sessionId, player);
+            // Handle Manual Sync
+            if (this.manualPlayerSync && state.players) {
+                const currentSessionIds = new Set();
+
+                // key is sessionId
+                state.players.forEach((player, sessionId) => {
+                    currentSessionIds.add(sessionId);
+
+                    // Check for new joiners
+                    if (!this.knownPlayers.has(sessionId)) {
+                        console.log('[Colyseus] Fallback: Found new player:', sessionId);
+                        this.knownPlayers.add(sessionId);
+                        if (sessionId !== this.sessionId && this.onPlayerJoin) {
+                            this.onPlayerJoin(sessionId, player);
+                        }
+                    }
+                });
+
+                // Check for leavers
+                for (const sessionId of this.knownPlayers) {
+                    if (!currentSessionIds.has(sessionId)) {
+                        console.log('[Colyseus] Fallback: Player left:', sessionId);
+                        this.knownPlayers.delete(sessionId);
+                        if (this.onPlayerLeave) {
+                            this.onPlayerLeave(sessionId);
+                        }
+                    }
+                }
             }
         });
 
-        // Listen for player updates
-        this.room.state.players.onChange((player, sessionId) => {
-            // Position/rotation updates are automatic via state sync
-        });
-
-        // Listen for players leaving
-        this.room.state.players.onRemove((player, sessionId) => {
-            console.log('[Colyseus] Player left:', sessionId);
-
-            if (this.onPlayerLeave) {
-                this.onPlayerLeave(sessionId);
-            }
-        });
-
-        // Listen for block changes
-        this.room.state.blockChanges.onAdd((blockChange) => {
-            if (this.onBlockChange) {
-                this.onBlockChange(
-                    blockChange.x,
-                    blockChange.y,
-                    blockChange.z,
-                    blockChange.blockType
-                );
-            }
-        });
+        // Also try immediately in case state is already ready
+        setupPlayerHandlers();
     }
 
     /**
@@ -262,8 +337,17 @@ export class ColyseusManager {
         if (!this.room) return null;
 
         const url = new URL(window.location.href);
-        url.searchParams.set('room', this.room.id);
+        url.searchParams.set('room', this.room.roomId);
         return url.toString();
+    }
+
+    /**
+     * Update the player count in the UI
+     */
+    updatePlayerCount() {
+        if (!this.room?.state?.players) return;
+        const count = this.room.state.players.size;
+        this.game.uiManager?.updatePlayerCount(count);
     }
 
     /**

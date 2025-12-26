@@ -14,13 +14,9 @@ export class Penguin extends Animal {
 
     createBody() {
         // Penguin Colors
-        const blackColor = 0x111111;
-        const whiteColor = 0xFFFFFF;
-        const beakColor = 0xFFA500; // Orange
-
-        const blackMat = new THREE.MeshLambertMaterial({ color: blackColor });
-        const whiteMat = new THREE.MeshLambertMaterial({ color: whiteColor });
-        const beakMat = new THREE.MeshLambertMaterial({ color: beakColor });
+        const blackMat = this.game.assetManager.getEntityMaterial('penguin_black');
+        const whiteMat = this.game.assetManager.getEntityMaterial('penguin_white');
+        const beakMat = this.game.assetManager.getEntityMaterial('penguin_beak');
 
         // Main Body (Oval-ish shape using boxes)
         // Torso

@@ -277,18 +277,18 @@ export class SpawnManager {
                 // Fish spawn underwater
                 if (terrainY < worldGen.seaLevel) {
                     const waterY = worldGen.seaLevel - 1 - rng.next() * (worldGen.seaLevel - terrainY);
-                    this.createAnimal(AnimalClass, x, waterY, z);
+                    this.createAnimal(AnimalClass, x, waterY, z, false);
                 }
             } else if (AnimalClass === Monkey || AnimalClass === Squirrel) {
                 // Monkeys and Squirrels spawn in trees - find actual tree blocks
                 const treePos = this.findTreeSpawnPosition(x, z, terrainY);
                 if (treePos) {
-                    this.createAnimal(AnimalClass, treePos.x, treePos.y, treePos.z);
+                    this.createAnimal(AnimalClass, treePos.x, treePos.y, treePos.z, false);
                 }
 
             } else if (isAquatic && terrainY < worldGen.seaLevel) {
                 // Spawning at surface for ducks/turtles if in valid water column
-                this.createAnimal(AnimalClass, x, worldGen.seaLevel, z);
+                this.createAnimal(AnimalClass, x, worldGen.seaLevel, z, false);
             } else {
                 // Standard land animal
                 const y = terrainY + 1;
@@ -331,10 +331,67 @@ export class SpawnManager {
         return null; // No tree found, don't spawn
     }
 
-    createAnimal(AnimalClass, x, y, z) {
-        const animal = new AnimalClass(this.game, x, y, z);
+    createAnimal(AnimalClass, x, y, z, snapToGround = true) {
+        let spawnY = y;
+
+        if (snapToGround) {
+            // Find actual ground level by checking blocks, not just terrain height
+            // This prevents spawning in mid-air when chunks aren't loaded yet
+            const groundY = this.findGroundLevel(x, y, z);
+            if (groundY === null) {
+                // No valid ground found, skip spawning this animal
+                // console.log(`Skipping spawn of ${AnimalClass.name} at ${x},${z} - no ground found`);
+                return;
+            }
+            spawnY = groundY;
+        }
+
+        const animal = new AnimalClass(this.game, x, spawnY, z);
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
+    }
+
+    /**
+     * Find valid ground level by checking actual blocks
+     * @param {number} x - World X coordinate
+     * @param {number} y - Expected Y coordinate (hint)
+     * @param {number} z - World Z coordinate
+     * @returns {number|null} - Ground Y position (top of solid block + 1), or null if no ground
+     */
+    findGroundLevel(x, y, z) {
+        const checkX = Math.floor(x);
+        const checkZ = Math.floor(z);
+
+        // Start from expected Y and search up and down
+        const startY = Math.floor(y);
+        const searchRange = 10;
+
+        // First, search downward for solid ground
+        for (let checkY = startY; checkY >= startY - searchRange; checkY--) {
+            const block = this.game.getBlock(checkX, checkY, checkZ);
+            if (block && block.type !== 'water') {
+                // Found solid ground - spawn one block above it
+                // Also verify there's air above to stand in
+                const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
+                if (!blockAbove || blockAbove.type === 'water') {
+                    return checkY + 1;
+                }
+            }
+        }
+
+        // If nothing found below, search upward (might be underground)
+        for (let checkY = startY + 1; checkY <= startY + searchRange; checkY++) {
+            const block = this.game.getBlock(checkX, checkY, checkZ);
+            if (block && block.type !== 'water') {
+                const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
+                if (!blockAbove || blockAbove.type === 'water') {
+                    return checkY + 1;
+                }
+            }
+        }
+
+        // No valid ground found (chunk probably not loaded)
+        return null;
     }
 
     /**
@@ -459,7 +516,8 @@ export class SpawnManager {
             const tx = cx + ox;
             const tz = cz + oz;
             const terrainH = this.game.worldGen.getTerrainHeight(tx, tz);
-            const spawnY = Math.max(cy, terrainH + 1);
+            // Always spawn on the ground, not at player's height
+            const spawnY = terrainH + 1;
 
             this.createAnimal(EntityClass, tx, spawnY, tz);
         }

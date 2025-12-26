@@ -3,11 +3,12 @@
  * System prompts for the Gemini AI assistant
  */
 
-/**
- * Build the system instruction for the AI
- * @param {Object} transform - Player transform with position and rotation
- * @returns {Object} System instruction configuration
- */
+import { AnimalClasses } from '../AnimalRegistry.js';
+
+// Get sorted list of available creature names
+function getAvailableCreatures() {
+    return Object.keys(AnimalClasses).sort().join(', ');
+}
 export function getSystemInstruction(transform) {
     const posX = transform.position.x.toFixed(2);
     const posY = transform.position.y.toFixed(2);
@@ -31,7 +32,7 @@ When the user asks for ideas or help, use provide_suggestions to give them click
 
 You also have INSTANT-ACTION tools that execute immediately without coding:
 - teleport_player: Move the player to named locations (desert, ocean, forest, jungle, mountain, snow, spawn) or specific coordinates
-- spawn_creature: Spawn creatures near the player (Pig, Wolf, Zombie, Unicorn, TRex, Dragon, Penguin, etc.)
+- spawn_creature: Spawn creatures near the player. Use EXACT names from this list: ${getAvailableCreatures()}
 - get_scene_info: Get info about player's location, biome, nearby creatures, health, etc.
 
 Use these instant tools when the player wants immediate actions like "take me to the desert" or "spawn 3 wolves" or "where am I?"
@@ -88,7 +89,7 @@ CRITICAL INSTRUCTIONS:
    - See Horse.js in the context for the correct pattern
 
 2. REGISTRY UPDATES (AnimalRegistry.js):
-   - APPEND new imports at the end of the import block (after Robot import)
+   - APPEND new imports at the end of the import block
    - APPEND new class names to the export block and AnimalClasses object
    - DO NOT REMOVE OR REWRITE existing imports/exports - only ADD to them!
 

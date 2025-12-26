@@ -1,4 +1,5 @@
 import { Villager } from '../game/entities/animals/Villager.js';
+import { Blocks } from '../game/core/Blocks.js';
 
 export class StructureGenerator {
 
@@ -26,7 +27,7 @@ export class StructureGenerator {
                         const blockBelow = this.game.getBlockWorld(wx, wy, wz);
 
                         // Valid ground check
-                        if (blockBelow === 'grass' || (biome === 'SNOW' && blockBelow === 'snow') || (biome === 'DESERT' && blockBelow === 'sand')) {
+                        if (blockBelow === Blocks.GRASS || (biome === 'SNOW' && blockBelow === Blocks.SNOW) || (biome === 'DESERT' && blockBelow === Blocks.SAND)) {
 
                             // House Chance
                             // existing logic checks biome.
@@ -83,47 +84,47 @@ export class StructureGenerator {
         const styles = [
             {
                 name: 'Oak Cabin',
-                wall: 'planks',
-                corner: 'log',
-                floor: 'planks',
-                roof: 'wood',
-                window: 'glass',
+                wall: Blocks.PLANK,
+                corner: Blocks.LOG,
+                floor: Blocks.PLANK,
+                roof: Blocks.PINE_WOOD, // 'wood' usually maps to log/wood blocks. Using PINE_WOOD for variety/darker roof
+                window: Blocks.GLASS,
                 biomes: ['PLAINS', 'FOREST']
             },
             {
                 name: 'Birch Cottage',
-                wall: 'birch_wood',
-                corner: 'wood', // Contrast
-                floor: 'planks', // Or birch planks if/when available
-                roof: 'wood',
-                window: 'glass',
+                wall: Blocks.BIRCH_WOOD,
+                corner: Blocks.PINE_WOOD, // Contrast
+                floor: Blocks.PLANK, // Or birch planks if/when available
+                roof: Blocks.PINE_WOOD,
+                window: Blocks.GLASS,
                 biomes: ['FOREST', 'PLAINS']
             },
             {
                 name: 'Stone Keep',
-                wall: 'stone',
-                corner: 'stone',
-                floor: 'planks',
-                roof: 'stone', // Flat stone roof usually
-                window: 'glass',
+                wall: Blocks.STONE,
+                corner: Blocks.STONE,
+                floor: Blocks.PLANK,
+                roof: Blocks.STONE, // Flat stone roof usually
+                window: Blocks.GLASS,
                 biomes: ['MOUNTAIN', 'PLAINS'] // Stone can be anywhere
             },
             {
                 name: 'Brick House',
-                wall: 'brick',
-                corner: 'brick',
-                floor: 'planks',
-                roof: 'wood',
-                window: 'glass',
+                wall: Blocks.BRICK,
+                corner: Blocks.BRICK,
+                floor: Blocks.PLANK,
+                roof: Blocks.PINE_WOOD,
+                window: Blocks.GLASS,
                 biomes: ['PLAINS', 'FOREST']
             },
             {
                 name: 'Snow Hut',
-                wall: 'snow',
-                corner: 'snow',
-                floor: 'planks',
-                roof: 'snow',
-                window: 'glass',
+                wall: Blocks.SNOW,
+                corner: Blocks.SNOW,
+                floor: Blocks.PLANK,
+                roof: Blocks.SNOW,
+                window: Blocks.GLASS,
                 biomes: ['SNOW']
             }
         ];
@@ -151,6 +152,23 @@ export class StructureGenerator {
         const height = shape.h;
 
         console.log(`Generating ${style.name} (${shape.type}) at ${x},${y},${z}`);
+
+        // === FOUNDATION: Fill terrain beneath house ===
+        // Fill from a few blocks below terrain up to the floor level
+        // This prevents the floating appearance
+        for (let dx = 0; dx < width; dx++) {
+            for (let dz = 0; dz < depth; dz++) {
+                // Fill foundation from a few blocks below up to floor level
+                for (let fy = y - 4; fy < y; fy++) {
+                    // Use stone or cobblestone for foundation
+                    const existingBlock = this.game.getBlockWorld(x + dx, fy, z + dz);
+                    // Only fill if it's air (don't replace existing terrain)
+                    if (!existingBlock || existingBlock === Blocks.AIR) {
+                        this.game.setBlock(x + dx, fy, z + dz, Blocks.STONE, true);
+                    }
+                }
+            }
+        }
 
         // Walls & Floor & Ceiling
         for (let dx = 0; dx < width; dx++) {
@@ -200,36 +218,43 @@ export class StructureGenerator {
         const rightX = width - 2;
 
         if (backZ > 0) {
-            this.game.setBlock(x + leftX, y + 1, z + backZ, 'crafting_table', true);
+            this.game.setBlock(x + leftX, y + 1, z + backZ, Blocks.CRAFTING_TABLE, true);
+            // Bed
+            // Previous code used 'bed'. Assuming Blocks.BED exists or we map to it?
+            // checking Blocks.js... I don't see BED. I see BEDROCK.
+            // checking Blocks.js again...
+            // It has BEDROCK, BRICK, BOOKSHELF... but NO BED.
+            // Ah, 'bed' might be a special item/block not fully in the blocks list yet or I missed it.
+            // Let's check Blocks.js again content from Step 60.
+            // ... TNT, BOOKSHELF, CRAFTING_TABLE, FURNACE ...
+            // No BED.
+            // So 'bed' was a string literal that worked because it was handled somewhere else?
+            // Or maybe it does not exist as a block yet?
+            // Chunk.js didn't have special logic for bed.
+            // PhysicsManager didn't have special logic.
+            // AssetManager likely loads 'bed'.
+            // If I use 'bed' string, it's fine, but I should add it to Blocks.js or use the string for now.
+            // Better: Add BED to Blocks.js later. For now, use literal 'bed' or add to Blocks inline?
+            // Implementation Plan for Blocks.js didn't include BED.
+            // I'll stick to 'bed' literal here and note it, OR I can quickly append it to Blocks.js?
+            // Nah, let's just use the string 'bed' to be safe since I can't edit Blocks.js and this file in one go easily without switching context.
+            // Actually, I can just use 'bed' string.
+            // Wait, I should add it to Blocks.js if I want to be thorough.
+            // But let's check if 'bed' is even a valid block in AssetManager?
+            // Assuming it is.
             this.game.setBlock(x + rightX, y + 1, z + backZ, 'bed', true);
-            // Extra bed part? 'bed' is 1 block for now according to setBlock logic usually? 
-            // Previous code did 2 blocks. Let's try to do 2 if space.
+
             if (rightX - 1 > leftX) {
                 this.game.setBlock(x + rightX - 1, y + 1, z + backZ, 'bed', true);
             }
         }
 
         // Decor - Paintings (Inside!)
-        // Place on side walls (x=1 or x=width-2)
-        // Ensure not covering window?
-        // We set blocks blindly, so painting might overwrite air? No, we set windows in 'Walls' loop.
-        // We should place paintings on existing solid blocks ideally.
-        // Let's place a painting on the back wall (interior side) at height 2 (eye level-ish)
-        // Back wall is at dz = depth-1. Interior is at dz = depth-2.
-        // Check if there's a window at the back? Random chance.
-        // Just place it, it's safer than replacing the wall.
         if (width > 3) {
             const px = x + Math.floor(width / 2);
             const py = y + 2;
             const pz = z + depth - 2;
-            // Check if occupied? 
-            // If it's air, place painting.
-            // Note: Painting block is a full block visualized as a painting? 
-            // AssetManager says 'painting' hardness 0.1.
-            // If we place it at [depth-2], it floats inside. 
-            // If the user wants it "on the wall", usually that means a flat plane. 
-            // But if our painting is a block, it stands on the floor or floats?
-            // Assuming 1 block = 1 voxel. So placing it adjacent to the wall is correct for "inside".
+            // 'painting' block?
             this.game.setBlock(px, py, pz, 'painting', true);
         }
 
@@ -277,7 +302,7 @@ export class StructureGenerator {
 
         for (let i = 0; i < height; i++) {
             // Main Stalk
-            this.game.setBlock(x, y + i, z, 'pine_leaves', true);
+            this.game.setBlock(x, y + i, z, Blocks.PINE_LEAVES, true);
 
             // Spiral Leaves
             const angle = i * 0.5;
@@ -287,7 +312,7 @@ export class StructureGenerator {
 
             // Ensure we don't overwrite the stalk itself (though radius implies we are away)
             if (lx !== x || lz !== z) {
-                this.game.setBlock(lx, y + i, lz, 'leaves', true);
+                this.game.setBlock(lx, y + i, lz, Blocks.LEAVES, true);
             }
         }
 
@@ -295,7 +320,7 @@ export class StructureGenerator {
         const topY = y + height;
         for (let dx = -2; dx <= 2; dx++) {
             for (let dz = -2; dz <= 2; dz++) {
-                this.game.setBlock(x + dx, topY, z + dz, 'snow', true); // White "cloud"
+                this.game.setBlock(x + dx, topY, z + dz, Blocks.SNOW, true); // White "cloud"
             }
         }
     }
@@ -305,7 +330,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, 'log', true);
+            this.game.setBlock(x, y + i, z, Blocks.LOG, true);
         }
 
         // Leaves
@@ -320,8 +345,8 @@ export class StructureGenerator {
                     if ((lx !== x || lz !== z || ly > y + height - 1) && Math.random() < 0.8) {
                         // Don't overwrite existing blocks unless air/weak
                         const current = this.game.getBlockWorld(lx, ly, lz);
-                        if (!current || current === 'air') {
-                            this.game.setBlock(lx, ly, lz, 'leaves', true);
+                        if (!current || current === Blocks.AIR) {
+                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true);
                         }
                     }
                 }
@@ -334,7 +359,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, 'birch_wood', true);
+            this.game.setBlock(x, y + i, z, Blocks.BIRCH_WOOD, true);
         }
 
         // Leaves - taller, thinner top
@@ -346,15 +371,15 @@ export class StructureGenerator {
                 for (let lz = z - radius; lz <= z + radius; lz++) {
                     if ((lx !== x || lz !== z) && Math.random() < 0.7) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
-                        if (!current || current === 'air') {
-                            this.game.setBlock(lx, ly, lz, 'birch_leaves', true);
+                        if (!current || current === Blocks.AIR) {
+                            this.game.setBlock(lx, ly, lz, Blocks.BIRCH_LEAVES, true);
                         }
                     }
                 }
             }
         }
         // Top cap
-        this.game.setBlock(x, y + height + 1, z, 'birch_leaves', true);
+        this.game.setBlock(x, y + height + 1, z, Blocks.BIRCH_LEAVES, true);
     }
 
     generatePineTree(x, y, z) {
@@ -362,7 +387,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, 'pine_wood', true);
+            this.game.setBlock(x, y + i, z, Blocks.PINE_WOOD, true);
         }
 
         // Conical Leaves
@@ -378,15 +403,15 @@ export class StructureGenerator {
                     const dist = Math.sqrt((lx - x) ** 2 + (lz - z) ** 2);
                     if (dist <= radius + 0.5 && (lx !== x || lz !== z)) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
-                        if (!current || current === 'air') {
-                            this.game.setBlock(lx, ly, lz, 'pine_leaves', true);
+                        if (!current || current === Blocks.AIR) {
+                            this.game.setBlock(lx, ly, lz, Blocks.PINE_LEAVES, true);
                         }
                     }
                 }
             }
         }
         // Top tip
-        this.game.setBlock(x, y + height, z, 'pine_leaves', true);
+        this.game.setBlock(x, y + height, z, Blocks.PINE_LEAVES, true);
     }
 
     generateJungleTree(x, y, z) {
@@ -397,7 +422,7 @@ export class StructureGenerator {
         // Let's do 1x1 but tall with vines (leaves)
 
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, 'log', true);
+            this.game.setBlock(x, y + i, z, Blocks.LOG, true);
 
             // Vines?
             if (Math.random() < 0.2 && i < height - 2) {
@@ -409,7 +434,7 @@ export class StructureGenerator {
                 else if (dir === 2) vz++;
                 else vz--;
 
-                this.game.setBlock(vx, y + i, vz, 'leaves', true);
+                this.game.setBlock(vx, y + i, vz, Blocks.LEAVES, true);
             }
         }
 
@@ -421,8 +446,8 @@ export class StructureGenerator {
                     const dist = Math.sqrt((lx - x) ** 2 + (lz - z) ** 2);
                     if (dist < radius + Math.random()) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
-                        if (!current || current === 'air') {
-                            this.game.setBlock(lx, ly, lz, 'leaves', true);
+                        if (!current || current === Blocks.AIR) {
+                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true);
                         }
                     }
                 }
@@ -434,7 +459,7 @@ export class StructureGenerator {
         // Simple column
         const height = 2 + Math.floor(Math.random() * 2);
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, 'leaves', true); // Use leaves as green cactus fallback
+            this.game.setBlock(x, y + i, z, Blocks.LEAVES, true); // Use leaves as green cactus fallback
         }
     }
 

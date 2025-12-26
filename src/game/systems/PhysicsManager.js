@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FallingTree } from '../entities/animals/FallingTree.js';
+import { Blocks } from '../core/Blocks.js';
 
 /**
  * PhysicsManager handles raycasting, block interaction, and entity collision detection.
@@ -82,7 +83,7 @@ export class PhysicsManager {
         if (target) {
             // Suppress highlight for water
             const blockType = this.game.getBlockWorld(target.x, target.y, target.z);
-            if (blockType === 'water') {
+            if (blockType === Blocks.WATER) {
                 this.highlightBox.visible = false;
                 return;
             }
@@ -106,7 +107,7 @@ export class PhysicsManager {
             const blockType = this.game.getBlockWorld(this.breakingBlock.x, this.breakingBlock.y, this.breakingBlock.z);
 
             // Suppress cracks for water
-            if (blockType === 'water') {
+            if (blockType === Blocks.WATER) {
                 this.breakOverlay.visible = false;
                 return;
             }
@@ -139,11 +140,23 @@ export class PhysicsManager {
     getTargetBlock() {
         this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
 
-        // Raycast against chunk meshes
+        // Optimization: Only check chunks near the player
+        const playerChunk = this.game.worldToChunk(
+            this.game.camera.position.x,
+            this.game.camera.position.y,
+            this.game.camera.position.z
+        );
+
+        const checkRadius = 2; // Only check chunks within 2 units radius
         const chunkMeshes = [];
+
         for (const chunk of this.game.chunks.values()) {
             if (chunk.mesh && chunk.mesh.visible) {
-                chunkMeshes.push(chunk.mesh);
+                // Distance check
+                if (Math.abs(chunk.cx - playerChunk.cx) <= checkRadius &&
+                    Math.abs(chunk.cz - playerChunk.cz) <= checkRadius) {
+                    chunkMeshes.push(chunk.mesh);
+                }
             }
         }
 
@@ -255,7 +268,7 @@ export class PhysicsManager {
         const target = this.getTargetBlock();
         if (target) {
             const blockType = this.game.getBlockWorld(target.x, target.y, target.z);
-            if (!blockType || blockType === 'water') return;
+            if (!blockType || blockType === Blocks.WATER) return;
 
             const properties = this.game.assetManager.blockProperties[blockType] || { hardness: 1.0 };
             const hardness = properties.hardness;
@@ -295,7 +308,7 @@ export class PhysicsManager {
             if (this.breakProgress >= 1.0) {
                 // Check if this is a tree base before breaking
                 // Log types: 'log', 'wood', 'pine_wood', 'birch_wood'
-                const logTypes = ['log', 'wood', 'pine_wood', 'birch_wood'];
+                const logTypes = [Blocks.LOG, Blocks.PINE_WOOD, Blocks.BIRCH_WOOD];
 
                 if (logTypes.includes(blockType)) {
                     this.checkAndFellTree(target.x, target.y, target.z, blockType);
@@ -329,7 +342,7 @@ export class PhysicsManager {
     checkAndFellTree(x, y, z, logType) {
         // 1. Verify base: Block below should NOT be a log (it should be dirt/grass/etc)
         const below = this.game.getBlockWorld(x, y - 1, z);
-        const logTypes = ['log', 'wood', 'pine_wood', 'birch_wood'];
+        const logTypes = [Blocks.LOG, Blocks.PINE_WOOD, Blocks.BIRCH_WOOD];
         if (below && logTypes.includes(below)) {
             // Not the base, just break normal block
             this.game.setBlock(x, y, z, null);
@@ -349,7 +362,7 @@ export class PhysicsManager {
         const MAX_BLOCKS = 200;
 
         // Leaf types to include if connected
-        const leafTypes = ['leaves', 'pine_leaves', 'birch_leaves'];
+        const leafTypes = [Blocks.LEAVES, Blocks.PINE_LEAVES, Blocks.BIRCH_LEAVES];
 
         let foundLeaves = false;
 

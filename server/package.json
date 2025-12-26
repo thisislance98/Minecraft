@@ -13,7 +13,10 @@
         "@colyseus/schema": "^3.0.0",
         "colyseus": "^0.16.0",
         "cors": "^2.8.5",
-        "express": "^4.18.2"
+        "dotenv": "^17.2.3",
+        "express": "^4.18.2",
+        "firebase-admin": "^13.6.0",
+        "stripe": "^20.1.0"
     },
     "devDependencies": {
         "@colyseus/testing": "^0.16.0",

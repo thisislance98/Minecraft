@@ -13,6 +13,12 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
-    hmr: true
+    hmr: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:2567',
+        changeOrigin: true
+      }
+    }
   }
 });

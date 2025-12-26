@@ -1,4 +1,4 @@
-import { Schema, MapSchema, type } from '@colyseus/schema';
+import { Schema, MapSchema, ArraySchema, type } from '@colyseus/schema';
 
 /**
  * Player state schema
@@ -69,10 +69,10 @@ export class GameState extends Schema {
     players = new MapSchema<PlayerState>();
 
     @type([BlockChange])
-    blockChanges = new Array<BlockChange>();
+    blockChanges = new ArraySchema<BlockChange>();
 
     @type('number')
-    maxBlockHistory: number = 1000; // Keep last 1000 block changes
+    maxBlockHistory: number = 100; // Keep last 100 block changes (reduced to prevent sync overload)
 
     /**
      * Add a block change to history

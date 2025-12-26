@@ -4,3 +4,5 @@ dist/
 .DS_Store
 coverage/
 .vscode/
+server/firebase-service-account.json
+src/config/firebase-credentials.json

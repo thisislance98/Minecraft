@@ -12,14 +12,23 @@ export class Duck extends Animal {
     }
 
     createBody() {
-        // Mallard
-        const bodyColor = 0x8B4513;
-        const headColor = 0x006400;
-        const beakColor = 0xFFD700;
+        // Mallard with detailed texture
+        const textureLoader = new THREE.TextureLoader();
 
-        const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-        const headMat = new THREE.MeshLambertMaterial({ color: headColor });
-        const beakMat = new THREE.MeshLambertMaterial({ color: beakColor });
+        // Load body texture
+        const bodyTexture = textureLoader.load('textures/duck_body.png');
+        const bodyColor = 0x8B4513;
+        const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor, map: bodyTexture });
+
+        // Load head texture
+        const headTexture = textureLoader.load('textures/duck_head.png');
+        const headColor = 0x006400;
+        const headMat = new THREE.MeshLambertMaterial({ color: headColor, map: headTexture });
+
+        // Load beak texture
+        const beakTexture = textureLoader.load('textures/duck_beak.png');
+        const beakColor = 0xFFD700;
+        const beakMat = new THREE.MeshLambertMaterial({ color: beakColor, map: beakTexture });
 
         // Body
         const bodyGeo = new THREE.BoxGeometry(0.4, 0.3, 0.6);

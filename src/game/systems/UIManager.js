@@ -303,10 +303,40 @@ export class UIManager {
         const logsBtn = taskEl.querySelector('.task-logs-btn');
         logsBtn.addEventListener('click', () => this.showTaskLogs(backendTaskId));
 
+        // Add cancel button if it's a backend task
+        if (backendTaskId) {
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'task-logs-btn'; // reuse style
+            cancelBtn.style.marginLeft = '5px';
+            cancelBtn.style.color = '#ff6666';
+            cancelBtn.style.borderColor = '#ff6666';
+            cancelBtn.style.background = 'rgba(255, 100, 100, 0.1)';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', () => this.cancelTask(taskId, backendTaskId));
+            taskEl.appendChild(cancelBtn);
+        }
+
         this.taskItemsDiv.appendChild(taskEl);
         this.tasks.push({ id: taskId, name, status: 'working', backendTaskId });
         this.taskListDiv.style.display = 'flex';
         return taskId;
+    }
+
+    async cancelTask(uiTaskId, backendTaskId) {
+        if (!confirm('Are you sure you want to stop this task?')) return;
+
+        try {
+            await fetch('/api/god-mode/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: backendTaskId })
+            });
+            // The polling loop will eventually catch the 'cancelled' status (Or we can update UI immediately)
+            this.updateTask(uiTaskId, 'error', 'Cancelling...');
+        } catch (e) {
+            console.error('Failed to cancel task:', e);
+            alert('Failed to cancel task');
+        }
     }
 
     async showTaskLogs(backendTaskId) {
@@ -434,10 +464,14 @@ export class UIManager {
                 <span class="task-done">✓</span>
                 <span class="task-done">${message || task?.name || 'Complete'}</span>
             `;
-        } else if (status === 'error') {
             taskEl.innerHTML = `
                 <span class="task-error">✗</span>
                 <span class="task-error">${message || 'Error'}</span>
+            `;
+        } else if (status === 'cancelled') {
+            taskEl.innerHTML = `
+                <span class="task-error">🛑</span>
+                <span class="task-error">Cancelled</span>
             `;
         }
 
@@ -540,6 +574,7 @@ export class UIManager {
         if (!status) {
             if (this.networkStatusDiv) this.networkStatusDiv.remove();
             this.networkStatusDiv = null;
+            this.playerCountElement = null;
             return;
         }
 
@@ -573,11 +608,32 @@ export class UIManager {
             };
             div.appendChild(shareBtn);
 
+            // Add Player Count Display
+            this.playerCountElement = document.createElement('span');
+            this.playerCountElement.style.cssText = `
+                background: rgba(0, 255, 204, 0.2);
+                padding: 2px 8px;
+                border-radius: 3px;
+                color: #00ffcc;
+            `;
+            this.playerCountElement.textContent = '👥 1';
+            div.appendChild(this.playerCountElement);
+
             this.networkStatusText = document.createElement('span');
             div.appendChild(this.networkStatusText);
         }
 
         this.networkStatusText.textContent = status;
+    }
+
+    /**
+     * Update the player count display
+     * @param {number} count - Number of connected players
+     */
+    updatePlayerCount(count) {
+        if (this.playerCountElement) {
+            this.playerCountElement.textContent = `👥 ${count}`;
+        }
     }
 
     showMultiplayerMenu() {

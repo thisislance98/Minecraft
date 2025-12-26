@@ -125,12 +125,15 @@ export class InputManager {
                 }
             }
 
-            // E for Broom activation only (use I for inventory)
+            // E for Broom activation or Dismount (use I for inventory)
             if (e.code === 'KeyE') {
                 if (!this.game.agent.isChatOpen) {
                     // If inventory is open, E closes it
                     if (this.game.gameState.flags.inventoryOpen) {
                         this.game.toggleInventory();
+                    } else if (this.game.player.mount) {
+                        // E dismounts if mounted
+                        this.game.player.dismount();
                     } else {
                         // E only toggles flight if holding Broom
                         const item = this.game.inventory.getSelectedItem();

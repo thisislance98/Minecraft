@@ -19,12 +19,12 @@ export class Lampost extends Animal {
 
     createBody() {
         // Materials
-        const metalColor = 0x222222; // Dark Iron
-        const glassColor = 0xFFFFE0; // Warm White Light (Emissive)
+        const metalMat = this.game.assetManager.getEntityMaterial('lampost_metal');
 
-        const metalMat = new THREE.MeshLambertMaterial({ color: metalColor });
+        // Ensure glass texture is generated
+        this.game.assetManager.getEntityMaterial('lampost_glass');
         const lightMat = new THREE.MeshStandardMaterial({
-            color: glassColor,
+            map: this.game.assetManager.textures['lampost_glass'],
             emissive: 0xFFDD00,
             emissiveIntensity: 1.0,
             transparent: true,

@@ -39,6 +39,7 @@ export class Drop {
         );
 
         this.levitationTimer = 0;
+        this.isGrounded = false;
     }
 
     createMesh(type) {
@@ -78,7 +79,8 @@ export class Drop {
         if (this.levitationTimer > 0) {
             this.velocity.y += this.game.gravity * 2.5 * deltaTime; // Strong lift
             if (this.velocity.y > 3.0) this.velocity.y = 3.0;
-        } else {
+            this.isGrounded = false;
+        } else if (!this.isGrounded) {
             this.velocity.y -= this.game.gravity * 2;
         }
 
@@ -104,6 +106,16 @@ export class Drop {
             this.position.y = Math.floor(this.position.y) + 1 + 0.125; // Sit on top (0.25 height / 2)
             this.velocity.y = 0;
             this.velocity.x *= 0.8; // Friction
+            this.velocity.z *= 0.8;
+            this.isGrounded = true;
+        } else if (this.isGrounded) {
+            // Check if we should still be grounded (block below us)
+            const blockBelow = this.game.getBlock(blockX, blockY - 1, blockZ);
+            if (!blockBelow || blockBelow.type === 'air' || this.isPassable(blockBelow.type)) {
+                this.isGrounded = false; // Start falling again
+            }
+            // Apply friction while grounded
+            this.velocity.x *= 0.8;
             this.velocity.z *= 0.8;
         }
 

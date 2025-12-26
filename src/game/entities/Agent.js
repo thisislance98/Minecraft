@@ -1,7 +1,6 @@
 
 import * as THREE from 'three';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AnimalClasses } from '../AnimalRegistry.js';
 
 // Import AI modules
 import { getTools } from '../ai/tools.js';
@@ -24,6 +23,10 @@ import {
     BIOME_ALIASES,
     CREATURE_ALIASES
 } from '../ai/constants.js';
+
+// Retry configuration for API calls (gemini-3-flash-preview can be unstable)
+const API_MAX_RETRIES = 3;
+const API_INITIAL_DELAY_MS = 1000;
 
 // ============================================================================
 // Audio Worklet Processor Source (inline as string for blob URL)
@@ -497,7 +500,7 @@ export class Agent {
             const creature = args?.creature;
             const count = Math.min(MAX_SPAWN_COUNT, Math.max(1, args?.count || 1));
             console.log('[Agent] Spawning creature:', creature, 'x', count);
-            const result = this.spawnCreature(creature, count);
+            const result = await this.spawnCreature(creature, count);
 
             // Check if creature doesn't exist and needs to be created
             if (result?.status === 'not_found') {
@@ -507,7 +510,7 @@ export class Agent {
                 this.game.uiManager.addChatMessage('ai', `🔧 "${capitalizedName}" doesn't exist yet! Creating it now...`);
 
                 // Build the creation request
-                const createRequest = `Create a new animal creature called "${capitalizedName}" in the game. Create the file at src/game/entities/animals/${capitalizedName}.js. It should:\n1. Import THREE and Animal base class\n2. Export a class ${capitalizedName} that extends Animal\n3. Have a createBody() method that builds a blocky, voxel-style 3D model using THREE.BoxGeometry and THREE.MeshLambertMaterial\n4. Use appropriate colors for a ${capitalizedName}\n5. Include legs, body, head, and any distinctive features\n\nAfter creating the file, update src/game/AnimalRegistry.js to:\n1. Add an import for ${capitalizedName}\n2. Add it to the exports\n3. Add it to the AnimalClasses object\n4. Add the module path to the HMR animalModules array`;
+                const createRequest = `Create a new animal creature called "${capitalizedName}" in the game. Create the file at src/game/entities/animals/${capitalizedName}.js. It should:\n1. Import THREE and Animal base class\n2. Export a class ${capitalizedName} that extends Animal\n3. Have a createBody() method that builds a blocky, voxel-style 3D model using THREE.BoxGeometry and THREE.MeshLambertMaterial\n4. Use appropriate colors for a ${capitalizedName}\n5. Include legs, body, head, and any distinctive features\n\nAfter creating the file, update src/game/AnimalRegistry.js to:\n1. Add an import for ${capitalizedName}\n2. Add it to the exports\n3. Add it to the AnimalClasses object`;
 
                 // Trigger perform_task to create the creature
                 const taskResult = await this.executeTool('perform_task', { request: createRequest });
@@ -778,7 +781,7 @@ export class Agent {
                     const x = Math.floor(player.position.x + Math.cos(angle) * radius);
                     const z = Math.floor(player.position.z + Math.sin(angle) * radius);
                     const y = worldGen.getTerrainHeight(x, z);
-                    const biome = this.game.biomeManager.getBiome(x, z, y);
+                    const biome = worldGen.getBiome(x, z);
                     if (biome === targetBiome) {
                         player.position.set(x, y + 2, z);
                         return `Teleported to ${loc} biome at (${x}, ${Math.floor(y + 2)}, ${z})`;
@@ -794,7 +797,11 @@ export class Agent {
     /**
      * Spawn creatures near the player
      */
-    spawnCreature(creatureName, count = 1) {
+    async spawnCreature(creatureName, count = 1) {
+        // Dynamic import to get the latest classes (updated via HMR mutation in AnimalRegistry)
+        const module = await import('../AnimalRegistry.js');
+        const AnimalClasses = module.AnimalClasses;
+
         // Check aliases first
         const lower = creatureName.toLowerCase();
         if (CREATURE_ALIASES[lower]) {
@@ -810,15 +817,33 @@ export class Agent {
             CreatureClass = AnimalClasses[normalized];
         }
 
-        // Try finding partial match
+        // Try finding partial match - prefer longer/more specific matches
         if (!CreatureClass) {
-            const lowerName = creatureName.toLowerCase();
+            const lowerName = creatureName.toLowerCase().replace(/\s+/g, ''); // Remove spaces
+            let bestMatch = null;
+            let bestScore = 0;
+
             for (const [name, cls] of Object.entries(AnimalClasses)) {
-                if (name.toLowerCase().includes(lowerName) || lowerName.includes(name.toLowerCase())) {
-                    CreatureClass = cls;
+                const lowerClassName = name.toLowerCase();
+                let score = 0;
+
+                // Exact match (case-insensitive, spaces removed)
+                if (lowerClassName === lowerName) {
+                    bestMatch = cls;
                     break;
                 }
+
+                // Class name ends with input (e.g. "duck" matches "YellowDuck")
+                if (lowerClassName.endsWith(lowerName)) {
+                    score = 100 + lowerName.length;
+                }
+
+                if (score > bestScore) {
+                    bestMatch = cls;
+                    bestScore = score;
+                }
             }
+            CreatureClass = bestMatch;
         }
 
         if (!CreatureClass) {
@@ -1022,7 +1047,26 @@ export class Agent {
                 const transform = this.getPlayerTransform();
                 const contextMsg = `[PLAYER CONTEXT - Position: x=${transform.position.x.toFixed(2)}, y=${transform.position.y.toFixed(2)}, z=${transform.position.z.toFixed(2)}, Orientation: pitch=${transform.rotation.x.toFixed(2)}, yaw=${transform.rotation.y.toFixed(2)}]\n${text}`;
 
-                let result = await this.chatSession.sendMessage(contextMsg);
+                // Send message with retry logic for 500 errors
+                let result;
+                let lastError;
+                for (let attempt = 1; attempt <= API_MAX_RETRIES; attempt++) {
+                    try {
+                        result = await this.chatSession.sendMessage(contextMsg);
+                        break; // Success, exit retry loop
+                    } catch (e) {
+                        lastError = e;
+                        const is500 = e.message?.includes('500') || e.message?.includes('Internal');
+                        if (is500 && attempt < API_MAX_RETRIES) {
+                            const delay = API_INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+                            console.log(`[Agent] Gemini API returned 500, retrying in ${delay}ms (attempt ${attempt}/${API_MAX_RETRIES})...`);
+                            await new Promise(r => setTimeout(r, delay));
+                        } else {
+                            throw e; // Non-retryable or max retries reached
+                        }
+                    }
+                }
+                if (!result) throw lastError;
                 let response = result.response;
 
                 // Handle tool calls loop
@@ -1040,8 +1084,22 @@ export class Agent {
                                 }
                             });
                         }
-                        // Send function responses back
-                        result = await this.chatSession.sendMessage(functionResponses);
+                        // Send function responses back with retry logic
+                        for (let attempt = 1; attempt <= API_MAX_RETRIES; attempt++) {
+                            try {
+                                result = await this.chatSession.sendMessage(functionResponses);
+                                break;
+                            } catch (e) {
+                                const is500 = e.message?.includes('500') || e.message?.includes('Internal');
+                                if (is500 && attempt < API_MAX_RETRIES) {
+                                    const delay = API_INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+                                    console.log(`[Agent] Gemini API returned 500, retrying in ${delay}ms (attempt ${attempt}/${API_MAX_RETRIES})...`);
+                                    await new Promise(r => setTimeout(r, delay));
+                                } else {
+                                    throw e;
+                                }
+                            }
+                        }
                         response = result.response;
                         turns++;
                     } else {
@@ -1058,9 +1116,8 @@ export class Agent {
                     // Add to shared history and trim
                     this.conversationHistory.push({ role: 'model', text: responseText });
                     this.trimConversationHistory();
-                } else {
-                    this.game.uiManager.addChatMessage('system', 'AI returned no text.');
                 }
+                // Note: If no text, that's OK - tool execution already provided feedback via chat
 
                 // Notify CLI of completion
                 if (this.currentDebugId) {

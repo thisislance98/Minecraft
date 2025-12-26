@@ -68,7 +68,13 @@ const palettes = {
     thatch: ['#D4A574', '#C4956A', '#E5B584', '#B4854A'],
     half_timber: { wood: ['#3e2723', '#4e342e'], plaster: ['#F5F5DC', '#FAEBD7'] },
     mossy_stone: ['#555555', '#666666', '#777777'],
-    iron_bars: ['#4a4a4a', '#5a5a5a', '#6a6a6a']
+    iron_bars: ['#4a4a4a', '#5a5a5a', '#6a6a6a'],
+    // Animal Textures
+    penguin_black: ['#111111', '#1a1a1a', '#0a0a0a'],
+    penguin_white: ['#FFFFFF', '#F0F0F0', '#E8E8E8'],
+    penguin_beak: ['#FFA500', '#FF8C00', '#FFB732'],
+    lampost_metal: ['#222222', '#2a2a2a', '#1a1a1a', '#333333'], // Dark iron
+    lampost_glass: ['#FFFFE0', '#FFFACD', '#FFFFF0'] // Warm white
 };
 
 export function generateTexture(type, size = 16) {
@@ -799,19 +805,45 @@ export function generateTexture(type, size = 16) {
             const palette = palettes.dark_planks;
             ctx.fillStyle = palette[0];
             ctx.fillRect(0, 0, size, size);
-            ctx.fillStyle = palette[2];
-            for (let i = 0; i < size; i += 4) {
-                ctx.fillRect(0, i, size, 1);
-            }
-            ctx.fillStyle = palette[1];
-            for (let i = 0; i < size; i += 4) {
-                const offset = (i % 8 === 0) ? 4 : 0;
-                for (let j = 0; j < size; j += 8) {
-                    ctx.fillRect((j + offset) % size, i, 1, 4);
+            // darker grain
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const grainOffset = Math.floor(x / 4);
+                    const colorIdx = (grainOffset + Math.floor(seededRandom(seed++) * 2)) % palette.length;
+                    ctx.fillStyle = palette[colorIdx];
+                    ctx.fillRect(x, y, 1, 1);
                 }
             }
             break;
         }
+
+        case 'penguin_black':
+        case 'penguin_white':
+        case 'penguin_beak':
+        case 'lampost_metal': {
+            // Generic noise texture for these
+            const palette = palettes[type];
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palette[Math.floor(seededRandom(seed++) * palette.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'lampost_glass': {
+            const palette = palettes.lampost_glass;
+            ctx.fillStyle = palette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Glow center
+            ctx.fillStyle = '#FFFFFF';
+            ctx.globalAlpha = 0.5;
+            ctx.fillRect(4, 4, 8, 8);
+            ctx.globalAlpha = 1.0;
+            break;
+        }
+
 
         case 'white_plaster': {
             // Stucco/plaster texture

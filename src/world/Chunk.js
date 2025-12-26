@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Blocks } from '../game/core/Blocks.js';
 
 /**
  * Chunk class for optimized block storage and mesh generation
@@ -24,9 +25,12 @@ export class Chunk {
         );
 
         // Define plant types for special rendering
-        this.plantTypes = new Set(['flower_red', 'flower_yellow', 'mushroom_red', 'mushroom_brown', 'long_grass', 'fern', 'flower_blue', 'dead_bush']);
-        this.doorTypes = new Set(['door_closed', 'door_open']);
-        this.fenceTypes = new Set(['fence']);
+        this.plantTypes = new Set([
+            Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.MUSHROOM_RED, Blocks.MUSHROOM_BROWN,
+            Blocks.LONG_GRASS, Blocks.FERN, Blocks.FLOWER_BLUE, Blocks.DEAD_BUSH
+        ]);
+        this.doorTypes = new Set([Blocks.DOOR_CLOSED, Blocks.DOOR_OPEN]);
+        this.fenceTypes = new Set([Blocks.FENCE]);
     }
 
     getIndex(lx, ly, lz) {
@@ -202,7 +206,7 @@ export class Chunk {
 
                         let x1 = 0, x2 = 1, z1 = 0.4, z2 = 0.6; // Closed defaults (Z-planeish)
 
-                        if (blockType === 'door_open') {
+                        if (blockType === Blocks.DOOR_OPEN) {
                             // Rotated 90 deg (Open) -> Aligned along X? Or Z?
                             // Usually "Open" means you can walk through the Z-hole. So door must be along X-wall.
                             // Wait, if door is in a Z-wall. Closed = blocks Z passage (Plane is XY).
@@ -311,11 +315,11 @@ export class Chunk {
                             let connects = false;
                             if (nb) {
                                 if (this.fenceTypes.has(nb)) connects = true;
-                                else if (nb.type !== 'air' &&
-                                    nb.type !== 'water' &&
+                                else if (nb.type !== Blocks.AIR &&
+                                    nb.type !== Blocks.WATER &&
                                     !this.plantTypes.has(nb.type) &&
-                                    nb.type !== 'glass' &&
-                                    nb.type !== 'leaves') { // connect to solids
+                                    nb.type !== Blocks.GLASS &&
+                                    nb.type !== Blocks.LEAVES) { // connect to solids
                                     connects = true;
                                 }
                             }
@@ -354,14 +358,14 @@ export class Chunk {
 
 
                         // Check if neighbor is transparent or non-full block (so we should draw our face)
-                        const isTransparent = neighbor === 'water' ||
-                            neighbor === 'glass' ||
-                            neighbor === 'leaves' ||
-                            neighbor === 'fence' ||
-                            neighbor === 'iron_bars' ||
-                            neighbor === 'window_frame' ||
-                            neighbor === 'door_closed' ||
-                            neighbor === 'door_open' ||
+                        const isTransparent = neighbor === Blocks.WATER ||
+                            neighbor === Blocks.GLASS ||
+                            neighbor === Blocks.LEAVES ||
+                            neighbor === Blocks.FENCE ||
+                            neighbor === Blocks.IRON_BARS ||
+                            neighbor === Blocks.WINDOW_FRAME ||
+                            neighbor === Blocks.DOOR_CLOSED ||
+                            neighbor === Blocks.DOOR_OPEN ||
                             neighborIsPlant;
                         const shouldRender = !neighbor || (isTransparent && neighbor !== blockType);
 

@@ -3,6 +3,7 @@ import { BiomeManager } from './BiomeManager.js';
 import { TerrainGenerator } from './TerrainGenerator.js';
 import { StructureGenerator } from './StructureGenerator.js';
 import { Config } from '../game/core/Config.js';
+import { Blocks } from '../game/core/Blocks.js';
 
 export class WorldGenerator {
     constructor(game) {
@@ -62,7 +63,7 @@ export class WorldGenerator {
 
                     // Bedrock
                     if (wy === 0) {
-                        this.game.setBlock(wx, wy, wz, 'bedrock', true);
+                        this.game.setBlock(wx, wy, wz, Blocks.BEDROCK, true);
                         continue;
                     }
 
@@ -74,60 +75,48 @@ export class WorldGenerator {
 
                     // Terrain
                     if (wy <= groundHeight) {
-                        let type = 'stone';
+                        let type = Blocks.STONE;
 
                         // Ore Generation
-                        if (type === 'stone') {
+                        if (type === Blocks.STONE) {
                             const depth = groundHeight - wy;
                             const rand = Math.random();
 
                             // Coal: Common, anywhere under ground
-                            if (rand < 0.03) { // 3% chance
-                                type = 'coal_ore';
-                            }
                             // Iron: Uncommon, below sea level or deep
-                            else if (wy < this.seaLevel && rand < 0.06) { // +3% chance (exclusive from above if structure changes, but here simple if-else chain)
-                                type = 'iron_ore';
-                            }
                             // Gold: Rare, deep
-                            else if (wy < 15 && rand < 0.08) { // +2% chance
-                                type = 'gold_ore';
-                            }
                             // Diamond: Very Rare, very deep
-                            else if (wy < 8 && rand < 0.09) { // +1% chance
-                                type = 'diamond_ore';
-                            }
                             // Make it explicit priority to avoid higher probability overwriting
                             // Let's rewrite for clarity and priority (rarest first)
 
                             const oreRand = Math.random();
                             if (wy < 8 && oreRand < Config.GENERATION.ORE_DIAMOND) { // Diamond
-                                type = 'diamond_ore';
+                                type = Blocks.DIAMOND_ORE;
                             } else if (wy < 15 && oreRand < Config.GENERATION.ORE_GOLD) { // Gold
-                                type = 'gold_ore';
+                                type = Blocks.GOLD_ORE;
                             } else if (wy < this.seaLevel && oreRand < Config.GENERATION.ORE_IRON) { // Iron
-                                type = 'iron_ore';
+                                type = Blocks.IRON_ORE;
                             } else if (oreRand < Config.GENERATION.ORE_COAL) { // Coal
-                                type = 'coal_ore';
+                                type = Blocks.COAL_ORE;
                             }
                         }
 
                         // Dirt/Grass layers
                         if (wy === groundHeight) {
-                            if (biome === 'DESERT') type = 'sand';
-                            else if (biome === 'SNOW') type = 'snow';
-                            else if (groundHeight < this.seaLevel + 2 && biome !== 'MOUNTAIN') type = 'sand'; // Beach
-                            else type = 'grass';
+                            if (biome === 'DESERT') type = Blocks.SAND;
+                            else if (biome === 'SNOW') type = Blocks.SNOW;
+                            else if (groundHeight < this.seaLevel + 2 && biome !== 'MOUNTAIN') type = Blocks.SAND; // Beach
+                            else type = Blocks.GRASS;
                         } else if (wy > groundHeight - 4) {
-                            if (biome === 'DESERT') type = 'sand';
-                            else type = 'dirt';
+                            if (biome === 'DESERT') type = Blocks.SAND;
+                            else type = Blocks.DIRT;
                         }
 
                         this.game.setBlock(wx, wy, wz, type, true);
                     } else {
                         // Water
                         if (wy <= this.seaLevel) {
-                            this.game.setBlock(wx, wy, wz, 'water', true);
+                            this.game.setBlock(wx, wy, wz, Blocks.WATER, true);
                         }
                     }
                 }

@@ -8,12 +8,17 @@
  * Usage:
  *   node scripts/ai-test-suite.js                    # Run all tests
  *   node scripts/ai-test-suite.js --test spawn      # Run specific test
+ *   node scripts/ai-test-suite.js --test multiplayer --players 2 --bots 2
  *   node scripts/ai-test-suite.js --timeout 60000   # Custom timeout
  */
 
 import { Client } from "colyseus.js";
 import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'ws';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Node.js WebSocket polyfill
 global.WebSocket = WebSocket;
@@ -25,6 +30,8 @@ const DEFAULT_TIMEOUT = 45000; // 45 seconds per test
 const args = process.argv.slice(2);
 const specificTest = args.includes('--test') ? args[args.indexOf('--test') + 1] : null;
 const timeout = args.includes('--timeout') ? parseInt(args[args.indexOf('--timeout') + 1]) : DEFAULT_TIMEOUT;
+const players = args.includes('--players') ? parseInt(args[args.indexOf('--players') + 1]) : 2;
+const botCount = args.includes('--bots') ? parseInt(args[args.indexOf('--bots') + 1]) : 0;
 
 /**
  * Test case definitions
@@ -104,6 +111,137 @@ const TEST_CASES = [
     }
 ];
 
+class Bot {
+    constructor(id) {
+        this.id = id;
+        this.client = new Client(SERVER_URL);
+        this.room = null;
+        this.angle = Math.random() * Math.PI * 2;
+        this.radius = 5 + Math.random() * 3;
+        this.speed = 0.05 + Math.random() * 0.05;
+        this.interval = null;
+    }
+
+    async connect() {
+        try {
+            // Join existing room or create
+            let rooms = [];
+            try {
+                const apiRes = await fetch(`${SERVER_URL}/api/rooms`);
+                if (apiRes.ok) rooms = await apiRes.json();
+            } catch (e) { /* ignore */ }
+
+            const hostRoom = rooms.find(r => r.clients > 0);
+            if (hostRoom) {
+                this.room = await this.client.joinById(hostRoom.roomId, { name: `Bot_${this.id}` });
+            } else {
+                this.room = await this.client.joinOrCreate("game", { name: `Bot_${this.id}` });
+            }
+
+            console.log(`[Bot ${this.id}] Connected to room ${this.room.id}`);
+            this.startLoop();
+        } catch (e) {
+            console.error(`[Bot ${this.id}] Connection failed:`, e.message);
+        }
+    }
+
+    startLoop() {
+        this.interval = setInterval(() => {
+            if (!this.room) return;
+
+            // Move in a circle
+            this.angle += this.speed;
+            const x = 32 + Math.cos(this.angle) * this.radius;
+            const z = 32 + Math.sin(this.angle) * this.radius;
+            const y = 40;
+
+            // Look at center
+            const rotationY = Math.atan2(32 - x, 32 - z); // Simple look-at math
+
+            this.room.send('playerMove', {
+                x: x,
+                y: y,
+                z: z,
+                rotationX: 0,
+                rotationY: rotationY,
+                animation: 'walking',
+                heldItem: 'sword_diamond'
+            });
+
+        }, 100); // 10hz updates
+    }
+
+    disconnect() {
+        if (this.interval) clearInterval(this.interval);
+        if (this.room) this.room.leave();
+    }
+}
+
+/**
+ * Open multiple browser windows for multiplayer testing
+ */
+async function runMultiplayerTest(playerCount, botCount) {
+    console.log(`\n👥 Starting Multiplayer Test...`);
+
+    // Launch Browsers
+    if (playerCount > 0) {
+        console.log(`   Opening ${playerCount} browser windows to http://localhost:3000`);
+        try {
+            const platform = process.platform;
+            let command = '';
+
+            if (platform === 'darwin') {
+                command = `open -n -a "Google Chrome" --args "--new-window" "http://localhost:3000"`;
+            } else if (platform === 'linux') {
+                command = `google-chrome --new-window "http://localhost:3000"`;
+            } else if (platform === 'win32') {
+                command = `start chrome --new-window "http://localhost:3000"`;
+            }
+
+            for (let i = 0; i < playerCount; i++) {
+                console.log(`   🚀 Launching player ${i + 1}...`);
+                await new Promise(r => setTimeout(r, 800));
+                await execAsync(command).catch(e => {
+                    if (platform === 'darwin') return execAsync(`open "http://localhost:3000"`);
+                    throw e;
+                });
+            }
+        } catch (e) {
+            console.error(`❌ Failed to launch browsers: ${e.message}`);
+        }
+    }
+
+    // Launch Bots
+    if (botCount > 0) {
+        console.log(`   🤖 Launching ${botCount} bots...`);
+        const bots = [];
+        for (let i = 0; i < botCount; i++) {
+            const bot = new Bot(i + 1);
+            bots.push(bot);
+            await bot.connect();
+            await new Promise(r => setTimeout(r, 200));
+        }
+        console.log(`   ✅ ${botCount} bots are running. Press Ctrl+C to stop.`);
+
+        // Command the player to teleport to the bots to ensure visibility
+        if (bots.length > 0 && bots[0].room) {
+            console.log(`   ✨ Teleporting player to bots (32, 50, 32)...`);
+            bots[0].room.send('debugCommand', {
+                action: 'teleport',
+                x: 32,
+                y: 50,
+                z: 32
+            });
+        }
+
+        // Keep process alive
+        await new Promise(() => { });
+    }
+
+    console.log(`\n✅ All players launched.`);
+    console.log(`   Verify they are connected in the game window.`);
+}
+
 /**
  * Run a single test case
  */
@@ -112,23 +250,35 @@ async function runTest(client, testCase) {
 
     return new Promise(async (resolve, reject) => {
         const timeoutId = setTimeout(() => {
-            reject(new Error(`Timeout: No response within ${timeout}ms`));
+            reject(new Error(`Timeout: No response within ${timeout}ms. (Is the browser active?)`));
         }, timeout);
 
         try {
             // Find existing room or create one
             let room;
             try {
-                const response = await fetch(`${SERVER_URL}/matchmake/game`);
-                const rooms = response.ok ? await response.json() : [];
+                // Fetch active rooms from server API
+                const apiRes = await fetch(`${SERVER_URL}/api/rooms`);
+                const rooms = await apiRes.json();
+                console.log(`Debug: Found ${rooms.length} active rooms via API.`);
 
-                if (rooms.length > 0) {
+                // Find a room with clients (likely the browser host)
+                const hostRoom = rooms.find(r => r.clients > 0);
+
+                if (hostRoom) {
+                    console.log(`Debug: Joining existing room ${hostRoom.roomId} (${hostRoom.clients} clients)`);
+                    room = await client.joinById(hostRoom.roomId, { name: 'AI_Test_Runner' });
+                } else if (rooms.length > 0) {
+                    // Fallback to any room
+                    console.log(`Debug: Joining existing empty room ${rooms[0].roomId}`);
                     room = await client.joinById(rooms[0].roomId, { name: 'AI_Test_Runner' });
                 } else {
-                    room = await client.joinOrCreate("game", { name: 'AI_Test_Runner' });
+                    console.log("Debug: No existing rooms found via API. Creating new one.");
+                    room = await client.create("game", { name: 'AI_Test_Runner' });
                 }
             } catch (e) {
-                room = await client.joinOrCreate("game", { name: 'AI_Test_Runner' });
+                console.log("Debug: Join failed, creating new room. Error:", e.message);
+                room = await client.create("game", { name: 'AI_Test_Runner' });
             }
 
             // Listen for response
@@ -170,6 +320,9 @@ async function runAllTests() {
     console.log('═'.repeat(50));
     console.log(`📡 Server: ${SERVER_URL}`);
     console.log(`⏱️  Timeout: ${timeout}ms per test`);
+    console.log('═'.repeat(50));
+    console.log('ℹ️  NOTE: Tests run in the game environment.');
+    console.log('   Please ensure http://localhost:3000 is open in your browser.');
     console.log('═'.repeat(50));
 
     const client = new Client(SERVER_URL);
@@ -233,57 +386,41 @@ async function runAllTests() {
     process.exit(exitCode);
 }
 
-// Check if server is available and has clients
+// Check if server is available
 async function checkServer() {
     try {
-        const response = await fetch(`${SERVER_URL}/matchmake/game`);
-        if (!response.ok) return { up: false, clients: 0 };
-
-        const rooms = await response.json();
-        const clientCount = rooms.reduce((acc, room) => acc + room.clients, 0);
-
-        return { up: true, clients: clientCount };
+        const response = await fetch(`${SERVER_URL}/health`);
+        return response.ok;
     } catch (e) {
-        return { up: false, clients: 0 };
+        console.error('Debug: checkServer connection error:', e.message);
+        return false;
     }
 }
 
 // Main
 async function main() {
+    // Special case for multiplayer 'test'
+    if (specificTest === 'multiplayer') {
+        await runMultiplayerTest(players, botCount);
+        return;
+    }
+
     console.log('\n🔍 Checking game server...');
 
-    const status = await checkServer();
-    if (!status.up) {
+    const serverUp = await checkServer();
+    if (!serverUp) {
         console.error(`\n❌ Cannot connect to server at ${SERVER_URL}`);
         console.error('   Make sure the game is running:');
         console.error('   1. Start the server: cd server && npm start');
         console.error('   2. Open the game in a browser: npm run dev');
+        console.error('   3. Check if port is correct (default 2567)');
         console.error('\n');
         process.exit(1);
     }
 
-    if (status.clients === 0) {
-        console.warn(`\n⚠️  Server is up but NO clients are connected!`);
-        console.warn('   The AI lives in the game client (browser), not the server.');
-        console.warn('   Please open http://localhost:3000 in your browser before running tests.');
-        console.warn('   Waiting 30 seconds for a client to connect...\n');
-
-        // Wait for client to connect
-        for (let i = 0; i < 30; i++) {
-            await new Promise(r => setTimeout(r, 1000));
-            const newStatus = await checkServer();
-            if (newStatus.clients > 0) {
-                console.log('✅ Client connected!');
-                break;
-            }
-            if (i === 29) {
-                console.error('❌ Timeout: No game client connected.');
-                process.exit(1);
-            }
-        }
-    }
-
-    console.log(`✅ Server is running (${status.clients || 'at least 1'} client(s) connected)\n`);
+    // Warn if we can't verify client count (simplified check)
+    // We assume if server is up, we try to run.
+    console.log('✅ Server is reachable. Waiting for client...');
 
     await runAllTests();
 }

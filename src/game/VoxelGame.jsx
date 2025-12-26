@@ -33,13 +33,19 @@ import { WorldParticleSystem } from './systems/WorldParticleSystem.js';
 import { SoundManager } from './systems/SoundManager.js';
 import { StructureGenerator } from '../world/StructureGenerator.js';
 import { Config } from './core/Config.js';
+import { Blocks } from './core/Blocks.js';
 import { OmniProjectile } from './entities/projectiles/OmniProjectile.js';
 import { SpellSystem } from './systems/SpellSystem.js';
 import { Tornado } from './entities/Tornado.js';
 import { WaterSystem } from './systems/WaterSystem.js';
+import { StoreUI } from './ui/StoreUI.js';
+
 
 export class VoxelGame {
     constructor() {
+        // Expose game globally for HMR to update existing creatures
+        window.__VOXEL_GAME__ = this;
+
         this.container = document.getElementById('game-container');
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -151,10 +157,25 @@ export class VoxelGame {
         this.colyseusManager = this.networkManager; // Alias for Agent compatibility
         this.remotePlayers = new Map(); // peerId -> RemotePlayer
 
-        // Auto-host for development/testing
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Check for room URL parameter to join an existing room
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomIdToJoin = urlParams.get('room');
+
+        if (roomIdToJoin && roomIdToJoin !== 'undefined' && roomIdToJoin.length > 0) {
+            // Join the shared room
+            console.log('[Game] Joining shared room:', roomIdToJoin);
+            this.networkManager.joinRoom(roomIdToJoin)
+                .then(() => {
+                    console.log('[Game] ✅ Successfully joined room:', roomIdToJoin);
+                })
+                .catch(e => {
+                    console.error('[Game] Failed to join room:', e);
+                    this.uiManager?.addChatMessage('system', `Failed to join room: ${e.message}`);
+                });
+        } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // Auto-host for development/testing with retry logic
             console.log('[Game] Auto-hosting multiplayer session for testing...');
-            this.networkManager.createRoom().catch(e => console.error('[Game] Auto-host failed:', e));
+            this.autoHostWithRetry();
         }
 
         // Setup Network Callbacks (Colyseus)
@@ -197,6 +218,9 @@ export class VoxelGame {
             if (e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.setDaytime();
             }
+            if (e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+                this.storeUI.toggle();
+            }
         });
 
         // Initial chunk check
@@ -236,11 +260,21 @@ export class VoxelGame {
         this.inventory.addItem('wizard_tower_wand', 1, 'tool');
 
 
-        this.inventory.addItem('door_closed', 64, 'block');
+        this.inventory.addItem(Blocks.DOOR_CLOSED, 64, 'block');
 
+        // Poll for AI spawn requests every 2 seconds
+        this.startSpawnQueuePolling();
 
+        // Poll for chat test prompts (for curl-based testing)
+        this.startChatTestPolling();
+
+        // Poll for eval requests (for game state inspection)
+        this.startEvalPolling();
 
         // Chat Button Listener & Debug Panel handled by UIManager/InputManager now
+
+        // Initialize Store UI
+        this.storeUI = new StoreUI(this);
     }
 
     // Helper for Debug Toggle (called by InputManager)
@@ -257,8 +291,8 @@ export class VoxelGame {
 
     setDaytime() {
         if (this.environment) {
-            // Set time to day (0 is usually dawn/day start)
-            this.environment.time = 0;
+            // Set time to noon
+            this.environment.time = 0.25;
             // Force immediate update of lights and skybox
             this.environment.updateDayNightCycle(0, this.player.position);
             if (this.uiManager) {
@@ -268,7 +302,163 @@ export class VoxelGame {
         }
     }
 
+    /**
+     * Poll for AI-requested creature spawns
+     */
+    startSpawnQueuePolling() {
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/god-mode/spawns');
+                const data = await res.json();
+
+                if (data.spawns && data.spawns.length > 0) {
+                    for (const spawn of data.spawns) {
+                        console.log('[Game] Processing spawn request:', spawn);
+
+                        // Import AnimalClasses dynamically to get the creature
+                        const { AnimalClasses } = await import('./AnimalRegistry.js');
+
+                        // Try to find the creature class
+                        let CreatureClass = AnimalClasses[spawn.creature];
+
+                        // Case-insensitive fallback
+                        if (!CreatureClass) {
+                            const normalized = spawn.creature.charAt(0).toUpperCase() + spawn.creature.slice(1).toLowerCase();
+                            CreatureClass = AnimalClasses[normalized];
+                        }
+
+                        if (CreatureClass) {
+                            this.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, spawn.count || 1);
+                            this.uiManager?.addChatMessage('system', `Spawned ${spawn.count || 1}x ${spawn.creature}!`);
+                            console.log(`[Game] Spawned ${spawn.count || 1}x ${spawn.creature}`);
+                        } else {
+                            console.warn(`[Game] Unknown creature: ${spawn.creature}`);
+                            this.uiManager?.addChatMessage('system', `Unknown creature: ${spawn.creature}`);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Silently ignore polling errors (server might not be ready)
+            }
+        }, 2000); // Poll every 2 seconds
+    }
+
+    /**
+     * Poll for chat test prompts (curl-based testing of in-game AI)
+     */
+    startChatTestPolling() {
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/chat-test/poll');
+                const data = await res.json();
+
+                if (data.prompt && this.agent) {
+                    const { testId, message } = data.prompt;
+                    console.log(`[ChatTest] Processing prompt (${testId}): ${message}`);
+
+                    try {
+                        // Send the message through the agent's text chat
+                        await this.agent.sendTextMessage(message);
+
+                        // Report success - get the last AI message from chat
+                        const lastAiMessage = this.uiManager?.getLastAiMessage?.() || 'Message processed';
+
+                        await fetch('/api/chat-test/response', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                testId,
+                                aiResponse: lastAiMessage,
+                                toolsCalled: []
+                            })
+                        });
+                    } catch (e) {
+                        // Report error
+                        await fetch('/api/chat-test/response', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                testId,
+                                error: e.message
+                            })
+                        });
+                    }
+                }
+            } catch (e) {
+                // Silently ignore polling errors
+            }
+        }, 1000); // Poll every 1 second for responsiveness
+    }
+
     // Removing setupDebugPanel() as it is in UIManager now
+
+    /**
+     * Poll for game state inspection code (eval)
+     * CAUTION: Only for development use!
+     */
+    startEvalPolling() {
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/test/eval/poll');
+                const data = await res.json();
+
+                if (data.item) {
+                    const { evalId, code } = data.item;
+                    console.log(`[Eval] Inspecting: ${code}`);
+
+                    try {
+                        // Execute the inspection code
+                        // We provide 'game' and 'window' context
+                        // The code should return a JSON-serializable value
+                        const game = this;
+                        const result = await (new Function('game', 'window', `return (async () => { ${code} })()`))(game, window);
+
+                        await fetch('/api/test/eval/result', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                evalId,
+                                result: result
+                            })
+                        });
+                    } catch (e) {
+                        await fetch('/api/test/eval/result', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                evalId,
+                                error: e.message
+                            })
+                        });
+                    }
+                }
+            } catch (e) {
+                // Silently ignore
+            }
+        }, 1000);
+    }
+
+    /**
+     * Auto-host multiplayer session with retry logic for development.
+     * Handles the race condition where page loads before Colyseus server is ready.
+     */
+    async autoHostWithRetry(retries = 5, delay = 1000) {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                await this.networkManager.createRoom();
+                console.log(`[Game] ✅ Connected to Colyseus (attempt ${attempt})`);
+                return; // Success!
+            } catch (e) {
+                console.warn(`[Game] Auto-host attempt ${attempt}/${retries} failed:`, e.message || e);
+                if (attempt < retries) {
+                    console.log(`[Game] Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential backoff
+                }
+            }
+        }
+        console.error('[Game] ❌ Auto-host failed after all retries. Refresh the page once the server is running.');
+    }
 
     spawnPlayer() {
         let spawnX = 32;
@@ -431,14 +621,14 @@ export class VoxelGame {
         const target = this.physicsManager.getTargetBlock();
         if (target) {
             const block = this.getBlockWorld(target.x, target.y, target.z);
-            if (block === 'door_closed') {
-                this.setBlock(target.x, target.y, target.z, 'door_open');
+            if (block === Blocks.DOOR_CLOSED) {
+                this.setBlock(target.x, target.y, target.z, Blocks.DOOR_OPEN);
                 this.soundManager.playSound('click'); // consistent feedback
                 return true; // Handled
-            } else if (block === 'door_open') {
+            } else if (block === Blocks.DOOR_OPEN) {
                 // Check if player is inside the door before closing interaction?
                 // For now, just close it. Collision will handle pushing out or getting stuck.
-                this.setBlock(target.x, target.y, target.z, 'door_closed');
+                this.setBlock(target.x, target.y, target.z, Blocks.DOOR_CLOSED);
                 this.soundManager.playSound('click');
                 return true; // Handled
             }
@@ -528,10 +718,10 @@ export class VoxelGame {
     }
 
     spawnDrop(x, y, z, blockType) {
-        if (!blockType || blockType === 'air' || blockType === 'water') return;
+        if (!blockType || blockType === Blocks.AIR || blockType === Blocks.WATER) return;
 
         // Leaf logic: Chance to drop
-        if (blockType.includes('leaves')) {
+        if (blockType.includes(Blocks.LEAVES)) {
             if (Math.random() > 0.2) return;
         }
 
@@ -605,8 +795,8 @@ export class VoxelGame {
         if (!block) return;
 
         let newType;
-        if (block.type === 'door_closed') newType = 'door_open';
-        else if (block.type === 'door_open') newType = 'door_closed';
+        if (block.type === Blocks.DOOR_CLOSED) newType = Blocks.DOOR_OPEN;
+        else if (block.type === Blocks.DOOR_OPEN) newType = Blocks.DOOR_CLOSED;
         else return;
 
         // Toggle clicked block
@@ -614,13 +804,13 @@ export class VoxelGame {
 
         // Check Up
         const upBlock = this.getBlock(x, y + 1, z);
-        if (upBlock && (upBlock.type === 'door_closed' || upBlock.type === 'door_open')) {
+        if (upBlock && (upBlock.type === Blocks.DOOR_CLOSED || upBlock.type === Blocks.DOOR_OPEN)) {
             this.setBlock(x, y + 1, z, newType);
         }
 
         // Check Down
         const downBlock = this.getBlock(x, y - 1, z);
-        if (downBlock && (downBlock.type === 'door_closed' || downBlock.type === 'door_open')) {
+        if (downBlock && (downBlock.type === Blocks.DOOR_CLOSED || downBlock.type === Blocks.DOOR_OPEN)) {
             this.setBlock(x, y - 1, z, newType);
         }
     }
@@ -802,10 +992,11 @@ export class VoxelGame {
             if (processed > 0) {
                 this.updateBlockCount();
 
-                // Spawn initial animals and dragon AFTER first batch of world chunks are generated
-                if (!this._initialSpawnDone) {
+                // Spawn initial animals and dragon AFTER enough chunks are generated
+                // Wait for at least 50 chunks to ensure the world around player is loaded
+                if (!this._initialSpawnDone && this.generatedChunks.size >= 50) {
                     this._initialSpawnDone = true;
-                    console.log('[Game] Initial chunks generated, spawning animals...');
+                    console.log(`[Game] ${this.generatedChunks.size} chunks generated, spawning animals...`);
 
                     this.spawnAnimals();
                     this.spawnManager.spawnKangaroosNearPlayer();
@@ -844,9 +1035,27 @@ export class VoxelGame {
         );
         this.frustum.setFromProjectionMatrix(this.frustumMatrix);
 
+        // Get player chunk position for distance calculations
+        const playerCX = Math.floor(this.player.position.x / this.chunkSize);
+        const playerCZ = Math.floor(this.player.position.z / this.chunkSize);
+
         for (const chunk of this.chunks.values()) {
             if (chunk.mesh) {
-                chunk.mesh.visible = chunk.isInFrustum(this.frustum);
+                // Calculate horizontal distance from player
+                const hDist = Math.max(Math.abs(chunk.cx - playerCX), Math.abs(chunk.cz - playerCZ));
+
+                // Keep ground-level chunks (cy <= 0) visible within render distance
+                // This prevents terrain from being culled under structures
+                const isGroundChunk = chunk.cy <= 0;
+                const withinRenderDistance = hDist <= this.renderDistance;
+
+                if (isGroundChunk && withinRenderDistance) {
+                    // Always show ground chunks within render distance
+                    chunk.mesh.visible = true;
+                } else {
+                    // Apply normal frustum culling for above-ground chunks
+                    chunk.mesh.visible = chunk.isInFrustum(this.frustum);
+                }
             }
         }
     }

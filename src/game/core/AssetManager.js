@@ -348,4 +348,46 @@ export class AssetManager {
     getBlockMaterialIndices() {
         return this.blockMaterialIndices;
     }
+
+    getEntityMaterial(name) {
+        if (this.matMap[name] !== undefined) {
+            // If it's already in the global array (reused block texture), return it
+            // BUT for entities we usually want a standalone material if we are doing custom things?
+            // Actually, reusing the material index is fine if we return the material object.
+            const idx = this.matMap[name];
+            return this.materialArray[idx];
+        }
+
+        // Check explicit entity cache if separate (optional, but let's stick to valid reuse)
+        // For now, let's create a NEW material for entities to ensure settings (like vertexColors: false) are correct
+        // effectively treating entities distinct from blocks to avoid side effects.
+
+        // Actually, let's just generate it and cache it in matMap for now, assuming standard settings?
+        // Detailed Plan said: "Returns a THREE.MeshLambertMaterial with vertexColors: false"
+
+        const canvas = generateTexture(name);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestFilter;
+
+        const mat = new THREE.MeshLambertMaterial({
+            map: texture,
+            vertexColors: false // Entities don't use the chunk-based lighting (yet)
+        });
+
+        // We don't necessarily need to add it to 'this.materialArray' because that's for the Chunk InstancedMesh/TextureAtlas system (if applicable).
+        // Since entities are individual meshes, we can just return the material.
+        // We SHOULD cache it though.
+
+        this.matMap[name] = this.materialArray.length; // Just to mark it as known, though we might not push it to array if not block?
+        // Wait, 'this.matMap' maps name -> index in 'this.materialArray'.
+        // If we don't push it to materialArray, we shouldn't use matMap in the same way.
+        // Let's use a separate cache for entity materials.
+
+        if (!this.entityMaterials) this.entityMaterials = {};
+        if (this.entityMaterials[name]) return this.entityMaterials[name];
+
+        this.entityMaterials[name] = mat;
+        return mat;
+    }
 }

@@ -879,6 +879,258 @@ export class Inventory {
                         <circle cx="32" cy="16" r="12" fill="#888" filter="url(#glow-giant-wand)"/>
                         <path d="M26 16 L38 16" stroke="#444" stroke-width="4"/>
                         <circle cx="32" cy="16" r="6" fill="#DDD" opacity="0.8"/>
+                    </svg>`,
+            growth_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-growth-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="10" fill="#32CD32" filter="url(#glow-growth-wand)"/>
+                        <circle cx="32" cy="16" r="6" fill="#90EE90" opacity="0.6"/>
+                        <path d="M26 16 Q 32 6 38 16" fill="none" stroke="#228B22" stroke-width="2"/>
+                    </svg>`,
+            wizard_tower_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-wizard-wand">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="24" width="8" height="36" rx="2" fill="#4B0082" stroke="#2e0050" stroke-width="2"/>
+                        <path d="M26 4 L38 4 L42 24 L22 24 Z" fill="#FFD700" stroke="#DAA520" stroke-width="2"/>
+                        <circle cx="32" cy="14" r="4" fill="#E6E6FA" filter="url(#glow-wizard-wand)"/>
+                        <rect x="30" y="30" width="4" height="20" fill="#9370DB" opacity="0.5"/>
+                    </svg>`,
+
+            // ===== NEW BUILDING BLOCK ICONS =====
+            cobblestone: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#5a5a5a"/>
+                        <rect x="4" y="4" width="18" height="14" rx="4" fill="#777"/>
+                        <rect x="26" y="6" width="16" height="12" rx="3" fill="#666"/>
+                        <rect x="46" y="2" width="14" height="16" rx="4" fill="#888"/>
+                        <rect x="8" y="22" width="22" height="16" rx="4" fill="#555"/>
+                        <rect x="34" y="20" width="18" height="14" rx="3" fill="#6a6a6a"/>
+                        <rect x="2" y="42" width="16" height="18" rx="4" fill="#7a7a7a"/>
+                        <rect x="22" y="44" width="20" height="16" rx="4" fill="#4a4a4a"/>
+                        <rect x="46" y="40" width="16" height="20" rx="3" fill="#5f5f5f"/>
+                    </svg>`,
+            roof_tiles: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#8B0000"/>
+                        <rect x="0" y="0" width="16" height="12" fill="#A52A2A"/>
+                        <rect x="16" y="0" width="16" height="12" fill="#CD5C5C"/>
+                        <rect x="32" y="0" width="16" height="12" fill="#B22222"/>
+                        <rect x="48" y="0" width="16" height="12" fill="#A52A2A"/>
+                        <rect x="8" y="16" width="16" height="12" fill="#B22222"/>
+                        <rect x="24" y="16" width="16" height="12" fill="#A52A2A"/>
+                        <rect x="40" y="16" width="16" height="12" fill="#CD5C5C"/>
+                        <rect x="0" y="32" width="16" height="12" fill="#CD5C5C"/>
+                        <rect x="16" y="32" width="16" height="12" fill="#B22222"/>
+                        <rect x="32" y="32" width="16" height="12" fill="#A52A2A"/>
+                        <rect x="48" y="32" width="16" height="12" fill="#8B0000"/>
+                        <rect x="8" y="48" width="16" height="16" fill="#8B0000"/>
+                        <rect x="24" y="48" width="16" height="16" fill="#CD5C5C"/>
+                        <rect x="40" y="48" width="16" height="16" fill="#B22222"/>
+                        <path d="M0 12 L64 12 M0 28 L64 28 M0 44 L64 44" stroke="#6B0000" stroke-width="2"/>
+                    </svg>`,
+            chimney_brick: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#3a1a10"/>
+                        <path d="M0 16 L64 16 M0 32 L64 32 M0 48 L64 48" stroke="#2a0f08" stroke-width="3"/>
+                        <rect x="0" y="2" width="14" height="12" fill="#5a3520"/>
+                        <rect x="16" y="2" width="14" height="12" fill="#4a2513"/>
+                        <rect x="32" y="2" width="14" height="12" fill="#6a4530"/>
+                        <rect x="48" y="2" width="14" height="12" fill="#5a3520"/>
+                        <rect x="8" y="18" width="14" height="12" fill="#4a2513"/>
+                        <rect x="24" y="18" width="14" height="12" fill="#5a3520"/>
+                        <rect x="40" y="18" width="14" height="12" fill="#4a2513"/>
+                        <rect x="0" y="34" width="14" height="12" fill="#6a4530"/>
+                        <rect x="16" y="34" width="14" height="12" fill="#5a3520"/>
+                        <rect x="32" y="34" width="14" height="12" fill="#4a2513"/>
+                        <rect x="48" y="34" width="14" height="12" fill="#6a4530"/>
+                        <rect x="8" y="50" width="14" height="12" fill="#5a3520"/>
+                        <rect x="24" y="50" width="14" height="12" fill="#4a2513"/>
+                        <rect x="40" y="50" width="14" height="12" fill="#6a4530"/>
+                    </svg>`,
+            window_frame: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="2" y="2" width="60" height="60" fill="#5C4033" stroke="#3a2515" stroke-width="3"/>
+                        <rect x="6" y="6" width="24" height="24" fill="#a0d8ff" fill-opacity="0.4"/>
+                        <rect x="34" y="6" width="24" height="24" fill="#a0d8ff" fill-opacity="0.4"/>
+                        <rect x="6" y="34" width="24" height="24" fill="#a0d8ff" fill-opacity="0.4"/>
+                        <rect x="34" y="34" width="24" height="24" fill="#a0d8ff" fill-opacity="0.4"/>
+                        <path d="M32 6 L32 58 M6 32 L58 32" stroke="#5C4033" stroke-width="4"/>
+                        <rect x="8" y="8" width="8" height="8" fill="white" opacity="0.4"/>
+                        <rect x="36" y="8" width="8" height="8" fill="white" opacity="0.4"/>
+                    </svg>`,
+            fence: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="10" height="56" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="50" y="4" width="10" height="56" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="27" y="8" width="10" height="52" fill="#A0522D" stroke="#6b4423" stroke-width="2"/>
+                        <rect x="0" y="18" width="64" height="8" fill="#6B4423"/>
+                        <rect x="0" y="42" width="64" height="8" fill="#6B4423"/>
+                        <path d="M9 4 L9 8 M55 4 L55 8 M32 8 L32 12" stroke="#3e2b1e" stroke-width="2"/>
+                    </svg>`,
+            shingles: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#2F4F4F"/>
+                        <rect x="0" y="0" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="16" y="0" width="16" height="8" fill="#456565"/>
+                        <rect x="32" y="0" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="48" y="0" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="8" y="8" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="24" y="8" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="40" y="8" width="16" height="8" fill="#456565"/>
+                        <rect x="0" y="16" width="16" height="8" fill="#456565"/>
+                        <rect x="16" y="16" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="32" y="16" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="48" y="16" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="8" y="24" width="16" height="8" fill="#456565"/>
+                        <rect x="24" y="24" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="40" y="24" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="0" y="32" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="16" y="32" width="16" height="8" fill="#456565"/>
+                        <rect x="32" y="32" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="48" y="32" width="16" height="8" fill="#456565"/>
+                        <rect x="8" y="40" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="24" y="40" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="40" y="40" width="16" height="8" fill="#456565"/>
+                        <rect x="0" y="48" width="16" height="8" fill="#456565"/>
+                        <rect x="16" y="48" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="32" y="48" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="48" y="48" width="16" height="8" fill="#1a3a3a"/>
+                        <rect x="8" y="56" width="16" height="8" fill="#3a5a5a"/>
+                        <rect x="24" y="56" width="16" height="8" fill="#456565"/>
+                        <rect x="40" y="56" width="16" height="8" fill="#1a3a3a"/>
+                    </svg>`,
+            polished_stone: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-polished" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#bababa" />
+                                <stop offset="50%" style="stop-color:#9a9a9a" />
+                                <stop offset="100%" style="stop-color:#8a8a8a" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="64" height="64" fill="url(#grad-polished)"/>
+                        <rect x="2" y="2" width="60" height="60" fill="none" stroke="white" stroke-width="2" opacity="0.3"/>
+                        <rect x="4" y="4" width="20" height="20" fill="white" opacity="0.15"/>
+                        <path d="M10 50 L50 10" stroke="white" stroke-width="2" opacity="0.2"/>
+                    </svg>`,
+            dark_planks: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#3e2723"/>
+                        <path d="M0 16 L64 16 M0 32 L64 32 M0 48 L64 48" stroke="#2c1e18" stroke-width="3"/>
+                        <path d="M16 0 L16 16 M32 16 L32 32 M48 32 L48 48 M16 48 L16 64" stroke="#2c1e18" stroke-width="2"/>
+                        <rect x="4" y="4" width="8" height="8" fill="#4e342e" opacity="0.5"/>
+                        <rect x="40" y="20" width="12" height="8" fill="#4e342e" opacity="0.5"/>
+                        <rect x="8" y="36" width="10" height="8" fill="#5d4037" opacity="0.4"/>
+                        <rect x="48" y="52" width="8" height="8" fill="#4e342e" opacity="0.5"/>
+                    </svg>`,
+            white_plaster: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#FAF0E6"/>
+                        <rect x="4" y="4" width="12" height="10" fill="#FFFAF0" opacity="0.8"/>
+                        <rect x="20" y="8" width="16" height="12" fill="#F5F5DC" opacity="0.7"/>
+                        <rect x="42" y="4" width="18" height="14" fill="#FAEBD7" opacity="0.8"/>
+                        <rect x="8" y="26" width="20" height="14" fill="#FAEBD7" opacity="0.6"/>
+                        <rect x="36" y="24" width="14" height="16" fill="#FFFAF0" opacity="0.7"/>
+                        <rect x="4" y="46" width="16" height="14" fill="#F5F5DC" opacity="0.7"/>
+                        <rect x="28" y="44" width="18" height="16" fill="#FAF0E6" opacity="0.8"/>
+                        <rect x="52" y="48" width="8" height="12" fill="#FAEBD7" opacity="0.6"/>
+                    </svg>`,
+            terracotta: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#CD853F"/>
+                        <rect x="4" y="4" width="16" height="16" fill="#D2691E" opacity="0.7"/>
+                        <rect x="24" y="8" width="20" height="12" fill="#B8860B" opacity="0.6"/>
+                        <rect x="48" y="4" width="12" height="18" fill="#DEB887" opacity="0.7"/>
+                        <rect x="8" y="28" width="24" height="16" fill="#DEB887" opacity="0.5"/>
+                        <rect x="38" y="26" width="18" height="14" fill="#CD853F" opacity="0.8"/>
+                        <rect x="4" y="48" width="18" height="12" fill="#D2691E" opacity="0.6"/>
+                        <rect x="28" y="46" width="16" height="14" fill="#B8860B" opacity="0.7"/>
+                        <rect x="50" y="50" width="10" height="10" fill="#DEB887" opacity="0.7"/>
+                    </svg>`,
+            thatch: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#D4A574"/>
+                        <path d="M0 8 L64 8 M0 16 L64 16 M0 24 L64 24 M0 32 L64 32 M0 40 L64 40 M0 48 L64 48 M0 56 L64 56" stroke="#C4956A" stroke-width="2"/>
+                        <path d="M4 0 L4 64 M12 0 L12 64 M20 0 L20 64 M28 0 L28 64 M36 0 L36 64 M44 0 L44 64 M52 0 L52 64 M60 0 L60 64" stroke="#E5B584" stroke-width="1" opacity="0.6"/>
+                        <rect x="8" y="12" width="12" height="4" fill="#B4854A" opacity="0.5"/>
+                        <rect x="36" y="28" width="16" height="4" fill="#B4854A" opacity="0.5"/>
+                        <rect x="16" y="44" width="10" height="4" fill="#E5B584" opacity="0.6"/>
+                    </svg>`,
+            half_timber: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#F5F5DC"/>
+                        <rect x="0" y="0" width="64" height="8" fill="#3e2723"/>
+                        <rect x="0" y="56" width="64" height="8" fill="#3e2723"/>
+                        <rect x="0" y="0" width="8" height="64" fill="#3e2723"/>
+                        <rect x="56" y="0" width="8" height="64" fill="#3e2723"/>
+                        <path d="M8 8 L56 56" stroke="#4e342e" stroke-width="8"/>
+                        <path d="M8 56 L56 8" stroke="#4e342e" stroke-width="8"/>
+                        <rect x="28" y="0" width="8" height="64" fill="#4e342e"/>
+                        <rect x="0" y="28" width="64" height="8" fill="#4e342e"/>
+                    </svg>`,
+            mossy_stone: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-mossy" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#777" />
+                                <stop offset="100%" style="stop-color:#555" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="64" height="64" fill="url(#grad-mossy)"/>
+                        <rect x="8" y="8" width="16" height="12" fill="#666"/>
+                        <rect x="36" y="4" width="20" height="16" fill="#777"/>
+                        <rect x="4" y="28" width="24" height="14" fill="#555"/>
+                        <rect x="42" y="32" width="18" height="18" fill="#666"/>
+                        <rect x="12" y="48" width="20" height="12" fill="#777"/>
+                        <circle cx="12" cy="12" r="6" fill="#3a5a2a" opacity="0.7"/>
+                        <circle cx="50" cy="24" r="8" fill="#4a6a3a" opacity="0.6"/>
+                        <circle cx="24" cy="52" r="7" fill="#3a5a2a" opacity="0.7"/>
+                        <circle cx="52" cy="50" r="5" fill="#4a6a3a" opacity="0.5"/>
+                        <rect x="4" y="36" width="8" height="4" fill="#3a5a2a" opacity="0.6"/>
+                    </svg>`,
+            iron_bars: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="6" y="0" width="6" height="64" fill="#5a5a5a" stroke="#4a4a4a" stroke-width="1"/>
+                        <rect x="20" y="0" width="6" height="64" fill="#5a5a5a" stroke="#4a4a4a" stroke-width="1"/>
+                        <rect x="38" y="0" width="6" height="64" fill="#5a5a5a" stroke="#4a4a4a" stroke-width="1"/>
+                        <rect x="52" y="0" width="6" height="64" fill="#5a5a5a" stroke="#4a4a4a" stroke-width="1"/>
+                        <rect x="0" y="12" width="64" height="4" fill="#6a6a6a"/>
+                        <rect x="0" y="32" width="64" height="4" fill="#6a6a6a"/>
+                        <rect x="0" y="48" width="64" height="4" fill="#6a6a6a"/>
+                        <rect x="8" y="2" width="2" height="4" fill="#8a8a8a" opacity="0.6"/>
+                        <rect x="22" y="2" width="2" height="4" fill="#8a8a8a" opacity="0.6"/>
+                        <rect x="40" y="2" width="2" height="4" fill="#8a8a8a" opacity="0.6"/>
+                        <rect x="54" y="2" width="2" height="4" fill="#8a8a8a" opacity="0.6"/>
+                    </svg>`,
+            planks: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#9a7553"/>
+                        <path d="M0 16 L64 16 M0 32 L64 32 M0 48 L64 48" stroke="#6b4423" stroke-width="3"/>
+                        <path d="M16 0 L16 16 M48 0 L48 16 M32 16 L32 32 M16 32 L16 48 M48 32 L48 48 M32 48 L32 64" stroke="#6b4423" stroke-width="2"/>
+                        <rect x="4" y="4" width="8" height="8" fill="#aa8563" opacity="0.4"/>
+                        <rect x="36" y="20" width="10" height="8" fill="#aa8563" opacity="0.4"/>
+                        <rect x="8" y="36" width="12" height="8" fill="#8a6543" opacity="0.5"/>
+                    </svg>`,
+            stone_brick: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#696969"/>
+                        <path d="M0 16 L64 16 M0 32 L64 32 M0 48 L64 48" stroke="#555" stroke-width="3"/>
+                        <rect x="0" y="2" width="30" height="12" fill="#757575"/>
+                        <rect x="34" y="2" width="28" height="12" fill="#575757"/>
+                        <rect x="16" y="18" width="30" height="12" fill="#575757"/>
+                        <rect x="0" y="18" width="12" height="12" fill="#757575"/>
+                        <rect x="50" y="18" width="14" height="12" fill="#757575"/>
+                        <rect x="0" y="34" width="28" height="12" fill="#575757"/>
+                        <rect x="32" y="34" width="30" height="12" fill="#757575"/>
+                        <rect x="14" y="50" width="32" height="12" fill="#757575"/>
+                        <rect x="0" y="50" width="10" height="12" fill="#575757"/>
+                        <rect x="50" y="50" width="14" height="12" fill="#575757"/>
+                    </svg>`,
+            trampoline: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="56" height="56" fill="#2F4F4F" stroke="#1a3a3a" stroke-width="3"/>
+                        <rect x="10" y="10" width="44" height="44" fill="#2E8B57"/>
+                        <path d="M10 20 L54 20 M10 32 L54 32 M10 44 L54 44" stroke="#3CB371" stroke-width="2"/>
+                        <path d="M20 10 L20 54 M32 10 L32 54 M44 10 L44 54" stroke="#3CB371" stroke-width="2"/>
+                        <circle cx="32" cy="32" r="6" fill="white" opacity="0.3"/>
                     </svg>`
 
         };

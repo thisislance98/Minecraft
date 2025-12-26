@@ -13,6 +13,7 @@ import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
 import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
 import { LevitationProjectile } from './entities/projectiles/LevitationProjectile.js';
 import { GiantProjectile } from './entities/projectiles/GiantProjectile.js';
+import { WizardTowerProjectile } from './entities/projectiles/WizardTowerProjectile.js';
 
 import { GrowthProjectile } from './entities/projectiles/GrowthProjectile.js';
 import { FloatingBlock } from './entities/FloatingBlock.js';
@@ -23,7 +24,7 @@ import { GameState } from './core/GameState.js';
 import { WorldGenerator } from '../world/WorldGenerator.js';
 import { AssetManager } from './core/AssetManager.js';
 import { Environment } from './systems/Environment.js';
-import { Studio } from './systems/Studio.js';
+
 import { WeatherSystem } from './systems/WeatherSystem.js';
 import { Dragon } from './entities/animals/Dragon.js';
 import { ColyseusManager } from './systems/ColyseusManager.js';
@@ -57,6 +58,7 @@ export class VoxelGame {
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
         this.renderDistance = Config.WORLD.RENDER_DISTANCE;
         this.generatedChunks = new Set();
+        this.chunkGenQueue = []; // Queue for chunks to be generated
 
         // For raycasting - we need to track individual block positions
         // this.blockData = new Map(); // REMOVED: Redundant storage
@@ -109,7 +111,7 @@ export class VoxelGame {
         this.entityManager = new EntityManager(this);
         this.weatherSystem = new WeatherSystem(this);
         this.environment = new Environment(this.scene, this);
-        this.studio = new Studio(this);
+
         this.animals = [];
         this.spawnManager = new SpawnManager(this);
         this.worldParticleSystem = new WorldParticleSystem(this);
@@ -146,7 +148,14 @@ export class VoxelGame {
 
         // Network Manager
         this.networkManager = new ColyseusManager(this);
+        this.colyseusManager = this.networkManager; // Alias for Agent compatibility
         this.remotePlayers = new Map(); // peerId -> RemotePlayer
+
+        // Auto-host for development/testing
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log('[Game] Auto-hosting multiplayer session for testing...');
+            this.networkManager.createRoom().catch(e => console.error('[Game] Auto-host failed:', e));
+        }
 
         // Setup Network Callbacks (Colyseus)
         this.networkManager.onPlayerJoin = (sessionId, playerState) => {
@@ -180,51 +189,25 @@ export class VoxelGame {
             }
         };
 
+        // Set up Agent's debug command handler now that colyseusManager exists
+        this.agent.setupDebugCommandHandler();
+
+        // Add daytime switch hotkey (K)
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+                this.setDaytime();
+            }
+        });
+
         // Initial chunk check
         this.checkChunks();
         this.updateChunks();
         this.updateBlockCount();
 
-        // Spawn Initial Animals
-        this.spawnAnimals();
-
-        // Generate Castle near spawn
-        const castleX = Math.floor(this.spawnPoint.x) + 40;
-        const castleZ = Math.floor(this.spawnPoint.z);
-        const castleY = this.worldGen.getTerrainHeight(castleX, castleZ);
-
-        console.log(`Generating Castle at ${castleX}, ${castleY}, ${castleZ}`);
-
-        // We need an instance of StructureGenerator?
-        // WorldGenerator has one? No, StructureGenerator takes worldGenerator.
-        // It seems StructureGenerator is not instantiated in VoxelGame normally?
-        // It's usually called by WorldGenerator or Chunk?
-        // Let's check usage. 
-        // WorldGenerator uses StructureGenerator.
-        // But we want to manually place one.
-
-        // Quick fix: Instantiate one here just for this.
-        if (this.worldGen.structureGen) {
-            this.worldGen.structureGen.generateCastle(castleX, castleY, castleZ);
-        } else {
-            const sg = new StructureGenerator(this, this.worldGen);
-            sg.generateCastle(castleX, castleY, castleZ);
-            // Re-update chunks around castle
-            this.updateChunks();
-        }
-
-        // Spawn some kangaroos near the player for immediate viewing
-        this.spawnManager.spawnKangaroosNearPlayer();
-
-        // Spawn some Pugasus (mythical chimera creatures) near the player!
-        this.spawnManager.spawnPugasusNearPlayer();
-
-        // Spawn festive Snowmen near the player!
-        this.spawnManager.spawnSnowmenNearPlayer();
-
-        // Spawn Dragon
+        // Animals and Dragon spawning is deferred until initial world chunks are generated
+        // (handled in processChunkQueue via _initialSpawnDone flag)
+        this._initialSpawnDone = false;
         this.dragon = null;
-        this.spawnDragon();
 
         // Projectiles
         this.projectiles = [];
@@ -245,10 +228,12 @@ export class VoxelGame {
 
         // Start game loop
         this.lastTime = performance.now();
+        this.processChunkQueue();
         this.animate();
 
         // Add the new wand to the inventory for testing
         this.inventory.addItem('growth_wand', 1, 'tool');
+        this.inventory.addItem('wizard_tower_wand', 1, 'tool');
 
 
         this.inventory.addItem('door_closed', 64, 'block');
@@ -267,6 +252,19 @@ export class VoxelGame {
             this.inputManager.unlock();
         } else {
             this.inputManager.lock();
+        }
+    }
+
+    setDaytime() {
+        if (this.environment) {
+            // Set time to day (0 is usually dawn/day start)
+            this.environment.time = 0;
+            // Force immediate update of lights and skybox
+            this.environment.updateDayNightCycle(0, this.player.position);
+            if (this.uiManager) {
+                this.uiManager.addChatMessage('system', 'Time set to daytime');
+            }
+            console.log('[Game] Time set to daytime');
         }
     }
 
@@ -300,6 +298,9 @@ export class VoxelGame {
                 // FORCE FOREST BIOME CHECK
                 const biome = this.worldGen.getBiome(x, z);
                 if (biome !== 'FOREST') continue;
+
+                // Max height check to avoid spawning in sky
+                if (terrainH > 100) continue;
 
                 // Spawn above the terrain surface
                 const spot = { x: x, y: terrainH + 2, z: z };
@@ -498,6 +499,13 @@ export class VoxelGame {
         console.log('Giant Magic Fired!');
     }
 
+    spawnWizardTowerProjectile(pos, vel) {
+        const projectile = new WizardTowerProjectile(this, pos, vel);
+        this.projectiles.push(projectile);
+        this.scene.add(projectile.mesh);
+        console.log('Wizard Tower Projectile Fired!');
+    }
+
 
     spawnGrowthProjectile(pos, vel) {
         const projectile = new GrowthProjectile(this, pos, vel);
@@ -592,6 +600,31 @@ export class VoxelGame {
         }
     }
 
+    toggleDoor(x, y, z) {
+        const block = this.getBlock(x, y, z);
+        if (!block) return;
+
+        let newType;
+        if (block.type === 'door_closed') newType = 'door_open';
+        else if (block.type === 'door_open') newType = 'door_closed';
+        else return;
+
+        // Toggle clicked block
+        this.setBlock(x, y, z, newType);
+
+        // Check Up
+        const upBlock = this.getBlock(x, y + 1, z);
+        if (upBlock && (upBlock.type === 'door_closed' || upBlock.type === 'door_open')) {
+            this.setBlock(x, y + 1, z, newType);
+        }
+
+        // Check Down
+        const downBlock = this.getBlock(x, y - 1, z);
+        if (downBlock && (downBlock.type === 'door_closed' || downBlock.type === 'door_open')) {
+            this.setBlock(x, y - 1, z, newType);
+        }
+    }
+
     markNeighborsDirty(x, y, z) {
         const { lx, ly, lz } = this.worldToChunk(x, y, z);
         // If on chunk edge, mark neighboring chunk dirty
@@ -666,57 +699,130 @@ export class VoxelGame {
 
         const { cx, cz } = playerChunk;
 
-        // Optimization: Only update if we moved to a new chunk
+        // Optimization: Only update if we moved to a new chunk (roughly)
+        // But we need to ensure we fill the queue if it's empty even if we haven't moved chunks?
+        // Actually, checkChunks is called every frame, so we should guard it.
         if (this.lastChunkX === cx && this.lastChunkZ === cz) {
+            // Keep queue filled if we have gaps? No, standard logic relies on initial position.
+            // If we didn't move, we don't need to check for *new* chunks to load.
+            // But we might still have a queue processing.
             return;
         }
 
         this.lastChunkX = cx;
         this.lastChunkZ = cz;
 
-        // Unload far chunks
+        // 1. Unload far chunks
         const unloadDist = this.renderDistance + 2;
         for (const [key, chunk] of this.chunks) {
             if (Math.abs(chunk.cx - cx) > unloadDist || Math.abs(chunk.cz - cz) > unloadDist) {
                 this.unloadChunk(key);
+                // Also remove from queue if it's pending?
+                // Ideally yes, to avoid generating things we immediately unload.
+                // Brute force filter the queue:
+                this.chunkGenQueue = this.chunkGenQueue.filter(req =>
+                    Math.abs(req.cx - cx) <= unloadDist && Math.abs(req.cz - cz) <= unloadDist
+                );
             }
         }
 
-        let chunksGenerated = false;
-
+        // 2. Queue missing chunks
         // Generate chunks around the player
         for (let x = cx - this.renderDistance; x <= cx + this.renderDistance; x++) {
             for (let z = cz - this.renderDistance; z <= cz + this.renderDistance; z++) {
-                // For now, we only generate a fixed height of chunks (e.g., -4 to 8 for height -64 to 128)
-                let columnGenerated = false;
+                // Determine vertical range
                 for (let y = -4; y < 8; y++) {
-                    const funcKey = `${x},${y},${z}`;
-                    // Note: We might re-generate chunks we unloaded. 
-                    // This means changes are lost, but it saves memory.
-                    // To prevent re-gen loop if we just unloaded, we rely on unloadDist > renderDistance.
+                    const chunkKey = `${x},${y},${z}`;
 
-                    if (!this.chunks.has(`${x},${y},${z}`)) {
-                        // Only gen if not currently in memory
-                        // We also check generatedChunks to avoid re-running widely expensive procedural gen if unnecessary,
-                        // but since we unloaded, we MUST re-run it or load from disk.
-                        // For now, we allow re-generation.
-                        this.worldGen.generateChunk(x, y, z);
-                        this.generatedChunks.add(funcKey); // Mark as gen'd (stats)
-                        chunksGenerated = true;
-                        columnGenerated = true;
-                    }
-                }
+                    // Skip if already loaded
+                    if (this.chunks.has(chunkKey)) continue;
 
-                // Attempt spawn if we generated new terrain in this column
-                if (columnGenerated) {
-                    this.spawnManager.spawnChunk(x, z);
+                    // Skip if already in queue
+                    // Optimization: Check existing keys in queue. 
+                    // Since queue can be large, maybe a Set for pending keys?
+                    // For now, simple find is okay if render distance isn't huge.
+                    const alreadyQueued = this.chunkGenQueue.some(req => req.key === chunkKey);
+                    if (alreadyQueued) continue;
+
+                    // Add to queue
+                    const dx = x - cx;
+                    const dz = z - cz;
+                    const distSq = dx * dx + dz * dz;
+
+                    this.chunkGenQueue.push({
+                        cx: x, cy: y, cz: z,
+                        key: chunkKey,
+                        distSq: distSq
+                    });
                 }
             }
         }
 
-        if (chunksGenerated) {
-            this.updateBlockCount();
-        }
+        // chunkGenQueue will be processed in animate()
+    }
+
+    processChunkQueue() {
+        if (this.chunkGenQueue.length === 0) return;
+        if (this._idleCallbackScheduled) return; // Already scheduled
+
+        // Sort by distance (closest first)
+        const playerChunk = this.worldToChunk(this.player.position.x, this.player.position.y, this.player.position.z);
+
+        this.chunkGenQueue.forEach(req => {
+            const dx = req.cx - playerChunk.cx;
+            const dz = req.cz - playerChunk.cz;
+            req.distSq = dx * dx + dz * dz;
+        });
+
+        this.chunkGenQueue.sort((a, b) => a.distSq - b.distSq);
+
+        // Schedule idle callback to process chunks when browser is free
+        this._idleCallbackScheduled = true;
+
+        const processInIdle = (deadline) => {
+            this._idleCallbackScheduled = false;
+
+            let processed = 0;
+
+            // Process as many chunks as we can while there's idle time
+            while (this.chunkGenQueue.length > 0 && deadline.timeRemaining() > 2) {
+                const req = this.chunkGenQueue.shift();
+
+                // Double check if loaded (rare case)
+                if (this.chunks.has(req.key)) continue;
+
+                // Generate
+                this.worldGen.generateChunk(req.cx, req.cy, req.cz);
+                this.generatedChunks.add(req.cx + ',' + req.cy + ',' + req.cz);
+
+                this.spawnManager.spawnChunk(req.cx, req.cz);
+                processed++;
+            }
+
+            if (processed > 0) {
+                this.updateBlockCount();
+
+                // Spawn initial animals and dragon AFTER first batch of world chunks are generated
+                if (!this._initialSpawnDone) {
+                    this._initialSpawnDone = true;
+                    console.log('[Game] Initial chunks generated, spawning animals...');
+
+                    this.spawnAnimals();
+                    this.spawnManager.spawnKangaroosNearPlayer();
+                    this.spawnManager.spawnPugasusNearPlayer();
+                    this.spawnManager.spawnSnowmenNearPlayer();
+                    this.spawnDragon();
+                }
+            }
+
+            // If there's more to process, schedule another idle callback
+            if (this.chunkGenQueue.length > 0) {
+                this._idleCallbackScheduled = true;
+                requestIdleCallback(processInIdle, { timeout: 100 });
+            }
+        };
+
+        requestIdleCallback(processInIdle, { timeout: 100 });
     }
 
     unloadChunk(key) {
@@ -777,6 +883,7 @@ export class VoxelGame {
 
     animate() {
         requestAnimationFrame(() => this.animate());
+        this.processChunkQueue();
 
         const now = performance.now();
         const deltaTime = (now - this.lastTime) / 1000;

@@ -46,9 +46,9 @@ export class InventoryManager {
 
         // Add some materials for testing
         this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
-        this.addItemToSlot(7, 'wood', 10, 'block');
+        this.addItemToSlot(7, 'flying_broom', 1, 'flying_broom');
         this.addItemToSlot(8, 'giant_wand', 1, 'wand');
-        this.addItemToSlot(9, 'flying_broom', 1, 'flying_broom');
+        this.addItemToSlot(9, 'wood', 10, 'block');
         this.addItemToSlot(10, 'log', 10, 'block');
         this.addItemToSlot(11, 'ride_wand', 1, 'ride_wand');
         this.addItemToSlot(12, 'capture_wand', 1, 'wand');
@@ -58,6 +58,23 @@ export class InventoryManager {
         this.addItemToSlot(16, 'glass', 64, 'block');
         this.addItemToSlot(17, 'stick', 10, 'item');
 
+        // ===== NEW BUILDING BLOCKS FOR HOUSES =====
+        this.addItemToSlot(18, 'cobblestone', 64, 'block');      // Foundation/walls
+        this.addItemToSlot(19, 'roof_tiles', 64, 'block');       // Red clay roof
+        this.addItemToSlot(20, 'chimney_brick', 64, 'block');    // Chimneys
+        this.addItemToSlot(21, 'window_frame', 64, 'block');     // Windows
+        this.addItemToSlot(22, 'fence', 64, 'block');            // Fencing/railings
+        this.addItemToSlot(23, 'shingles', 64, 'block');         // Slate roofing
+        this.addItemToSlot(24, 'polished_stone', 64, 'block');   // Fancy floors
+        this.addItemToSlot(25, 'dark_planks', 64, 'block');      // Dark wood
+        this.addItemToSlot(26, 'white_plaster', 64, 'block');    // White walls
+        this.addItemToSlot(27, 'terracotta', 64, 'block');       // Decorative clay
+        this.addItemToSlot(28, 'thatch', 64, 'block');           // Straw roof
+        this.addItemToSlot(29, 'half_timber', 64, 'block');      // Tudor walls
+        this.addItemToSlot(30, 'mossy_stone', 64, 'block');      // Weathered stone
+        this.addItemToSlot(31, 'iron_bars', 64, 'block');        // Window bars
+        this.addItemToSlot(32, 'planks', 64, 'block');           // Regular planks
+        this.addItemToSlot(33, 'stone_brick', 64, 'block');      // Stone bricks
     }
 
     // --- Slot Accessors for Crafting ---

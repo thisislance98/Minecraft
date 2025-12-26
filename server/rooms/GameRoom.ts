@@ -102,5 +102,20 @@ export class GameRoom extends Room<GameState> {
             console.log(`[GameRoom] ${client.sessionId} is ready`);
             // Could trigger game start logic here
         });
+
+        // Debug Command (CLI -> Server -> Clients)
+        this.onMessage('debugCommand', (client, data) => {
+            console.log(`[GameRoom] Debug command from ${client.sessionId}:`, data);
+            // Broadcast to all clients (except sender if needed, but usually sender is CLI)
+            // We want the Game Client (browser) to receive this
+            this.broadcast('debugCommand', data);
+        });
+
+        // Debug Response (Client -> Server -> CLI)
+        this.onMessage('debugResponse', (client, data) => {
+            console.log(`[GameRoom] Debug response from ${client.sessionId}:`, data);
+            // Broadcast to all clients (CLI will pick this up)
+            this.broadcast('debugResponse', data);
+        });
     }
 }

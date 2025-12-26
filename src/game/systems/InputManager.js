@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 /**
  * InputManager handles global keyboard and mouse inputs.
  * It replaces the old Controls.js and centralizes input logic.
@@ -123,10 +125,20 @@ export class InputManager {
                 }
             }
 
-            // E for Inventory
+            // E for Broom activation only (use I for inventory)
             if (e.code === 'KeyE') {
                 if (!this.game.agent.isChatOpen) {
-                    this.game.toggleInventory();
+                    // If inventory is open, E closes it
+                    if (this.game.gameState.flags.inventoryOpen) {
+                        this.game.toggleInventory();
+                    } else {
+                        // E only toggles flight if holding Broom
+                        const item = this.game.inventory.getSelectedItem();
+                        if (item && item.item === 'flying_broom') {
+                            this.game.player.toggleFlying();
+                        }
+                        // Otherwise E does nothing (use I for inventory)
+                    }
                 }
             }
 
@@ -283,13 +295,21 @@ export class InputManager {
     handlePrimaryAction() {
         const item = this.game.inventory.getSelectedItem();
 
-        // 0. Interaction (Entity Click - e.g. NPC)
+        // 0. Attack (Entity Click)
         // Check for entity hits first!
         const hitAnimal = this.game.physicsManager.getHitAnimal();
-        if (hitAnimal && hitAnimal.interact) {
-            // If the animal has an interact method, use it!
-            hitAnimal.interact(this.game.player);
-            // Don't break blocks if we interacted
+        if (hitAnimal) {
+            // Left click attacks
+            // Calculate damage based on item? For now just 1.
+            // TODO: check held item for damage
+            hitAnimal.takeDamage(1, this.game.player);
+
+            // Apply knockback based on player direction
+            const dir = this.game.camera.getWorldDirection(new THREE.Vector3());
+            dir.y = 0;
+            dir.normalize();
+            hitAnimal.knockback(dir, 10.0);
+
             return;
         }
 
@@ -304,7 +324,7 @@ export class InputManager {
         }
 
         // 2. Usable Items (Wand, Bow) - Fire
-        if (item && (item.item === 'bow' || item.item === 'wand' || item.item === 'shrink_wand' || item.item === 'omni_wand' || item.item === 'levitation_wand' || item.item === 'giant_wand' || item.item === 'water_bucket')) {
+        if (item && (item.item === 'bow' || item.item === 'wand' || item.item === 'shrink_wand' || item.item === 'omni_wand' || item.item === 'levitation_wand' || item.item === 'giant_wand' || item.item === 'wizard_tower_wand' || item.item === 'water_bucket')) {
 
             this.game.onRightClickDown();
             return;
@@ -333,11 +353,32 @@ export class InputManager {
             }
         }
 
-        // 5. Default: Break Block
+        // 5. Default: Break Block (or Interact with Door)
+        // User requested Left Click on Door -> Open
+        const targetBlock = this.game.physicsManager.getTargetBlock();
+        if (targetBlock) {
+            const block = this.game.getBlock(targetBlock.x, targetBlock.y, targetBlock.z);
+            if (block && (block.type === 'door_closed' || block.type === 'door_open')) {
+                this.game.toggleDoor(targetBlock.x, targetBlock.y, targetBlock.z);
+                if (this.mouseDownInterval) {
+                    clearInterval(this.mouseDownInterval);
+                    this.mouseDownInterval = null;
+                }
+                return;
+            }
+        }
+
         this.game.physicsManager.breakBlock();
     }
 
     handleSecondaryAction() {
+        // 0. Interact (Entity Click)
+        const hitAnimal = this.game.physicsManager.getHitAnimal();
+        if (hitAnimal && hitAnimal.interact) {
+            hitAnimal.interact(this.game.player);
+            return;
+        }
+
         // Trigger item usage (Secondary Action)
         this.game.onRightClickDown();
     }

@@ -106,11 +106,40 @@ export class UIManager {
         div.innerHTML = `
             <div id="voice-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333;"></div>
             <span id="voice-status-text">Voice Off (V)</span>
+            <select id="voice-select" style="
+                background: rgba(0,0,0,0.5); border: 1px solid #00ffcc; 
+                color: #00ffcc; font-family: inherit; font-size: 12px; 
+                border-radius: 4px; outline: none; margin-left: 5px; cursor: pointer;
+                padding: 2px 5px;
+            ">
+                <option value="Puck">Puck</option>
+                <option value="Charon">Charon</option>
+                <option value="Kore">Kore</option>
+                <option value="Fenrir">Fenrir</option>
+                <option value="Aoede">Aoede</option>
+            </select>
         `;
         document.body.appendChild(div);
         this.statusDiv = div;
         this.voiceIndicator = div.querySelector('#voice-indicator');
         this.statusText = div.querySelector('#voice-status-text');
+
+        // Setup voice selector
+        const voiceSelect = div.querySelector('#voice-select');
+        const currentVoice = localStorage.getItem('agent_voice') || 'Puck';
+        voiceSelect.value = currentVoice;
+
+        voiceSelect.addEventListener('change', (e) => {
+            // Unfocus to prevent keyboard capture (like 'W' for walking) affecting the select
+            e.target.blur();
+            if (this.game.agent) {
+                this.game.agent.setVoice(e.target.value);
+            }
+        });
+
+        // Prevent key presses in the dropdown from triggering game actions
+        voiceSelect.addEventListener('keydown', (e) => e.stopPropagation());
+        voiceSelect.addEventListener('keyup', (e) => e.stopPropagation());
 
         this.createTaskListUI();
     }

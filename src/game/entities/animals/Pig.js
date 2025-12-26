@@ -275,7 +275,10 @@ export class Pig extends Animal {
         // Pick a phrase
         const text = PHRASES[Math.floor(Math.random() * PHRASES.length)];
 
-
+        // Play Sound
+        if (this.game.soundManager) {
+            this.game.soundManager.playSound('pig_oink', this.position);
+        }
 
         // Show bubble
         this.talk(text);

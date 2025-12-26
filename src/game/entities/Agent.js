@@ -1,13 +1,36 @@
 
 import * as THREE from 'three';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AnimalClasses } from '../AnimalRegistry.js';
+
+// Import AI modules
+import { getTools } from '../ai/tools.js';
+import { getSystemInstruction } from '../ai/prompts.js';
+import {
+    AUDIO_SAMPLE_RATE_INPUT,
+    AUDIO_SAMPLE_RATE_OUTPUT,
+    AUDIO_BUFFER_SIZE,
+    MAX_CONVERSATION_HISTORY,
+    MAX_TOOL_CALL_TURNS,
+    MAX_SPAWN_COUNT,
+    BIOME_SEARCH_MAX_RADIUS,
+    BIOME_SEARCH_STEP,
+    CREATURE_DETECTION_RADIUS,
+    TASK_POLL_INTERVAL,
+    VOICE_RECONNECT_DELAY,
+    GEMINI_MODEL_TEXT,
+    GEMINI_WS_URL,
+    DEFAULT_VOICE,
+    BIOME_ALIASES,
+    CREATURE_ALIASES
+} from '../ai/constants.js';
 
 // ============================================================================
 // Audio Worklet Processor Source (inline as string for blob URL)
 // ============================================================================
 const AudioRecordingWorkletSrc = `
 class AudioRecordingProcessor extends AudioWorkletProcessor {
-  buffer = new Int16Array(2048);
+  buffer = new Int16Array(${AUDIO_BUFFER_SIZE});
   bufferWriteIndex = 0;
 
   process(inputs) {
@@ -51,8 +74,9 @@ export class Agent {
 
         // Chat State
         this.isChatOpen = false;
-        this.isTypingMode = false; // When true, keyboard goes to chat input. Tab toggles this.
-        this.chatHistory = [];
+        this.isTypingMode = false;
+        // Shared conversation history between voice and text chat
+        this.conversationHistory = [];
 
         // Voice Chat State
         this.ws = null;
@@ -65,11 +89,34 @@ export class Agent {
         this.audioQueue = [];
         this.isPlaying = false;
 
+        // Voice Config
+        this.voiceName = localStorage.getItem('agent_voice') || DEFAULT_VOICE;
+
         // Create minimal status indicator
         this.game.uiManager.updateVoiceStatus(false, 'Voice Off (V)');
 
         // Voice is OFF by default - press V to toggle
         this.setupKeyboardToggle();
+
+        // Debug command handler will be set up later via setupDebugCommandHandler()
+        // because ColyseusManager is created after Agent in VoxelGame
+    }
+
+    /**
+     * Set up debug command handler - called by VoxelGame after colyseusManager is created
+     */
+    setupDebugCommandHandler() {
+        if (this.game.colyseusManager) {
+            console.log('[Agent] Setting up debug command handler');
+            this.game.colyseusManager.onDebugCommand = (data) => {
+                console.log('[Agent] Received debug command:', data);
+                if (data.prompt) {
+                    this.injectPrompt(data.prompt, data.debugId);
+                }
+            };
+        } else {
+            console.warn('[Agent] ColyseusManager not available for debug commands');
+        }
     }
 
     setupKeyboardToggle() {
@@ -100,8 +147,22 @@ export class Agent {
         if (this.inputContext) { this.inputContext.close(); this.inputContext = null; }
         if (this.outputContext) { this.outputContext.close(); this.outputContext = null; }
         this.audioQueue = [];
+        this.isPlaying = false;
 
         this.game.uiManager.updateVoiceStatus(false, 'Voice Off (V)');
+    }
+
+    setVoice(voiceName) {
+        this.voiceName = voiceName;
+        localStorage.setItem('agent_voice', voiceName);
+        console.log(`[Agent] Voice set to ${voiceName}`);
+
+        // If connected, reconnect to apply new voice
+        if (this.isConnected) {
+            this.disconnectVoice();
+            // Short delay to ensure clean disconnect
+            setTimeout(() => this.connectVoice(), VOICE_RECONNECT_DELAY);
+        }
     }
 
     createMesh() {
@@ -133,9 +194,53 @@ export class Agent {
         this.mesh.userData.agent = this;
     }
 
-    // UI methods moved to UIManager
+    /**
+     * Get the player's current transform (position and rotation)
+     * @returns {Object} Transform with position and rotation
+     */
+    getPlayerTransform() {
+        const player = this.game.player;
+        return {
+            position: {
+                x: player.position.x,
+                y: player.position.y,
+                z: player.position.z
+            },
+            rotation: {
+                x: player.rotation.x,
+                y: player.rotation.y
+            }
+        };
+    }
 
-    // Task UI methods moved to UIManager
+    /**
+     * Limit conversation history to prevent unbounded memory growth
+     */
+    trimConversationHistory() {
+        if (this.conversationHistory.length > MAX_CONVERSATION_HISTORY) {
+            this.conversationHistory = this.conversationHistory.slice(-MAX_CONVERSATION_HISTORY);
+        }
+    }
+
+    async initializeTextClient() {
+        if (this.genAI) return;
+
+        try {
+            const configReq = await fetch('/api/god-mode/config');
+            const config = await configReq.json();
+            if (!config.apiKey) throw new Error('No API Key');
+
+            this.genAI = new GoogleGenerativeAI(config.apiKey);
+            this.textModel = this.genAI.getGenerativeModel({
+                model: GEMINI_MODEL_TEXT,
+                systemInstruction: getSystemInstruction(this.getPlayerTransform()),
+                tools: getTools()
+            });
+            console.log('[Agent] Text client initialized');
+        } catch (e) {
+            console.error("[Agent] Failed to init text client:", e);
+        }
+    }
 
     async connectVoice() {
         try {
@@ -144,14 +249,24 @@ export class Agent {
             const config = await configReq.json();
             if (!config.apiKey) throw new Error('No API Key');
 
+            // Initialize text client opportunistically as well
+            if (!this.genAI) {
+                this.genAI = new GoogleGenerativeAI(config.apiKey);
+                this.textModel = this.genAI.getGenerativeModel({
+                    model: GEMINI_MODEL_TEXT,
+                    systemInstruction: getSystemInstruction(this.getPlayerTransform()),
+                    tools: getTools()
+                });
+            }
+
             this.game.uiManager.updateVoiceStatus(false, 'Setting up Audio...');
 
             // Input context at 16kHz for recording
-            this.inputContext = new AudioContext({ sampleRate: 16000 });
+            this.inputContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE_INPUT });
             await this.inputContext.resume();
 
             // Output context at 24kHz for playback
-            this.outputContext = new AudioContext({ sampleRate: 24000 });
+            this.outputContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE_OUTPUT });
             await this.outputContext.resume();
 
             // Get Microphone
@@ -173,7 +288,7 @@ export class Agent {
 
             // Setup WebSocket
             this.game.uiManager.updateVoiceStatus(false, 'Connecting to Gemini...');
-            const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${config.apiKey}`;
+            const wsUrl = `${GEMINI_WS_URL}?key=${config.apiKey}`;
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = () => {
@@ -182,116 +297,52 @@ export class Agent {
                 this.game.uiManager.updateVoiceStatus(true, 'Listening');
 
                 // Send setup with function calling for code modification
+                const transform = this.getPlayerTransform();
                 this.ws.send(JSON.stringify({
                     setup: {
                         model: "models/gemini-2.0-flash-exp",
-                        generationConfig: { responseModalities: ["AUDIO"] },
-                        systemInstruction: {
-                            parts: [{
-                                text: `You are an AI assistant inside a Minecraft-like voxel game. 
-You help the player by modifying the game's code in real-time.
-When the player asks you to change something about the game (like jump height, speed, colors, etc.), 
-you MUST use the perform_task function to make the change.
-Do NOT just describe how you would do it; you MUST call the tool.
-When the user asks for ideas or help, use provide_suggestions to give them clickable options.
-
-You also have INSTANT-ACTION tools that execute immediately without coding:
-- teleport_player: Move the player to named locations (desert, ocean, forest, jungle, mountain, snow, spawn) or specific coordinates
-- spawn_creature: Spawn creatures near the player (Pig, Wolf, Zombie, Unicorn, TRex, Dragon, Penguin, etc.)
-- get_scene_info: Get info about player's location, biome, nearby creatures, health, etc.
-
-Use these instant tools when the player wants immediate actions like "take me to the desert" or "spawn 3 wolves" or "where am I?"
-
-PERSONALITY:
- You are extremely funny, witty, and sarcastic. You love making voxel-related puns.
- You should crack jokes about the player's building skills (in a lighthearted way) or the blocky nature of the world.
- Be energetic and entertaining. Don't be a boring robot.
- 
-IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until you receive a [SYSTEM NOTIFICATION] confirming completion. If the user asks about task status before you receive this notification, say "I'm still working on it" or "The task is still in progress." Only announce completion when the system tells you the task finished.`
-                            }]
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: {
+                                        voiceName: this.voiceName || DEFAULT_VOICE
+                                    }
+                                }
+                            }
                         },
-                        tools: [{
-                            functionDeclarations: [{
-                                name: "perform_task",
-                                description: "Modifies the game code based on the user's request. Use this when the player wants to change game mechanics, physics, visuals, or any other aspect of the game.",
-                                parameters: {
-                                    type: "object",
-                                    properties: {
-                                        request: {
-                                            type: "string",
-                                            description: "A clear description of what code change the user wants, e.g. 'Make the player jump twice as high' or 'Change the sky color to purple'"
-                                        }
-                                    },
-                                    required: ["request"]
-                                }
-                            }, {
-                                name: "provide_suggestions",
-                                description: "Provides a list of suggested follow-up actions or questions for the user to click. Use this to help the user discover what they can do.",
-                                parameters: {
-                                    type: "object",
-                                    properties: {
-                                        suggestions: {
-                                            type: "array",
-                                            items: { type: "string" },
-                                            description: "List of short suggestion strings, e.g. ['Fly', 'Give me a diamond sword', 'Spawn a sheep']"
-                                        }
-                                    },
-                                    required: ["suggestions"]
-                                }
-                            }, {
-                                name: "teleport_player",
-                                description: "Teleport the player to a new location INSTANTLY. Supports named locations (spawn, ocean, desert, forest, jungle, mountain, snow) or specific coordinates.",
-                                parameters: {
-                                    type: "object",
-                                    properties: {
-                                        location: {
-                                            type: "string",
-                                            description: "Named location like 'spawn', 'desert', 'ocean', 'forest', 'jungle', 'mountain', 'snow' OR coordinates like '100, 50, 200'"
-                                        }
-                                    },
-                                    required: ["location"]
-                                }
-                            }, {
-                                name: "spawn_creature",
-                                description: "Spawn a creature near the player INSTANTLY. Available: Pig, Horse, Chicken, Bunny, Wolf, Bear, Lion, Tiger, Elephant, Giraffe, Deer, Sheep, Cow, Zombie, Skeleton, Creeper, Enderman, Unicorn, TRex, Owl, Fox, Panda, Dolphin, Penguin, Dragon, Snowman, SantaClaus, and more.",
-                                parameters: {
-                                    type: "object",
-                                    properties: {
-                                        creature: {
-                                            type: "string",
-                                            description: "Name of creature to spawn (e.g. 'Pig', 'Wolf', 'Zombie', 'Unicorn', 'TRex')"
-                                        },
-                                        count: {
-                                            type: "integer",
-                                            description: "Number of creatures to spawn (1-10, default 1)"
-                                        }
-                                    },
-                                    required: ["creature"]
-                                }
-                            }, {
-                                name: "get_scene_info",
-                                description: "Get information about the player's current environment including position, biome, nearby creatures, time of day, health, and surroundings. Use this when player asks 'where am I?' or 'what's around me?'",
-                                parameters: {
-                                    type: "object",
-                                    properties: {},
-                                    required: []
-                                }
-                            }]
-                        }]
+                        systemInstruction: getSystemInstruction(transform),
+                        tools: getTools()
                     }
                 }));
+
+                // Send existing conversation history to voice session
+                if (this.conversationHistory.length > 0) {
+                    this.ws.send(JSON.stringify({
+                        clientContent: {
+                            turns: this.conversationHistory.map(msg => ({
+                                role: msg.role,
+                                parts: [{ text: msg.text }]
+                            })),
+                            turnComplete: true
+                        }
+                    }));
+                    console.log('[Agent] Sent conversation history to voice session:', this.conversationHistory.length, 'messages');
+                }
 
                 // Start sending audio
                 this.workletNode.port.onmessage = (ev) => {
                     if (!this.isConnected) return;
                     const arrayBuffer = ev.data.int16arrayBuffer;
                     if (arrayBuffer) {
-                        const base64Audio = this.arrayBufferToBase64(arrayBuffer);
-                        this.ws.send(JSON.stringify({
-                            realtimeInput: {
-                                mediaChunks: [{ mimeType: "audio/pcm", data: base64Audio }]
-                            }
-                        }));
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            const base64Audio = this.arrayBufferToBase64(arrayBuffer);
+                            this.ws.send(JSON.stringify({
+                                realtimeInput: {
+                                    mediaChunks: [{ mimeType: "audio/pcm", data: base64Audio }]
+                                }
+                            }));
+                        }
                     }
                 };
             };
@@ -307,20 +358,32 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
 
                 // Handle tool calls (function calling)
                 if (msg.toolCall) {
-                    console.log('[Agent] Tool call received:', msg.toolCall);
+                    console.log('[Agent] Tool call received (top-level):', msg.toolCall);
                     await this.handleToolCall(msg.toolCall);
                     return;
                 }
 
-                // Handle audio response
                 if (msg.serverContent?.modelTurn?.parts) {
-                    for (const part of msg.serverContent.modelTurn.parts) {
+                    const parts = msg.serverContent.modelTurn.parts;
+
+                    // 1. Check for function calls in parts
+                    const functionCalls = parts.filter(p => p.functionCall).map(p => p.functionCall);
+                    if (functionCalls.length > 0) {
+                        console.log('[Agent] Tool calls received in parts:', functionCalls);
+                        await this.handleToolCall({ functionCalls });
+                    }
+
+                    // 2. Handle audio/text response
+                    for (const part of parts) {
                         if (part.inlineData?.data) {
                             this.queueAudio(part.inlineData.data);
                         }
                         if (part.text) {
                             console.log('[Agent] Text response:', part.text);
                             this.game.uiManager.addChatMessage('ai', part.text);
+                            // Add to shared history and trim
+                            this.conversationHistory.push({ role: 'model', text: part.text });
+                            this.trimConversationHistory();
                         }
                     }
                 }
@@ -331,118 +394,191 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
 
             this.ws.onerror = (e) => {
                 console.error("WebSocket Error:", e);
-                this.game.uiManager.updateVoiceStatus(false, 'Error');
+                this.disconnectVoice();  // Clean up resources properly
+                this.game.uiManager.updateVoiceStatus(false, 'Error - Press V to retry');
             };
 
-            this.ws.onclose = () => {
+            this.ws.onclose = (event) => {
+                console.log(`[Agent] WebSocket Closed. Code: ${event.code}, Reason: ${event.reason}`);
                 this.isConnected = false;
                 this.isListening = false;
                 this.game.uiManager.updateVoiceStatus(false, 'Voice Off (V)');
-                // No auto-reconnect - user can press V to reconnect
             };
 
         } catch (e) {
             console.error("Voice Connect Error:", e);
+            this.disconnectVoice();  // Clean up on error
             this.game.uiManager.updateVoiceStatus(false, 'Error: ' + e.message);
         }
+    }
+
+    async executeTool(name, args) {
+        if (name === 'perform_task') {
+            const request = args?.request;
+            console.log('[Agent] Executing code modification via tool:', request);
+
+            this.game.uiManager.addChatMessage('ai', `Starting task: ${request}`);
+            this.game.uiManager.updateVoiceStatus(true, 'Coding...');
+
+            try {
+                const res = await fetch('/api/god-mode/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: request })
+                });
+                const data = await res.json();
+
+                if (data.success && data.taskId) {
+                    // Create UI task with backend ID so Logs button works
+                    const uiTaskId = this.game.uiManager.addTask(request, data.taskId);
+
+                    // Start polling for completion
+                    this.pollTaskStatus(data.taskId, uiTaskId, request);
+
+                    // Report back to CLI (Debug)
+                    if (this.currentDebugId) {
+                        this.game.colyseusManager?.sendDebugResponse({
+                            debugId: this.currentDebugId,
+                            tool: 'perform_task',
+                            request: request,
+                            status: 'started'
+                        });
+                        this.currentDebugId = null;
+                    }
+
+                    return { output: { status: "started", taskId: data.taskId } };
+                } else {
+                    throw new Error(data.error || 'Failed to start task');
+                }
+
+            } catch (e) {
+                console.error('[Agent] Tool call error:', e);
+                this.game.uiManager.addChatMessage('system', `Task error: ${e.message}`);
+                this.game.uiManager.updateVoiceStatus(true, 'Listening');
+                return { output: { error: e.message } };
+            }
+        } else if (name === 'provide_suggestions') {
+            const suggestions = args?.suggestions;
+            console.log('[Agent] Received suggestions:', suggestions);
+            if (suggestions && Array.isArray(suggestions)) {
+                this.game.uiManager.showSuggestions(suggestions);
+            }
+
+            // Report back to CLI (Debug)
+            if (this.currentDebugId) {
+                this.game.colyseusManager?.sendDebugResponse({
+                    debugId: this.currentDebugId,
+                    tool: 'provide_suggestions',
+                    suggestions: suggestions
+                });
+                this.currentDebugId = null;
+            }
+
+            return { output: { suggestions: suggestions ? suggestions.join(', ') : '' } };
+        } else if (name === 'teleport_player') {
+            const location = args?.location;
+            console.log('[Agent] Teleporting player to:', location);
+            const result = this.teleportPlayer(location);
+            this.game.uiManager.addChatMessage('ai', `🌍 ${result}`);
+
+            // Report back to CLI (Debug)
+            if (this.currentDebugId) {
+                this.game.colyseusManager?.sendDebugResponse({
+                    debugId: this.currentDebugId,
+                    tool: 'teleport_player',
+                    location: location,
+                    result: result
+                });
+                this.currentDebugId = null;
+            }
+
+            return { output: { result } };
+        } else if (name === 'spawn_creature') {
+            const creature = args?.creature;
+            const count = Math.min(MAX_SPAWN_COUNT, Math.max(1, args?.count || 1));
+            console.log('[Agent] Spawning creature:', creature, 'x', count);
+            const result = this.spawnCreature(creature, count);
+
+            // Check if creature doesn't exist and needs to be created
+            if (result?.status === 'not_found') {
+                const creatureName = result.creature;
+                const capitalizedName = creatureName.charAt(0).toUpperCase() + creatureName.slice(1).toLowerCase();
+
+                this.game.uiManager.addChatMessage('ai', `🔧 "${capitalizedName}" doesn't exist yet! Creating it now...`);
+
+                // Build the creation request
+                const createRequest = `Create a new animal creature called "${capitalizedName}" in the game. Create the file at src/game/entities/animals/${capitalizedName}.js. It should:\n1. Import THREE and Animal base class\n2. Export a class ${capitalizedName} that extends Animal\n3. Have a createBody() method that builds a blocky, voxel-style 3D model using THREE.BoxGeometry and THREE.MeshLambertMaterial\n4. Use appropriate colors for a ${capitalizedName}\n5. Include legs, body, head, and any distinctive features\n\nAfter creating the file, update src/game/AnimalRegistry.js to:\n1. Add an import for ${capitalizedName}\n2. Add it to the exports\n3. Add it to the AnimalClasses object\n4. Add the module path to the HMR animalModules array`;
+
+                // Trigger perform_task to create the creature
+                const taskResult = await this.executeTool('perform_task', { request: createRequest });
+
+                return {
+                    output: {
+                        result: `Creating ${capitalizedName}... This will take a moment. Say "spawn ${capitalizedName.toLowerCase()}" again once the task completes!`,
+                        taskStarted: true
+                    }
+                };
+            }
+
+            this.game.uiManager.addChatMessage('ai', `🐾 ${result}`);
+
+            // Report back to CLI (Debug)
+            if (this.currentDebugId) {
+                const player = this.game.player;
+                // Calculate spawn pos (roughly in front)
+                const dir = new THREE.Vector3();
+                this.game.camera.getWorldDirection(dir);
+                const spawnPos = {
+                    x: player.position.x + dir.x * 5,
+                    y: player.position.y,
+                    z: player.position.z + dir.z * 5
+                };
+
+                this.game.colyseusManager?.sendDebugResponse({
+                    debugId: this.currentDebugId,
+                    tool: 'spawn_creature',
+                    creature: creature,
+                    count: count,
+                    result: result,
+                    approxSpawnX: spawnPos.x,
+                    approxSpawnZ: spawnPos.z
+                });
+                this.currentDebugId = null;
+            }
+
+            return { output: { result } };
+        } else if (name === 'get_scene_info') {
+            console.log('[Agent] Getting scene info');
+            const info = this.getSceneInfo();
+
+            // Report back to CLI (Debug)
+            if (this.currentDebugId) {
+                this.game.colyseusManager?.sendDebugResponse({
+                    debugId: this.currentDebugId,
+                    tool: 'get_scene_info',
+                    ...info
+                });
+                this.currentDebugId = null;
+            }
+
+            return { output: info };
+        }
+
+        return { output: { error: `Unknown tool: ${name}` } };
     }
 
     async handleToolCall(toolCall) {
         if (toolCall.functionCalls) {
             for (const call of toolCall.functionCalls) {
-                if (call.name === 'perform_task') {
-                    const request = call.args?.request;
-                    console.log('[Agent] Executing code modification via tool:', request);
+                const result = await this.executeTool(call.name, call.args);
 
-                    this.game.uiManager.addChatMessage('ai', `Starting task: ${request}`);
-                    this.game.uiManager.updateVoiceStatus(true, 'Coding...');
-
-                    try {
-                        const res = await fetch('/api/god-mode/chat', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ message: request })
-                        });
-                        const data = await res.json();
-
-                        if (data.success && data.taskId) {
-                            // Create UI task with backend ID so Logs button works
-                            const uiTaskId = this.game.uiManager.addTask(request, data.taskId);
-
-                            // Start polling for completion
-                            this.pollTaskStatus(data.taskId, uiTaskId, request);
-
-                            // Send tool response back to Gemini (acknowledge start)
-                            this.ws.send(JSON.stringify({
-                                toolResponse: {
-                                    functionResponses: [{
-                                        id: call.id,
-                                        response: { output: `Task started with ID: ${data.taskId}` }
-                                    }]
-                                }
-                            }));
-                        } else {
-                            throw new Error(data.error || 'Failed to start task');
-                        }
-                    } catch (e) {
-                        console.error('[Agent] Tool call error:', e);
-                        this.game.uiManager.addChatMessage('system', `Task error: ${e.message}`);
-                        this.game.uiManager.updateVoiceStatus(true, 'Listening');
-                    }
-                } else if (call.name === 'provide_suggestions') {
-                    const suggestions = call.args?.suggestions;
-                    console.log('[Agent] Received suggestions:', suggestions);
-                    if (suggestions && Array.isArray(suggestions)) {
-                        this.game.uiManager.showSuggestions(suggestions);
-                    }
-
-                    // Respond to tool call
+                // Voice API expects executeTool response in specific format
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(JSON.stringify({
                         toolResponse: {
                             functionResponses: [{
                                 id: call.id,
-                                response: { output: `Suggestions displayed to user: ${suggestions.join(', ')}` }
-                            }]
-                        }
-                    }));
-                } else if (call.name === 'teleport_player') {
-                    const location = call.args?.location;
-                    console.log('[Agent] Teleporting player to:', location);
-                    const result = this.teleportPlayer(location);
-                    this.game.uiManager.addChatMessage('ai', `🌍 ${result}`);
-
-                    this.ws.send(JSON.stringify({
-                        toolResponse: {
-                            functionResponses: [{
-                                id: call.id,
-                                response: { output: result }
-                            }]
-                        }
-                    }));
-                } else if (call.name === 'spawn_creature') {
-                    const creature = call.args?.creature;
-                    const count = Math.min(10, Math.max(1, call.args?.count || 1));
-                    console.log('[Agent] Spawning creature:', creature, 'x', count);
-                    const result = this.spawnCreature(creature, count);
-                    this.game.uiManager.addChatMessage('ai', `🐾 ${result}`);
-
-                    this.ws.send(JSON.stringify({
-                        toolResponse: {
-                            functionResponses: [{
-                                id: call.id,
-                                response: { output: result }
-                            }]
-                        }
-                    }));
-                } else if (call.name === 'get_scene_info') {
-                    console.log('[Agent] Getting scene info');
-                    const info = this.getSceneInfo();
-
-                    this.ws.send(JSON.stringify({
-                        toolResponse: {
-                            functionResponses: [{
-                                id: call.id,
-                                response: { output: JSON.stringify(info) }
+                                response: result
                             }]
                         }
                     }));
@@ -502,7 +638,7 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
         const poll = async () => {
             const isDone = await checkStatus();
             if (!isDone) {
-                setTimeout(poll, 2000);
+                setTimeout(poll, TASK_POLL_INTERVAL);
             }
         };
 
@@ -557,31 +693,44 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
     }
 
     /**
-     * Speak a message via text-to-speech (uses browser TTS or WebSocket if connected)
+     * Speak a message via text-to-speech (only when voice is actively connected)
      */
     speakMessage(message) {
+        // Only speak if voice mode is actively connected
+        if (!this.isConnected || !this.isListening) {
+            return; // Voice is off, don't speak anything
+        }
+
         // If WebSocket is connected, send text for Gemini to speak
-        if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             // Send a client turn with text to prompt voice response
+            const transform = this.getPlayerTransform();
             this.ws.send(JSON.stringify({
                 clientContent: {
                     turns: [{
                         role: "user",
-                        parts: [{ text: `[SYSTEM NOTIFICATION - Speak this to the user]: ${message}` }]
+                        parts: [{ text: `[SYSTEM NOTIFICATION - Speak this naturally to the user]: ${message}` }]
                     }],
                     turnComplete: true
                 }
             }));
-        } else {
-            // Fallback to browser's built-in text-to-speech
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(message);
-                utterance.rate = 1.0;
-                utterance.pitch = 1.0;
-                utterance.volume = 0.8;
-                window.speechSynthesis.speak(utterance);
-            }
         }
+    }
+
+    /**
+     * Inject a text prompt (for debugging/CLI)
+     * Uses sendTextMessage which handles both voice-connected and text-only modes
+     */
+    async injectPrompt(text, debugId = null) {
+        console.log(`[Agent] Injecting prompt: "${text}"`);
+        this.currentDebugId = debugId;
+
+        // Use the same path as the UI send button
+        await this.sendTextMessage(text);
+
+        // If we're connected via voice, the response will come back via WebSocket handlers
+        // If not connected, sendTextMessage uses REST API and we need to handle the response differently
+        // For CLI, the debugResponse is sent from handleToolCall when tools are executed
     }
 
     /**
@@ -620,32 +769,12 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
         }
 
         // Search for biome
-        const biomeMap = {
-            'desert': 'DESERT',
-            'dessert': 'DESERT', // Common typo
-            'ocean': 'OCEAN',
-            'sea': 'OCEAN',
-            'water': 'OCEAN',
-            'forest': 'FOREST',
-            'woods': 'FOREST',
-            'jungle': 'JUNGLE',
-            'mountain': 'MOUNTAIN',
-            'mountains': 'MOUNTAIN',
-            'peak': 'MOUNTAIN',
-            'snow': 'SNOW',
-            'snowy': 'SNOW',
-            'tundra': 'SNOW',
-            'arctic': 'SNOW',
-            'plains': 'PLAINS',
-            'grassland': 'PLAINS'
-        };
-
-        const targetBiome = biomeMap[loc];
+        const targetBiome = BIOME_ALIASES[loc];
         if (targetBiome) {
             // Search in expanding circles from player position
-            // Increased range to 2000 blocks to ensure we find it
-            for (let radius = 50; radius <= 2000; radius += 50) {
-                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+            const angleStep = (Math.PI * 2) / 16;
+            for (let radius = BIOME_SEARCH_STEP; radius <= BIOME_SEARCH_MAX_RADIUS; radius += BIOME_SEARCH_STEP) {
+                for (let angle = 0; angle < Math.PI * 2; angle += angleStep) {
                     const x = Math.floor(player.position.x + Math.cos(angle) * radius);
                     const z = Math.floor(player.position.z + Math.sin(angle) * radius);
                     const y = worldGen.getTerrainHeight(x, z);
@@ -656,7 +785,7 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
                     }
                 }
             }
-            return `Could not find ${loc} biome within 2000 blocks`;
+            return `Could not find ${loc} biome within ${BIOME_SEARCH_MAX_RADIUS} blocks`;
         }
 
         return `Unknown location: "${location}". Try 'spawn', 'desert', 'forest', 'ocean', 'mountain', 'jungle', 'snow', or coordinates like "100, 50, 200".`;
@@ -666,7 +795,11 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
      * Spawn creatures near the player
      */
     spawnCreature(creatureName, count = 1) {
-        // AnimalClasses imported at top of file
+        // Check aliases first
+        const lower = creatureName.toLowerCase();
+        if (CREATURE_ALIASES[lower]) {
+            creatureName = CREATURE_ALIASES[lower];
+        }
 
         // Try exact match first
         let CreatureClass = AnimalClasses[creatureName];
@@ -689,8 +822,12 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
         }
 
         if (!CreatureClass) {
-            const available = Object.keys(AnimalClasses).slice(0, 15).join(', ');
-            return `Unknown creature "${creatureName}". Try: ${available}...`;
+            // Return structured object so executeTool can trigger auto-creation
+            return {
+                status: 'not_found',
+                creature: creatureName,
+                available: Object.keys(AnimalClasses).slice(0, 15)
+            };
         }
 
         // Use SpawnManager to spawn in front of player
@@ -705,8 +842,30 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
     getSceneInfo() {
         const player = this.game.player;
         const pos = player.position;
-        const terrainHeight = this.game.worldGen.getTerrainHeight(pos.x, pos.z);
-        const biome = this.game.biomeManager.getBiome(pos.x, pos.z, terrainHeight);
+        const worldGen = this.game.worldGen;
+
+        // Safe terrain/biome lookup
+        let terrainHeight = 0;
+        let biome = 'unknown';
+        if (worldGen) {
+            terrainHeight = worldGen.getTerrainHeight(pos.x, pos.z);
+            biome = worldGen.getBiome ? worldGen.getBiome(pos.x, pos.z) : 'unknown';
+        }
+
+        // Check what the player is looking at
+        let lookingAt = "nothing in particular";
+        if (this.game.physicsManager) {
+            const targetBlock = this.game.physicsManager.getTargetBlock();
+            const targetAnimal = this.game.physicsManager.getHitAnimal();
+
+            if (targetAnimal) {
+                lookingAt = `a ${targetAnimal.constructor.name} (Entity)`;
+            } else if (targetBlock) {
+                const blockType = this.game.getBlockWorld(targetBlock.x, targetBlock.y, targetBlock.z);
+                const dist = player.position.distanceTo(new THREE.Vector3(targetBlock.x, targetBlock.y, targetBlock.z));
+                lookingAt = `a ${blockType} block at [${targetBlock.x}, ${targetBlock.y}, ${targetBlock.z}], distance: ${dist.toFixed(1)}m`;
+            }
+        }
 
         // Count nearby creatures
         const nearbyCreatures = {};
@@ -716,7 +875,7 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
         for (const animal of animals) {
             if (animal.mesh) {
                 const dist = animal.mesh.position.distanceTo(pos);
-                if (dist < 150) { // Increased from 50 to 150
+                if (dist < CREATURE_DETECTION_RADIUS) {
                     const name = animal.constructor.name;
                     nearbyCreatures[name] = (nearbyCreatures[name] || 0) + 1;
                 }
@@ -732,6 +891,8 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
 
         return {
             position: { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) },
+            orientation: { pitch: player.rotation.x.toFixed(2), yaw: player.rotation.y.toFixed(2) },
+            lookingAt: lookingAt,
             biome: biome,
             altitude: Math.floor(pos.y - terrainHeight),
             aboveGround: pos.y > terrainHeight,
@@ -768,7 +929,13 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
         this.isPlaying = true;
 
         const audioData = this.audioQueue.shift();
-        const audioBuffer = this.outputContext.createBuffer(1, audioData.length, 24000);
+
+        if (!this.outputContext) {
+            this.isPlaying = false;
+            return;
+        }
+
+        const audioBuffer = this.outputContext.createBuffer(1, audioData.length, AUDIO_SAMPLE_RATE_OUTPUT);
         audioBuffer.getChannelData(0).set(audioData);
 
         const source = this.outputContext.createBufferSource();
@@ -804,6 +971,11 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
 
         // Send to Gemini if connected
         if (this.isConnected && this.ws) {
+            const transform = this.getPlayerTransform();
+            // Add to shared history and trim
+            this.conversationHistory.push({ role: 'user', text: text });
+            this.trimConversationHistory();
+
             this.ws.send(JSON.stringify({
                 realtimeInput: {
                     mediaChunks: [], // Empty for text-only
@@ -811,32 +983,108 @@ IMPORTANT: When a task is started, do NOT claim it is "done" or "complete" until
                 clientContent: {
                     turns: [{
                         role: "user",
-                        parts: [{ text: text }]
+                        parts: [{
+                            text: `[PLAYER CONTEXT - Position: x=${transform.position.x.toFixed(2)}, y=${transform.position.y.toFixed(2)}, z=${transform.position.z.toFixed(2)}, Orientation: pitch=${transform.rotation.x.toFixed(2)}, yaw=${transform.rotation.y.toFixed(2)}]\n${text}`
+                        }]
                     }]
                 }
             }));
         } else {
-            // Use REST API if not connected via WebSocket
-            this.game.uiManager.addChatMessage('ai', `Starting request: ${text}`);
+            // Text Mode (Local GenAI SDK)
+            // Track the "Thinking..." message ID so we can remove it
+            const thinkingMsgId = this.game.uiManager.addChatMessage('ai', `Thinking...`);
 
             try {
-                const res = await fetch('/api/god-mode/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
-                });
-                const data = await res.json();
+                await this.initializeTextClient();
 
-                if (data.success && data.taskId) {
-                    // Create UI task with backend ID so Logs button works
-                    const uiTaskId = this.game.uiManager.addTask(text, data.taskId);
-                    this.pollTaskStatus(data.taskId, uiTaskId, text);
-                } else {
-                    this.game.uiManager.addChatMessage('system', `Error: ${data.error || 'Unknown error'}`);
+                if (!this.genAI || !this.textModel) {
+                    throw new Error("AI Client failed to initialize");
                 }
+
+                // Initialize chat session with shared history
+                if (!this.chatSession || this.chatSessionHistoryLength !== this.conversationHistory.length) {
+                    // Convert shared history to SDK format
+                    const sdkHistory = this.conversationHistory.map(msg => ({
+                        role: msg.role,
+                        parts: [{ text: msg.text }]
+                    }));
+                    this.chatSession = this.textModel.startChat({
+                        history: sdkHistory
+                    });
+                    this.chatSessionHistoryLength = this.conversationHistory.length;
+                }
+
+                // Add user message to shared history and trim
+                this.conversationHistory.push({ role: 'user', text: text });
+                this.trimConversationHistory();
+
+                // Prepare message with context
+                const transform = this.getPlayerTransform();
+                const contextMsg = `[PLAYER CONTEXT - Position: x=${transform.position.x.toFixed(2)}, y=${transform.position.y.toFixed(2)}, z=${transform.position.z.toFixed(2)}, Orientation: pitch=${transform.rotation.x.toFixed(2)}, yaw=${transform.rotation.y.toFixed(2)}]\n${text}`;
+
+                let result = await this.chatSession.sendMessage(contextMsg);
+                let response = result.response;
+
+                // Handle tool calls loop
+                let turns = 0;
+                while (turns < MAX_TOOL_CALL_TURNS) {
+                    const functionCalls = response.functionCalls();
+                    if (functionCalls && functionCalls.length > 0) {
+                        const functionResponses = [];
+                        for (const call of functionCalls) {
+                            const executionResult = await this.executeTool(call.name, call.args);
+                            functionResponses.push({
+                                functionResponse: {
+                                    name: call.name,
+                                    response: executionResult.output
+                                }
+                            });
+                        }
+                        // Send function responses back
+                        result = await this.chatSession.sendMessage(functionResponses);
+                        response = result.response;
+                        turns++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Remove the "Thinking..." message
+                this.game.uiManager.removeChatMessage?.(thinkingMsgId);
+
+                const responseText = response.text();
+                if (responseText) {
+                    this.game.uiManager.addChatMessage('ai', responseText);
+                    // Add to shared history and trim
+                    this.conversationHistory.push({ role: 'model', text: responseText });
+                    this.trimConversationHistory();
+                } else {
+                    this.game.uiManager.addChatMessage('system', 'AI returned no text.');
+                }
+
+                // Notify CLI of completion
+                if (this.currentDebugId) {
+                    this.game.colyseusManager?.sendDebugResponse({
+                        debugId: this.currentDebugId,
+                        message: responseText || "Command executed"
+                    });
+                    this.currentDebugId = null;
+                }
+
             } catch (e) {
-                console.error('[Agent] REST chat error:', e);
-                this.game.uiManager.addChatMessage('system', `Failed to send message: ${e.message}`);
+                console.error('[Agent] Text chat error:', e);
+                // Remove the "Thinking..." message
+                this.game.uiManager.removeChatMessage?.(thinkingMsgId);
+                this.game.uiManager.addChatMessage('system', `Error: ${e.message}`);
+
+                // Report error back to CLI
+                if (this.currentDebugId) {
+                    this.game.colyseusManager?.sendDebugResponse({
+                        debugId: this.currentDebugId,
+                        error: e.message
+                    });
+                    this.currentDebugId = null;
+                }
             }
         }
     }

@@ -179,4 +179,16 @@ export class Cow extends Animal {
             makeLeg(0.3, -0.5)    // Back right
         ];
     }
+
+    interact(player) {
+        // Face player
+        const dx = player.position.x - this.position.x;
+        const dz = player.position.z - this.position.z;
+        this.rotation = Math.atan2(dx, dz);
+        this.mesh.rotation.y = this.rotation;
+
+        if (this.game.soundManager) {
+            this.game.soundManager.playSound('cow_moo', this.position);
+        }
+    }
 }

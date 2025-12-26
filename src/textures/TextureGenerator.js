@@ -53,7 +53,22 @@ const palettes = {
     trampoline_side: ['#2F4F4F', '#4682B4', '#2E8B57'], // DarkSlateGray (frame), SteelBlue/Green
     snow: ['#FFFFFF', '#F0F8FF', '#E8E8E8', '#F5F5F5'], // Various shades of white
     door_closed: { wood: ['#8B4513', '#A0522D'], handle: ['#C0C0C0', '#808080'] }, // Wood door with handle
-    door_open: { frame: ['#8B4513', '#A0522D'] } // Just the frame
+    door_open: { frame: ['#8B4513', '#A0522D'] }, // Just the frame
+    // New building blocks
+    cobblestone: ['#555555', '#666666', '#777777', '#4a4a4a', '#888888'],
+    roof_tiles: ['#8B0000', '#A52A2A', '#CD5C5C', '#B22222'],
+    chimney_brick: ['#4a2513', '#5a3520', '#6a4530', '#3a1a10'],
+    window_frame: { frame: ['#5C4033', '#4a3020'], glass: ['rgba(200, 230, 255, 0.4)'] },
+    fence: ['#8B4513', '#A0522D', '#6B4423'],
+    shingles: ['#2F4F4F', '#3a5a5a', '#456565', '#1a3a3a'],
+    polished_stone: ['#8a8a8a', '#9a9a9a', '#aaaaaa', '#bababa'],
+    dark_planks: ['#3e2723', '#4e342e', '#2c1e18', '#5d4037'],
+    white_plaster: ['#F5F5DC', '#FAEBD7', '#FAF0E6', '#FFFAF0'],
+    terracotta: ['#CD853F', '#D2691E', '#B8860B', '#DEB887'],
+    thatch: ['#D4A574', '#C4956A', '#E5B584', '#B4854A'],
+    half_timber: { wood: ['#3e2723', '#4e342e'], plaster: ['#F5F5DC', '#FAEBD7'] },
+    mossy_stone: ['#555555', '#666666', '#777777'],
+    iron_bars: ['#4a4a4a', '#5a5a5a', '#6a6a6a']
 };
 
 export function generateTexture(type, size = 16) {
@@ -566,6 +581,7 @@ export function generateTexture(type, size = 16) {
         case 'levitation_wand':
         case 'wand':
         case 'shrink_wand':
+        case 'wizard_tower_wand':
             ctx.clearRect(0, 0, size, size);
             // Stick
             ctx.fillStyle = '#8B4513';
@@ -576,6 +592,7 @@ export function generateTexture(type, size = 16) {
             // Tip
             if (type === 'levitation_wand') ctx.fillStyle = '#00FFFF'; // Cyan
             else if (type === 'shrink_wand') ctx.fillStyle = '#00FF00'; // Green
+            else if (type === 'wizard_tower_wand') ctx.fillStyle = '#8A2BE2'; // BlueViolet
             else ctx.fillStyle = '#FF00FF'; // Magenta
 
             // Draw tip at top right
@@ -659,6 +676,234 @@ export function generateTexture(type, size = 16) {
             ctx.fillRect(size - 2, 0, 2, size); // Right
             ctx.fillRect(0, 0, size, 2); // Top
             // Optional: Threshold?
+            break;
+        }
+
+        case 'cobblestone': {
+            // Irregular stone pattern
+            ctx.fillStyle = '#5a5a5a';
+            ctx.fillRect(0, 0, size, size);
+            const cobbleColors = palettes.cobblestone;
+            for (let i = 0; i < 20; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                const w = 2 + Math.floor(seededRandom(seed++) * 4);
+                const h = 2 + Math.floor(seededRandom(seed++) * 4);
+                ctx.fillStyle = cobbleColors[Math.floor(seededRandom(seed++) * cobbleColors.length)];
+                ctx.fillRect(rx, ry, w, h);
+            }
+            break;
+        }
+
+        case 'roof_tiles': {
+            // Overlapping roof tiles pattern
+            ctx.fillStyle = palettes.roof_tiles[0];
+            ctx.fillRect(0, 0, size, size);
+            for (let row = 0; row < 4; row++) {
+                const offset = row % 2 === 0 ? 0 : 4;
+                for (let col = 0; col < 2; col++) {
+                    const bx = col * 8 + offset;
+                    const by = row * 4;
+                    ctx.fillStyle = palettes.roof_tiles[Math.floor(seededRandom(seed++) * palettes.roof_tiles.length)];
+                    ctx.beginPath();
+                    ctx.fillRect(bx % size, by, 7, 3);
+                    // Add shadow for 3D effect
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(bx % size, by + 3, 7, 1);
+                }
+            }
+            break;
+        }
+
+        case 'chimney_brick': {
+            // Darker brick pattern
+            ctx.fillStyle = '#3a1a10';
+            ctx.fillRect(0, 0, size, size);
+            for (let row = 0; row < 4; row++) {
+                const offset = row % 2 === 0 ? 0 : 4;
+                for (let col = 0; col < 2; col++) {
+                    const bx = col * 8 + offset;
+                    const by = row * 4;
+                    ctx.fillStyle = palettes.chimney_brick[Math.floor(seededRandom(seed++) * palettes.chimney_brick.length)];
+                    ctx.fillRect(bx % size, by, 7, 3);
+                }
+            }
+            break;
+        }
+
+        case 'window_frame': {
+            const { frame, glass } = palettes.window_frame;
+            // Frame
+            ctx.fillStyle = frame[0];
+            ctx.fillRect(0, 0, size, size);
+            // Glass panes (2x2 grid)
+            ctx.fillStyle = glass[0];
+            ctx.fillRect(2, 2, 5, 5);
+            ctx.fillRect(9, 2, 5, 5);
+            ctx.fillRect(2, 9, 5, 5);
+            ctx.fillRect(9, 9, 5, 5);
+            // Shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(3, 3, 2, 2);
+            ctx.fillRect(10, 3, 2, 2);
+            break;
+        }
+
+        case 'fence': {
+            // Solid wood planks pattern using fence palette
+            const palette = palettes.fence;
+            ctx.fillStyle = palette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Vertical grain like wood_side
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const grainOffset = Math.floor(x / 4);
+                    const colorIdx = (grainOffset + Math.floor(seededRandom(seed++) * 2)) % palette.length;
+                    ctx.fillStyle = palette[colorIdx];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'shingles': {
+            // Slate roof shingles
+            ctx.fillStyle = palettes.shingles[0];
+            ctx.fillRect(0, 0, size, size);
+            for (let row = 0; row < 8; row++) {
+                const offset = row % 2 === 0 ? 0 : 2;
+                for (let col = 0; col < 4; col++) {
+                    const bx = col * 4 + offset;
+                    const by = row * 2;
+                    ctx.fillStyle = palettes.shingles[Math.floor(seededRandom(seed++) * palettes.shingles.length)];
+                    ctx.fillRect(bx % size, by, 3, 2);
+                }
+            }
+            break;
+        }
+
+        case 'polished_stone': {
+            // Smooth polished stone
+            ctx.fillStyle = palettes.polished_stone[0];
+            ctx.fillRect(0, 0, size, size);
+            // Subtle shine lines
+            ctx.fillStyle = palettes.polished_stone[3];
+            ctx.fillRect(0, 0, size, 1);
+            ctx.fillRect(0, 0, 1, size);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(2, 2, 4, 4);
+            break;
+        }
+
+        case 'dark_planks': {
+            const palette = palettes.dark_planks;
+            ctx.fillStyle = palette[0];
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = palette[2];
+            for (let i = 0; i < size; i += 4) {
+                ctx.fillRect(0, i, size, 1);
+            }
+            ctx.fillStyle = palette[1];
+            for (let i = 0; i < size; i += 4) {
+                const offset = (i % 8 === 0) ? 4 : 0;
+                for (let j = 0; j < size; j += 8) {
+                    ctx.fillRect((j + offset) % size, i, 1, 4);
+                }
+            }
+            break;
+        }
+
+        case 'white_plaster': {
+            // Stucco/plaster texture
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.white_plaster[Math.floor(seededRandom(seed++) * palettes.white_plaster.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'terracotta': {
+            // Clay/terracotta texture
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.terracotta[Math.floor(seededRandom(seed++) * palettes.terracotta.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'thatch': {
+            // Straw/thatch roof texture
+            ctx.fillStyle = palettes.thatch[0];
+            ctx.fillRect(0, 0, size, size);
+            // Horizontal straw lines
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (seededRandom(seed++) > 0.5) {
+                        ctx.fillStyle = palettes.thatch[Math.floor(seededRandom(seed++) * palettes.thatch.length)];
+                        ctx.fillRect(x, y, 2, 1);
+                    }
+                }
+            }
+            break;
+        }
+
+        case 'half_timber': {
+            const { wood, plaster } = palettes.half_timber;
+            // Plaster background
+            ctx.fillStyle = plaster[0];
+            ctx.fillRect(0, 0, size, size);
+            // Timber frame
+            ctx.fillStyle = wood[0];
+            // Horizontal beams
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, size - 2, size, 2);
+            // Vertical beams
+            ctx.fillRect(0, 0, 2, size);
+            ctx.fillRect(size - 2, 0, 2, size);
+            // Diagonal brace
+            ctx.fillStyle = wood[1];
+            for (let i = 0; i < size - 4; i++) {
+                ctx.fillRect(2 + i, 2 + i, 2, 2);
+            }
+            break;
+        }
+
+        case 'mossy_stone': {
+            // Stone with moss patches
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    const patchNoise = seededRandom(Math.floor(x / 3) * 100 + Math.floor(y / 3));
+                    const combined = (noise + patchNoise) / 2;
+                    ctx.fillStyle = palettes.mossy_stone[Math.floor(combined * palettes.mossy_stone.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add moss patches
+            ctx.fillStyle = '#3a5a3a';
+            for (let i = 0; i < 8; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(rx, ry, 2, 2);
+            }
+            break;
+        }
+
+        case 'iron_bars': {
+            ctx.clearRect(0, 0, size, size);
+            ctx.fillStyle = palettes.iron_bars[0];
+            // Vertical bars
+            ctx.fillRect(3, 0, 2, size);
+            ctx.fillRect(7, 0, 2, size);
+            ctx.fillRect(11, 0, 2, size);
+            // Horizontal connectors
+            ctx.fillStyle = palettes.iron_bars[1];
+            ctx.fillRect(0, 4, size, 1);
+            ctx.fillRect(0, 11, size, 1);
             break;
         }
 

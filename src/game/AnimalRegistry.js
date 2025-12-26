@@ -72,6 +72,7 @@ import { WienerDog } from './entities/animals/WienerDog.js';
 import { GoldenRetriever } from './entities/animals/GoldenRetriever.js';
 import { Cybertruck } from './entities/animals/Cybertruck.js';
 import { Robot } from './entities/animals/Robot.js';
+import { Zebra } from './entities/animals/Zebra.js';
 
 // Export all classes for use by SpawnManager and others
 export {
@@ -81,7 +82,7 @@ export {
     Ladybug, Toucan, Gymnast,
     Fox, FennecFox,
     Panda, Camel, Snail, Owl, Cow, Snowman,
-    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Robot, Cybertruck
+    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Robot, Cybertruck, Zebra
 };
 
 // Map of class names to classes for potential runtime lookup
@@ -92,7 +93,7 @@ export const AnimalClasses = {
     Ladybug, Toucan, Gymnast,
     Fox, FennecFox,
     Panda, Camel, Snail, Owl, Cow, Snowman,
-    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, Robot, Cybertruck
+    SantaClaus, Unicorn, MagicalCreature, TigerBear, Raccoon, Shark, TRex, MythicalVillager, Lampost, Pumpkin, Lorax, Wizard, Rocketship, Giraffifant, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, Robot, Cybertruck, Zebra
 };
 
 /**

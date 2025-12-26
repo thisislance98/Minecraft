@@ -260,6 +260,7 @@ export class Player {
         this.createGrowthWand();
         this.createOmniWand();
         this.createRideWand();
+        this.createWizardTowerWand();
         this.createBroom();
         this.createFoodModels();
         this.updateHeldItemVisibility();
@@ -425,6 +426,30 @@ export class Player {
         this.toolAttachment.add(wandGroup);
         this.rideWand = wandGroup;
         this.rideWand.visible = false;
+    }
+
+    createWizardTowerWand() {
+        const wandGroup = new THREE.Group();
+
+        // Handle (Stick)
+        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
+        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.renderOrder = 999;
+        handle.position.y = -0.2;
+        wandGroup.add(handle);
+
+        // Tip (Gem) - Purple
+        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const tipMat = new THREE.MeshBasicMaterial({ color: 0x8A2BE2, depthTest: false }); // BlueViolet
+        const tip = new THREE.Mesh(tipGeo, tipMat);
+        tip.renderOrder = 999;
+        tip.position.y = -0.42;
+        wandGroup.add(tip);
+
+        this.toolAttachment.add(wandGroup);
+        this.wizardTowerWand = wandGroup;
+        this.wizardTowerWand.visible = false;
     }
 
     createBroom() {
@@ -620,7 +645,9 @@ export class Player {
         if (this.shrinkWand) this.shrinkWand.visible = itemType === 'shrink_wand';
         if (this.growthWand) this.growthWand.visible = itemType === 'growth_wand';
         if (this.omniWand) this.omniWand.visible = itemType === 'omni_wand';
+        if (this.omniWand) this.omniWand.visible = itemType === 'omni_wand';
         if (this.rideWand) this.rideWand.visible = itemType === 'ride_wand';
+        if (this.wizardTowerWand) this.wizardTowerWand.visible = itemType === 'wizard_tower_wand';
         if (this.broom) {
             // Only show held broom if we are NOT flying
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
@@ -689,7 +716,8 @@ export class Player {
                 canDismount = false;
             }
 
-            if ((input.isActionActive('INTERACT') || input.isActionActive('SPRINT')) && canDismount) {
+            const shiftJustPressed = input.isActionActive('SPRINT') && !this.wasShiftPressed;
+            if ((input.isActionActive('INTERACT') || shiftJustPressed) && canDismount) {
                 this.dismount();
             } else {
                 if (this.mount.handleRiding) {
@@ -702,6 +730,7 @@ export class Player {
                 this.position.y += 0.8;
                 this.velocity.set(0, 0, 0);
             }
+            this.wasShiftPressed = input.isActionActive('SPRINT');
         } else {
             // NORMAL PHYSICS OR FLYING
             if (this.isFlying) {
@@ -781,6 +810,7 @@ export class Player {
                 }
 
                 this.wasSpacePressed = input.isActionActive('JUMP');
+                this.wasShiftPressed = input.isActionActive('SPRINT');
 
                 // Move with collision detection
                 this.moveWithCollision(velX, this.velocity.y, velZ);

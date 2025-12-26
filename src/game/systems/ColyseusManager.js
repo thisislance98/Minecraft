@@ -16,7 +16,9 @@ export class ColyseusManager {
         this.onPlayerJoin = null;
         this.onPlayerLeave = null;
         this.onBlockChange = null;
+        this.onBlockChange = null;
         this.onWorldSeedReceived = null;
+        this.onDebugCommand = null;
     }
 
     /**
@@ -48,15 +50,16 @@ export class ColyseusManager {
                 name: 'Host'
             });
 
-            this.sessionId = this.room.sessionId;
+            this.sessionId = this.room?.sessionId;
             this.connected = true;
 
             this.setupRoomHandlers();
 
-            console.log(`[Colyseus] Room created: ${this.room.id}`);
-            this.game.uiManager?.showNetworkStatus(`Hosting: ${this.room.id.substring(0, 6)}`);
+            const roomId = this.room?.id || 'unknown';
+            console.log(`[Colyseus] Room created: ${roomId}`);
+            this.game.uiManager?.showNetworkStatus(`Hosting: ${roomId.substring(0, 6)}`);
 
-            return this.room.id;
+            return roomId;
         } catch (error) {
             console.error('[Colyseus] Create room error:', error);
             throw error;
@@ -96,13 +99,61 @@ export class ColyseusManager {
     /**
      * Setup room event handlers
      */
+    /**
+     * Setup room event handlers
+     */
     setupRoomHandlers() {
         if (!this.room) return;
 
-        // State synchronization
+        // --- Message Handlers (Register these FIRST so they work even if schema fails) ---
+
+        // Listen for world seed
+        this.room.onMessage('worldSeed', (data) => {
+            console.log('[Colyseus] Received world seed:', data.seed);
+            if (this.onWorldSeedReceived) {
+                this.onWorldSeedReceived(data.seed);
+            }
+        });
+
+        // Listen for debug commands (from CLI)
+        this.room.onMessage('debugCommand', (data) => {
+            console.log('[Colyseus] Received debug command:', data);
+
+            // Handle remote reload
+            if (data.action === 'reload') {
+                console.log('🔄 Remote reload requested!');
+                window.location.reload();
+                return;
+            }
+
+            if (this.onDebugCommand) {
+                this.onDebugCommand(data);
+            }
+        });
+
+        // Error handling
+        this.room.onError((code, message) => {
+            console.error('[Colyseus] Room error:', code, message);
+        });
+
+        // Room leave
+        this.room.onLeave((code) => {
+            console.log('[Colyseus] Left room with code:', code);
+            this.connected = false;
+            this.game.uiManager?.showNetworkStatus(null);
+        });
+
+        // --- State Synchronization (Subject to Schema Version Mismatch) ---
+
         this.room.onStateChange((state) => {
             // console.log('[Colyseus] State updated');
         });
+
+        // Guard against undefined state (version mismatch or early call)
+        if (!this.room.state || !this.room.state.players) {
+            console.warn('[Colyseus] Room state not ready, skipping player handlers');
+            return;
+        }
 
         // Listen for new players
         this.room.state.players.onAdd((player, sessionId) => {
@@ -138,26 +189,6 @@ export class ColyseusManager {
                     blockChange.blockType
                 );
             }
-        });
-
-        // Listen for world seed
-        this.room.onMessage('worldSeed', (data) => {
-            console.log('[Colyseus] Received world seed:', data.seed);
-            if (this.onWorldSeedReceived) {
-                this.onWorldSeedReceived(data.seed);
-            }
-        });
-
-        // Error handling
-        this.room.onError((code, message) => {
-            console.error('[Colyseus] Room error:', code, message);
-        });
-
-        // Room leave
-        this.room.onLeave((code) => {
-            console.log('[Colyseus] Left room with code:', code);
-            this.connected = false;
-            this.game.uiManager?.showNetworkStatus(null);
         });
     }
 
@@ -198,6 +229,14 @@ export class ColyseusManager {
     sendReady() {
         if (!this.room || !this.connected) return;
         this.room.send('ready');
+    }
+
+    /**
+     * Send debug response back to server (-> CLI)
+     */
+    sendDebugResponse(data) {
+        if (!this.room || !this.connected) return;
+        this.room.send('debugResponse', data);
     }
 
     /**

@@ -13,9 +13,18 @@ export class SoundManager {
         this.audioLoader = new THREE.AudioLoader();
         this.isInitialized = false;
         this.musicVolume = 0.5;
+        this.sfxVolume = 1.0;
 
         this.currentTrack = null;
         this.playlist = [music1, music2];
+
+        // Sound Registry
+        this.sounds = new Map();
+        this.soundRegistry = {
+            'click': '/sounds/click.mp3', // Placeholder if needed
+            'pig_oink': '/sounds/pig_oink.mp3',
+            'cow_moo': '/sounds/cow_moo.mp3'
+        };
 
         // Load mute preference
         this.isMuted = localStorage.getItem('isMuted') === 'true';
@@ -37,10 +46,23 @@ export class SoundManager {
             this.isInitialized = true;
             document.removeEventListener('click', startAudio);
             document.removeEventListener('keydown', startAudio);
+
+            // Preload sounds
+            this.preloadSounds();
         };
 
         document.addEventListener('click', startAudio);
         document.addEventListener('keydown', startAudio);
+    }
+
+    preloadSounds() {
+        for (const [name, path] of Object.entries(this.soundRegistry)) {
+            this.audioLoader.load(path, (buffer) => {
+                this.sounds.set(name, buffer);
+            }, undefined, (err) => {
+                console.warn(`Failed to load sound: ${name} at ${path}`, err);
+            });
+        }
     }
 
     playMusic() {
@@ -67,10 +89,58 @@ export class SoundManager {
             });
     }
 
-    playSound(soundName) {
-        // Placeholder for sound effects
-        console.log(`[SoundManager] Playing sound: ${soundName}`);
-        // Future: Load and play sound buffer
+    playSound(soundName, position = null, volume = 1.0) {
+        if (this.isMuted) return;
+
+        const buffer = this.sounds.get(soundName);
+        if (!buffer) {
+            // Try loading it on the fly if not preloaded (or if it failed earlier)
+            if (this.soundRegistry[soundName]) {
+                this.audioLoader.load(this.soundRegistry[soundName], (buff) => {
+                    this.sounds.set(soundName, buff);
+                    this._playSoundBuffer(buff, position, volume);
+                });
+            } else {
+                // If it's not in registry, maybe just log or ignore
+                // console.warn(`Sound not found: ${soundName}`);
+            }
+            return;
+        }
+
+        this._playSoundBuffer(buffer, position, volume);
+    }
+
+    _playSoundBuffer(buffer, position, volume) {
+        if (position) {
+            // Positional Audio
+            const sound = new THREE.PositionalAudio(this.listener);
+            sound.setBuffer(buffer);
+            sound.setRefDistance(5);
+            sound.setVolume(volume * this.sfxVolume);
+
+            // We need to attach it to a mesh/object or set its position
+            // Since we might not have the mesh reference passed easily, setting position directly
+            sound.position.copy(position);
+
+            // We need to add it to the scene or a parent to update its matrix world
+            // Ideally attached to the animal mesh, but 'position' argument suggests coordinate.
+            // If position is a Vector3, we just place it in the scene temporarily?
+            // Audio works best when added to the scene graph.
+            this.game.scene.add(sound);
+
+            sound.play();
+
+            // Clean up after playing
+            sound.onEnded = () => {
+                this.game.scene.remove(sound);
+            };
+        } else {
+            // Global Audio
+            const sound = new THREE.Audio(this.listener);
+            sound.setBuffer(buffer);
+            sound.setVolume(volume * this.sfxVolume);
+            sound.play();
+        }
     }
 
     stopMusic() {

@@ -8,6 +8,9 @@
     "server": "cd server && npm start",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "test:server": "cd server && npm test",
+    "test:ai": "node scripts/ai-test-suite.js",
+    "test:ai:spawn": "node scripts/ai-test-suite.js --test spawn",
+    "test:ai:teleport": "node scripts/ai-test-suite.js --test teleport",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -16,7 +19,9 @@
     "concurrently": "^9.2.1",
     "peerjs": "^1.5.5",
     "simplex-noise": "^4.0.3",
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "uuid": "^13.0.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@google/generative-ai": "^0.24.1",

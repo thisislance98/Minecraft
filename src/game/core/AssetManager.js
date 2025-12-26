@@ -61,7 +61,22 @@ export class AssetManager {
             'tapestry': { hardness: 0.1 },
             'trampoline': { hardness: 0.8 },
             'door_closed': { hardness: 1.0 },
-            'door_open': { hardness: 1.0 }
+            'door_open': { hardness: 1.0 },
+            // New Building Blocks
+            'cobblestone': { hardness: 1.8 },
+            'roof_tiles': { hardness: 1.2 },
+            'chimney_brick': { hardness: 1.5 },
+            'window_frame': { hardness: 0.8 },
+            'fence': { hardness: 0.8 },
+            'shingles': { hardness: 1.2 },
+            'polished_stone': { hardness: 2.0 },
+            'dark_planks': { hardness: 1.0 },
+            'white_plaster': { hardness: 0.5 },
+            'terracotta': { hardness: 1.2 },
+            'thatch': { hardness: 0.3 },
+            'half_timber': { hardness: 1.0 },
+            'mossy_stone': { hardness: 1.3 },
+            'iron_bars': { hardness: 2.0 }
         };
     }
 
@@ -195,6 +210,64 @@ export class AssetManager {
 
         const doorOpen = this.getOrCreateMat('door_open', true); // Transparent center
         this.registerBlockMaterials('door_open', doorOpen);
+
+        // ===== NEW BUILDING BLOCKS =====
+
+        // Cobblestone - Rustic foundation and walls
+        const cobblestone = this.getOrCreateMat('cobblestone');
+        this.registerBlockMaterials('cobblestone', cobblestone);
+
+        // Roof Tiles - Red clay roofing
+        const roofTiles = this.getOrCreateMat('roof_tiles');
+        this.registerBlockMaterials('roof_tiles', roofTiles);
+
+        // Chimney Brick - Dark brick for chimneys
+        const chimneyBrick = this.getOrCreateMat('chimney_brick');
+        this.registerBlockMaterials('chimney_brick', chimneyBrick);
+
+        // Window Frame - Decorative windows
+        const windowFrame = this.getOrCreateMat('window_frame', true);
+        this.registerBlockMaterials('window_frame', windowFrame);
+
+        // Fence - Wooden fence
+        const fence = this.getOrCreateMat('fence', false);
+        this.registerBlockMaterials('fence', fence);
+
+        // Shingles - Slate roof material
+        const shingles = this.getOrCreateMat('shingles');
+        this.registerBlockMaterials('shingles', shingles);
+
+        // Polished Stone - Smooth floor material
+        const polishedStone = this.getOrCreateMat('polished_stone');
+        this.registerBlockMaterials('polished_stone', polishedStone);
+
+        // Dark Planks - Dark wood flooring
+        const darkPlanks = this.getOrCreateMat('dark_planks');
+        this.registerBlockMaterials('dark_planks', darkPlanks);
+
+        // White Plaster - Wall material
+        const whitePlaster = this.getOrCreateMat('white_plaster');
+        this.registerBlockMaterials('white_plaster', whitePlaster);
+
+        // Terracotta - Decorative clay blocks
+        const terracotta = this.getOrCreateMat('terracotta');
+        this.registerBlockMaterials('terracotta', terracotta);
+
+        // Thatch - Straw roofing
+        const thatch = this.getOrCreateMat('thatch');
+        this.registerBlockMaterials('thatch', thatch);
+
+        // Half-Timber - Tudor style walls
+        const halfTimber = this.getOrCreateMat('half_timber');
+        this.registerBlockMaterials('half_timber', halfTimber);
+
+        // Mossy Stone - Weathered stone
+        const mossyStone = this.getOrCreateMat('mossy_stone');
+        this.registerBlockMaterials('mossy_stone', mossyStone);
+
+        // Iron Bars - Window/fence bars
+        const ironBars = this.getOrCreateMat('iron_bars', true);
+        this.registerBlockMaterials('iron_bars', ironBars);
 
         // Break Stages
         this.breakMaterials = [];

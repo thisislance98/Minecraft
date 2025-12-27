@@ -17,6 +17,7 @@ export class SpawnManager {
 
         this.spawnedChunks = new Set();
         this.isSpawningEnabled = true;
+        this.hasLoadedPersistedEntities = false; // Set true when server sends entities:initial
         this.allowedAnimals = new Set(); // If empty, all allowed. If not empty, only those in set.
         // Actually, better to default to ALL allowed.
         // Let's use a flag or assume if it's in the set it's allowed.
@@ -169,7 +170,18 @@ export class SpawnManager {
      * @param {Array} entitiesList 
      */
     handleInitialEntities(entitiesList) {
-        console.log(`[SpawnManager] Loading ${entitiesList.length} persisted entities...`);
+        console.log(`[SpawnManager] Received entities:initial with ${entitiesList.length} entities`);
+
+        // Mark that we've received the initial entities event from server
+        this.hasReceivedInitialEntities = true;
+
+        // If there are persisted entities, disable chunk-based spawning to prevent duplicates
+        // When entities list is empty, allow normal chunk spawning for fresh worlds
+        if (entitiesList.length > 0) {
+            this.hasLoadedPersistedEntities = true;
+            console.log('[SpawnManager] Disabling chunk-based spawning (persisted entities exist)');
+        }
+
         for (const data of entitiesList) {
             this.handleRemoteSpawn(data);
         }
@@ -260,6 +272,10 @@ export class SpawnManager {
 
         // Global toggle
         if (!this.isSpawningEnabled) return;
+
+        // Skip chunk-based spawning if persisted entities were loaded
+        // This prevents duplicates since persisted entities have moved from their original spawn positions
+        if (this.hasLoadedPersistedEntities) return;
 
         // Cap max entities (Reduced from 200 for performance)
         if (this.game.animals.length > 50) return;

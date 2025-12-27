@@ -159,8 +159,10 @@ export class SocketManager {
 
         // Handle entity initial load
         this.socket.on('entities:initial', (entities) => {
+            // Always call handleInitialEntities, even with empty array, 
+            // so SpawnManager knows we've received server state
             if (this.game.spawnManager) {
-                this.game.spawnManager.handleInitialEntities(entities);
+                this.game.spawnManager.handleInitialEntities(entities || []);
             }
         });
 
@@ -176,6 +178,19 @@ export class SocketManager {
             if (this.game.spawnManager) {
                 this.game.spawnManager.handleRemoteUpdate(data);
             }
+        });
+
+        // Handle world reset (triggered by settings menu)
+        this.socket.on('world:reset', (data) => {
+            console.log('[SocketManager] World reset received:', data);
+            // Show a brief message then reload the page with the new world
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', 'World is being reset...');
+            }
+            // Short delay to let the message display, then reload
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
         });
 
         // Add an animation loop for remote characters
@@ -305,6 +320,19 @@ export class SocketManager {
     sendEntitySpawn(data) {
         if (!this.isConnected()) return;
         this.socket.emit('entity:spawn', data);
+    }
+
+    /**
+     * Request a world reset from the server
+     * This clears all persisted blocks, entities, and signs
+     */
+    sendWorldReset() {
+        if (!this.isConnected()) {
+            console.warn('[SocketManager] Cannot reset world: Not connected');
+            return;
+        }
+        console.log('[SocketManager] Sending world reset request...');
+        this.socket.emit('world:reset');
     }
 
     toggleEcho() {

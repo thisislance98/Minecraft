@@ -323,6 +323,34 @@ class WorldPersistenceService {
         }
         return result;
     }
+
+    /**
+     * Reset the entire world - clears all blocks, entities, and signs
+     * @returns Promise that resolves when reset is complete
+     */
+    async resetWorld(): Promise<void> {
+        if (!realtimeDb) {
+            console.log('[WorldPersistence] No database configured, skipping reset');
+            return;
+        }
+
+        try {
+            // Clear the global world data (blocks, entities, signs)
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/blocks`).remove();
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/entities`).remove();
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/signs`).remove();
+
+            // Clear any pending writes
+            this.writeQueue = [];
+            this.entityWriteQueue = [];
+            this.signWriteQueue = [];
+
+            console.log('[WorldPersistence] World reset complete - cleared all blocks, entities, and signs');
+        } catch (error) {
+            console.error('[WorldPersistence] Failed to reset world:', error);
+            throw error;
+        }
+    }
 }
 
 // Singleton instance

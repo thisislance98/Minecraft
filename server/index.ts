@@ -145,18 +145,19 @@ io.on('connection', (socket) => {
         });
 
         // Send persisted entities to the new player
+        // ALWAYS send this event (even if empty) so client knows persistence was checked
         try {
             const entities = await worldPersistence.getEntities(roomId);
-            if (entities.size > 0) {
-                const entityList: any[] = [];
-                for (const [id, data] of entities) {
-                    entityList.push({ id, ...data });
-                }
-                socket.emit('entities:initial', entityList);
-                console.log(`[Socket] Sent ${entityList.length} persisted entities to ${socket.id}`);
+            const entityList: any[] = [];
+            for (const [id, data] of entities) {
+                entityList.push({ id, ...data });
             }
+            socket.emit('entities:initial', entityList);
+            console.log(`[Socket] Sent ${entityList.length} persisted entities to ${socket.id}`);
         } catch (e) {
             console.error('Failed to load/send persisted entities', e);
+            // Send empty list on error so client knows we tried
+            socket.emit('entities:initial', []);
         }
 
         // Send persisted block changes to the new player
@@ -308,6 +309,40 @@ io.on('connection', (socket) => {
                     from: socket.id,
                     signal: data.signal
                 });
+            }
+        });
+
+        // Handle world reset request
+        socket.on('world:reset', async () => {
+            if (!roomId) return;
+
+            console.log(`[Socket] World reset requested by ${socket.id} in room ${roomId}`);
+
+            try {
+                // Clear all persisted data
+                await worldPersistence.resetWorld();
+
+                // Generate a new world seed
+                const newSeed = Math.floor(Math.random() * 1000000);
+                const room = rooms.get(roomId);
+                if (room) {
+                    room.worldSeed = newSeed;
+                    room.time = 0.25; // Reset to noon
+                }
+
+                // Save new metadata
+                await worldPersistence.saveRoomMetadata(roomId, newSeed);
+
+                // Broadcast reset to ALL clients in the room (including sender)
+                io.to(roomId).emit('world:reset', {
+                    worldSeed: newSeed,
+                    time: 0.25
+                });
+
+                console.log(`[Socket] World reset complete - new seed: ${newSeed}`);
+            } catch (error) {
+                console.error('[Socket] Failed to reset world:', error);
+                socket.emit('world:reset:error', { message: 'Failed to reset world' });
             }
         });
     });

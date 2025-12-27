@@ -366,6 +366,7 @@ export class Chunk {
                             neighbor === Blocks.WINDOW_FRAME ||
                             neighbor === Blocks.DOOR_CLOSED ||
                             neighbor === Blocks.DOOR_OPEN ||
+                            neighbor === Blocks.SIGN ||
                             neighborIsPlant;
                         const shouldRender = !neighbor || (isTransparent && neighbor !== blockType);
 

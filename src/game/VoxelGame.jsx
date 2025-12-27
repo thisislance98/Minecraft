@@ -849,7 +849,8 @@ export class VoxelGame {
         const geometry = new THREE.PlaneGeometry(0.8, 0.4);
         const material = new THREE.MeshBasicMaterial({
             map: texture,
-            transparent: false
+            transparent: true,
+            depthWrite: false  // Prevent sign from occluding blocks behind it
         });
 
         const mesh = new THREE.Mesh(geometry, material);

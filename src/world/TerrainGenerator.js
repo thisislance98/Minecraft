@@ -95,7 +95,7 @@ export class TerrainGenerator {
             // Current height could be anything.
 
             // let's blend current height towards river bed height based on factor
-            const riverBedHeight = this.seaLevel - 5;
+            const riverBedHeight = Math.max(this.seaLevel - 5, height - 8);
 
             // simple subtraction might not be enough for mountains
             // let's interpolate

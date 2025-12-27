@@ -50,6 +50,121 @@ export class UIManager {
         this.createMuteButton();
         this.createNetworkHUD();
         this.createSignInputUI();
+        this.setupSettingsMenu();
+    }
+
+    setupSettingsMenu() {
+        // Cache DOM elements
+        this.settingsModal = document.getElementById('settings-modal');
+        this.settingsBtn = document.getElementById('settings-btn');
+        this.settingsClose = document.getElementById('settings-close');
+        this.resetWorldBtn = document.getElementById('reset-world-btn');
+        this.audioToggle = document.getElementById('settings-audio-toggle');
+        this.fpsToggle = document.getElementById('settings-fps-toggle');
+        this.positionToggle = document.getElementById('settings-position-toggle');
+        this.debugElement = document.getElementById('debug');
+
+        if (!this.settingsModal || !this.settingsBtn) {
+            console.warn('[UIManager] Settings elements not found');
+            return;
+        }
+
+        // Load saved preferences
+        const savedAudio = localStorage.getItem('settings_audio') !== 'false';
+        const savedFps = localStorage.getItem('settings_fps') !== 'false';
+        const savedPosition = localStorage.getItem('settings_position') !== 'false';
+
+        // Apply initial states
+        if (this.audioToggle) {
+            this.audioToggle.checked = savedAudio;
+            if (!savedAudio && this.game.soundManager) {
+                this.game.soundManager.setMuted(true);
+            }
+        }
+        if (this.fpsToggle) {
+            this.fpsToggle.checked = savedFps;
+            if (this.fpsCounter) this.fpsCounter.style.display = savedFps ? 'block' : 'none';
+        }
+        if (this.positionToggle) {
+            this.positionToggle.checked = savedPosition;
+            if (this.debugElement) this.debugElement.style.display = savedPosition ? 'block' : 'none';
+        }
+
+        // Settings button click - open modal
+        this.settingsBtn.addEventListener('click', () => {
+            this.settingsModal.classList.remove('hidden');
+            // Sync toggle states with current settings
+            if (this.audioToggle && this.game.soundManager) {
+                this.audioToggle.checked = !this.game.soundManager.isMuted;
+            }
+        });
+
+        // Close button
+        this.settingsClose.addEventListener('click', () => {
+            this.settingsModal.classList.add('hidden');
+        });
+
+        // Click outside to close
+        this.settingsModal.addEventListener('click', (e) => {
+            if (e.target === this.settingsModal) {
+                this.settingsModal.classList.add('hidden');
+            }
+        });
+
+        // Audio toggle
+        if (this.audioToggle) {
+            this.audioToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_audio', enabled);
+                if (this.game.soundManager) {
+                    this.game.soundManager.setMuted(!enabled);
+                }
+                // Update mute button icon
+                if (this.muteBtn) {
+                    this.muteBtn.textContent = enabled ? '🔊' : '🔇';
+                }
+            });
+        }
+
+        // FPS toggle
+        if (this.fpsToggle) {
+            this.fpsToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_fps', enabled);
+                if (this.fpsCounter) {
+                    this.fpsCounter.style.display = enabled ? 'block' : 'none';
+                }
+            });
+        }
+
+        // Position toggle
+        if (this.positionToggle) {
+            this.positionToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_position', enabled);
+                if (this.debugElement) {
+                    this.debugElement.style.display = enabled ? 'block' : 'none';
+                }
+            });
+        }
+
+        // Reset World button
+        if (this.resetWorldBtn) {
+            this.resetWorldBtn.addEventListener('click', () => {
+                if (confirm('⚠️ Are you sure you want to reset the world?\n\nThis will:\n• Clear all placed blocks\n• Remove all creatures\n• Delete all signs\n• Generate new terrain\n\nThis action cannot be undone!')) {
+                    // Close settings modal
+                    this.settingsModal.classList.add('hidden');
+
+                    // Send reset request via socket
+                    if (this.game.socketManager) {
+                        this.game.socketManager.sendWorldReset();
+                    } else {
+                        console.error('[UIManager] SocketManager not available');
+                        alert('Failed to reset world: Not connected to server');
+                    }
+                }
+            });
+        }
     }
 
     createNetworkHUD() {

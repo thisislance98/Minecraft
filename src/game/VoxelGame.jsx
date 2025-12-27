@@ -59,6 +59,25 @@ export class VoxelGame {
         // Essential for children of camera to be visible
         this.scene.add(this.camera);
 
+        // Check for bare-bones mode via URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        this.isBareBones = urlParams.get('bare-bones') === 'true';
+
+        if (this.isBareBones) {
+            console.log('[Game] Bare Bones Mode: Minimal renderer only.');
+
+            // Minimal scene content
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            this.cube = new THREE.Mesh(geometry, material);
+            this.scene.add(this.cube);
+            this.camera.position.z = 5;
+
+            // Start minimal loop
+            this.animateBareBones();
+            return; // STOP initialization here
+        }
+
         // World data - chunk based
         this.chunks = new Map();
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
@@ -153,10 +172,16 @@ export class VoxelGame {
         // this.spawnManager = new SpawnManager(this);
 
         // Check for offline mode via URL parameter
-        const urlParams = new URLSearchParams(window.location.search);
+        // Check for offline mode via URL parameter - urlParams already declared at top of constructor
+        // const urlParams = new URLSearchParams(window.location.search);
         this.isOffline = urlParams.get('offline') === 'true';
+        this.isUIOnly = urlParams.get('ui-only') === 'true';
 
-        if (this.isOffline) {
+        if (this.isUIOnly) {
+            console.log('[Game] UI-Only Mode: World/Entities disabled.');
+        }
+
+        if (this.isOffline || this.isUIOnly) {
             console.log('[Game] Offline Mode: Network disabled.');
             this.networkManager = null;
             this.remotePlayers = new Map();
@@ -238,9 +263,14 @@ export class VoxelGame {
             }
         });
 
-        // Initial chunk check
-        this.checkChunks();
-        this.updateChunks();
+        // Initial chunk check - SKIP in UI-only mode
+        if (!this.isUIOnly) {
+            this.checkChunks();
+            this.updateChunks();
+            this.updateBlockCount();
+        } else {
+            console.log('[Game] UI-Only Mode: Skipping world generation.');
+        }
         this.updateBlockCount();
 
         // Animals and Dragon spawning is deferred until initial world chunks are generated
@@ -1114,6 +1144,13 @@ export class VoxelGame {
         // UI Update (Speech bubbles)
         this.uiManager.update(deltaTime);
 
+        // UI-Only Mode: Skip all world/entity updates
+        if (this.isUIOnly) {
+            this.updateDebug();
+            this.renderer.render(this.scene, this.camera);
+            return;
+        }
+
         if (this.controls.isLocked) {
             this.player.update(deltaTime);
             this.physicsManager.update();
@@ -1409,8 +1446,47 @@ export class VoxelGame {
     toggleWeather(enabled) {
         if (this.weatherSystem) {
             this.weatherSystem.enabled = enabled;
-            if (!enabled) this.weatherSystem.clear(); // Clear existing rain/snow
+            if (!enabled) this.weatherSystem.clear();
         }
         console.log(`[Game] Weather: ${enabled}`);
     }
+
+    animateBareBones() {
+        requestAnimationFrame(() => this.animateBareBones());
+        if (this.cube) {
+            this.cube.rotation.x += 0.01;
+            this.cube.rotation.y += 0.01;
+        }
+
+        // Manual FPS Counter
+        const now = performance.now();
+        if (!this._lastTime) this._lastTime = now;
+        const delta = now - this._lastTime;
+
+        if (!this._fpsDiv) {
+            this._fpsDiv = document.createElement('div');
+            this._fpsDiv.style.position = 'absolute';
+            this._fpsDiv.style.top = '10px';
+            this._fpsDiv.style.left = '10px';
+            this._fpsDiv.style.color = 'lime';
+            this._fpsDiv.style.fontSize = '24px';
+            this._fpsDiv.style.fontFamily = 'monospace';
+            this._fpsDiv.style.fontWeight = 'bold';
+            this._fpsDiv.style.zIndex = '9999';
+            document.body.appendChild(this._fpsDiv);
+            this._frames = 0;
+            this._lastFpsUpdate = now;
+        }
+
+        this._frames++;
+        if (now - this._lastFpsUpdate >= 1000) {
+            const fps = Math.round((this._frames * 1000) / (now - this._lastFpsUpdate));
+            this._fpsDiv.innerText = `BARE BONES FPS: ${fps}`;
+            this._frames = 0;
+            this._lastFpsUpdate = now;
+        }
+
+        this.renderer.render(this.scene, this.camera);
+    }
+
 }

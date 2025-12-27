@@ -17,6 +17,7 @@ import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'ws';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import puppeteer from 'puppeteer';
 
 const execAsync = promisify(exec);
 
@@ -32,6 +33,7 @@ const specificTest = args.includes('--test') ? args[args.indexOf('--test') + 1] 
 const timeout = args.includes('--timeout') ? parseInt(args[args.indexOf('--timeout') + 1]) : DEFAULT_TIMEOUT;
 const players = args.includes('--players') ? parseInt(args[args.indexOf('--players') + 1]) : 2;
 const botCount = args.includes('--bots') ? parseInt(args[args.indexOf('--bots') + 1]) : 0;
+const visualSession = args.includes('--session') || args.includes('--visual');
 
 /**
  * Test case definitions
@@ -174,6 +176,76 @@ class Bot {
     disconnect() {
         if (this.interval) clearInterval(this.interval);
         if (this.room) this.room.leave();
+    }
+}
+
+/**
+ * Start a visual debugging session with Puppeteer
+ * streaming logs to the console
+ */
+async function startVisualSession(playerCount = 2) {
+    console.log('\n🎥 Starting VISUAL Multiplayer Session...');
+    console.log('   (Press Ctrl+C to stop)\n');
+
+    const browser = await puppeteer.launch({
+        headless: false,
+        defaultViewport: null,
+        args: ['--start-maximized', '--window-size=1600,900']
+    });
+
+    try {
+        // HOST
+        console.log('1️⃣  Launching HOST...');
+        const pages = await browser.pages();
+        const hostPage = pages[0] || await browser.newPage();
+
+        // Stream Host Logs
+        hostPage.on('console', msg => {
+            const text = msg.text();
+            // Filter slightly to reduce noise, but show important game/network events
+            if (text.includes('[Colyseus]') || text.includes('[Game]') || text.includes('Error')) {
+                console.log(`\x1b[36m[HOST]\x1b[0m ${text}`);
+            }
+        });
+
+        await hostPage.goto('http://localhost:3000', { waitUntil: 'networkidle0' });
+
+        // Wait for room
+        console.log('⏳ Waiting for Host to create room (dev_room)...');
+        const roomId = await hostPage.waitForFunction(() => {
+            return window.__VOXEL_GAME__?.networkManager?.room?.roomId;
+        }, { timeout: 30000 }).then(h => h.jsonValue());
+
+        console.log(`✅ Host ready. Room ID: ${roomId}`);
+
+        // GUESTS
+        const guests = Math.max(1, playerCount - 1); // If 2 players, 1 is guest
+        for (let i = 0; i < guests; i++) {
+            console.log(`2️⃣  Launching GUEST ${i + 1}...`);
+            const guestPage = await browser.newPage();
+
+            // Stream Guest Logs
+            guestPage.on('console', msg => {
+                const text = msg.text();
+                if (text.includes('[Colyseus]') || text.includes('[Game]') || text.includes('Error')) {
+                    console.log(`\x1b[33m[GUEST ${i + 1}]\x1b[0m ${text}`);
+                }
+            });
+
+            await guestPage.goto(`http://localhost:3000/?room=${roomId}`);
+        }
+
+        console.log(`\n🟢 Session Active. Logs streaming below...`);
+
+        // Keep alive
+        await new Promise(() => { });
+
+    } catch (e) {
+        console.error('❌ Session Error:', e);
+        if (!e.message.includes('target closed')) {
+            await browser.close();
+        }
+        process.exit(1);
     }
 }
 
@@ -401,7 +473,16 @@ async function checkServer() {
 async function main() {
     // Special case for multiplayer 'test'
     if (specificTest === 'multiplayer') {
-        await runMultiplayerTest(players, botCount);
+        if (visualSession) {
+            await startVisualSession(players);
+        } else {
+            await runMultiplayerTest(players, botCount);
+        }
+        return;
+    }
+
+    if (visualSession) {
+        await startVisualSession(players);
         return;
     }
 

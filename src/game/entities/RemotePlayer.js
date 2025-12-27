@@ -5,9 +5,10 @@ import * as THREE from 'three';
  * Handles visual rendering and smooth interpolation of position updates.
  */
 export class RemotePlayer {
-    constructor(game, peerId) {
+    constructor(game, peerId, playerState) {
         this.game = game;
         this.peerId = peerId;
+        this.playerState = playerState;
 
         // Transform state
         this.position = new THREE.Vector3(32, 50, 32);
@@ -31,15 +32,16 @@ export class RemotePlayer {
         game.scene.add(this.mesh);
 
         // Get reference to Colyseus player state
-        this.playerState = null;
-        this.updatePlayerStateReference();
+        if (!this.playerState) {
+            this.updatePlayerStateReference();
+        }
     }
 
     /**
      * Get the Colyseus player state for this remote player
      */
     updatePlayerStateReference() {
-        if (this.game.networkManager.room) {
+        if (!this.playerState && this.game.networkManager.room) {
             this.playerState = this.game.networkManager.room.state.players.get(this.peerId);
         }
     }

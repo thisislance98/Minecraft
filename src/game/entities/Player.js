@@ -9,7 +9,11 @@ export class Player {
         this.game = game;
 
         // Player state
-        this.position = new THREE.Vector3(32, 80, 32);
+        this.position = new THREE.Vector3(
+            Config.PLAYER.SPAWN_POINT.x,
+            Config.PLAYER.SPAWN_POINT.y,
+            Config.PLAYER.SPAWN_POINT.z
+        );
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.rotation = { x: 0, y: 0 };
         this.orbitRotation = { x: 0, y: 0 }; // Camera orbit angles

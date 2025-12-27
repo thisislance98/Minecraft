@@ -25,7 +25,8 @@ export const Config = {
         EYE_HEIGHT: 1.6,
         REACH: 5,
         MAX_HEALTH: 20,
-        MAX_HUNGER: 20
+        MAX_HUNGER: 20,
+        SPAWN_POINT: { x: 32, y: 80, z: 32 }
     },
 
     // UI

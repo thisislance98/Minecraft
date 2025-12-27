@@ -30,8 +30,8 @@ async function launchSession() {
 
         // Wait for room ID to be available in the game instance
         const roomId = await hostPage.waitForFunction(() => {
-            return window.game?.networkManager?.room?.roomId;
-        }, { timeout: 30000 }).then(handle => handle.jsonValue());
+            return window.__VOXEL_GAME__?.networkManager?.room?.roomId;
+        }, { timeout: 120000 }).then(handle => handle.jsonValue());
 
         console.log(`✅ Host Created Room: ${roomId}`);
 

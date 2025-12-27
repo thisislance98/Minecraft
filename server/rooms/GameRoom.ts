@@ -13,13 +13,23 @@ export class GameRoom extends Room<GameState> {
 
     async onCreate(options: any) {
         console.log('[GameRoom] onCreate called with options:', options);
+
+        // Allow requesting a specific Room ID (for development)
+        if (options.requestedRoomId) {
+            this.roomId = options.requestedRoomId;
+            console.log(`[GameRoom] Setting static Room ID: ${this.roomId}`);
+        }
+
         this.setState(new GameState());
 
         // Use fixed world seed for deterministic terrain generation
         this.state.worldSeed = WORLD_SEED;
 
-        // Load saved block changes from Firestore
-        await this.loadBlockChangesFromFirestore();
+        // Load saved block changes from Firestore (non-blocking)
+        // If Firebase fails, room still works - just without saved changes
+        this.loadBlockChangesFromFirestore().catch(err => {
+            console.warn('[GameRoom] Failed to load block changes from Firebase (non-blocking):', err.message);
+        });
 
         console.log(`[GameRoom] Created with fixed seed: ${this.state.worldSeed}`);
 

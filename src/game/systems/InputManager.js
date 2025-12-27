@@ -266,7 +266,8 @@ export class InputManager {
 
                 this.game.container.requestPointerLock().catch((err) => {
                     // Ignore SecurityError when user exits lock before request completes
-                    if (err.name !== 'SecurityError') {
+                    // Ignore WrongDocumentError when container is not part of active document (e.g. automated tests, tab switch)
+                    if (err.name !== 'SecurityError' && err.name !== 'WrongDocumentError') {
                         console.error('Pointer lock error:', err);
                     }
                 });
@@ -296,6 +297,7 @@ export class InputManager {
     }
 
     handlePrimaryAction() {
+        if (!this.game.physicsManager) return;
         const item = this.game.inventory.getSelectedItem();
 
         // 0. Attack (Entity Click)
@@ -375,6 +377,7 @@ export class InputManager {
     }
 
     handleSecondaryAction() {
+        if (!this.game.physicsManager) return;
         // 0. Interact (Entity Click)
         const hitAnimal = this.game.physicsManager.getHitAnimal();
         if (hitAnimal && hitAnimal.interact) {
@@ -390,7 +393,7 @@ export class InputManager {
     lock() {
         this.game.container.requestPointerLock().catch((err) => {
             // Ignore SecurityError when user exits lock before request completes
-            if (err.name !== 'SecurityError') {
+            if (err.name !== 'SecurityError' && err.name !== 'WrongDocumentError') {
                 console.error('Pointer lock error:', err);
             }
         });

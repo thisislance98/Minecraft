@@ -23,6 +23,7 @@ import {
     BIOME_ALIASES,
     CREATURE_ALIASES
 } from '../ai/constants.js';
+import { Config } from '../core/Config.js';
 
 // Retry configuration for API calls (gemini-3-flash-preview can be unstable)
 const API_MAX_RETRIES = 3;
@@ -766,8 +767,8 @@ export class Agent {
         // Named locations
         const loc = location.toLowerCase().trim();
         if (loc === 'spawn' || loc === 'home' || loc === 'start') {
-            const y = worldGen.getTerrainHeight(32, 32) + 2;
-            player.position.set(32, y, 32);
+            const y = worldGen.getTerrainHeight(Config.PLAYER.SPAWN_POINT.x, Config.PLAYER.SPAWN_POINT.z) + 2;
+            player.position.set(Config.PLAYER.SPAWN_POINT.x, y, Config.PLAYER.SPAWN_POINT.z);
             return 'Teleported to spawn point';
         }
 

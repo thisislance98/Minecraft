@@ -162,16 +162,9 @@ export class VoxelGame {
         const roomIdToJoin = urlParams.get('room');
 
         if (roomIdToJoin && roomIdToJoin !== 'undefined' && roomIdToJoin.length > 0) {
-            // Join the shared room
+            // Join the shared room with retry logic
             console.log('[Game] Joining shared room:', roomIdToJoin);
-            this.networkManager.joinRoom(roomIdToJoin)
-                .then(() => {
-                    console.log('[Game] ✅ Successfully joined room:', roomIdToJoin);
-                })
-                .catch(e => {
-                    console.error('[Game] Failed to join room:', e);
-                    this.uiManager?.addChatMessage('system', `Failed to join room: ${e.message}`);
-                });
+            this.joinRoomWithRetry(roomIdToJoin);
         } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
             // Auto-host for development/testing with retry logic
             console.log('[Game] Auto-hosting multiplayer session for testing...');
@@ -181,7 +174,7 @@ export class VoxelGame {
         // Setup Network Callbacks (Colyseus)
         this.networkManager.onPlayerJoin = (sessionId, playerState) => {
             console.log('Player joined:', sessionId);
-            const remotePlayer = new RemotePlayer(this, sessionId);
+            const remotePlayer = new RemotePlayer(this, sessionId, playerState);
             this.remotePlayers.set(sessionId, remotePlayer);
             this.uiManager.addChatMessage('system', `${playerState.name} joined`);
         };
@@ -442,9 +435,40 @@ export class VoxelGame {
      * Auto-host multiplayer session with retry logic for development.
      * Handles the race condition where page loads before Colyseus server is ready.
      */
+    /**
+     * Join a room with retry logic to handle initial connection failures
+     */
+    async joinRoomWithRetry(roomId, retries = 5, delay = 1000) {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                this.uiManager?.showNetworkStatus(`Joining... (${attempt}/${retries})`);
+                await this.networkManager.joinRoom(roomId);
+                console.log(`[Game] ✅ Successfully joined room (attempt ${attempt})`);
+                return; // Success!
+            } catch (e) {
+                console.warn(`[Game] Join attempt ${attempt}/${retries} failed:`, e.message || e);
+
+                if (attempt < retries) {
+                    console.log(`[Game] Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 1.5; // Mild exponential backoff
+                } else {
+                    console.error('[Game] ❌ Failed to join room after all retries.');
+                    this.uiManager?.showNetworkStatus('Connection Failed');
+                    this.uiManager?.addChatMessage('system', `Failed to join room: ${e.message}`);
+                }
+            }
+        }
+    }
+
+    /**
+     * Auto-host multiplayer session with retry logic for development.
+     * Handles the race condition where page loads before Colyseus server is ready.
+     */
     async autoHostWithRetry(retries = 5, delay = 1000) {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
+                this.networkManager.game.uiManager?.showNetworkStatus(`Creating... (${attempt}/${retries})`);
                 await this.networkManager.createRoom();
                 console.log(`[Game] ✅ Connected to Colyseus (attempt ${attempt})`);
                 return; // Success!
@@ -458,73 +482,34 @@ export class VoxelGame {
             }
         }
         console.error('[Game] ❌ Auto-host failed after all retries. Refresh the page once the server is running.');
+        this.networkManager.game.uiManager?.showNetworkStatus('Host Failed');
     }
 
     spawnPlayer() {
-        let spawnX = 32;
-        let spawnZ = 32;
-        let spawnY = 0;
+        const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
-        // We will look for a "Coastal" spot first.
-        // A coastal spot is on land, but has water nearby.
-        let bestSpot = null; // Fallback: any safe land
-        let coastalSpot = null; // Priority: safe land near water
+        // Calculate ground height at spawn location
+        const spawnY = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z) + 2;
 
-        const maxAttempts = 200; // Increased attempts to find coast
-        const checkRadius = 400; // Max radius to search
+        console.log(`[Game] Spawning player at global spawn point: ${spawnPoint.x}, ${spawnY}, ${spawnPoint.z}`);
 
-        for (let i = 0; i < maxAttempts; i++) {
-            // Spiral outwards
-            const radius = 32 + (i / maxAttempts) * checkRadius;
-            const angle = i * (Math.PI / 8) + (Math.random() * 0.5); // Tighter spiral
-
-            const x = 32 + Math.cos(angle) * radius;
-            const z = 32 + Math.sin(angle) * radius;
-
-            const terrainH = this.worldGen.getTerrainHeight(x, z);
-
-            // Check if valid land (above sea level)
-            if (terrainH > this.worldGen.seaLevel + 1) {
-                // FORCE FOREST BIOME CHECK
-                const biome = this.worldGen.getBiome(x, z);
-                if (biome !== 'FOREST') continue;
-
-                // Max height check to avoid spawning in sky
-                if (terrainH > 100) continue;
-
-                // Spawn above the terrain surface
-                const spot = { x: x, y: terrainH + 2, z: z };
-
-                if (!bestSpot) bestSpot = spot; // Save first valid spot as fallback
-
-                // We found a valid forest spot, use it
-                coastalSpot = spot;
-                break;
-            }
-        }
-
-        // Use coastal spot if found, otherwise fallback
-        const finalSpot = coastalSpot || bestSpot;
-
-        if (finalSpot) {
-            spawnX = finalSpot.x;
-            spawnY = finalSpot.y;
-            spawnZ = finalSpot.z;
-        } else {
-            // Absolute fallback if everything fails (e.g. infinite ocean)
-            spawnY = Math.max(this.worldGen.getTerrainHeight(spawnX, spawnZ) + 20, this.worldGen.seaLevel + 2);
-        }
-
-        this.spawnPoint = new THREE.Vector3(spawnX, spawnY, spawnZ);
+        this.spawnPoint = new THREE.Vector3(spawnPoint.x, spawnY, spawnPoint.z);
         this.player.position.copy(this.spawnPoint);
         this.player.velocity.set(0, 0, 0);
+
+        // Reset fall damage trackers
+        this.player.highestY = spawnY;
+        this.player.isDead = false;
+        if (this.uiManager) {
+            this.uiManager.hideDeathScreen();
+        }
 
         // Also update camera immediately so we don't flash at the wrong spot
         this.camera.position.copy(this.player.position);
         this.camera.position.y += 1.6;
-
-        console.log(`Spawned at ${spawnX.toFixed(1)}, ${spawnY.toFixed(1)}, ${spawnZ.toFixed(1)} (Coastal: ${!!coastalSpot})`);
     }
+
+
 
     spawnAnimals() {
         // Delegate to SpawnManager

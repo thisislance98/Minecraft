@@ -1,4 +1,5 @@
 import Peer from 'peerjs';
+import { Config } from '../core/Config.js';
 
 /**
  * NetworkManager handles all multiplayer functionality.
@@ -225,22 +226,11 @@ export class NetworkManager {
                         seed: this.worldSeed
                     });
 
-                    // Also send spawn position (in front of host)
-                    if (this.game.player) {
-                        const hostPos = this.game.player.position;
-                        const hostRot = this.game.player.rotation.y;
-
-                        // Calculate position 4 blocks in front of host
-                        const spawnDistance = 4;
-                        const spawnX = hostPos.x - Math.sin(hostRot) * spawnDistance;
-                        const spawnZ = hostPos.z - Math.cos(hostRot) * spawnDistance;
-                        const spawnY = hostPos.y;
-
-                        conn.send({
-                            type: 'spawn_position',
-                            position: { x: spawnX, y: spawnY, z: spawnZ }
-                        });
-                    }
+                    // Send global spawn point (calculated by host)
+                    conn.send({
+                        type: 'spawn_position',
+                        position: this.game.spawnPoint || Config.PLAYER.SPAWN_POINT
+                    });
                 }
                 break;
 

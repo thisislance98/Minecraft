@@ -21,6 +21,7 @@ import { RideWandItem } from './items/RideWandItem.js';
 import { CaptureWandItem } from './items/CaptureWandItem.js';
 import { SpawnEggItem } from './items/SpawnEggItem.js';
 import { WaterBucketItem } from './items/WaterBucketItem.js';
+import { SignItem } from './items/SignItem.js';
 
 // Export all classes for use by ItemManager and others
 export {
@@ -37,7 +38,8 @@ export {
     RideWandItem,
     CaptureWandItem,
     SpawnEggItem,
-    WaterBucketItem
+    WaterBucketItem,
+    SignItem
 };
 
 // Map of class names to classes for runtime lookup
@@ -55,7 +57,8 @@ export const ItemClasses = {
     RideWandItem,
     CaptureWandItem,
     SpawnEggItem,
-    WaterBucketItem
+    WaterBucketItem,
+    SignItem
 };
 
 /**
@@ -104,7 +107,8 @@ if (import.meta.hot) {
         './items/RideWandItem.js',
         './items/CaptureWandItem.js',
         './items/SpawnEggItem.js',
-        './items/WaterBucketItem.js'
+        './items/WaterBucketItem.js',
+        './items/SignItem.js'
     ];
 
     import.meta.hot.accept(itemModules, (modules) => {

@@ -55,5 +55,6 @@ export const Blocks = {
     WINDOW_FRAME: 'window_frame',
     LADDER: 'ladder',
     TORCH: 'torch',
-    FIRE: 'fire'
+    FIRE: 'fire',
+    SIGN: 'sign'
 };

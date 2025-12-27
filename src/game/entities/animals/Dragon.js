@@ -1,13 +1,15 @@
 import * as THREE from 'three';
+import { SeededRandom } from '../../../utils/SeededRandom.js';
 
 export class Dragon {
-    constructor(game, x, y, z) {
+    constructor(game, x, y, z, seed) {
         this.game = game;
         this.position = new THREE.Vector3(x, y, z);
+        this.rng = new SeededRandom(seed || Math.random() * 0xffffffff);
         this.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 10,
+            (this.rng.next() - 0.5) * 10,
             0,
-            (Math.random() - 0.5) * 10
+            (this.rng.next() - 0.5) * 10
         );
 
         // Flight parameters
@@ -40,7 +42,7 @@ export class Dragon {
 
         // Animation
         this.animTime = 0;
-        this.wingPhase = Math.random() * Math.PI * 2;
+        this.wingPhase = this.rng.next() * Math.PI * 2;
 
         // Create the dragon mesh
         this.mesh = new THREE.Group();
@@ -408,7 +410,7 @@ export class Dragon {
         if (this.state === 'patrol' && this.stateTimer <= 0) {
 
             // Chance to look for a tree to land on
-            if (this.position.y > 30 && Math.random() < 0.2) {
+            if (this.position.y > 30 && this.rng.next() < 0.2) {
                 const treePos = this.findTree();
                 if (treePos) {
                     this.nestPosition = treePos;
@@ -436,7 +438,7 @@ export class Dragon {
                 }
             }
 
-            if (nearestPrey && Math.random() < 0.3) {
+            if (nearestPrey && this.rng.next() < 0.3) {
                 this.target = nearestPrey;
                 this.state = 'hunting';
                 this.stateTimer = 10; // Hunt for up to 10 seconds
@@ -502,7 +504,7 @@ export class Dragon {
             if (distToNest < 1.0) {
                 this.state = 'nesting';
                 this.velocity.set(0, 0, 0);
-                this.stateTimer = 10 + Math.random() * 20; // Rest for 10-30 seconds
+                this.stateTimer = 10 + this.rng.next() * 20; // Rest for 10-30 seconds
                 this.buildNest();
             }
         }
@@ -527,8 +529,8 @@ export class Dragon {
         const attempts = 10;
 
         for (let i = 0; i < attempts; i++) {
-            const tx = this.position.x + (Math.random() - 0.5) * range * 2;
-            const tz = this.position.z + (Math.random() - 0.5) * range * 2;
+            const tx = this.position.x + (this.rng.next() - 0.5) * range * 2;
+            const tz = this.position.z + (this.rng.next() - 0.5) * range * 2;
 
             // Scan down from dragon height or max height
             const scanStart = Math.min(this.position.y + 10, 60);
@@ -601,8 +603,8 @@ export class Dragon {
         // Patrol behavior - circle around
         if (this.state === 'patrol') {
             // Add some randomness to velocity
-            this.velocity.x += (Math.random() - 0.5) * 5 * dt;
-            this.velocity.z += (Math.random() - 0.5) * 5 * dt;
+            this.velocity.x += (this.rng.next() - 0.5) * 5 * dt;
+            this.velocity.z += (this.rng.next() - 0.5) * 5 * dt;
 
             // Height control
             const targetY = player.position.y + 30;
@@ -689,7 +691,7 @@ export class Dragon {
                         if (dist < 1.5) {
                             animal.takeDamage(1);
                             // If killed, dragon might eat it
-                            if (animal.isDead && Math.random() < 0.5) {
+                            if (animal.isDead && this.rng.next() < 0.5) {
                                 this.target = null;
                                 this.state = 'patrol';
                             }
@@ -723,15 +725,15 @@ export class Dragon {
         // Random spread
         const spread = 0.5;
         const velocity = forward.clone().multiplyScalar(15);
-        velocity.x += (Math.random() - 0.5) * spread * 10;
-        velocity.y += (Math.random() - 0.5) * spread * 5 - 2;
-        velocity.z += (Math.random() - 0.5) * spread * 10;
+        velocity.x += (this.rng.next() - 0.5) * spread * 10;
+        velocity.y += (this.rng.next() - 0.5) * spread * 5 - 2;
+        velocity.z += (this.rng.next() - 0.5) * spread * 10;
 
         // Create particle mesh
-        const size = 0.3 + Math.random() * 0.4;
+        const size = 0.3 + this.rng.next() * 0.4;
         const geometry = new THREE.BoxGeometry(size, size, size);
-        const hue = 0.05 + Math.random() * 0.1; // Orange to red
-        const color = new THREE.Color().setHSL(hue, 1, 0.5 + Math.random() * 0.3);
+        const hue = 0.05 + this.rng.next() * 0.1; // Orange to red
+        const color = new THREE.Color().setHSL(hue, 1, 0.5 + this.rng.next() * 0.3);
         const material = new THREE.MeshBasicMaterial({
             color,
             transparent: true,
@@ -746,7 +748,7 @@ export class Dragon {
         const particle = {
             mesh,
             velocity,
-            life: 0.8 + Math.random() * 0.4,
+            life: 0.8 + this.rng.next() * 0.4,
             maxLife: 1.2
         };
         particle.maxLife = particle.life;

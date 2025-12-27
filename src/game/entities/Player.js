@@ -668,7 +668,11 @@ export class Player {
         if (this.isDead) return;
 
         const input = this.game.inputManager;
-        const speed = this.speed * (input.isActionActive('SPRINT') ? this.sprintMultiplier : 1);
+        // REF_FPS allows us to tune values as if running at 60 FPS
+        const REF_FPS = 60.0;
+
+        // Scale speed to blocks/second
+        const speed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? this.sprintMultiplier : 1);
 
         // Calculate movement input
         const moveForward = (input.isActionActive('FORWARD') ? 1 : 0) - (input.isActionActive('BACKWARD') ? 1 : 0);
@@ -679,18 +683,19 @@ export class Player {
         const cos = Math.cos(this.rotation.y);
 
         // Forward/back moves along camera facing direction, left/right strafes perpendicular
+        // These velocities are now in blocks per second
         const velX = (-moveForward * sin + moveRight * cos) * speed;
         const velZ = (-moveForward * cos - moveRight * sin) * speed;
 
         // Studio mode - disable physics and allow free movement
         if (this.game.studio && this.game.studio.isActive) {
             // Free movement in studio - no gravity, no collision
-            this.position.x += velX;
-            this.position.z += velZ;
+            this.position.x += velX * deltaTime;
+            this.position.z += velZ * deltaTime;
 
             // Allow vertical movement with space/shift
-            if (input.isActionActive('JUMP')) this.position.y += speed * 0.5;
-            if (input.isActionActive('SPRINT')) this.position.y -= speed * 0.5;
+            if (input.isActionActive('JUMP')) this.position.y += speed * 0.5 * deltaTime;
+            if (input.isActionActive('SPRINT')) this.position.y -= speed * 0.5 * deltaTime;
 
             // Keep player on the studio floor (Y=5002 is the floor level)
             const studioFloorY = this.game.studio.position.y + 2;
@@ -741,7 +746,7 @@ export class Player {
                 // Flying Physics
                 // Base flight speed is 3x walk speed
                 // Shift (Sprint) boosts it to 5x
-                let currentFlightSpeed = speed * (input.isActionActive('SPRINT') ? 6.0 : 3.0);
+                let currentFlightSpeed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? 6.0 : 3.0);
 
                 this.flightTime += deltaTime;
 
@@ -762,7 +767,10 @@ export class Player {
                 // Add gentle bobbing motion
                 // Reduced amplitude from 0.03 to 0.005 for subtler effect
                 // Reduced frequency from 3.0 to 2.0
-                const bobbing = Math.cos(this.flightTime * 2.0) * 0.005;
+                const bobbing = Math.cos(this.flightTime * 2.0) * (0.005 * REF_FPS); // Scale bobbing velocity?
+                // Actually bobbing is usually position offset or velocity?
+                // Original: velocity.y += bobbing. 
+                // bobbing was result of cos() * 0.005. 0.005 units/frame.
                 this.velocity.y += bobbing;
 
                 if (moveRight !== 0) {
@@ -778,7 +786,8 @@ export class Player {
 
                 // Move (using collision or just position?)
                 // Use collision to prevent going through walls
-                this.moveWithCollision(this.velocity.x, this.velocity.y, this.velocity.z);
+                // Integrate velocity * deltaTime
+                this.moveWithCollision(this.velocity.x * deltaTime, this.velocity.y * deltaTime, this.velocity.z * deltaTime);
 
                 // Reset falling state
                 this.onGround = false;
@@ -798,17 +807,27 @@ export class Player {
 
                 // Apply gravity
                 if (inWater) {
-                    this.velocity.y -= this.game.gravity * 0.2; // Reduced gravity
+                    const gravityAccel = this.game.gravity * 0.2 * REF_FPS * REF_FPS;
+                    this.velocity.y -= gravityAccel * deltaTime; // Reduced gravity
+
                     if (input.isActionActive('JUMP')) {
-                        this.velocity.y = 0.1; // Swim up
+                        this.velocity.y = 0.1 * REF_FPS; // Swim up
                     }
-                    this.velocity.x *= 0.5; // Drag
-                    this.velocity.z *= 0.5;
+
+                    // Drag: 0.5 per frame decay means speed halving every frame.
+                    // (0.5)^FPS per second.
+                    // frameFactor = 0.5. dt=1/60. 
+                    // To do time based: factor = Math.pow(0.5, deltaTime * 60)
+                    const drag = Math.pow(0.5, deltaTime * REF_FPS);
+                    this.velocity.x *= drag;
+                    this.velocity.z *= drag;
                 } else {
-                    this.velocity.y -= this.game.gravity;
+                    const gravityAccel = this.game.gravity * REF_FPS * REF_FPS;
+                    this.velocity.y -= gravityAccel * deltaTime;
+
                     // Jump
                     if (input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
-                        this.velocity.y = this.jumpForce;
+                        this.velocity.y = this.jumpForce * REF_FPS;
                         this.onGround = false;
                     }
                 }
@@ -817,7 +836,8 @@ export class Player {
                 this.wasShiftPressed = input.isActionActive('SPRINT');
 
                 // Move with collision detection
-                this.moveWithCollision(velX, this.velocity.y, velZ);
+                // Apply delta time integration here
+                this.moveWithCollision(velX * deltaTime, this.velocity.y * deltaTime, velZ * deltaTime);
 
                 // Check for mounting
                 this.checkMountCollision();
@@ -987,11 +1007,12 @@ export class Player {
 
     knockback(direction, force) {
         // direction is a normalized Vector3
-        // force is scalar
+        // force is scalar (assumed blocks/frame impulse)
         // Add to velocity (simple impulse)
-        this.velocity.x += direction.x * force;
-        this.velocity.z += direction.z * force;
-        this.velocity.y = 0.2; // Small hop
+        const REF_FPS = 60.0;
+        this.velocity.x += direction.x * force * REF_FPS;
+        this.velocity.z += direction.z * force * REF_FPS;
+        this.velocity.y = 0.2 * REF_FPS; // Small hop
         this.onGround = false;
     }
 
@@ -1037,7 +1058,8 @@ export class Player {
     toggleFlying() {
         this.isFlying = !this.isFlying;
         if (this.isFlying) {
-            this.velocity.y = 0.5; // Hop
+            const REF_FPS = 60.0;
+            this.velocity.y = 0.5 * REF_FPS; // Hop
             this.game.addMessage && this.game.addMessage("You are now flying!");
 
             // Switch to Riding Model
@@ -1367,7 +1389,8 @@ export class Player {
                         const block = this.game.getBlock(pos.x + dx, newY, pos.z + dz);
                         if (block && block.type === 'trampoline') {
                             // Bounce logic - Minimum threshold to avoid infinite jitter
-                            if (this.velocity.y < -0.2) {
+                            // -0.2 * 60 = -12
+                            if (this.velocity.y < -12.0) {
                                 this.velocity.y = -this.velocity.y * 0.9; // 90% resilience
                                 this.highestY = pos.y; // Reset fall damage calculation
                                 canMoveY = false;

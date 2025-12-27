@@ -49,6 +49,7 @@ export class UIManager {
 
         this.createMuteButton();
         this.createNetworkHUD();
+        this.createSignInputUI();
     }
 
     createNetworkHUD() {
@@ -1208,6 +1209,93 @@ export class UIManager {
         // Re-lock pointer for gameplay
         if (this.game.inputManager) {
             this.game.inputManager.lock();
+        }
+    }
+
+    createSignInputUI() {
+        if (this.signInputOverlay) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'sign-input-overlay';
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none;
+            justify-content: center; align-items: center; z-index: 5000;
+        `;
+
+        const container = document.createElement('div');
+        container.style.cssText = `
+            background: #6F4E37; border: 4px solid #3B2A1D;
+            padding: 20px; border-radius: 8px; width: 400px;
+            display: flex; flex-direction: column; gap: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        `;
+
+        const title = document.createElement('div');
+        title.textContent = 'Edit Sign Message';
+        title.style.cssText = `color: #fff; font-family: 'Minecraft', monospace; font-size: 20px; text-align: center;`;
+
+        const input = document.createElement('textarea');
+        input.id = 'sign-text-input';
+        input.maxLength = 50;
+        input.placeholder = 'Enter text...';
+        input.style.cssText = `
+            width: 100%; height: 100px; padding: 10px;
+            font-family: 'Minecraft', monospace; font-size: 16px;
+            background: #3B2A1D; color: #fff; border: none; outline: none; resize: none;
+        `;
+
+        const btnContainer = document.createElement('div');
+        btnContainer.style.cssText = `display: flex; justify-content: space-between; gap: 10px;`;
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = `flex: 1; padding: 8px; cursor: pointer; background: #cc4444; color: white; border: none; font-family: inherit;`;
+
+        const doneBtn = document.createElement('button');
+        doneBtn.textContent = 'Done';
+        doneBtn.style.cssText = `flex: 1; padding: 8px; cursor: pointer; background: #44cc44; color: white; border: none; font-family: inherit;`;
+
+        btnContainer.appendChild(cancelBtn);
+        btnContainer.appendChild(doneBtn);
+        container.appendChild(title);
+        container.appendChild(input);
+        container.appendChild(btnContainer);
+        overlay.appendChild(container);
+
+        document.body.appendChild(overlay);
+        this.signInputOverlay = overlay;
+        this.signTextInput = input;
+
+        // Handlers
+        this.onSignSubmit = null;
+
+        doneBtn.onclick = () => {
+            const text = this.signTextInput.value;
+            this.toggleSignInput(false);
+            if (this.onSignSubmit) this.onSignSubmit(text); // Return text
+            this.game.inputManager.lock();
+        };
+
+        cancelBtn.onclick = () => {
+            this.toggleSignInput(false);
+            if (this.onSignSubmit) this.onSignSubmit(null); // Cancelled
+            this.game.inputManager.lock();
+        };
+    }
+
+    showSignInput(callback, initialText = '') {
+        if (!this.signInputOverlay) this.createSignInputUI();
+        this.signTextInput.value = initialText;
+        this.onSignSubmit = callback;
+        this.toggleSignInput(true);
+        this.game.inputManager.unlock();
+        setTimeout(() => this.signTextInput.focus(), 50);
+    }
+
+    toggleSignInput(show) {
+        if (this.signInputOverlay) {
+            this.signInputOverlay.style.display = show ? 'flex' : 'none';
         }
     }
 }

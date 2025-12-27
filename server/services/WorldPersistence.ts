@@ -14,11 +14,25 @@ interface PendingWrite {
     blockType: string | null;
 }
 
+interface PendingEntityWrite {
+    roomId: string;
+    entityId: string;
+    data: any | null; // null for deletion
+}
+
+interface PendingSignWrite {
+    roomId: string;
+    key: string;
+    text: string;
+}
+
 // Hardcode a global world ID so all rooms share the same persistent world
 const GLOBAL_WORLD_ID = 'global-world';
 
 class WorldPersistenceService {
     private writeQueue: PendingWrite[] = [];
+    private entityWriteQueue: PendingEntityWrite[] = [];
+    private signWriteQueue: PendingSignWrite[] = [];
     private flushTimer: NodeJS.Timeout | null = null;
     private readonly FLUSH_INTERVAL_MS = 500; // Batch writes every 500ms
 
@@ -58,6 +72,12 @@ class WorldPersistenceService {
     private async flushWrites(): Promise<void> {
         this.flushTimer = null;
 
+        await this.flushBlockWrites();
+        await this.flushEntityWrites();
+        await this.flushSignWrites();
+    }
+
+    private async flushBlockWrites(): Promise<void> {
         if (this.writeQueue.length === 0) return;
 
         const writes = [...this.writeQueue];
@@ -180,6 +200,128 @@ class WorldPersistenceService {
         } catch (error) {
             console.error(`[WorldPersistence] Failed to delete room:`, error);
         }
+    }
+
+    /**
+     * Save/Update an entity
+     */
+    async saveEntity(roomId: string, entityId: string, data: any): Promise<void> {
+        const targetId = GLOBAL_WORLD_ID;
+        // console.log(`[WorldPersistence] saveEntity called for ${entityId}`);
+        if (!realtimeDb) return;
+
+        this.entityWriteQueue.push({ roomId: targetId, entityId, data });
+
+        if (!this.flushTimer) {
+            this.flushTimer = setTimeout(() => this.flushWrites(), this.FLUSH_INTERVAL_MS);
+        }
+    }
+
+    private async flushEntityWrites(): Promise<void> {
+        if (this.entityWriteQueue.length === 0) return;
+
+        const writes = [...this.entityWriteQueue];
+        this.entityWriteQueue = [];
+
+        const byRoom = new Map<string, Map<string, any>>();
+        for (const { roomId, entityId, data } of writes) {
+            if (!byRoom.has(roomId)) {
+                byRoom.set(roomId, new Map());
+            }
+            byRoom.get(roomId)!.set(entityId, data);
+        }
+
+        for (const [roomId, entities] of byRoom) {
+            try {
+                const updates: Record<string, any> = {};
+                for (const [entityId, data] of entities) {
+                    updates[`rooms/${roomId}/entities/${entityId}`] = data;
+                }
+                await realtimeDb!.ref().update(updates);
+                console.log(`[WorldPersistence] Saved ${entities.size} entity updates for room ${roomId}`);
+            } catch (error) {
+                console.error(`[WorldPersistence] Failed to save entities for room ${roomId}:`, error);
+            }
+        }
+    }
+
+    /**
+     * Get all entities for a room
+     */
+    async getEntities(roomId: string): Promise<Map<string, any>> {
+        const targetId = GLOBAL_WORLD_ID;
+        const result = new Map<string, any>();
+        if (!realtimeDb) return result;
+
+        try {
+            const snapshot = await realtimeDb.ref(`rooms/${targetId}/entities`).get();
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                for (const [id, entityData] of Object.entries(data)) {
+                    result.set(id, entityData);
+                }
+                console.log(`[WorldPersistence] Loaded ${result.size} entities for room ${roomId}`);
+            }
+        } catch (error) {
+            console.error(`[WorldPersistence] Failed to load entities:`, error);
+        }
+        return result;
+    }
+    async saveSignText(roomId: string, x: number, y: number, z: number, text: string): Promise<void> {
+        const targetId = GLOBAL_WORLD_ID;
+        if (!realtimeDb) return;
+
+        const key = `${Math.floor(x)}_${Math.floor(y)}_${Math.floor(z)}`;
+        this.signWriteQueue.push({ roomId: targetId, key, text });
+
+        if (!this.flushTimer) {
+            this.flushTimer = setTimeout(() => this.flushWrites(), this.FLUSH_INTERVAL_MS);
+        }
+    }
+
+    private async flushSignWrites(): Promise<void> {
+        if (this.signWriteQueue.length === 0) return;
+
+        const writes = [...this.signWriteQueue];
+        this.signWriteQueue = [];
+
+        const byRoom = new Map<string, Map<string, string>>();
+        for (const { roomId, key, text } of writes) {
+            if (!byRoom.has(roomId)) byRoom.set(roomId, new Map());
+            byRoom.get(roomId)!.set(key, text);
+        }
+
+        for (const [roomId, signs] of byRoom) {
+            try {
+                const updates: Record<string, string> = {};
+                for (const [key, text] of signs) {
+                    updates[`rooms/${roomId}/signs/${key}`] = text;
+                }
+                await realtimeDb!.ref().update(updates);
+                console.log(`[WorldPersistence] Saved ${signs.size} signs for room ${roomId}`);
+            } catch (error) {
+                console.error(`[WorldPersistence] Failed to save signs:`, error);
+            }
+        }
+    }
+
+    async getSignTexts(roomId: string): Promise<Map<string, string>> {
+        const targetId = GLOBAL_WORLD_ID;
+        const result = new Map<string, string>();
+        if (!realtimeDb) return result;
+
+        try {
+            const snapshot = await realtimeDb.ref(`rooms/${targetId}/signs`).get();
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                for (const [key, text] of Object.entries(data)) {
+                    result.set(key, text as string);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to get signs:', error);
+        }
+        return result;
     }
 }
 

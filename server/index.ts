@@ -144,6 +144,21 @@ io.on('connection', (socket) => {
             time: roomToJoin.time
         });
 
+        // Send persisted entities to the new player
+        try {
+            const entities = await worldPersistence.getEntities(roomId);
+            if (entities.size > 0) {
+                const entityList: any[] = [];
+                for (const [id, data] of entities) {
+                    entityList.push({ id, ...data });
+                }
+                socket.emit('entities:initial', entityList);
+                console.log(`[Socket] Sent ${entityList.length} persisted entities to ${socket.id}`);
+            }
+        } catch (e) {
+            console.error('Failed to load/send persisted entities', e);
+        }
+
         // Send persisted block changes to the new player
         try {
             // Use race to prevent hanging
@@ -163,6 +178,27 @@ io.on('connection', (socket) => {
             }
         } catch (e) {
             console.error('Failed to load/send persisted blocks', e);
+        }
+
+        // Send persisted signs
+        try {
+            // Use race...
+            const signsMap = await Promise.race([
+                worldPersistence.getSignTexts(roomId),
+                new Promise<Map<string, string>>(resolve => setTimeout(() => resolve(new Map()), 1000))
+            ]) || new Map();
+
+            if (signsMap.size > 0) {
+                const signsArray: { x: number; y: number; z: number; text: string }[] = [];
+                for (const [key, text] of signsMap) {
+                    const [x, y, z] = key.split('_').map(Number);
+                    signsArray.push({ x, y, z, text });
+                }
+                socket.emit('signs:initial', signsArray);
+                console.log(`[Socket] Sent ${signsArray.length} persisted signs to ${socket.id}`);
+            }
+        } catch (e) {
+            console.error('Failed to load/send persisted signs', e);
         }
 
         // Notify others
@@ -200,6 +236,53 @@ io.on('connection', (socket) => {
             console.log(`[DEBUG] Completed worldPersistence.saveBlockChange call`);
         });
 
+        // Handle sign text update
+        socket.on('sign:update', async (data: { x: number; y: number; z: number; text: string }) => {
+            if (!roomId) return;
+
+            // Broadcast
+            socket.to(roomId).emit('sign:update', data);
+
+            // Persist
+            await worldPersistence.saveSignText(roomId, data.x, data.y, data.z, data.text);
+        });
+
+        // Handle entity updates (movement, health, state)
+        socket.on('entity:update', async (data: { id: string;[key: string]: any }) => {
+            if (!roomId) return;
+
+            // Broadcast to others (skip sender?)
+            // Usually entity updates are authoritative from one client (e.g. host or owner)
+            // Ideally we broadcast to everyone else so they see it move.
+            socket.to(roomId).emit('entity:update', data);
+
+            // Persist
+            await worldPersistence.saveEntity(roomId, data.id, data);
+        });
+
+        // Handle entity spawn (manual or initial)
+        socket.on('entity:spawn', async (data: { id: string; type: string; x: number; y: number; z: number; seed?: number;[key: string]: any }) => {
+            if (!roomId) return;
+
+            // Broadcast
+            socket.to(roomId).emit('entity:spawn', data);
+            console.log(`[Socket] Entity spawned by ${socket.id}: ${data.type} (${data.id})`);
+
+            // Persist
+            await worldPersistence.saveEntity(roomId, data.id, data);
+        });
+
+        // Handle PeerJS ID sharing for voice chat
+        socket.on('peerjs:id', (data: { peerId: string }) => {
+            if (!roomId) return;
+            // Broadcast to others in room so they can call this peer
+            socket.to(roomId).emit('peerjs:id', {
+                socketId: socket.id,
+                peerId: data.peerId
+            });
+            console.log(`[Socket] PeerJS ID shared: ${socket.id} -> ${data.peerId}`);
+        });
+
         // Handle time changes (e.g. from "K" key)
         socket.on('world:set_time', (time: number) => {
             if (!roomId) return;
@@ -207,8 +290,14 @@ io.on('connection', (socket) => {
             if (room) {
                 room.time = time;
                 // Immediate broadcast
-                io.to(roomId).emit('world:time', room.time);
                 console.log(`[Socket] Room ${roomId} time set to ${time} by ${socket.id}`);
+            }
+        });
+
+        // Handle voice activity state change
+        socket.on('player:voice', (active: boolean) => {
+            if (roomId) {
+                socket.to(roomId).emit('player:voice', { id: socket.id, active });
             }
         });
 
@@ -257,6 +346,8 @@ app.get('/health', (req, res) => {
 
 // ============ Start Server ============
 
-httpServer.listen(port, () => {
-    console.log(`[Server] Listening on http://localhost:${port}`);
+console.log('[Server] Startup: initializing...');
+httpServer.listen(port, '0.0.0.0', () => {
+    console.log(`[Server] Listening on http://0.0.0.0:${port}`);
+    console.log('[Server] Startup: complete');
 });

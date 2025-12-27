@@ -202,6 +202,13 @@ export class InputManager {
                 }
             }
 
+            // H for Voice Echo (Debug)
+            if (e.code === 'KeyH') {
+                if (this.game.socketManager) {
+                    this.game.socketManager.toggleEcho();
+                }
+            }
+
             // V for Voice (Handled in Agent.js directly via document listener, ideally move here later)
         });
 
@@ -360,13 +367,45 @@ export class InputManager {
             }
         }
 
-        // 5. Default: Break Block (or Interact with Door)
+        // 5. Default: Break Block (or Interact with Door / Sign)
         // User requested Left Click on Door -> Open
         const targetBlock = this.game.physicsManager.getTargetBlock();
         if (targetBlock) {
             const block = this.game.getBlock(targetBlock.x, targetBlock.y, targetBlock.z);
             if (block && (block.type === 'door_closed' || block.type === 'door_open')) {
                 this.game.toggleDoor(targetBlock.x, targetBlock.y, targetBlock.z);
+                if (this.mouseDownInterval) {
+                    clearInterval(this.mouseDownInterval);
+                    this.mouseDownInterval = null;
+                }
+                return;
+            }
+
+            // Left click on sign opens editor
+            if (block && block.type === 'sign') {
+                const key = this.game.getBlockKey(targetBlock.x, targetBlock.y, targetBlock.z);
+                const currentText = this.game.signData.get(key) || '';
+
+                if (this.game.uiManager) {
+                    this.game.uiManager.showSignInput((text) => {
+                        if (text !== null) {
+                            this.game.setSignText(targetBlock.x, targetBlock.y, targetBlock.z, text);
+                        }
+                    }, currentText);
+                }
+                if (this.mouseDownInterval) {
+                    clearInterval(this.mouseDownInterval);
+                    this.mouseDownInterval = null;
+                }
+                return;
+            }
+        }
+
+        // 6. Sign item placement (before break block)
+        if (item && item.item === 'sign') {
+            // Trigger sign item behavior
+            const handled = this.game.itemManager.handleItemDown('sign');
+            if (handled) {
                 if (this.mouseDownInterval) {
                     clearInterval(this.mouseDownInterval);
                     this.mouseDownInterval = null;

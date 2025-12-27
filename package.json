@@ -16,6 +16,7 @@
     "concurrently": "^9.2.1",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.6.0",
+    "peerjs": "^1.5.5",
     "puppeteer": "^24.34.0",
     "simple-peer": "^9.11.1",
     "simplex-noise": "^4.0.3",

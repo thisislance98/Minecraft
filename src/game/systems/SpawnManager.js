@@ -14,7 +14,7 @@ import {
 export class SpawnManager {
     constructor(game) {
         this.game = game;
-        this.game = game;
+
         this.spawnedChunks = new Set();
         this.isSpawningEnabled = true;
         this.allowedAnimals = new Set(); // If empty, all allowed. If not empty, only those in set.
@@ -159,6 +159,83 @@ export class SpawnManager {
             { class: Creeper, weight: 0.25, packSize: [1, 2] },
             { class: Enderman, weight: 0.1, packSize: [1, 1] }
         ];
+
+        // Entity Lookup (for updates)
+        this.entities = new Map(); // id -> Animal
+    }
+
+    /**
+     * Handle initial entities from server (persistence)
+     * @param {Array} entitiesList 
+     */
+    handleInitialEntities(entitiesList) {
+        console.log(`[SpawnManager] Loading ${entitiesList.length} persisted entities...`);
+        for (const data of entitiesList) {
+            this.handleRemoteSpawn(data);
+        }
+    }
+
+    /**
+     * Handle remote entity spawn
+     * @param {Object} data 
+     */
+    handleRemoteSpawn(data) {
+        // If we already have this entity, just update it (or ignore)
+        if (this.entities.has(data.id)) {
+            // Already exists, maybe update?
+            const entity = this.entities.get(data.id);
+            entity.deserialize(data);
+            return;
+        }
+
+        // Find Class
+        // We stored "type": this.constructor.name (e.g. "Pig")
+        // We need to map string to class.
+        // We can search through registry imports, or just iterate common ones?
+        // We don't have a direct map exposed. Let's make a map.
+        const AnimalClass = this.findAnimalClass(data.type);
+
+        if (AnimalClass) {
+            console.log(`[SpawnManager] Spawning remote/persisted ${data.type} (${data.id})`);
+            // Create, but don't re-add to game.animals if createAnimal does it?
+            // createAnimal adds to game.animals.
+            // But createAnimal generates an ID. We need to force the ID.
+
+            // Refactored createAnimal to accept ID override or separate method?
+            // Let's modify createAnimal slightly or duplicate logic?
+            // Cleanest is to modify createAnimal to take an options object or similar, but for now just special path.
+
+            // We can just call new AnimalClass and setup keys
+            const animal = new AnimalClass(this.game, data.x, data.y, data.z, data.seed);
+            animal.id = data.id; // FORCE ID
+            animal.deserialize(data); // Apply saved state (health, etc)
+
+            this.game.animals.push(animal);
+            this.game.scene.add(animal.mesh);
+            this.entities.set(animal.id, animal);
+        } else {
+            console.warn(`[SpawnManager] Unknown animal type: ${data.type}`);
+        }
+    }
+
+    findAnimalClass(typeName) {
+        // Simple linear search or map. We imported them all above.
+        // Let's build a static map for performance next time, but for now:
+        const registry = [
+            Pig, Horse, Chicken, Bunny, Frog, Wolf, Elephant, Lion, Bear, Tiger,
+            Deer, Giraffe, Fish, Turtle, Duck, Squirrel, Monkey, Reindeer, Sheep,
+            Goat, Turkey, Mouse, Snake, Zombie, Skeleton, Enderman, Creeper, Kangaroo, Pugasus, Cow, Snowman, Owl, SantaClaus, Unicorn,
+            Panda, Camel, Snail, Fox, FennecFox,
+            Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever
+        ];
+        return registry.find(cls => cls.name === typeName);
+    }
+
+    handleRemoteUpdate(data) {
+        const entity = this.entities.get(data.id);
+        if (entity) {
+            entity.deserialize(data);
+        }
     }
 
     /**
@@ -266,6 +343,7 @@ export class SpawnManager {
         const worldGen = this.game.worldGen;
 
         for (let i = 0; i < count; i++) {
+            const childSeed = rng.next();
             const x = baseX + (rng.next() - 0.5) * 10;
             const z = baseZ + (rng.next() - 0.5) * 10;
             const terrainY = worldGen.getTerrainHeight(x, z);
@@ -277,24 +355,24 @@ export class SpawnManager {
                 // Fish spawn underwater
                 if (terrainY < worldGen.seaLevel) {
                     const waterY = worldGen.seaLevel - 1 - rng.next() * (worldGen.seaLevel - terrainY);
-                    this.createAnimal(AnimalClass, x, waterY, z, false);
+                    this.createAnimal(AnimalClass, x, waterY, z, false, childSeed);
                 }
             } else if (AnimalClass === Monkey || AnimalClass === Squirrel) {
                 // Monkeys and Squirrels spawn in trees - find actual tree blocks
                 const treePos = this.findTreeSpawnPosition(x, z, terrainY);
                 if (treePos) {
-                    this.createAnimal(AnimalClass, treePos.x, treePos.y, treePos.z, false);
+                    this.createAnimal(AnimalClass, treePos.x, treePos.y, treePos.z, false, childSeed);
                 }
 
             } else if (isAquatic && terrainY < worldGen.seaLevel) {
                 // Spawning at surface for ducks/turtles if in valid water column
-                this.createAnimal(AnimalClass, x, worldGen.seaLevel, z, false);
+                this.createAnimal(AnimalClass, x, worldGen.seaLevel, z, false, childSeed);
             } else {
                 // Standard land animal
                 const y = terrainY + 1;
                 // If it's a land animal (not aquatic), don't spawn in water
                 if (!isAquatic && y <= worldGen.seaLevel + 1) continue;
-                this.createAnimal(AnimalClass, x, y, z);
+                this.createAnimal(AnimalClass, x, y, z, true, childSeed);
             }
         }
     }
@@ -331,7 +409,7 @@ export class SpawnManager {
         return null; // No tree found, don't spawn
     }
 
-    createAnimal(AnimalClass, x, y, z, snapToGround = true) {
+    createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null) {
         let spawnY = y;
 
         if (snapToGround) {
@@ -346,9 +424,51 @@ export class SpawnManager {
             spawnY = groundY;
         }
 
-        const animal = new AnimalClass(this.game, x, spawnY, z);
+        const animal = new AnimalClass(this.game, x, spawnY, z, seed);
+
+        // If this is a LOCALLY generated animal (via chunk gen or debug), 
+        // we might check if it conflicts with a persisted entity?
+        // Or just let it be. But we should register it in this.entities
+        // And if it's NEW (not loaded from DB), we should tell the server?
+        // "Chunk Gen" animals are deterministic. 
+        // If we load persisted entities, we might get duplicates if we also generate them.
+        // STRATEGY: 
+        // 1. Entities loaded from server are added to `this.entities` map.
+        // 2. When generating chunk, check if ID already exists in `this.entities`.
+        // 3. If exists, SKIP generation (use persisted version).
+
+        if (this.entities.has(animal.id)) {
+            // Already exists (loaded from persistence), so don't spawn this "fresh" one.
+            // But we need to make sure the persisted one is actually shown/active?
+            // If it's loaded, it's in the list.
+            return;
+        }
+
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
+        this.entities.set(animal.id, animal);
+
+        // Notify server that we spawned this (if it's not a remote echo)
+        // But wait, chunk gen happens on ALL clients. We don't want everyone to send "spawn".
+        // Deterministic spawns don't need "spawn" messages if everyone does it.
+        // BUT, persistence means we want to modify them. 
+        // If I move a deterministic pig, I save it. 
+        // Next time I join, I get the saved pig. 
+        // My chunk gen tries to make a NEW pig at start pos.
+        // `if (this.entities.has(animal.id))` prevents that new pig.
+
+        // Manual spawns (e.g. debug, or item) ARE NOT deterministic based on chunk (usually).
+        // If `seed` is random.
+        // How do we distinguish?
+        // Let's assume ONLY explicit user actions trigger `entity:spawn` network event.
+        // Chunk gen does NOT trigger network event (everyone does it).
+
+        // For persistence:
+        // When we modify a deterministic animal, we send `entity:update`.
+        // Server saves it.
+        // Next load, we get `entities:initial`. We spawn it.
+        // Chunk gen runs, sees ID exists, skips.
+        // Perfect.
     }
 
     /**
@@ -418,7 +538,7 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Kangaroo, x, y, z);
+                this.createAnimal(Kangaroo, x, y, z, true, rng.next());
             }
         }
     }
@@ -448,7 +568,7 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Pugasus, x, y, z);
+                this.createAnimal(Pugasus, x, y, z, true, rng.next());
             }
         }
     }
@@ -478,7 +598,7 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Snowman, x, y, z);
+                this.createAnimal(Snowman, x, y, z, true, rng.next());
             }
         }
     }
@@ -505,11 +625,12 @@ export class SpawnManager {
         const cz = player.position.z + dir.z * dist;
         const cy = this.game.player.position.y;
 
-        // Use Math.random() for debug spawns - these are player-triggered, not world-gen
+        // Use SeededRandom for debug spawns so they also get seeds
+        const rng = new SeededRandom(Math.random() * 0xFFFFFF); // Random seed for the pack, but controlled children
         for (let i = 0; i < count; i++) {
             // Spread slightly
-            const ox = (Math.random() - 0.5) * (count > 1 ? 4 : 0);
-            const oz = (Math.random() - 0.5) * (count > 1 ? 4 : 0);
+            const ox = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
+            const oz = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
 
             // Adjust Y to terrain if needed, or drop from sky
             // Let's spawn slightly above player level or terrain level
@@ -519,8 +640,25 @@ export class SpawnManager {
             // Always spawn on the ground, not at player's height
             const spawnY = terrainH + 1;
 
-            this.createAnimal(EntityClass, tx, spawnY, tz);
+            const animal = this.createAnimal(EntityClass, tx, spawnY, tz, true, rng.next());
+            if (animal && this.game.socketManager) {
+                this.game.socketManager.sendEntitySpawn(animal.serialize());
+            }
         }
         console.log(`Debug spawned ${count} ${EntityClass.name}`);
+
+        // For debug spawns, we DO want to persist and sync them?
+        // Since they are random/local to the user who pressed the key.
+        // Yes, these should be treated as "Manual Spawns".
+        // But `createAnimal` logic above doesn't send `entity:spawn`.
+        // We need a way to explicitly "Network Spawn".
+        // We can iterate the spawned animals (requires refactoring createAnimal to return it)
+        // Or just let `Animal` checkSync handle it? 
+        // `checkSync` updates position. But `entity:spawn` is needed for others to create it.
+
+        // Let's rely on the fact that if I debug spawn, it has a random ID.
+        // I should send `entity:spawn` for it.
+        // But `createAnimal` returns void.
+        // Let's update `createAnimal` to return the animal.
     }
 }

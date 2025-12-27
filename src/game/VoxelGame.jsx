@@ -267,6 +267,10 @@ export class VoxelGame {
 
         // Initialize persisted blocks storage
         this.persistedBlocks = new Map(); // key: chunkKey, value: Array<{lx, ly, lz, type}>
+
+        // Sign Data (text)
+        this.signData = new Map(); // key: "x,y,z", value: text
+        this.signMeshes = new Map(); // key: "x,y,z", value: THREE.Mesh (text mesh)
     }
 
     // Helper for Debug Toggle (called by InputManager)
@@ -479,7 +483,8 @@ export class VoxelGame {
         const z = this.player.position.z + (Math.random() - 0.5) * 40;
         const y = this.player.position.y + 35; // High in the sky
 
-        this.dragon = new Dragon(this, x, y, z);
+        const seed = Math.random() * 0xFFFFFF; // Or derive from worldSeed
+        this.dragon = new Dragon(this, x, y, z, seed);
         this.scene.add(this.dragon.mesh);
     }
 
@@ -568,6 +573,19 @@ export class VoxelGame {
                 this.setBlock(target.x, target.y, target.z, Blocks.DOOR_CLOSED);
                 this.soundManager.playSound('click');
                 return true; // Handled
+            } else if (block === Blocks.SIGN) {
+                this.soundManager.playSound('click');
+                const key = this.getBlockKey(target.x, target.y, target.z);
+                const currentText = this.signData.get(key) || '';
+
+                if (this.uiManager) {
+                    this.uiManager.showSignInput((text) => {
+                        if (text !== null) {
+                            this.setSignText(target.x, target.y, target.z, text);
+                        }
+                    }, currentText);
+                }
+                return true;
             }
         }
 
@@ -725,6 +743,145 @@ export class VoxelGame {
         // Network sync: broadcast block change to other players and persist
         if (!skipBroadcast && this.socketManager?.isConnected()) {
             this.socketManager.sendBlockChange(x, y, z, type);
+        }
+
+        // Handle Sign Removal
+        if (type === null) {
+            this.removeSignText(x, y, z);
+        }
+    }
+
+    // --- Sign Logic ---
+
+    setSignText(x, y, z, text) {
+        const key = this.getBlockKey(x, y, z);
+        this.signData.set(key, text);
+        this.updateSignMesh(x, y, z, text);
+
+        // Network sync
+        if (this.socketManager && this.socketManager.isConnected()) {
+            this.socketManager.sendSignUpdate(x, y, z, text);
+        }
+    }
+
+    // Called when receiving update from server
+    receiveSignUpdate(x, y, z, text) {
+        const key = this.getBlockKey(x, y, z);
+        this.signData.set(key, text);
+        this.updateSignMesh(x, y, z, text);
+    }
+
+    removeSignText(x, y, z) {
+        const key = this.getBlockKey(x, y, z);
+        this.signData.delete(key);
+
+        if (this.signMeshes.has(key)) {
+            const mesh = this.signMeshes.get(key);
+            this.scene.remove(mesh);
+            this.signMeshes.delete(key);
+            // Dispose texture/material?
+            if (mesh.material.map) mesh.material.map.dispose();
+            if (mesh.material) mesh.material.dispose();
+            if (mesh.geometry) mesh.geometry.dispose();
+        }
+    }
+
+    updateSignMesh(x, y, z, text) {
+        const key = this.getBlockKey(x, y, z);
+
+        // Remove existing if any
+        if (this.signMeshes.has(key)) {
+            const mesh = this.signMeshes.get(key);
+            this.scene.remove(mesh);
+            this.signMeshes.delete(key);
+            if (mesh.material.map) mesh.material.map.dispose();
+            if (mesh.material) mesh.material.dispose();
+            if (mesh.geometry) mesh.geometry.dispose();
+        }
+
+        if (!text) return;
+
+        // Create canvas texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+
+        // Background (wood-ish) or transparent? 
+        // Signs usually have text on the wood texture. 
+        // We will make a floating text plane slightly in front of the block.
+        // Or we can draw a wood background.
+        ctx.fillStyle = '#6F4E37'; // Dark wood
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.font = '24px Minecraft'; // Fallback to sans-serif if not loaded
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Wrap text
+        const maxWidth = 240;
+        const words = text.split(' ');
+        let lines = [];
+        let currentLine = words[0];
+
+        for (let i = 1; i < words.length; i++) {
+            const word = words[i];
+            const width = ctx.measureText(currentLine + " " + word).width;
+            if (width < maxWidth) {
+                currentLine += " " + word;
+            } else {
+                lines.push(currentLine);
+                currentLine = word;
+            }
+        }
+        lines.push(currentLine);
+
+        // Draw lines
+        const lineHeight = 30;
+        const startY = (canvas.height - (lines.length * lineHeight)) / 2 + (lineHeight / 2);
+
+        lines.forEach((line, i) => {
+            ctx.fillText(line, canvas.width / 2, startY + (i * lineHeight));
+        });
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const geometry = new THREE.PlaneGeometry(0.8, 0.4);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: false
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+
+        // Position slightly in front of the block
+        // Problem: We need to know orientation. 
+        // For simplified v1, we will just make it look at the player or stick to one side?
+        // Let's stick it to the side facing the player when placed? 
+        // Or simpler: billboards? No, signs are static.
+        // For now, let's just place it on all 4 sides? No that's expensive.
+        // Let's defaulted to Z+ face for now or try to deduce from placement?
+        // Actually, SignItem knows placement. But here we just have x,y,z.
+        // Let's put it on top of the block effectively standing up?
+        // Or centered in the block if it's a "Sign Post" style.
+        // Since we use a full block for SIGN, let's put it on the faces.
+
+        // Actually, let's make it a Sprite for simplicity? No, Sprites rotate.
+        // Let's just put it on the North and South faces for visibility.
+
+        mesh.position.set(x + 0.5, y + 0.5, z + 0.55); // Front face (Z+)
+        // mesh.rotation.y = ...
+
+        this.scene.add(mesh);
+        this.signMeshes.set(key, mesh);
+    }
+
+    addPersistedSigns(signs) {
+        // signs: Array<{x, y, z, text}>
+        if (!signs) return;
+        for (const s of signs) {
+            this.signData.set(this.getBlockKey(s.x, s.y, s.z), s.text);
+            this.updateSignMesh(s.x, s.y, s.z, s.text);
         }
     }
 

@@ -11,7 +11,8 @@ import {
     RideWandItem,
     CaptureWandItem,
     SpawnEggItem,
-    WaterBucketItem
+    WaterBucketItem,
+    SignItem
 } from '../ItemRegistry.js';
 import { AnimalClasses } from '../AnimalRegistry.js';
 
@@ -37,6 +38,7 @@ export class ItemManager {
         this.register(new RideWandItem());
         this.register(new CaptureWandItem());
         this.register(new WaterBucketItem());
+        this.register(new SignItem());
 
         // Register Spawn Eggs
         Object.values(AnimalClasses).forEach(AnimalClass => {

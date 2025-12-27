@@ -1,0 +1,31 @@
+{
+    "hosting": {
+        "site": "minecraft-clone-trackit-v2",
+        "public": "dist",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ],
+        "rewrites": [
+            {
+                "source": "/api/**",
+                "run": {
+                    "serviceId": "minecraft-server",
+                    "region": "us-central1"
+                }
+            },
+            {
+                "source": "/socket.io/**",
+                "run": {
+                    "serviceId": "minecraft-server",
+                    "region": "us-central1"
+                }
+            },
+            {
+                "source": "**",
+                "destination": "/index.html"
+            }
+        ]
+    }
+}

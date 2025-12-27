@@ -47,7 +47,7 @@ export class InventoryManager {
         // Add some materials for testing
         this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
         this.addItemToSlot(7, 'flying_broom', 1, 'flying_broom');
-        this.addItemToSlot(8, 'giant_wand', 1, 'wand');
+        this.addItemToSlot(8, 'sign', 16, 'sign');
         this.addItemToSlot(9, 'wood', 10, 'block');
         this.addItemToSlot(10, 'log', 10, 'block');
         this.addItemToSlot(11, 'ride_wand', 1, 'ride_wand');

@@ -1,11 +1,20 @@
 import * as THREE from 'three';
+import { SeededRandom } from '../../utils/SeededRandom.js';
 
 export class Animal {
-    constructor(game, x, y, z) {
+    constructor(game, x, y, z, seed) {
         this.game = game;
         this.position = new THREE.Vector3(x, y, z);
+        this.data = {}; // Generic storage for persistence
+
+        // Deterministic ID (if not provided, generate one)
+        // Format: Type_Seed_X_Z (approx)
+        this.seed = seed || Math.random() * 0xffffffff;
+        this.id = `${this.constructor.name}_${Math.floor(this.seed)}_${Math.floor(x)}_${Math.floor(z)}`;
+
         this.velocity = new THREE.Vector3(0, 0, 0);
-        this.rotation = Math.random() * Math.PI * 2;
+        this.rng = new SeededRandom(this.seed);
+        this.rotation = this.rng.next() * Math.PI * 2;
 
         // Dimensions (should be overridden)
         this.width = 0.8;
@@ -29,7 +38,7 @@ export class Animal {
         this.attackTimer = 0;
         this.damage = 1;
         this.isHostile = false;
-        this.stateTimer = Math.random() * 3 + 1;
+        this.stateTimer = this.rng.next() * 3 + 1;
         this.moveDirection = new THREE.Vector3();
 
         // Animation
@@ -208,6 +217,45 @@ export class Animal {
                 this.state = 'idle';
             }
         }
+
+        // Persistence / Sync Check
+        this.checkSync();
+    }
+
+    checkSync() {
+        if (!this.game.socketManager || !this.game.socketManager.isConnected()) return;
+
+        // Simple distance check: if we moved significantly, send update
+        if (!this.lastSyncPos) this.lastSyncPos = this.position.clone();
+
+        const dist = this.position.distanceTo(this.lastSyncPos);
+        if (dist > 1.0) { // Sync every 1 block of movement
+            this.game.socketManager.sendEntityUpdate(this.serialize());
+            this.lastSyncPos.copy(this.position);
+        }
+    }
+
+    serialize() {
+        return {
+            id: this.id,
+            type: this.constructor.name,
+            x: this.position.x,
+            y: this.position.y,
+            z: this.position.z,
+            seed: this.seed,
+            health: this.health,
+            state: this.state
+        };
+    }
+
+    deserialize(data) {
+        if (data.x !== undefined) {
+            this.position.set(data.x, data.y, data.z);
+            this.mesh.position.copy(this.position);
+        }
+        if (data.health !== undefined) this.health = data.health;
+        // Don't override state blindly if we are currently reacting to something, 
+        // but for initial load it's fine.
     }
 
     handleRiding(moveForward, moveRight, jump, rotationY, dt) {
@@ -287,7 +335,7 @@ export class Animal {
             if (this.stateTimer <= 0) {
                 // Stop fleeing
                 this.state = 'idle';
-                this.stateTimer = Math.random() * 2 + 1;
+                this.stateTimer = this.rng.next() * 2 + 1;
                 this.isMoving = false;
                 this.fleeTarget = null;
             } else {
@@ -339,7 +387,7 @@ export class Animal {
                         // All directions blocked, just idle
                         this.state = 'idle';
                         this.isMoving = false;
-                        this.stateTimer = Math.random() * 2 + 1;
+                        this.stateTimer = this.rng.next() * 2 + 1;
                     }
                 }
                 this.lastPosition.copy(this.position);
@@ -362,7 +410,7 @@ export class Animal {
                 } else {
                     // No good direction, stop and idle
                     this.state = 'idle';
-                    this.stateTimer = Math.random() * 2 + 1;
+                    this.stateTimer = this.rng.next() * 2 + 1;
                     this.isMoving = false;
                 }
             }
@@ -372,13 +420,13 @@ export class Animal {
             // Change state
             if (this.state === 'walk') {
                 this.state = 'idle';
-                this.stateTimer = Math.random() * 3 + 2;
+                this.stateTimer = this.rng.next() * 3 + 2;
                 this.isMoving = false;
             } else {
                 // Switch to walk
-                if (Math.random() < 0.7) {
+                if (this.rng.next() < 0.7) {
                     this.state = 'walk';
-                    this.stateTimer = Math.random() * 4 + 1;
+                    this.stateTimer = this.rng.next() * 4 + 1;
 
                     // Pick a smart direction (avoid obstacles)
                     const smartDir = this.findBestDirection(null);
@@ -388,13 +436,13 @@ export class Animal {
                         this.isMoving = true;
                     } else {
                         // No clear path, try random anyway
-                        this.rotation = Math.random() * Math.PI * 2;
+                        this.rotation = this.rng.next() * Math.PI * 2;
                         this.moveDirection.set(Math.sin(this.rotation), 0, Math.cos(this.rotation));
                         this.isMoving = true;
                     }
                 } else {
                     // Stay idle longer
-                    this.stateTimer = Math.random() * 2 + 1;
+                    this.stateTimer = this.rng.next() * 2 + 1;
                     this.isMoving = false;
                 }
             }
@@ -548,7 +596,7 @@ export class Animal {
                 }
 
                 // Add some randomness to avoid predictable patterns
-                score += Math.random() * 0.5;
+                score += this.rng.next() * 0.5;
 
                 candidates.push({ dir, score });
             }

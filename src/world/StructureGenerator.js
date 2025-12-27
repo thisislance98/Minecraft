@@ -1,11 +1,49 @@
 import { Villager } from '../game/entities/animals/Villager.js';
 import { Blocks } from '../game/core/Blocks.js';
+import { SeededRandom } from '../utils/SeededRandom.js';
 
 export class StructureGenerator {
 
     constructor(game, worldGenerator) {
         this.game = game;
         this.worldGenerator = worldGenerator;
+        this.seed = 0;
+        this.rng = new SeededRandom(0);
+    }
+
+    setSeed(seed) {
+        this.seed = seed;
+        this.rng = new SeededRandom(seed);
+    }
+
+    /**
+     * Get deterministic random value for a specific position
+     * This ensures the same structure decisions are made for the same location
+     */
+    getPositionRandom(x, z, salt = 0) {
+        const hash = this.hashPosition(x, z, salt);
+        const rng = new SeededRandom(hash);
+        return rng.next();
+    }
+
+    /**
+     * Get a seeded random generator for a specific position
+     * Useful when multiple random values are needed for the same location
+     */
+    getPositionRng(x, z, salt = 0) {
+        const hash = this.hashPosition(x, z, salt);
+        return new SeededRandom(hash);
+    }
+
+    /**
+     * Hash a position with the world seed for deterministic results
+     */
+    hashPosition(x, z, salt = 0) {
+        let hash = this.seed;
+        hash = ((hash << 5) + hash) ^ (x * 73856093);
+        hash = ((hash << 5) + hash) ^ (z * 83492791);
+        hash = ((hash << 5) + hash) ^ (salt * 19349663);
+        return Math.abs(hash) >>> 0;
     }
 
     generateFeatures(cx, cy, cz) {
@@ -18,7 +56,9 @@ export class StructureGenerator {
                 const wx = startX + x;
                 const wz = startZ + z;
 
-                if (Math.random() < 0.01) {
+                // Use position-based seeded random for feature spawn check
+                const featureRng = this.getPositionRng(wx, wz, 1);
+                if (featureRng.next() < 0.01) {
                     const groundHeight = this.worldGenerator.getTerrainHeight(wx, wz);
                     const biome = this.worldGenerator.getBiome(wx, wz);
 
@@ -32,7 +72,7 @@ export class StructureGenerator {
                             // House Chance
                             // existing logic checks biome.
                             // Increased chance slightly for testing variety? No, keep it rare but varied.
-                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && Math.random() < 0.1) {
+                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && featureRng.next() < 0.1) {
                                 // Check for flat land for typical house size (approx 5x5 to 7x7)
                                 // We'll check 7x7 to be safe for larger houses
                                 let isFlat = true;
@@ -52,24 +92,25 @@ export class StructureGenerator {
                                     this.generateHouse(wx, wy + 1, wz, biome);
                                 }
                             } else {
-                                // Tree logic
+                                // Tree logic - use same RNG for consistency
+                                const treeRand = featureRng.next();
                                 // Jack and the Beanstalk (Very Rare)
-                                if ((biome === 'PLAINS' || biome === 'FOREST') && Math.random() < 0.005) {
+                                if ((biome === 'PLAINS' || biome === 'FOREST') && treeRand < 0.005) {
                                     this.generateBeanstalk(wx, wy + 1, wz);
                                 }
                                 else if (biome === 'DESERT') {
-                                    if (Math.random() < 0.2) this.generateCactus(wx, wy + 1, wz);
+                                    if (treeRand < 0.2) this.generateCactus(wx, wy + 1, wz);
                                 } else if (biome === 'JUNGLE') {
                                     this.generateJungleTree(wx, wy + 1, wz);
                                 } else if (biome === 'FOREST') {
-                                    if (Math.random() < 0.5) this.generateOakTree(wx, wy + 1, wz);
+                                    if (treeRand < 0.5) this.generateOakTree(wx, wy + 1, wz);
                                     else this.generateBirchTree(wx, wy + 1, wz);
                                 } else if (biome === 'MOUNTAIN' || biome === 'SNOW') {
-                                    if (Math.random() < 0.5) this.generatePineTree(wx, wy + 1, wz);
+                                    if (treeRand < 0.5) this.generatePineTree(wx, wy + 1, wz);
                                     else this.generateOakTree(wx, wy + 1, wz);
                                 } else {
                                     // Plains
-                                    if (Math.random() < 0.1) this.generateOakTree(wx, wy + 1, wz);
+                                    if (treeRand < 0.1) this.generateOakTree(wx, wy + 1, wz);
                                 }
                             }
                         }
@@ -133,8 +174,11 @@ export class StructureGenerator {
         let validStyles = styles.filter(s => s.biomes.includes(biome));
         if (validStyles.length === 0) validStyles = styles.filter(s => s.name === 'Oak Cabin'); // Default fallback
 
+        // Use position-based seeded random for house style/shape
+        const houseRng = this.getPositionRng(x, z, 100);
+
         // Pick random style
-        const style = validStyles[Math.floor(Math.random() * validStyles.length)];
+        const style = validStyles[Math.floor(houseRng.next() * validStyles.length)];
 
         // Pick random shape
         // Classic: 5x5, Tall: 4x4 (tall), Wide: 7x5
@@ -145,7 +189,7 @@ export class StructureGenerator {
             { w: 7, d: 5, h: 4, type: 'Wide' },
             { w: 6, d: 6, h: 5, type: 'BigBox' }
         ];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        const shape = shapes[Math.floor(houseRng.next() * shapes.length)];
 
         const width = shape.w;
         const depth = shape.d;
@@ -192,8 +236,8 @@ export class StructureGenerator {
                         if (dz === 0 && dx === Math.floor(width / 2) && dy < 3) {
                             this.game.setBlock(x + dx, y + dy, z + dz, null, true); // Doorway
                         }
-                        // Windows
-                        else if (dy === 2 && !isCorner && Math.random() < 0.4) {
+                        // Windows - use position-based random for consistent window placement
+                        else if (dy === 2 && !isCorner && this.getPositionRandom(x + dx, z + dz, 200) < 0.4) {
                             this.game.setBlock(x + dx, y + dy, z + dz, style.window, true);
                         }
                         else {
@@ -297,7 +341,8 @@ export class StructureGenerator {
     }
 
     generateBeanstalk(x, y, z) {
-        const height = 40 + Math.floor(Math.random() * 20); // 40-60 blocks tall
+        const rng = this.getPositionRng(x, z, 300);
+        const height = 40 + Math.floor(rng.next() * 20); // 40-60 blocks tall
         console.log(`Generating Beanstalk at ${x},${y},${z} height: ${height}`);
 
         for (let i = 0; i < height; i++) {
@@ -326,7 +371,8 @@ export class StructureGenerator {
     }
 
     generateOakTree(x, y, z) {
-        const height = 4 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 400);
+        const height = 4 + Math.floor(rng.next() * 3);
 
         // Trunk
         for (let i = 0; i < height; i++) {
@@ -341,8 +387,8 @@ export class StructureGenerator {
             for (let lx = x - radius; lx <= x + radius; lx++) {
                 for (let lz = z - radius; lz <= z + radius; lz++) {
                     // Circle check-ish or just square
-                    // Avoid overwriting trunk
-                    if ((lx !== x || lz !== z || ly > y + height - 1) && Math.random() < 0.8) {
+                    // Avoid overwriting trunk - use position-based random for leaf placement
+                    if ((lx !== x || lz !== z || ly > y + height - 1) && this.getPositionRandom(lx, lz, ly * 10 + 401) < 0.8) {
                         // Don't overwrite existing blocks unless air/weak
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
@@ -355,7 +401,8 @@ export class StructureGenerator {
     }
 
     generateBirchTree(x, y, z) {
-        const height = 5 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 500);
+        const height = 5 + Math.floor(rng.next() * 3);
 
         // Trunk
         for (let i = 0; i < height; i++) {
@@ -369,7 +416,7 @@ export class StructureGenerator {
 
             for (let lx = x - radius; lx <= x + radius; lx++) {
                 for (let lz = z - radius; lz <= z + radius; lz++) {
-                    if ((lx !== x || lz !== z) && Math.random() < 0.7) {
+                    if ((lx !== x || lz !== z) && this.getPositionRandom(lx, lz, ly * 10 + 501) < 0.7) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
                             this.game.setBlock(lx, ly, lz, Blocks.BIRCH_LEAVES, true);
@@ -383,7 +430,8 @@ export class StructureGenerator {
     }
 
     generatePineTree(x, y, z) {
-        const height = 6 + Math.floor(Math.random() * 5);
+        const rng = this.getPositionRng(x, z, 600);
+        const height = 6 + Math.floor(rng.next() * 5);
 
         // Trunk
         for (let i = 0; i < height; i++) {
@@ -416,7 +464,8 @@ export class StructureGenerator {
 
     generateJungleTree(x, y, z) {
         // Tall and big
-        const height = 10 + Math.floor(Math.random() * 10);
+        const rng = this.getPositionRng(x, z, 700);
+        const height = 10 + Math.floor(rng.next() * 10);
 
         // Trunk (2x2 ?) No, 1x1 for now is safer for this voxel engine unless verified
         // Let's do 1x1 but tall with vines (leaves)
@@ -424,10 +473,11 @@ export class StructureGenerator {
         for (let i = 0; i < height; i++) {
             this.game.setBlock(x, y + i, z, Blocks.LOG, true);
 
-            // Vines?
-            if (Math.random() < 0.2 && i < height - 2) {
+            // Vines? - use position-based random
+            const vineRng = this.getPositionRng(x, z, 701 + i);
+            if (vineRng.next() < 0.2 && i < height - 2) {
                 // Direction
-                const dir = Math.floor(Math.random() * 4);
+                const dir = Math.floor(vineRng.next() * 4);
                 let vx = x, vz = z;
                 if (dir === 0) vx++;
                 else if (dir === 1) vx--;
@@ -444,7 +494,7 @@ export class StructureGenerator {
             for (let lx = x - radius; lx <= x + radius; lx++) {
                 for (let lz = z - radius; lz <= z + radius; lz++) {
                     const dist = Math.sqrt((lx - x) ** 2 + (lz - z) ** 2);
-                    if (dist < radius + Math.random()) {
+                    if (dist < radius + this.getPositionRandom(lx, lz, ly * 10 + 702)) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
                             this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true);
@@ -457,7 +507,8 @@ export class StructureGenerator {
 
     generateCactus(x, y, z) {
         // Simple column
-        const height = 2 + Math.floor(Math.random() * 2);
+        const rng = this.getPositionRng(x, z, 800);
+        const height = 2 + Math.floor(rng.next() * 2);
         for (let i = 0; i < height; i++) {
             this.game.setBlock(x, y + i, z, Blocks.LEAVES, true); // Use leaves as green cactus fallback
         }

@@ -450,6 +450,12 @@ export class Chunk {
         this.mesh.userData.chunk = this;
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
+
+        // Respect global visibility toggle
+        if (this.game.terrainVisible === false) {
+            this.mesh.visible = false;
+        }
+
         this.game.scene.add(this.mesh);
 
         this.dirty = false;

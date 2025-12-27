@@ -102,25 +102,15 @@ export class Agent {
         // Voice is OFF by default - press V to toggle
         this.setupKeyboardToggle();
 
-        // Debug command handler will be set up later via setupDebugCommandHandler()
-        // because ColyseusManager is created after Agent in VoxelGame
+        // Debug command handler - kept for API compatibility
     }
 
     /**
-     * Set up debug command handler - called by VoxelGame after colyseusManager is created
+     * Set up debug command handler - legacy method kept for compatibility
+     * Debug commands are now handled via REST API polling in VoxelGame
      */
     setupDebugCommandHandler() {
-        if (this.game.colyseusManager) {
-            console.log('[Agent] Setting up debug command handler');
-            this.game.colyseusManager.onDebugCommand = (data) => {
-                console.log('[Agent] Received debug command:', data);
-                if (data.prompt) {
-                    this.injectPrompt(data.prompt, data.debugId);
-                }
-            };
-        } else {
-            console.warn('[Agent] ColyseusManager not available for debug commands');
-        }
+        console.log('[Agent] Debug command handler ready (using REST API)');
     }
 
     setupKeyboardToggle() {
@@ -439,16 +429,8 @@ export class Agent {
                     // Start polling for completion
                     this.pollTaskStatus(data.taskId, uiTaskId, request);
 
-                    // Report back to CLI (Debug)
-                    if (this.currentDebugId) {
-                        this.game.colyseusManager?.sendDebugResponse({
-                            debugId: this.currentDebugId,
-                            tool: 'perform_task',
-                            request: request,
-                            status: 'started'
-                        });
-                        this.currentDebugId = null;
-                    }
+                    // Clear debug ID
+                    this.currentDebugId = null;
 
                     return { output: { status: "started", taskId: data.taskId } };
                 } else {
@@ -468,15 +450,8 @@ export class Agent {
                 this.game.uiManager.showSuggestions(suggestions);
             }
 
-            // Report back to CLI (Debug)
-            if (this.currentDebugId) {
-                this.game.colyseusManager?.sendDebugResponse({
-                    debugId: this.currentDebugId,
-                    tool: 'provide_suggestions',
-                    suggestions: suggestions
-                });
-                this.currentDebugId = null;
-            }
+            // Clear debug ID
+            this.currentDebugId = null;
 
             return { output: { suggestions: suggestions ? suggestions.join(', ') : '' } };
         } else if (name === 'teleport_player') {
@@ -485,16 +460,8 @@ export class Agent {
             const result = this.teleportPlayer(location);
             this.game.uiManager.addChatMessage('ai', `🌍 ${result}`);
 
-            // Report back to CLI (Debug)
-            if (this.currentDebugId) {
-                this.game.colyseusManager?.sendDebugResponse({
-                    debugId: this.currentDebugId,
-                    tool: 'teleport_player',
-                    location: location,
-                    result: result
-                });
-                this.currentDebugId = null;
-            }
+            // Clear debug ID
+            this.currentDebugId = null;
 
             return { output: { result } };
         } else if (name === 'spawn_creature') {
@@ -526,44 +493,16 @@ export class Agent {
 
             this.game.uiManager.addChatMessage('ai', `🐾 ${result}`);
 
-            // Report back to CLI (Debug)
-            if (this.currentDebugId) {
-                const player = this.game.player;
-                // Calculate spawn pos (roughly in front)
-                const dir = new THREE.Vector3();
-                this.game.camera.getWorldDirection(dir);
-                const spawnPos = {
-                    x: player.position.x + dir.x * 5,
-                    y: player.position.y,
-                    z: player.position.z + dir.z * 5
-                };
-
-                this.game.colyseusManager?.sendDebugResponse({
-                    debugId: this.currentDebugId,
-                    tool: 'spawn_creature',
-                    creature: creature,
-                    count: count,
-                    result: result,
-                    approxSpawnX: spawnPos.x,
-                    approxSpawnZ: spawnPos.z
-                });
-                this.currentDebugId = null;
-            }
+            // Clear debug ID
+            this.currentDebugId = null;
 
             return { output: { result } };
         } else if (name === 'get_scene_info') {
             console.log('[Agent] Getting scene info');
             const info = this.getSceneInfo();
 
-            // Report back to CLI (Debug)
-            if (this.currentDebugId) {
-                this.game.colyseusManager?.sendDebugResponse({
-                    debugId: this.currentDebugId,
-                    tool: 'get_scene_info',
-                    ...info
-                });
-                this.currentDebugId = null;
-            }
+            // Clear debug ID
+            this.currentDebugId = null;
 
             return { output: info };
         }
@@ -1120,14 +1059,8 @@ export class Agent {
                 }
                 // Note: If no text, that's OK - tool execution already provided feedback via chat
 
-                // Notify CLI of completion
-                if (this.currentDebugId) {
-                    this.game.colyseusManager?.sendDebugResponse({
-                        debugId: this.currentDebugId,
-                        message: responseText || "Command executed"
-                    });
-                    this.currentDebugId = null;
-                }
+                // Clear debug ID
+                this.currentDebugId = null;
 
             } catch (e) {
                 console.error('[Agent] Text chat error:', e);
@@ -1135,14 +1068,8 @@ export class Agent {
                 this.game.uiManager.removeChatMessage?.(thinkingMsgId);
                 this.game.uiManager.addChatMessage('system', `Error: ${e.message}`);
 
-                // Report error back to CLI
-                if (this.currentDebugId) {
-                    this.game.colyseusManager?.sendDebugResponse({
-                        debugId: this.currentDebugId,
-                        error: e.message
-                    });
-                    this.currentDebugId = null;
-                }
+                // Clear debug ID
+                this.currentDebugId = null;
             }
         }
     }

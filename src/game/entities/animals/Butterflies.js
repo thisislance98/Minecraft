@@ -277,4 +277,21 @@ export class ButterflyManager {
             butterfly.rightWing.rotation.z = Math.PI - wingAngle;
         }
     }
+
+    clear() {
+        this.count = 0;
+        if (this.group) {
+            this.game.scene.remove(this.group);
+            this.group.traverse(obj => {
+                if (obj.isMesh) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                }
+            });
+        }
+        this.butterflies = [];
+    }
 }

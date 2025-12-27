@@ -77,10 +77,12 @@ export class WorldGenerator {
                     if (wy <= groundHeight) {
                         let type = Blocks.STONE;
 
-                        // Ore Generation
+                        // Ore Generation - use position-based seeded random for determinism
                         if (type === Blocks.STONE) {
                             const depth = groundHeight - wy;
-                            const rand = Math.random();
+                            // Create deterministic random based on position and world seed
+                            const oreHash = this.getPositionHash(wx, wy, wz);
+                            const oreRand = (oreHash % 10000) / 10000;
 
                             // Coal: Common, anywhere under ground
                             // Iron: Uncommon, below sea level or deep
@@ -89,7 +91,6 @@ export class WorldGenerator {
                             // Make it explicit priority to avoid higher probability overwriting
                             // Let's rewrite for clarity and priority (rarest first)
 
-                            const oreRand = Math.random();
                             if (wy < 8 && oreRand < Config.GENERATION.ORE_DIAMOND) { // Diamond
                                 type = Blocks.DIAMOND_ORE;
                             } else if (wy < 15 && oreRand < Config.GENERATION.ORE_GOLD) { // Gold
@@ -136,12 +137,25 @@ export class WorldGenerator {
 
     setSeed(seed) {
         console.log('WorldGenerator: Setting seed to', seed);
+        this.seed = seed;
         this.noise = new NoiseGenerator(seed);
-        // We might need to propagate seed to other generators if they use their own noise
-        // But currently StructureGenerator uses this.worldGen.noise
-        // TerrainGenerator uses biomeManager...
-        // BiomeManager uses its own noise?
-        // Let's check BiomeManager...
+        // Propagate seed to all sub-generators for deterministic world generation
         this.biomeManager.setSeed(seed);
+        this.terrainGenerator.setSeed(seed);
+        this.structureGenerator.setSeed(seed);
+    }
+
+    /**
+     * Generate a deterministic hash from world position and seed
+     * Used for ore generation and other position-based random features
+     */
+    getPositionHash(x, y, z) {
+        const seed = this.seed || 0;
+        // Simple hash combining position and seed
+        let hash = seed;
+        hash = ((hash << 5) + hash) ^ (x * 73856093);
+        hash = ((hash << 5) + hash) ^ (y * 19349663);
+        hash = ((hash << 5) + hash) ^ (z * 83492791);
+        return Math.abs(hash) >>> 0; // Ensure positive 32-bit integer
     }
 }

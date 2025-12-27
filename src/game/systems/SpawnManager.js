@@ -184,8 +184,8 @@ export class SpawnManager {
         // Global toggle
         if (!this.isSpawningEnabled) return;
 
-        // Cap max entities
-        if (this.game.animals.length > 200) return;
+        // Cap max entities (Reduced from 200 for performance)
+        if (this.game.animals.length > 50) return;
 
         // Create deterministic RNG for this chunk
         const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, 1);

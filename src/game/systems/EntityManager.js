@@ -47,5 +47,13 @@ export class EntityManager {
             this.batManager.update(deltaTime, player, []);
         }
     }
+
+    clearAll() {
+        if (this.birdManager && this.birdManager.clear) this.birdManager.clear();
+        if (this.batManager && this.batManager.clear) this.batManager.clear();
+        if (this.mosquitoManager && this.mosquitoManager.clear) this.mosquitoManager.clear();
+        if (this.butterflyManager && this.butterflyManager.clear) this.butterflyManager.clear();
+        if (this.pixieManager && this.pixieManager.clear) this.pixieManager.clear();
+    }
 }
 

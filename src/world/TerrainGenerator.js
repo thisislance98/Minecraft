@@ -7,6 +7,10 @@ export class TerrainGenerator {
         this.seaLevel = 30;
     }
 
+    setSeed(seed) {
+        this.noise = new NoiseGenerator(seed);
+    }
+
     getTerrainHeight(x, z) {
         // Delegate temp/humidity fetching to biome manager if needed, or re-calculate
         // For efficiency, we might duplicate noise calls or pass them in?

@@ -27,7 +27,7 @@ import { Environment } from './systems/Environment.js';
 
 import { WeatherSystem } from './systems/WeatherSystem.js';
 import { Dragon } from './entities/animals/Dragon.js';
-import { ColyseusManager } from './systems/ColyseusManager.js';
+import { SocketManager } from './systems/SocketManager.js';
 import { RemotePlayer } from './entities/RemotePlayer.js';
 import { WorldParticleSystem } from './systems/WorldParticleSystem.js';
 import { SoundManager } from './systems/SoundManager.js';
@@ -63,6 +63,7 @@ export class VoxelGame {
         this.chunks = new Map();
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
         this.renderDistance = Config.WORLD.RENDER_DISTANCE;
+        this.terrainVisible = true; // Default visibility
         this.generatedChunks = new Set();
         this.chunkGenQueue = []; // Queue for chunks to be generated
 
@@ -106,10 +107,9 @@ export class VoxelGame {
         // But other files might access game.controls?
         // Let's alias it for now or check usage.
         this.controls = this.inputManager;
-
-        // Initialize world seed for consistent world generation
-        this.worldSeed = Math.floor(Math.random() * 1000000);
-        console.log('[Game] World seed:', this.worldSeed);
+        // Initialize world seed - use a fixed hardcoded seed so everyone sees the same world
+        this.worldSeed = 1337; // Fixed seed for consistency
+        console.log('[Game] using hardcoded world seed:', this.worldSeed);
 
         this.worldGen = new WorldGenerator(this);
         // Set the seed immediately after creation for consistent world generation
@@ -152,59 +152,72 @@ export class VoxelGame {
         // this.animals = [];
         // this.spawnManager = new SpawnManager(this);
 
-        // Network Manager
-        this.networkManager = new ColyseusManager(this);
-        this.colyseusManager = this.networkManager; // Alias for Agent compatibility
-        this.remotePlayers = new Map(); // peerId -> RemotePlayer
-
-        // Check for room URL parameter to join an existing room
+        // Check for offline mode via URL parameter
         const urlParams = new URLSearchParams(window.location.search);
-        const roomIdToJoin = urlParams.get('room');
+        this.isOffline = urlParams.get('offline') === 'true';
 
-        if (roomIdToJoin && roomIdToJoin !== 'undefined' && roomIdToJoin.length > 0) {
-            // Join the shared room with retry logic
-            console.log('[Game] Joining shared room:', roomIdToJoin);
-            this.joinRoomWithRetry(roomIdToJoin);
-        } else if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            // Auto-host for development/testing with retry logic
-            console.log('[Game] Auto-hosting multiplayer session for testing...');
-            this.autoHostWithRetry();
+        if (this.isOffline) {
+            console.log('[Game] Offline Mode: Network disabled.');
+            this.networkManager = null;
+            this.remotePlayers = new Map();
+        } else {
+            // Network Manager (Socket.IO)
+            this.networkManager = new SocketManager(this);
+            this.remotePlayers = new Map(); // playerId -> RemotePlayer
+
+            // Setup Network Callbacks (Socket.IO) - using new on() API
+            this.networkManager
+                .on('onPlayerJoin', (playerId, playerData) => {
+                    console.log('Player joined:', playerId);
+                    if (this.remotePlayers.has(playerId)) {
+                        console.warn(`[Game] Duplicate join for ${playerId}, disposing old instance`);
+                        this.remotePlayers.get(playerId).dispose();
+                    }
+                    const remotePlayer = new RemotePlayer(this, playerId, null);
+                    this.remotePlayers.set(playerId, remotePlayer);
+                    this.uiManager.addChatMessage('system', `${playerData?.name || 'Player'} joined`);
+                })
+                .on('onPlayerLeave', (playerId) => {
+                    console.log('Player left:', playerId);
+                    const remotePlayer = this.remotePlayers.get(playerId);
+                    if (remotePlayer) {
+                        remotePlayer.dispose();
+                        this.remotePlayers.delete(playerId);
+                        this.uiManager.addChatMessage('system', `Player left`);
+                    }
+                })
+                .on('onBlockChange', (x, y, z, blockType) => {
+                    // Apply block change without broadcasting back
+                    this.setBlock(x, y, z, blockType, false, true); // true = skipBroadcast
+                })
+                .on('onWorldSeed', (seed) => {
+                    console.log('[Game] Received world seed from network:', seed);
+
+                    // If we already have a different seed, we need to regenerate the world
+                    if (this.worldSeed !== seed) {
+                        console.log(`[Game] Seed mismatch! Local: ${this.worldSeed}, Network: ${seed}`);
+                        this.regenerateWithSeed(seed);
+                    }
+                });
         }
 
-        // Setup Network Callbacks (Colyseus)
-        this.networkManager.onPlayerJoin = (sessionId, playerState) => {
-            console.log('Player joined:', sessionId);
-            const remotePlayer = new RemotePlayer(this, sessionId, playerState);
-            this.remotePlayers.set(sessionId, remotePlayer);
-            this.uiManager.addChatMessage('system', `${playerState.name} joined`);
-        };
+        // Multiplayer connection is now handled manually via UI buttons (Create Room / Connect)
+        // No auto-connect - user must click buttons in the multiplayer menu
 
-        this.networkManager.onPlayerLeave = (sessionId) => {
-            console.log('Player left:', sessionId);
-            const remotePlayer = this.remotePlayers.get(sessionId);
-            if (remotePlayer) {
-                remotePlayer.dispose();
-                this.remotePlayers.delete(sessionId);
-                this.uiManager.addChatMessage('system', `Player left: ${sessionId.substring(0, 6)}`);
-            }
-        };
+        // Check for ?room=ROOM_ID in URL for direct connection
+        const roomParam = urlParams.get('room');
+        if (roomParam && !this.isOffline) {
+            console.log('[Game] Found room parameter, auto-joining:', roomParam);
+            // Auto-join after a brief delay to ensure initialization
+            setTimeout(() => {
+                this.joinRoomWithRetry(roomParam);
+            }, 500);
+        }
 
-        this.networkManager.onBlockChange = (x, y, z, blockType) => {
-            // Apply block change without broadcasting back
-            this.setBlock(x, y, z, blockType, false, true); // true = skipBroadcast
-        };
-
-        this.networkManager.onWorldSeedReceived = (seed) => {
-            console.log('[Game] Received world seed from server:', seed);
-            if (!this.generatedChunks || this.generatedChunks.size === 0) {
-                // Haven't generated world yet - just set seed
-                this.worldSeed = seed;
-                this.worldGen.setSeed(seed);
-            }
-        };
-
-        // Set up Agent's debug command handler now that colyseusManager exists
-        this.agent.setupDebugCommandHandler();
+        // Agent debug command handler
+        if (this.agent.setupDebugCommandHandler) {
+            this.agent.setupDebugCommandHandler();
+        }
 
         // Add daytime switch hotkey (K)
         window.addEventListener('keydown', (e) => {
@@ -213,6 +226,15 @@ export class VoxelGame {
             }
             if (e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.storeUI.toggle();
+            }
+            // Debug: 0 key toggles remote player updates
+            if (e.key === '0' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+                this._disableRemotePlayers = !this._disableRemotePlayers;
+                console.log(`[Debug] Remote player updates: ${this._disableRemotePlayers ? 'DISABLED' : 'ENABLED'}`);
+                // Also hide/show remote player meshes
+                for (const rp of this.remotePlayers.values()) {
+                    rp.mesh.visible = !this._disableRemotePlayers;
+                }
             }
         });
 
@@ -432,10 +454,6 @@ export class VoxelGame {
     }
 
     /**
-     * Auto-host multiplayer session with retry logic for development.
-     * Handles the race condition where page loads before Colyseus server is ready.
-     */
-    /**
      * Join a room with retry logic to handle initial connection failures
      */
     async joinRoomWithRetry(roomId, retries = 5, delay = 1000) {
@@ -463,14 +481,14 @@ export class VoxelGame {
 
     /**
      * Auto-host multiplayer session with retry logic for development.
-     * Handles the race condition where page loads before Colyseus server is ready.
+     * Handles the race condition where page loads before server is ready.
      */
     async autoHostWithRetry(retries = 5, delay = 1000) {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 this.networkManager.game.uiManager?.showNetworkStatus(`Creating... (${attempt}/${retries})`);
                 await this.networkManager.createRoom();
-                console.log(`[Game] ✅ Connected to Colyseus (attempt ${attempt})`);
+                console.log(`[Game] ✅ Connected to Socket.IO (attempt ${attempt})`);
                 return; // Success!
             } catch (e) {
                 console.warn(`[Game] Auto-host attempt ${attempt}/${retries} failed:`, e.message || e);
@@ -1036,10 +1054,11 @@ export class VoxelGame {
 
                 if (isGroundChunk && withinRenderDistance) {
                     // Always show ground chunks within render distance
-                    chunk.mesh.visible = true;
+                    // BUT only if terrain toggle is on!
+                    chunk.mesh.visible = this.terrainVisible;
                 } else {
                     // Apply normal frustum culling for above-ground chunks
-                    chunk.mesh.visible = chunk.isInFrustum(this.frustum);
+                    chunk.mesh.visible = this.terrainVisible && chunk.isInFrustum(this.frustum);
                 }
             }
         }
@@ -1073,6 +1092,15 @@ export class VoxelGame {
     updateDebug() {
         this.uiManager.updatePosition(this.player.position);
         this.uiManager.updateFPS();
+
+        // Track scene object count every 5 seconds
+        const now = performance.now();
+        if (!this._lastSceneCount || now - this._lastSceneCount > 5000) {
+            this._lastSceneCount = now;
+            let count = 0;
+            this.scene.traverse(() => count++);
+            console.log(`[Scene] Total objects: ${count}, Animals: ${this.animals.length}, Remote players: ${this.remotePlayers.size}`);
+        }
     }
 
     animate() {
@@ -1226,23 +1254,50 @@ export class VoxelGame {
             this.waterSystem.update(deltaTime);
         }
 
-        // Update Remote Players
-        const remoteDelta = deltaTime;
-        for (const remotePlayer of this.remotePlayers.values()) {
-            remotePlayer.update(remoteDelta);
+        // Update Remote Players (toggle with P key for debugging)
+        if (!this._disableRemotePlayers && this.remotePlayers) {
+            const remoteDelta = deltaTime;
+            for (const remotePlayer of this.remotePlayers.values()) {
+                remotePlayer.update(remoteDelta);
+            }
         }
 
-        // Send State to Server (Colyseus)
-        if (this.networkManager.isConnected()) {
-            const animation = (this.inputManager.keys['w'] || this.inputManager.keys['s'] ||
-                this.inputManager.keys['a'] || this.inputManager.keys['d']) ? 'walking' : 'idle';
+        // Send State to Server (Socket.IO)
+        // Respect debug toggle to isolate network performance
+        // Send State to Server (Socket.IO)
+        // Respect debug toggle to isolate network performance
+        if (this.networkManager && this.networkManager.isConnected() && !this._disableRemotePlayers) {
+            const now = performance.now();
+            // Throttle updates to 20Hz (every 50ms)
+            if (now - (this.lastNetworkUpdate || 0) > 50) {
+                this.lastNetworkUpdate = now;
 
-            this.networkManager.sendPlayerUpdate(
-                this.player.position,
-                this.player.rotation,
-                animation,
-                this.inventory.getSelectedItem()?.item
-            );
+                const animation = (this.inputManager.keys['w'] || this.inputManager.keys['s'] ||
+                    this.inputManager.keys['a'] || this.inputManager.keys['d']) ? 'walking' : 'idle';
+
+                // Sanitize and flatten data to ensure minimal payload size
+                // (Prevent potentially sending large Three.js structures or circular references)
+                const sanitizedPos = {
+                    x: Math.round(this.player.position.x * 100) / 100,
+                    y: Math.round(this.player.position.y * 100) / 100,
+                    z: Math.round(this.player.position.z * 100) / 100
+                };
+                const sanitizedRot = {
+                    x: Math.round(this.player.rotation.x * 100) / 100,
+                    y: Math.round(this.player.rotation.y * 100) / 100
+                };
+
+                // heldItem should be just the ID string (e.g., 'sword') or null
+                let heldItemId = this.inventory.getSelectedItem()?.item;
+                if (typeof heldItemId !== 'string') heldItemId = null;
+
+                this.networkManager.sendPlayerUpdate(
+                    sanitizedPos,
+                    sanitizedRot,
+                    animation,
+                    heldItemId
+                );
+            }
         }
 
         this.updateDebug();
@@ -1250,11 +1305,22 @@ export class VoxelGame {
     }
     killAllAnimals() {
         for (const animal of this.animals) {
-            animal.dispose();
-            this.scene.remove(animal.mesh);
+            if (animal.dispose) animal.dispose();
+            if (animal.mesh) this.scene.remove(animal.mesh);
         }
         this.animals = [];
-        console.log('Killed all animals.');
+
+        if (this.dragon) {
+            if (this.dragon.dispose) this.dragon.dispose();
+            if (this.dragon.mesh) this.scene.remove(this.dragon.mesh);
+            this.dragon = null;
+        }
+
+        if (this.entityManager) {
+            this.entityManager.clearAll();
+        }
+
+        console.log('Killed all animals, dragon, and ambient entities.');
     }
 
     cleanupEntities() {
@@ -1270,7 +1336,7 @@ export class VoxelGame {
     }
 
     regenerateWithSeed(seed) {
-        console.log('Regenerating world with seed:', seed);
+        console.log('[Game] Regenerating world with seed:', seed);
 
         // Update generator seeds
         this.worldGen.setSeed(seed);
@@ -1279,32 +1345,72 @@ export class VoxelGame {
         // Clear existing chunks
         for (const [key, chunk] of this.chunks) {
             chunk.dispose();
-            this.cleanupBlockData(chunk);
+            if (chunk.mesh) {
+                this.scene.remove(chunk.mesh);
+            }
         }
         this.chunks.clear();
         this.generatedChunks.clear();
+        this.chunkGenQueue = [];
+
+        // Reset chunk tracking to force regeneration
         this.lastChunkX = null;
         this.lastChunkZ = null;
-        this.blockData.clear(); // Clear block data too
 
         // Clear entities
         this.killAllAnimals();
-        this.spawnManager.spawnedChunks.clear();
+        if (this.spawnManager && this.spawnManager.spawnedChunks) {
+            this.spawnManager.spawnedChunks.clear();
+        }
+
+        // Respawn player at new surface
+        this.spawnPlayer();
 
         // Regenerate around player
         this.checkChunks();
         this.updateChunks();
 
-        // Respawn player at new surface
-        this.spawnPlayer();
-        this.spawnAnimals();
+        console.log('[Game] World regenerated with seed:', seed);
     }
 
     toggleTerrain(visible) {
+        this.terrainVisible = visible;
         for (const chunk of this.chunks.values()) {
             if (chunk.mesh) {
                 chunk.mesh.visible = visible;
             }
         }
+    }
+
+    toggleShadows(enabled) {
+        this.renderer.shadowMap.enabled = enabled;
+        this.scene.traverse((obj) => {
+            if (obj.isMesh) {
+                if (obj.castShadow) obj.castShadow = enabled;
+                if (obj.receiveShadow) obj.receiveShadow = enabled;
+            }
+            if (obj.isLight) {
+                obj.castShadow = enabled;
+            }
+        });
+        // Reload materials? Some might need update.
+        // Usually renderer setting is enough for next frame, but materials need needsUpdate=true
+        this.materials.forEach(m => m.needsUpdate = true);
+        console.log(`[Game] Shadows: ${enabled}`);
+    }
+
+    toggleWater(enabled) {
+        if (this.waterSystem) {
+            this.waterSystem.enabled = enabled;
+        }
+        console.log(`[Game] Water Logic: ${enabled}`);
+    }
+
+    toggleWeather(enabled) {
+        if (this.weatherSystem) {
+            this.weatherSystem.enabled = enabled;
+            if (!enabled) this.weatherSystem.clear(); // Clear existing rain/snow
+        }
+        console.log(`[Game] Weather: ${enabled}`);
     }
 }

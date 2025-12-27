@@ -27,6 +27,7 @@ export class WaterSystem {
 
         // Queue for water blocks to process
         this.updateQueue = [];
+        this.enabled = true;
     }
 
     /**
@@ -151,6 +152,8 @@ export class WaterSystem {
      * Main update loop - called from game animate()
      */
     update(deltaTime) {
+        if (!this.enabled) return;
+
         this.timeSinceUpdate += deltaTime;
 
         if (this.timeSinceUpdate < this.updateInterval) {

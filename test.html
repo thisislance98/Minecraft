@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket Performance Test</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        canvas {
+            background: #222;
+            border: 1px solid #444;
+            margin-top: 20px;
+        }
+
+        .stats {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #88ff88;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            border: 1px solid #333;
+            padding: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+
+        input {
+            padding: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Socket.IO Performance Test</h1>
+
+    <div class="controls">
+        <input type="text" id="socket-url" value="http://localhost:2567" placeholder="Socket URL">
+        <button id="btn-create">Create Room</button>
+        <input type="text" id="room-input" placeholder="Room ID">
+        <button id="btn-join">Join Room</button>
+        <button id="btn-disconnect" style="background:#522;">Disconnect</button>
+    </div>
+
+    <div id="status">Status: Disconnected</div>
+    <div id="fps" class="stats">FPS: 0</div>
+    <div id="net-stats" class="stats">In: 0/s | Out: 0/s | Room: -</div>
+
+    <canvas id="canvas" width="600" height="400"></canvas>
+
+    <!-- Load Socket.IO from CDN -->
+    <script type="module">
+        import { io } from "https://cdn.socket.io/4.8.1/socket.io.esm.min.js";
+
+        // State
+        let socket = null;
+        let roomId = null;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let lastFpsTime = 0;
+        let incomingCount = 0;
+        let outgoingCount = 0;
+        let lastNetTime = 0;
+
+        // Visual objects
+        const players = new Map(); // id -> {x, y, color}
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const fpsEl = document.getElementById('fps');
+        const netEl = document.getElementById('net-stats');
+
+        // Main Loop
+        function loop() {
+            const now = performance.now();
+            const delta = now - lastTime;
+            lastTime = now;
+
+            // 1. Calculate FPS
+            frameCount++;
+            if (now - lastFpsTime >= 1000) {
+                fpsEl.textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+
+            // 2. Count Network Stats
+            if (now - lastNetTime >= 1000) {
+                netEl.textContent = `In: ${incomingCount}/s | Out: ${outgoingCount}/s | Room: ${roomId || '-'}`;
+                incomingCount = 0;
+                outgoingCount = 0;
+                lastNetTime = now;
+            }
+
+            // 3. Move Local Player (Orbit)
+            const localX = 300 + Math.cos(now * 0.002) * 100;
+            const localY = 200 + Math.sin(now * 0.002) * 100;
+
+            // 4. Send Update (20Hz)
+            if (socket && socket.connected && roomId) {
+                // Throttle to ~50ms
+                if (!socket.lastUpdate || now - socket.lastUpdate > 50) {
+                    socket.lastUpdate = now;
+                    socket.emit('player:update', {
+                        position: { x: localX, y: 0, z: localY }, // Map 2D to 3D for server compatibility
+                        rotation: { x: 0, y: 0 },
+                        animation: 'walking'
+                    });
+                    outgoingCount++;
+                }
+            }
+
+            // 5. Draw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Local
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(localX - 10, localY - 10, 20, 20);
+            ctx.fillText("You", localX - 10, localY - 15);
+
+            // Draw Remote
+            for (const [id, p] of players) {
+                // Interpolate (simple)
+                p.x += (p.targetX - p.x) * 0.1;
+                p.y += (p.targetY - p.y) * 0.1;
+
+                ctx.fillStyle = p.color || '#ff00ff';
+                ctx.fillRect(p.x - 10, p.y - 10, 20, 20);
+                ctx.fillText(id.substring(0, 4), p.x - 10, p.y - 15);
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        // Setup Socket
+        function connect() {
+            if (socket) socket.disconnect();
+
+            statusEl.textContent = "Status: Connecting...";
+            const url = document.getElementById('socket-url').value;
+            socket = io(url);
+
+            socket.on('connect', () => {
+                statusEl.textContent = `Status: Connected (${socket.id})`;
+            });
+
+            socket.on('disconnect', () => {
+                statusEl.textContent = "Status: Disconnected";
+                roomId = null;
+                players.clear();
+            });
+
+            // Room Events
+            socket.on('room:joined', (data) => {
+                roomId = data.roomId;
+                console.log('Joined room:', data);
+
+                // Add existing players
+                data.players.forEach(p => {
+                    if (p.id !== socket.id) {
+                        players.set(p.id, {
+                            x: p.position.x || 300,
+                            y: p.position.z || 200,
+                            targetX: p.position.x,
+                            targetY: p.position.z,
+                            color: '#ff8800'
+                        });
+                    }
+                });
+            });
+
+            socket.on('player:joined', (p) => {
+                console.log('Player joined:', p);
+                players.set(p.id, {
+                    x: 300, y: 200,
+                    targetX: 300, targetY: 200,
+                    color: '#ff8800'
+                });
+            });
+
+            socket.on('player:left', (id) => {
+                console.log('Player left:', id);
+                players.delete(id);
+            });
+
+            socket.on('player:update', (data) => {
+                if (data.id === socket.id) return;
+                incomingCount++;
+
+                const p = players.get(data.id);
+                if (p) {
+                    // Update target
+                    if (data.position) {
+                        p.targetX = data.position.x;
+                        p.targetY = data.position.z; // Use Z as Y for 2D visualization
+                    }
+                }
+            });
+        }
+
+        // UI Handlers
+        document.getElementById('btn-create').onclick = () => {
+            if (!socket || !socket.connected) connect();
+            // Wait for connection then create
+            setTimeout(() => {
+                socket.emit('room:create', { playerName: 'Tester', roomId: document.getElementById('room-input').value || null }, (res) => {
+                    if (res.error) alert(res.error);
+                    else console.log('Created:', res);
+                });
+            }, 500);
+        };
+
+        document.getElementById('btn-join').onclick = () => {
+            if (!socket || !socket.connected) connect();
+            setTimeout(() => {
+                const id = document.getElementById('room-input').value;
+                if (!id) return alert("Enter Room ID");
+                socket.emit('room:join', { roomId: id, playerName: 'Joiner' }, (res) => {
+                    if (res.error) alert(res.error);
+                });
+            }, 500);
+        };
+
+        document.getElementById('btn-disconnect').onclick = () => {
+            if (socket) socket.disconnect();
+        };
+
+        // Start Loop
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+
+</html>

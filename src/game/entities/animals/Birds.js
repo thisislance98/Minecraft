@@ -301,4 +301,21 @@ export class BirdManager {
         // Update time for wing animation
         this.time += dt;
     }
+
+    clear() {
+        this.count = 0;
+        if (this.birdGroup) {
+            this.game.scene.remove(this.birdGroup);
+            this.birdGroup.traverse(obj => {
+                if (obj.isMesh) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                }
+            });
+        }
+        this.birds = [];
+    }
 }

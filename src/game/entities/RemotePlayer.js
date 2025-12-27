@@ -5,10 +5,10 @@ import * as THREE from 'three';
  * Handles visual rendering and smooth interpolation of position updates.
  */
 export class RemotePlayer {
-    constructor(game, peerId, playerState) {
+    constructor(game, actorNr, playerState) {
         this.game = game;
-        this.peerId = peerId;
-        this.playerState = playerState;
+        this.actorNr = actorNr; // Player ID from Socket.IO
+        this.playerState = playerState; // Optional initial state
 
         // Transform state
         this.position = new THREE.Vector3(32, 50, 32);
@@ -26,24 +26,31 @@ export class RemotePlayer {
 
         // Create mesh
         this.mesh = new THREE.Group();
-        this.createBody();
-        this.createNameLabel();
+
+        // DEBUG: Simple Box Mode (like test.html)
+        // this.createBody();
+        // this.createNameLabel();
+
+        const debugGeo = new THREE.BoxGeometry(1, 2, 1);
+        const debugMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true });
+        this.debugBox = new THREE.Mesh(debugGeo, debugMat);
+        this.mesh.add(this.debugBox);
 
         game.scene.add(this.mesh);
+        console.log(`[RemotePlayer] Created ghost player ${actorNr} (visuals disabled)`);
 
-        // Get reference to Colyseus player state
+        // Get reference to player state
         if (!this.playerState) {
             this.updatePlayerStateReference();
         }
     }
 
     /**
-     * Get the Colyseus player state for this remote player
+     * Get player state reference (for backwards compatibility)
+     * We use event-based updates via updateFromNetwork() instead
      */
     updatePlayerStateReference() {
-        if (!this.playerState && this.game.networkManager.room) {
-            this.playerState = this.game.networkManager.room.state.players.get(this.peerId);
-        }
+        // No-op - updates come via updateFromNetwork()
     }
 
     /**
@@ -120,7 +127,7 @@ export class RemotePlayer {
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.peerId.substring(0, 8), 128, 32);
+        ctx.fillText(`Player ${this.actorNr}`, 128, 32);
 
         const texture = new THREE.CanvasTexture(canvas);
         const material = new THREE.SpriteMaterial({
@@ -157,22 +164,8 @@ export class RemotePlayer {
      * Update every frame
      */
     update(deltaTime) {
-        // Update from Colyseus state if available
-        if (!this.playerState) {
-            this.updatePlayerStateReference();
-        }
-
-        if (this.playerState) {
-            this.targetPosition.set(
-                this.playerState.x,
-                this.playerState.y,
-                this.playerState.z
-            );
-            this.targetRotation.x = this.playerState.rotationX;
-            this.targetRotation.y = this.playerState.rotationY;
-            this.animation = this.playerState.animation || 'idle';
-            this.heldItem = this.playerState.heldItem;
-        }
+        // Position updates come via updateFromNetwork()
+        // We just interpolate here
 
         // Interpolate position
         this.position.lerp(this.targetPosition, this.lerpFactor);
@@ -181,19 +174,24 @@ export class RemotePlayer {
         // Interpolate rotation
         this.rotation.x += (this.targetRotation.x - this.rotation.x) * this.lerpFactor;
         this.rotation.y += (this.targetRotation.y - this.rotation.y) * this.lerpFactor;
-        this.bodyGroup.rotation.y = this.rotation.y;
-        this.head.rotation.x = -this.rotation.x * 0.5;
 
-        // Animate based on movement
-        const speed = this.targetPosition.distanceTo(this.position);
-        if (speed > 0.01 || this.animation === 'walking') {
-            this.animateWalk(deltaTime);
-        } else {
-            this.animateIdle();
+        if (this.bodyGroup) {
+            this.bodyGroup.rotation.y = this.rotation.y;
+            this.head.rotation.x = -this.rotation.x * 0.5;
+        }
+
+        // Animate based on movement (Only if body exists)
+        if (this.leftArm) {
+            const speed = this.targetPosition.distanceTo(this.position);
+            if (speed > 0.01 || this.animation === 'walking') {
+                this.animateWalk(deltaTime);
+            } else {
+                this.animateIdle();
+            }
         }
 
         // Keep name label facing camera
-        if (this.game.camera) {
+        if (this.game.camera && this.nameLabel) {
             this.nameLabel.lookAt(this.game.camera.position);
         }
     }
@@ -237,3 +235,4 @@ export class RemotePlayer {
         });
     }
 }
+

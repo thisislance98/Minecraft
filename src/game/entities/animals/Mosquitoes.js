@@ -326,4 +326,21 @@ export class MosquitoManager {
 
         this.time += dt;
     }
+
+    clear() {
+        this.count = 0;
+        if (this.mosquitoGroup) {
+            this.game.scene.remove(this.mosquitoGroup);
+            this.mosquitoGroup.traverse(obj => {
+                if (obj.isMesh) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                        else obj.material.dispose();
+                    }
+                }
+            });
+        }
+        this.mosquitoes = [];
+    }
 }

@@ -23,6 +23,14 @@ export class WeatherSystem {
         this.flashIntensity = 0;
 
         this.initRain();
+        this.enabled = true;
+    }
+
+    clear() {
+        this.currentWeather = 'clear';
+        if (this.rainSystem) this.rainSystem.visible = false;
+        // Reset environment if possible, or define default
+        if (this.game.environment) this.game.environment.setWeather('clear');
     }
 
     initRain() {
@@ -72,6 +80,8 @@ export class WeatherSystem {
     }
 
     update(deltaTime, playerPosition) {
+        if (!this.enabled) return;
+
         this.weatherTimer += deltaTime;
         if (this.weatherTimer > this.weatherDuration) {
             this.weatherTimer = 0;

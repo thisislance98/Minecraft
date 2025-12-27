@@ -1,234 +1,490 @@
 import { io } from 'socket.io-client';
+import * as THREE from 'three';
+import Peer from 'simple-peer/simplepeer.min.js';
 
 export class SocketManager {
     constructor(game) {
         this.game = game;
         this.socket = null;
         this.roomId = null;
-        this.callbacks = {
-            onPlayerJoin: null,
-            onPlayerLeave: null,
-            onPlayerUpdate: null,
-            onBlockChange: null,
-            onRoomJoined: null
-        };
-        console.log('[SocketManager] Initialized (Minimal V2)');
+        this.socketId = null;
+        this.playerMeshes = new Map(); // id -> THREE.Group
+
+        // Voice Chat
+        this.localStream = null;
+        this.peers = new Map(); // id -> Peer
+        this.pendingStreams = new Map(); // id -> MediaStream (if mesh not ready)
+        this.voiceEnabled = false;
+        this.lastVoiceState = false;
+
+        this.connect();
     }
 
-    isConnected() {
-        return this.socket && this.socket.connected;
-    }
+    connect() {
+        const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const serverUrl = isDev ? 'http://localhost:2567' : window.location.origin;
 
-    async connect() {
-        if (this.socket && this.socket.connected) return;
+        console.log(`[SocketManager] Connecting to ${serverUrl}...`);
 
-        // Determine URL - default to 2567 for dev
-        const url = window.location.hostname === 'localhost'
-            ? 'http://localhost:2567'
-            : window.location.origin;
-
-        console.log('[SocketManager] Connecting to:', url);
-        this.socket = io(url);
-
-        return new Promise((resolve) => {
-            this.socket.on('connect', () => {
-                console.log('[SocketManager] Connected:', this.socket.id);
-                this._setupListeners();
-                resolve();
-            });
-            this.socket.on('connect_error', (err) => {
-                console.error('[SocketManager] Connection failed:', err);
-            });
-        });
-    }
-
-    _setupListeners() {
-        if (!this.socket) return;
-
-        // Player Events
-        this.socket.on('player:joined', (data) => {
-            console.log('[SocketManager] Player joined:', data.id);
-            // Match legacy signature: (playerId, playerData)
-            this.callbacks.onPlayerJoin?.(data.id, data);
-            this._updatePlayerCount();
+        this.socket = io(serverUrl, {
+            transports: ['websocket'],
+            reconnection: true
         });
 
-        this.socket.on('player:left', (id) => {
-            console.log('[SocketManager] Player left:', id);
-            this.callbacks.onPlayerLeave?.(id);
-            this._updatePlayerCount();
-        });
+        this.socket.on('connect', () => {
+            console.log('[SocketManager] Connected! ID:', this.socket.id);
+            this.socketId = this.socket.id;
+            this.game.uiManager?.updateNetworkStatus('Connected');
 
-        this.socket.on('player:update', (data) => {
-            // Debug Toggle: Skip incoming updates
-            if (this.game._disableRemotePlayers) return;
+            // Automatically join a game
+            this.joinGame();
 
-            if (data.id !== this.socket.id) {
-                this.callbacks.onPlayerUpdate?.(data.id, data);
-            }
-        });
-
-        // Room Events
-        this.socket.on('room:joined', (data) => {
-            console.log('[SocketManager] Room joined:', data);
-            this.roomId = data.roomId;
-            this.callbacks.onRoomJoined?.(data);
-
-            // Initial player count update
-            if (this.game.uiManager) {
-                // UI expects count
-                const count = data.players ? data.players.length : 1;
-                this.game.uiManager.updatePlayerCount(count);
-                this.game.uiManager.showNetworkStatus(this.roomId, data.isHost);
-            }
-
-            // Call onWorldSeed if registered, passing the worldSeed from room data
-            if (this.callbacks.onWorldSeed && data.worldSeed) {
-                this.callbacks.onWorldSeed(data.worldSeed);
-            }
-        });
-
-        this.socket.on('block:changed', (data) => {
-            this.callbacks.onBlockChange?.(data.x, data.y, data.z, data.blockType);
+            // Initialize voice chat
+            this.initVoiceChat();
         });
 
         this.socket.on('disconnect', () => {
             console.log('[SocketManager] Disconnected');
             this.roomId = null;
-            this.game.uiManager?.showNetworkStatus(null);
+            this.game.uiManager?.updateNetworkStatus('Disconnected', null, null);
         });
-    }
 
-    // === Public API ===
+        this.socket.on('room:joined', (data) => {
+            console.log('[SocketManager] Joined room:', data);
+            this.roomId = data.roomId;
 
-    on(event, callback) {
-        // Map simplified event names to internal callbacks
-        // VoxelGame uses 'onPlayerJoin' style keys
-        switch (event) {
-            case 'player:join':
-            case 'onPlayerJoin': // Legacy support
-                this.callbacks.onPlayerJoin = callback;
-                break;
-            case 'player:leave':
-            case 'onPlayerLeave':
-                this.callbacks.onPlayerLeave = callback;
-                break;
-            case 'player:update':
-            case 'onPlayerUpdate':
-                this.callbacks.onPlayerUpdate = callback;
-                break;
-            case 'block:change':
-            case 'onBlockChange':
-                this.callbacks.onBlockChange = callback;
-                break;
-            case 'room:joined':
-            case 'onRoomJoined': // Might be used?
-                this.callbacks.onRoomJoined = callback;
-                break;
-            case 'onWorldSeed': // VoxelGame uses onWorldSeed which maps to room:joined? 
-                // Wait, VoxelGame uses onWorldSeed separate from onPlayerJoin.
-                // onRoomJoined usually carries seed.
-                // If VoxelGame expects 'onWorldSeed' to be called with seed...
-                // I need to check VoxelGame logic.
-                // This will be called from the room:joined listener
-                this.callbacks.onWorldSeed = callback;
-                break;
-        }
-        return this; // Enable chaining
-    }
+            const role = data.isHost ? 'Host' : 'Client';
+            this.game.uiManager?.updateNetworkStatus('In Room', role, data.roomId);
 
-    async createRoom(options = {}) {
-        if (!this.isConnected()) await this.connect();
+            // Notify game of initial state if needed
+            if (data.worldSeed && this.game.setWorldSeed) {
+                // Potentially re-seed world here if game implementation supports it
+                console.log(`[SocketManager] Room World Seed: ${data.worldSeed}`);
+            }
 
-        return new Promise((resolve, reject) => {
-            const payload = {
-                playerName: options.playerName || 'Host',
-                worldSeed: options.worldSeed || Math.floor(Math.random() * 1000000),
-                roomId: options.roomId || null
-            };
+            if (data.time !== undefined && this.game.environment) {
+                this.game.environment.setTimeOfDay(data.time);
+                console.log(`[SocketManager] Initial Room Time: ${data.time}`);
+            }
+        });
 
-            this.socket.emit('room:create', payload, (res) => {
-                if (res.error) {
-                    console.error('Create room failed:', res.error);
-                    alert(res.error);
-                    reject(res.error);
-                } else {
-                    this.roomId = res.roomId;
-                    resolve(res.roomId);
+        this.socket.on('player:joined', (data) => {
+            console.log('[SocketManager] Another player joined:', data.id);
+            // If we have a local stream, initiate a peer connection with the new player
+            if (this.localStream) {
+                this.createPeer(data.id, true);
+            }
+        });
+
+        this.socket.on('player:left', (id) => {
+            console.log('[SocketManager] Player left:', id);
+            this.game.uiManager?.updateRemotePlayerStatus(id, null); // Remove from UI
+
+            // Close peer connection
+            if (this.peers.has(id)) {
+                this.peers.get(id).destroy();
+                this.peers.delete(id);
+            }
+
+            // Remove 3D mesh
+            const mesh = this.playerMeshes.get(id);
+            if (mesh) {
+                this.game.scene.remove(mesh);
+                this.playerMeshes.delete(id);
+            }
+        });
+
+        this.socket.on('signal', (data) => {
+            // data: { from, signal }
+            const peer = this.peers.get(data.from);
+            if (peer) {
+                peer.signal(data.signal);
+            } else {
+                // If we didn't initiate, the other side did. Create a non-initiator peer.
+                this.createPeer(data.from, false, data.signal);
+            }
+        });
+
+        this.socket.on('player:move', (data) => {
+            // data: { id, pos, rotY }
+            if (data && data.pos) {
+                this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY);
+                this.updatePlayerMesh(data.id, data.pos, data.rotY);
+            }
+        });
+
+        // Handle block changes from other players (real-time sync)
+        this.socket.on('block:change', (data) => {
+            // data: { id, x, y, z, type }
+            if (data) {
+                console.log(`[SocketManager] Block change from ${data.id}: ${data.x},${data.y},${data.z} -> ${data.type}`);
+                // skipBroadcast = true to avoid echoing back to server
+                this.game.setBlock(data.x, data.y, data.z, data.type, false, true);
+            }
+        });
+
+        // Handle initial block state on room join (persisted blocks)
+        this.socket.on('blocks:initial', (blocks) => {
+            // Use the game's robust persisted block handler
+            if (this.game.addPersistedBlocks) {
+                this.game.addPersistedBlocks(blocks);
+            } else {
+                console.warn('[SocketManager] game.addPersistedBlocks not found, using fallback (may be overwritten)');
+                for (const block of blocks) {
+                    this.game.setBlock(block.x, block.y, block.z, block.type, true, true);
                 }
-            });
+                this.game.updateChunks();
+            }
+        });
+
+        // Handle time of day sync
+        this.socket.on('world:time', (time) => {
+            if (this.game.environment) {
+                // Smoothly lerp or just set?
+                // For now, just set it. It's updated every second or so.
+                // If the gap is large, we might want to lerp, but simple assignment is robust.
+                this.game.environment.setTimeOfDay(time);
+            }
+        });
+
+        // Add an animation loop for remote characters
+        this.lastUpdateTime = performance.now();
+        this.animateRemotePlayers();
+    }
+
+    animateRemotePlayers() {
+        requestAnimationFrame(() => this.animateRemotePlayers());
+
+        // 0. Update Push-to-Talk
+        const voiceActive = this.game.inputManager.isActionActive('VOICE');
+        if (voiceActive !== this.lastVoiceState) {
+            this.lastVoiceState = voiceActive;
+            if (this.localStream) {
+                console.log(`[SocketManager] Voice ${voiceActive ? 'ON' : 'OFF'}`);
+                this.localStream.getAudioTracks().forEach(t => t.enabled = voiceActive);
+                this.game.uiManager?.toggleVoiceTransmitIndicator(voiceActive);
+            }
+        }
+
+        const now = performance.now();
+        const deltaTime = (now - this.lastUpdateTime) / 1000;
+        this.lastUpdateTime = now;
+
+        this.playerMeshes.forEach((meshInfo, id) => {
+            // 1. Interpolate Position
+            meshInfo.group.position.lerp(meshInfo.targetPosition, 0.2);
+
+            // 2. Interpolate Rotation (Smooth turning)
+            let diff = meshInfo.targetRotationY - meshInfo.group.rotation.y;
+            // Normalize angle diff to [-PI, PI]
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            meshInfo.group.rotation.y += diff * 0.15;
+
+            // 3. Handle Walking Animation
+            const distToTarget = meshInfo.group.position.distanceTo(meshInfo.targetPosition);
+            const isMoving = distToTarget > 0.05;
+
+            // Smoothly transition walk amplitude
+            meshInfo.walkAmplitude = THREE.MathUtils.lerp(meshInfo.walkAmplitude, isMoving ? 1 : 0, 0.1);
+
+            if (meshInfo.walkAmplitude > 0.01) {
+                meshInfo.animationTime += deltaTime * 10; // Animation speed
+                const swing = Math.sin(meshInfo.animationTime) * 0.6 * meshInfo.walkAmplitude;
+
+                if (meshInfo.leftArm) meshInfo.leftArm.rotation.x = swing;
+                if (meshInfo.rightArm) meshInfo.rightArm.rotation.x = -swing;
+                if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x = -swing;
+                if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x = swing;
+            } else {
+                // Return limbs to neutral
+                if (meshInfo.leftArm) meshInfo.leftArm.rotation.x *= 0.9;
+                if (meshInfo.rightArm) meshInfo.rightArm.rotation.x *= 0.9;
+                if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x *= 0.9;
+                if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x *= 0.9;
+            }
         });
     }
 
-    async joinRoom(roomId, options = {}) {
-        if (!this.isConnected()) await this.connect();
+    joinGame() {
+        if (this.socket && this.socket.connected) {
+            console.log('[SocketManager] Requesting to join game...');
+            this.socket.emit('join_game');
+        }
+    }
 
-        return new Promise((resolve, reject) => {
-            const payload = {
-                roomId: roomId,
-                playerName: options.playerName || 'Guest'
+    /**
+     * Check if connected and in a room
+     */
+    isConnected() {
+        return this.socket && this.socket.connected && this.roomId;
+    }
+
+    /**
+     * Send position update
+     * @param {Object} pos - {x, y, z}
+     * @param {number} rotY - Rotation around Y axis
+     */
+    sendPosition(pos, rotY) {
+        if (!this.isConnected()) return;
+
+        // Convert THREE.Vector3 to plain object for socket transmission
+        const posData = { x: pos.x, y: pos.y, z: pos.z };
+
+        this.socket.emit('player:move', { pos: posData, rotY });
+    }
+
+    /**
+     * Send block change to server for sync and persistence
+     * @param {number} x - Block X coordinate
+     * @param {number} y - Block Y coordinate  
+     * @param {number} z - Block Z coordinate
+     * @param {string|null} type - Block type (null for air/deletion)
+     */
+    sendBlockChange(x, y, z, type) {
+        if (!this.isConnected()) return;
+
+        this.socket.emit('block:change', {
+            x: Math.floor(x),
+            y: Math.floor(y),
+            z: Math.floor(z),
+            type
+        });
+    }
+
+    /**
+     * Send time set request to server
+     * @param {number} time - Time of day (0.0 to 1.0)
+     */
+    sendSetTime(time) {
+        if (!this.isConnected()) return;
+        this.socket.emit('world:set_time', time);
+    }
+
+    // Voice chat methods below
+
+    initVoiceChat() {
+        if (this.localStream) return;
+
+        console.log('[SocketManager] Initializing Voice Chat...');
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then(stream => {
+                console.log('[SocketManager] Microphone access granted.');
+                this.localStream = stream;
+
+                // Mute by default for PTT
+                stream.getAudioTracks().forEach(t => t.enabled = false);
+
+                // If we are already in a room with players, we might need to initiate peers now
+                // (Though usually others join after us or we join after them)
+            })
+            .catch(err => {
+                console.error('[SocketManager] Failed to get local stream', err);
+                this.game.uiManager?.addChatMessage('system', 'Microphone access denied. Voice chat disabled.');
+            });
+    }
+
+    createPeer(id, initiator, initialSignal = null) {
+        if (this.peers.has(id)) return;
+
+        console.log(`[SocketManager] Creating Peer for ${id} (initiator: ${initiator})`);
+
+        const peer = new Peer({
+            initiator: initiator,
+            trickle: false,
+            stream: this.localStream
+        });
+
+        peer.on('signal', data => {
+            this.socket.emit('signal', { to: id, signal: data });
+        });
+
+        peer.on('stream', stream => {
+            console.log(`[SocketManager] Received stream from ${id}`);
+            this.setupSpatialAudio(id, stream);
+        });
+
+        peer.on('error', err => {
+            console.error(`[SocketManager] Peer error with ${id}:`, err);
+        });
+
+        peer.on('close', () => {
+            console.log(`[SocketManager] Peer connection with ${id} closed`);
+            this.peers.delete(id);
+        });
+
+        if (initialSignal) {
+            peer.signal(initialSignal);
+        }
+
+        this.peers.set(id, peer);
+    }
+
+    setupSpatialAudio(id, stream) {
+        const meshInfo = this.playerMeshes.get(id);
+        if (!meshInfo) {
+            console.warn(`[SocketManager] Mesh not found for ${id}, storing pending stream.`);
+            this.pendingStreams.set(id, stream);
+            return;
+        }
+
+        if (!this.game.audioListener) {
+            console.error('[SocketManager] AudioListener not found on camera');
+            return;
+        }
+
+        // Resume AudioContext on first interaction if suspended
+        const context = this.game.audioListener.context;
+        if (context.state === 'suspended') {
+            const resume = () => {
+                context.resume().then(() => {
+                    console.log('[SocketManager] AudioContext resumed');
+                });
+                window.removeEventListener('click', resume);
+                window.removeEventListener('keydown', resume);
             };
-
-            this.socket.emit('room:join', payload, (res) => {
-                if (res.error) {
-                    console.error('Join room failed:', res.error);
-                    alert(res.error);
-                    reject(res.error);
-                } else {
-                    this.roomId = res.roomId;
-                    resolve(res);
-                }
-            });
-        });
-    }
-
-    disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
+            window.addEventListener('click', resume);
+            window.addEventListener('keydown', resume);
         }
-        this.roomId = null;
+
+        // Create PositionalAudio
+        const sound = new THREE.PositionalAudio(this.game.audioListener);
+
+        // Use MediaStreamSource
+        const source = context.createMediaStreamSource(stream);
+
+        sound.setNodeSource(source);
+        sound.setRefDistance(5); // Distance at which sound starts to attenuate
+        sound.setMaxDistance(50); // Distance at which sound is completely silent
+        sound.setRolloffFactor(1);
+
+        meshInfo.group.add(sound);
+        meshInfo.spatialAudio = sound;
+
+        console.log(`[SocketManager] Spatial audio setup for ${id}`);
     }
 
-    sendPlayerUpdate(position, rotation, animation, heldItem) {
-        if (this.socket && this.roomId) { // Removed isConnected checks for speed
-            // Debug Toggle: Skip outgoing
-            if (this.game._disableRemotePlayers) return;
+    updatePlayerMesh(id, pos, rotY) {
+        let meshInfo = this.playerMeshes.get(id);
 
-            this.socket.emit('player:update', {
-                position: { x: position.x, y: position.y, z: position.z },
-                rotation: { x: rotation.x, y: rotation.y },
-                animation,
-                heldItem
-            });
+        if (!meshInfo || meshInfo instanceof THREE.Object3D) {
+            if (meshInfo instanceof THREE.Object3D) {
+                this.game.scene.remove(meshInfo);
+            }
+            meshInfo = this.createCharacterModel(id);
+            this.playerMeshes.set(id, meshInfo);
+
+            // Initial position
+            meshInfo.group.position.copy(pos);
+            meshInfo.targetPosition.copy(pos);
+
+            // Check if we have a pending stream for this mesh
+            const pendingStream = this.pendingStreams.get(id);
+            if (pendingStream) {
+                console.log(`[SocketManager] Found pending stream for ${id}, setting up spatial audio now.`);
+                this.setupSpatialAudio(id, pendingStream);
+                this.pendingStreams.delete(id);
+            }
+            return;
         }
-    }
 
-    sendBlockChange(x, y, z, blockType) {
-        if (this.socket && this.roomId) {
-            this.socket.emit('block:change', { x, y, z, blockType });
+        // Set target position for interpolation
+        const targetPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+
+        // Update target rotation
+        if (rotY !== undefined) {
+            meshInfo.targetRotationY = rotY;
+        } else {
+            // Fallback: face movement if no explicit rotation provided
+            const dx = targetPos.x - meshInfo.targetPosition.x;
+            const dz = targetPos.z - meshInfo.targetPosition.z;
+            if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
+                meshInfo.targetRotationY = Math.atan2(dx, dz) + Math.PI;
+            }
         }
+
+        meshInfo.targetPosition.copy(targetPos);
     }
 
-    getShareableLink() {
-        if (!this.roomId) return null;
-        const url = new URL(window.location.href);
-        url.searchParams.set('room', this.roomId);
-        return url.toString();
-    }
+    createCharacterModel(id) {
+        const group = new THREE.Group();
 
-    _updatePlayerCount() {
-        // VoxelGame maintains local players, so we might need help or just heuristic
-        // The proper way is counting VoxelGame.remotePlayers map + 1
-        if (this.game.uiManager) {
-            const count = (this.game.remotePlayers?.size || 0) + 1;
-            this.game.uiManager.updatePlayerCount(count);
-        }
-    }
+        // Colors matching Player.js (Steve skin)
+        const skinMat = new THREE.MeshLambertMaterial({ color: 0xB58D6E });
+        const shirtMat = new THREE.MeshLambertMaterial({ color: 0x00AAAA });
+        const pantsMat = new THREE.MeshLambertMaterial({ color: 0x3333AA });
+        const hairMat = new THREE.MeshLambertMaterial({ color: 0x4A3222 });
 
-    // Legacy getters if needed
-    get remotePlayers() {
-        // Return game's map to avoid breakage if something checks this
-        return this.game.remotePlayers || new Map();
+        // Torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.25), shirtMat);
+        torso.position.y = 1.05; // Slightly adjusted from 1.1 for better ground contact
+        group.add(torso);
+
+        // Head Group
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 1.675; // Positioned atop torso
+        group.add(headGroup);
+
+        const headSize = 0.5;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), skinMat);
+        headGroup.add(head);
+
+        // Hair (Hat layer)
+        const hair = new THREE.Mesh(new THREE.BoxGeometry(headSize + 0.05, headSize * 0.25, headSize + 0.05), hairMat);
+        hair.position.y = 0.2;
+        headGroup.add(hair);
+
+        // Facial Features (Simplified clones of Player.js logic)
+        const eyeSize = 0.08;
+        const eyeGeom = new THREE.BoxGeometry(eyeSize, eyeSize, 0.05);
+        const eyeWhiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const pupilMat = new THREE.MeshLambertMaterial({ color: 0x493B7F });
+
+        const createEye = (x) => {
+            const eye = new THREE.Group();
+            const white = new THREE.Mesh(eyeGeom, eyeWhiteMat);
+            const pupil = new THREE.Mesh(new THREE.BoxGeometry(eyeSize / 2, eyeSize / 2, 0.01), pupilMat);
+            pupil.position.z = -0.03; // Stick out front (-Z for this model orientation)
+            eye.add(white, pupil);
+            eye.position.set(x, 0, -0.251);
+            return eye;
+        };
+        headGroup.add(createEye(-0.12), createEye(0.12));
+
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.05), hairMat);
+        mouth.position.set(0, -0.12, -0.251);
+        headGroup.add(mouth);
+
+        // Limbs function
+        const createLimb = (y, xOffset, mat) => {
+            const pivot = new THREE.Group();
+            pivot.position.set(xOffset, y, 0);
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), mat);
+            mesh.position.y = -0.375; // Pivot at top
+            pivot.add(mesh);
+            return pivot;
+        };
+
+        const leftArm = createLimb(1.4, -0.375, skinMat);
+        const rightArm = createLimb(1.4, 0.375, skinMat);
+        const leftLeg = createLimb(0.7, -0.125, pantsMat);
+        const rightLeg = createLimb(0.7, 0.125, pantsMat);
+
+        group.add(leftArm, rightArm, leftLeg, rightLeg);
+        this.game.scene.add(group);
+
+        console.log(`[SocketManager] Created detailed character for ${id}`);
+
+        return {
+            group,
+            leftArm,
+            rightArm,
+            leftLeg,
+            rightLeg,
+            targetPosition: new THREE.Vector3(),
+            targetRotationY: 0,
+            walkAmplitude: 0,
+            animationTime: 0
+        };
     }
 }

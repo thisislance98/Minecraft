@@ -63,13 +63,13 @@ export class WorldGenerator {
 
                     // Bedrock
                     if (wy === 0) {
-                        this.game.setBlock(wx, wy, wz, Blocks.BEDROCK, true);
+                        this.game.setBlock(wx, wy, wz, Blocks.BEDROCK, true, true);
                         continue;
                     }
 
                     // Caves
                     if (this.isCave(wx, wy, wz) && wy < groundHeight && wy > 0) {
-                        this.game.setBlock(wx, wy, wz, null, true); // Air
+                        this.game.setBlock(wx, wy, wz, null, true, true); // Air
                         continue;
                     }
 
@@ -113,11 +113,11 @@ export class WorldGenerator {
                             else type = Blocks.DIRT;
                         }
 
-                        this.game.setBlock(wx, wy, wz, type, true);
+                        this.game.setBlock(wx, wy, wz, type, true, true);
                     } else {
                         // Water
                         if (wy <= this.seaLevel) {
-                            this.game.setBlock(wx, wy, wz, Blocks.WATER, true);
+                            this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
                         }
                     }
                 }

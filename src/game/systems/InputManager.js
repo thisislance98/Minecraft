@@ -18,6 +18,8 @@ export class InputManager {
             'ShiftLeft': 'SPRINT',
             'KeyF': 'INTERACT', // or Dismount
             'KeyC': 'CAMERA',
+            'AltLeft': 'VOICE',
+            'AltRight': 'VOICE',
         };
         this.isLocked = false;
         this.mouseDownInterval = null;

@@ -64,7 +64,7 @@ export class WaterSystem {
         }
 
         // Place water block in world
-        this.game.setBlock(x, y, z, 'water');
+        this.game.setBlock(x, y, z, 'water', false, true); // skipBroadcast - water flow is deterministic
 
         // Track as source
         this.waterBlocks.set(key, { level: 0, isSource: true });
@@ -115,7 +115,7 @@ export class WaterSystem {
 
                 // Downward flow resets level to 1 (or updates if better path)
                 if (!existing || existing.level > 1) {
-                    this.game.setBlock(x, belowY, z, 'water');
+                    this.game.setBlock(x, belowY, z, 'water', false, true); // skipBroadcast
                     this.waterBlocks.set(key, { level: 1, isSource: false });
                     this.updateQueue.push({ x, y: belowY, z, level: 1 });
                 }
@@ -140,7 +140,7 @@ export class WaterSystem {
 
                 // Only update if this path is shorter
                 if (!existing || existing.level > nextLevel) {
-                    this.game.setBlock(nx, y, nz, 'water');
+                    this.game.setBlock(nx, y, nz, 'water', false, true); // skipBroadcast
                     this.waterBlocks.set(key, { level: nextLevel, isSource: false });
                     this.updateQueue.push({ x: nx, y, z: nz, level: nextLevel });
                 }
@@ -186,7 +186,7 @@ export class WaterSystem {
 
         if (waterBlock && waterBlock.isSource) {
             this.waterBlocks.delete(key);
-            this.game.setBlock(x, y, z, null);
+            this.game.setBlock(x, y, z, null, false, true); // skipBroadcast
 
             // TODO: Recalculate dependent water blocks
             // For simplicity, non-source blocks will dry up over time

@@ -46,12 +46,101 @@ export class UIManager {
 
         this.setupChatPanelListeners();
 
-        const mpBtn = document.getElementById('multiplayer-btn');
-        if (mpBtn) {
-            mpBtn.addEventListener('click', () => this.showMultiplayerMenu());
-        }
 
         this.createMuteButton();
+        this.createNetworkHUD();
+    }
+
+    createNetworkHUD() {
+        if (this.networkHUD) return;
+
+        const div = document.createElement('div');
+        div.id = 'network-hud';
+        div.style.cssText = `
+            position: fixed; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.5); color: #fff;
+            padding: 8px 12px; border-radius: 4px;
+            font-family: 'VT323', monospace; font-size: 16px;
+            z-index: 1000; display: flex; flex-direction: column; gap: 4px;
+            pointer-events: none;
+        `;
+
+        div.innerHTML = `
+            <div id="net-status" style="color: #ffaa00;">Connecting...</div>
+            <div id="net-role" style="font-size: 14px; color: #aaa; display: none;"></div>
+            <div id="net-room" style="font-size: 14px; color: #aaa; display: none;"></div>
+            <div id="voice-transmit" style="font-size: 18px; color: #00ffcc; display: none; margin-top: 5px;">🎤 Transmitting...</div>
+            <div id="net-players" style="font-size: 12px; color: #ccc; margin-top: 5px; border-top: 1px solid #444; padding-top: 2px;"></div>
+        `;
+
+        document.body.appendChild(div);
+        this.networkHUD = div;
+        this.netStatusEl = div.querySelector('#net-status');
+        this.netRoleEl = div.querySelector('#net-role');
+        this.netRoomEl = div.querySelector('#net-room');
+        this.voiceTransmitEl = div.querySelector('#voice-transmit');
+        this.netPlayersEl = div.querySelector('#net-players');
+        this.remotePlayers = new Map(); // id -> {x, y, z}
+    }
+
+    updateNetworkStatus(status, role, roomId) {
+        if (!this.networkHUD) this.createNetworkHUD();
+
+        if (status) {
+            this.netStatusEl.textContent = status;
+            if (status === 'Connected' || status === 'In Room') {
+                this.netStatusEl.style.color = '#00ff00';
+            } else if (status === 'Disconnected') {
+                this.netStatusEl.style.color = '#ff0000';
+            } else {
+                this.netStatusEl.style.color = '#ffaa00';
+            }
+        }
+
+        if (role) {
+            this.netRoleEl.textContent = `Role: ${role}`;
+            this.netRoleEl.style.display = 'block';
+        } else {
+            this.netRoleEl.style.display = 'none';
+        }
+
+        if (roomId) {
+            this.netRoomEl.textContent = `Room: ${roomId}`;
+            this.netRoomEl.style.display = 'block';
+        }
+    }
+
+    updateRemotePlayerStatus(id, pos, rotY) {
+        if (!this.networkHUD) this.createNetworkHUD();
+        if (!this.remotePlayers) this.remotePlayers = new Map();
+
+        if (pos === null) {
+            this.remotePlayers.delete(id);
+        } else if (pos && typeof pos.x === 'number') {
+            // Store both position and rotation
+            this.remotePlayers.set(id, { pos, rotY: rotY ?? 0 });
+        } else {
+            // Ignore malformed updates
+            return;
+        }
+
+        // Update display
+        let html = '';
+        this.remotePlayers.forEach((data, pid) => {
+            if (data && data.pos && typeof data.pos.x === 'number') {
+                const sid = String(pid).substring(0, 4);
+                const p = data.pos;
+                const rotDeg = ((data.rotY ?? 0) * 180 / Math.PI).toFixed(0);
+                html += `<div>${sid}: pos(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) rot:${rotDeg}°</div>`;
+            }
+        });
+        if (this.netPlayersEl) this.netPlayersEl.innerHTML = html;
+    }
+
+    toggleVoiceTransmitIndicator(active) {
+        if (this.voiceTransmitEl) {
+            this.voiceTransmitEl.style.display = active ? 'block' : 'none';
+        }
     }
 
     createMuteButton() {
@@ -568,247 +657,9 @@ export class UIManager {
         }, 30000);
     }
 
-    // --- Multiplayer UI ---
 
-    showNetworkStatus(status) {
-        if (!status) {
-            if (this.networkStatusDiv) this.networkStatusDiv.remove();
-            this.networkStatusDiv = null;
-            this.playerCountElement = null;
-            return;
-        }
 
-        if (!this.networkStatusDiv) {
-            const div = document.createElement('div');
-            div.style.cssText = `
-                position: fixed; top: 60px; right: 10px;
-                background: rgba(0,0,0,0.6); padding: 8px 12px;
-                border-radius: 4px; color: #fff; font-family: 'VT323', monospace;
-                font-size: 16px; border: 1px solid rgba(255,255,255,0.2);
-                display: flex; gap: 10px; align-items: center;
-            `;
-            document.body.appendChild(div);
-            this.networkStatusDiv = div;
 
-            // Add Share Button
-            const shareBtn = document.createElement('button');
-            shareBtn.textContent = 'Share Link';
-            shareBtn.style.cssText = `
-                background: #4CAF50; color: white; border: none;
-                padding: 4px 8px; border-radius: 2px; cursor: pointer;
-                font-family: inherit; font-size: 14px;
-            `;
-            shareBtn.onclick = () => {
-                const link = this.game.networkManager.getShareableLink();
-                if (link) {
-                    navigator.clipboard.writeText(link);
-                    shareBtn.textContent = 'Copied!';
-                    setTimeout(() => shareBtn.textContent = 'Share Link', 2000);
-                }
-            };
-            div.appendChild(shareBtn);
-
-            // Add Disconnect Button
-            const disconnectBtn = document.createElement('button');
-            disconnectBtn.textContent = 'Disconnect';
-            disconnectBtn.style.cssText = `
-                background: rgba(255, 50, 50, 0.2);
-                border: 1px solid #ff3333;
-                color: #ff3333;
-                padding: 2px 8px;
-                cursor: pointer;
-                font-family: 'VT323', monospace;
-                font-size: 16px;
-                border-radius: 3px;
-                margin-right: 10px;
-            `;
-            disconnectBtn.onmouseover = () => { disconnectBtn.style.background = 'rgba(255, 50, 50, 0.4)'; };
-            disconnectBtn.onmouseout = () => { disconnectBtn.style.background = 'rgba(255, 50, 50, 0.2)'; };
-            disconnectBtn.onclick = () => {
-                this.game.networkManager.disconnect();
-            };
-            div.appendChild(disconnectBtn);
-
-            // Add Player Count Display
-            this.playerCountElement = document.createElement('span');
-            this.playerCountElement.style.cssText = `
-                background: rgba(0, 255, 204, 0.2);
-                padding: 2px 8px;
-                border-radius: 3px;
-                color: #00ffcc;
-            `;
-            this.playerCountElement.textContent = '👥 1';
-            div.appendChild(this.playerCountElement);
-
-            this.networkStatusText = document.createElement('span');
-            div.appendChild(this.networkStatusText);
-        }
-
-        this.networkStatusText.textContent = status;
-    }
-
-    /**
-     * Update the player count display
-     * @param {number} count - Number of connected players
-     */
-    updatePlayerCount(count) {
-        if (this.playerCountElement) {
-            this.playerCountElement.textContent = `👥 ${count}`;
-        }
-    }
-
-    showMultiplayerMenu() {
-        const div = document.createElement('div');
-        div.id = 'multiplayer-menu';
-        div.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.9); padding: 30px; border-radius: 12px;
-            border: 2px solid #00ffcc; color: #fff; font-family: 'VT323', monospace;
-            text-align: center; z-index: 2000; min-width: 350px;
-        `;
-
-        div.innerHTML = `
-            <h2 style="color: #00ffcc; margin-bottom: 20px;">🎮 Multiplayer</h2>
-            
-            <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #333;">
-                <h3 style="color: #4CAF50; margin-bottom: 10px;">Create New Room</h3>
-                <input id="mp-create-name" type="text" placeholder="Name (Optional)" style="
-                    padding: 10px 15px; font-size: 16px; width: 200px;
-                    background: rgba(255,255,255,0.1); border: 1px solid #666;
-                    color: #fff; border-radius: 4px; margin-bottom: 10px;
-                    font-family: 'VT323', monospace;
-                "/>
-                <br/>
-                <button id="mp-create-btn" style="
-                    padding: 12px 30px; font-size: 18px; cursor: pointer;
-                    background: linear-gradient(135deg, #4CAF50, #45a049);
-                    color: white; border: none; border-radius: 6px;
-                    font-family: 'VT323', monospace;
-                ">Create Room</button>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <h3 style="color: #2196F3; margin-bottom: 10px;">Join Existing Room</h3>
-                <input id="mp-room-input" type="text" placeholder="Enter Room ID" style="
-                    padding: 10px 15px; font-size: 16px; width: 200px;
-                    background: rgba(255,255,255,0.1); border: 1px solid #666;
-                    color: #fff; border-radius: 4px; margin-bottom: 10px;
-                    font-family: 'VT323', monospace;
-                "/>
-                <br/>
-                <button id="mp-join-btn" style="
-                    padding: 12px 30px; font-size: 18px; cursor: pointer;
-                    background: linear-gradient(135deg, #2196F3, #1976D2);
-                    color: white; border: none; border-radius: 6px;
-                    font-family: 'VT323', monospace;
-                ">Connect</button>
-            </div>
-            
-            <button id="mp-close-btn" style="
-                padding: 8px 20px; font-size: 16px; cursor: pointer;
-                background: transparent; color: #888; border: 1px solid #444;
-                border-radius: 4px; font-family: 'VT323', monospace;
-            ">Close</button>
-        `;
-
-        document.body.appendChild(div);
-
-        // Create Room button handler
-        document.getElementById('mp-create-btn').onclick = async () => {
-            const createBtn = document.getElementById('mp-create-btn');
-            const nameInput = document.getElementById('mp-create-name');
-            const customId = nameInput.value.trim() || null;
-
-            createBtn.disabled = true;
-            createBtn.textContent = 'Creating...';
-
-            try {
-                await this.game.networkManager.createRoom({ roomId: customId });
-                const link = this.game.networkManager.getShareableLink();
-                const roomId = this.game.networkManager.roomId;
-
-                // Update the dialog to show the shareable link
-                div.innerHTML = `
-                    <h2 style="color: #4CAF50;">✅ Room Created!</h2>
-                    <p style="margin: 15px 0; color: #aaa;">Room ID: <span style="color: #00ffcc;">${roomId}</span></p>
-                    <p style="margin: 15px 0; color: #aaa;">Share this link with friends:</p>
-                    <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; margin: 10px 0; word-break: break-all; font-size: 14px;">
-                        ${link}
-                    </div>
-                    <button id="mp-copy-btn" style="padding: 10px 20px; font-size: 18px; margin: 10px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px;">Copy Link</button>
-                    <button id="mp-done-btn" style="padding: 10px 20px; font-size: 18px; margin: 10px; cursor: pointer; background: transparent; color: #888; border: 1px solid #444; border-radius: 4px;">Done</button>
-                `;
-
-                // Copy button handler
-                document.getElementById('mp-copy-btn').onclick = () => {
-                    navigator.clipboard.writeText(link).then(() => {
-                        const copyBtn = document.getElementById('mp-copy-btn');
-                        copyBtn.textContent = 'Copied!';
-                        copyBtn.style.background = '#45a049';
-                        setTimeout(() => {
-                            copyBtn.textContent = 'Copy Link';
-                            copyBtn.style.background = '#4CAF50';
-                        }, 2000);
-                    }).catch(err => {
-                        console.error('Failed to copy:', err);
-                        alert('Failed to copy link. Please copy it manually.');
-                    });
-                };
-
-                // Done button handler
-                document.getElementById('mp-done-btn').onclick = () => div.remove();
-
-            } catch (e) {
-                createBtn.disabled = false;
-                createBtn.textContent = 'Create Room';
-                alert('Failed to create room: ' + e.message);
-            }
-        };
-
-        // Join Room button handler
-        document.getElementById('mp-join-btn').onclick = async () => {
-            const roomInput = document.getElementById('mp-room-input');
-            const joinBtn = document.getElementById('mp-join-btn');
-            const roomId = roomInput.value.trim();
-
-            if (!roomId) {
-                alert('Please enter a Room ID');
-                return;
-            }
-
-            joinBtn.disabled = true;
-            joinBtn.textContent = 'Connecting...';
-
-            try {
-                await this.game.networkManager.joinRoom(roomId);
-
-                // Show success and close
-                div.innerHTML = `
-                    <h2 style="color: #2196F3;">✅ Connected!</h2>
-                    <p style="margin: 15px 0; color: #aaa;">Successfully joined room: <span style="color: #00ffcc;">${roomId}</span></p>
-                    <button id="mp-done-btn" style="padding: 10px 20px; font-size: 18px; margin: 10px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px;">Done</button>
-                `;
-
-                document.getElementById('mp-done-btn').onclick = () => div.remove();
-
-            } catch (e) {
-                joinBtn.disabled = false;
-                joinBtn.textContent = 'Connect';
-                alert('Failed to join room: ' + e.message);
-            }
-        };
-
-        // Close button handler
-        document.getElementById('mp-close-btn').onclick = () => div.remove();
-
-        // Allow Enter key to submit room ID
-        document.getElementById('mp-room-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('mp-join-btn').click();
-            }
-            e.stopPropagation(); // Prevent game controls from triggering
-        });
-    }
 
 
     setupChatListener() {

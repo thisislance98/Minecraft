@@ -27,7 +27,8 @@ if (!serviceAccountPath) {
 
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccountPath),
-            storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+            storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+            databaseURL: process.env.FIREBASE_DATABASE_URL
         });
         console.log('[Config] Firebase Admin initialized');
     } catch (error) {
@@ -36,6 +37,14 @@ if (!serviceAccountPath) {
 }
 
 export const db = admin.apps.length ? admin.firestore() : null;
+
+// Only initialize Realtime Database if URL is configured
+const databaseUrl = process.env.FIREBASE_DATABASE_URL;
+export const realtimeDb = admin.apps.length && databaseUrl ? admin.database() : null;
+if (!databaseUrl) {
+    console.warn('[Config] FIREBASE_DATABASE_URL not set - world persistence disabled');
+}
+
 export const auth = admin.apps.length ? admin.auth() : null;
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;

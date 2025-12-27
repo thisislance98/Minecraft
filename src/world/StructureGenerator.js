@@ -208,7 +208,7 @@ export class StructureGenerator {
                     const existingBlock = this.game.getBlockWorld(x + dx, fy, z + dz);
                     // Only fill if it's air (don't replace existing terrain)
                     if (!existingBlock || existingBlock === Blocks.AIR) {
-                        this.game.setBlock(x + dx, fy, z + dz, Blocks.STONE, true);
+                        this.game.setBlock(x + dx, fy, z + dz, Blocks.STONE, true, true);
                     }
                 }
             }
@@ -218,10 +218,10 @@ export class StructureGenerator {
         for (let dx = 0; dx < width; dx++) {
             for (let dz = 0; dz < depth; dz++) {
                 // Floor
-                this.game.setBlock(x + dx, y, z + dz, style.floor, true);
+                this.game.setBlock(x + dx, y, z + dz, style.floor, true, true);
 
                 // Ceiling (Flat base for roof)
-                this.game.setBlock(x + dx, y + height, z + dz, style.roof, true); // Could be air check? No, nice to have ceiling.
+                this.game.setBlock(x + dx, y + height, z + dz, style.roof, true, true); // Could be air check? No, nice to have ceiling.
 
                 // Walls
                 for (let dy = 1; dy < height; dy++) {
@@ -234,18 +234,18 @@ export class StructureGenerator {
                         // Door opening (Front centerish)
                         // Front wall is usually z=0
                         if (dz === 0 && dx === Math.floor(width / 2) && dy < 3) {
-                            this.game.setBlock(x + dx, y + dy, z + dz, null, true); // Doorway
+                            this.game.setBlock(x + dx, y + dy, z + dz, null, true, true); // Doorway
                         }
                         // Windows - use position-based random for consistent window placement
                         else if (dy === 2 && !isCorner && this.getPositionRandom(x + dx, z + dz, 200) < 0.4) {
-                            this.game.setBlock(x + dx, y + dy, z + dz, style.window, true);
+                            this.game.setBlock(x + dx, y + dy, z + dz, style.window, true, true);
                         }
                         else {
-                            this.game.setBlock(x + dx, y + dy, z + dz, blockType, true);
+                            this.game.setBlock(x + dx, y + dy, z + dz, blockType, true, true);
                         }
                     } else {
                         // Interior Air
-                        this.game.setBlock(x + dx, y + dy, z + dz, null, true);
+                        this.game.setBlock(x + dx, y + dy, z + dz, null, true, true);
                     }
                 }
             }
@@ -262,7 +262,7 @@ export class StructureGenerator {
         const rightX = width - 2;
 
         if (backZ > 0) {
-            this.game.setBlock(x + leftX, y + 1, z + backZ, Blocks.CRAFTING_TABLE, true);
+            this.game.setBlock(x + leftX, y + 1, z + backZ, Blocks.CRAFTING_TABLE, true, true);
             // Bed
             // Previous code used 'bed'. Assuming Blocks.BED exists or we map to it?
             // checking Blocks.js... I don't see BED. I see BEDROCK.
@@ -286,10 +286,10 @@ export class StructureGenerator {
             // Wait, I should add it to Blocks.js if I want to be thorough.
             // But let's check if 'bed' is even a valid block in AssetManager?
             // Assuming it is.
-            this.game.setBlock(x + rightX, y + 1, z + backZ, 'bed', true);
+            this.game.setBlock(x + rightX, y + 1, z + backZ, 'bed', true, true);
 
             if (rightX - 1 > leftX) {
-                this.game.setBlock(x + rightX - 1, y + 1, z + backZ, 'bed', true);
+                this.game.setBlock(x + rightX - 1, y + 1, z + backZ, 'bed', true, true);
             }
         }
 
@@ -299,7 +299,7 @@ export class StructureGenerator {
             const py = y + 2;
             const pz = z + depth - 2;
             // 'painting' block?
-            this.game.setBlock(px, py, pz, 'painting', true);
+            this.game.setBlock(px, py, pz, 'painting', true, true);
         }
 
         // Roof
@@ -310,7 +310,7 @@ export class StructureGenerator {
                 for (let dz = 0; dz < depth; dz++) {
                     let isWall = (dx === 0 || dx === width - 1 || dz === 0 || dz === depth - 1);
                     if (isWall && (dx + dz) % 2 === 0) {
-                        this.game.setBlock(x + dx, y + height + 1, z + dz, style.corner, true);
+                        this.game.setBlock(x + dx, y + height + 1, z + dz, style.corner, true, true);
                     }
                 }
             }
@@ -324,7 +324,7 @@ export class StructureGenerator {
                             // Inside attic - usually leave empty or fill?
                             // This loop covers the *layer*.
                         }
-                        this.game.setBlock(x + dx, y + height + 1 + i, z + dz, style.roof, true);
+                        this.game.setBlock(x + dx, y + height + 1 + i, z + dz, style.roof, true, true);
                     }
                 }
             }
@@ -347,7 +347,7 @@ export class StructureGenerator {
 
         for (let i = 0; i < height; i++) {
             // Main Stalk
-            this.game.setBlock(x, y + i, z, Blocks.PINE_LEAVES, true);
+            this.game.setBlock(x, y + i, z, Blocks.PINE_LEAVES, true, true);
 
             // Spiral Leaves
             const angle = i * 0.5;
@@ -357,7 +357,7 @@ export class StructureGenerator {
 
             // Ensure we don't overwrite the stalk itself (though radius implies we are away)
             if (lx !== x || lz !== z) {
-                this.game.setBlock(lx, y + i, lz, Blocks.LEAVES, true);
+                this.game.setBlock(lx, y + i, lz, Blocks.LEAVES, true, true);
             }
         }
 
@@ -365,7 +365,7 @@ export class StructureGenerator {
         const topY = y + height;
         for (let dx = -2; dx <= 2; dx++) {
             for (let dz = -2; dz <= 2; dz++) {
-                this.game.setBlock(x + dx, topY, z + dz, Blocks.SNOW, true); // White "cloud"
+                this.game.setBlock(x + dx, topY, z + dz, Blocks.SNOW, true, true); // White "cloud"
             }
         }
     }
@@ -376,7 +376,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, Blocks.LOG, true);
+            this.game.setBlock(x, y + i, z, Blocks.LOG, true, true);
         }
 
         // Leaves
@@ -392,7 +392,7 @@ export class StructureGenerator {
                         // Don't overwrite existing blocks unless air/weak
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
-                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true);
+                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true, true);
                         }
                     }
                 }
@@ -406,7 +406,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, Blocks.BIRCH_WOOD, true);
+            this.game.setBlock(x, y + i, z, Blocks.BIRCH_WOOD, true, true);
         }
 
         // Leaves - taller, thinner top
@@ -419,14 +419,14 @@ export class StructureGenerator {
                     if ((lx !== x || lz !== z) && this.getPositionRandom(lx, lz, ly * 10 + 501) < 0.7) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
-                            this.game.setBlock(lx, ly, lz, Blocks.BIRCH_LEAVES, true);
+                            this.game.setBlock(lx, ly, lz, Blocks.BIRCH_LEAVES, true, true);
                         }
                     }
                 }
             }
         }
         // Top cap
-        this.game.setBlock(x, y + height + 1, z, Blocks.BIRCH_LEAVES, true);
+        this.game.setBlock(x, y + height + 1, z, Blocks.BIRCH_LEAVES, true, true);
     }
 
     generatePineTree(x, y, z) {
@@ -435,7 +435,7 @@ export class StructureGenerator {
 
         // Trunk
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, Blocks.PINE_WOOD, true);
+            this.game.setBlock(x, y + i, z, Blocks.PINE_WOOD, true, true);
         }
 
         // Conical Leaves
@@ -452,14 +452,14 @@ export class StructureGenerator {
                     if (dist <= radius + 0.5 && (lx !== x || lz !== z)) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
-                            this.game.setBlock(lx, ly, lz, Blocks.PINE_LEAVES, true);
+                            this.game.setBlock(lx, ly, lz, Blocks.PINE_LEAVES, true, true);
                         }
                     }
                 }
             }
         }
         // Top tip
-        this.game.setBlock(x, y + height, z, Blocks.PINE_LEAVES, true);
+        this.game.setBlock(x, y + height, z, Blocks.PINE_LEAVES, true, true);
     }
 
     generateJungleTree(x, y, z) {
@@ -471,7 +471,7 @@ export class StructureGenerator {
         // Let's do 1x1 but tall with vines (leaves)
 
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, Blocks.LOG, true);
+            this.game.setBlock(x, y + i, z, Blocks.LOG, true, true);
 
             // Vines? - use position-based random
             const vineRng = this.getPositionRng(x, z, 701 + i);
@@ -484,7 +484,7 @@ export class StructureGenerator {
                 else if (dir === 2) vz++;
                 else vz--;
 
-                this.game.setBlock(vx, y + i, vz, Blocks.LEAVES, true);
+                this.game.setBlock(vx, y + i, vz, Blocks.LEAVES, true, true);
             }
         }
 
@@ -497,7 +497,7 @@ export class StructureGenerator {
                     if (dist < radius + this.getPositionRandom(lx, lz, ly * 10 + 702)) {
                         const current = this.game.getBlockWorld(lx, ly, lz);
                         if (!current || current === Blocks.AIR) {
-                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true);
+                            this.game.setBlock(lx, ly, lz, Blocks.LEAVES, true, true);
                         }
                     }
                 }
@@ -510,7 +510,7 @@ export class StructureGenerator {
         const rng = this.getPositionRng(x, z, 800);
         const height = 2 + Math.floor(rng.next() * 2);
         for (let i = 0; i < height; i++) {
-            this.game.setBlock(x, y + i, z, Blocks.LEAVES, true); // Use leaves as green cactus fallback
+            this.game.setBlock(x, y + i, z, Blocks.LEAVES, true, true); // Use leaves as green cactus fallback
         }
     }
 

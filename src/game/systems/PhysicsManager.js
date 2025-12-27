@@ -423,7 +423,7 @@ export class PhysicsManager {
         if (treeBlocks.length > 3 && foundLeaves) { // Minimum size to count as tree
             // Remove blocks from world
             for (const b of treeBlocks) {
-                this.game.setBlock(b.x, b.y, b.z, null, true, false); // Quick remove, update mesh at end?
+                this.game.setBlock(b.x, b.y, b.z, null, true, true); // skipBroadcast - tree felling is local physics
                 // Note: setBlock updates mesh immediately unless optimized.
                 // We should probably optimize this batch update later, but for now simple loop is fine.
             }

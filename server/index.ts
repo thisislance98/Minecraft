@@ -9,30 +9,13 @@
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
-import { Server as SocketIOServer, Socket } from 'socket.io';
 import { stripeRoutes } from './routes/stripe';
 import { authRoutes } from './routes/auth';
 import './config'; // Initialize config
+import { worldPersistence } from './services/WorldPersistence';
 
 // ============ Types ============
 
-interface PlayerState {
-    id: string;
-    name: string;
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number };
-    animation: string;
-    heldItem: string;
-    joinedAt: number;
-}
-
-interface RoomState {
-    id: string;
-    worldSeed: number;
-    hostId: string;
-    players: Map<string, PlayerState>;
-    createdAt: number;
-}
 
 // ============ Server Setup ============
 
@@ -63,300 +46,202 @@ app.use((req, res, next) => {
 // Create HTTP server
 const httpServer = createServer(app);
 
-// ============ Socket.IO Server ============
+// ============ Socket.IO Setup ============
+import { Server } from 'socket.io';
 
-const io = new SocketIOServer(httpServer, {
+const io = new Server(httpServer, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    },
-    // Connection settings
-    pingTimeout: 60000,
-    pingInterval: 25000
+        origin: "*", // Allow all origins for simplicity
+        methods: ["GET", "POST"]
+    }
 });
 
-// Room storage
-const rooms = new Map<string, RoomState>();
+// Simple in-memory room storage
+const MAX_PLAYERS_PER_ROOM = 4;
+const DAY_DURATION_SECONDS = 600; // 10 minutes per day
+const TIME_INCREMENT_PER_SEC = 1 / DAY_DURATION_SECONDS;
 
-// Generate unique room ID
-function generateRoomId(): string {
-    return Math.random().toString(36).substring(2, 10);
-}
+// Global Game Loop (Low frequency for sync)
+// We tick time for all rooms here
+setInterval(() => {
+    rooms.forEach((room, roomId) => {
+        // Increment time
+        room.time += TIME_INCREMENT_PER_SEC;
+        if (room.time > 1.0) room.time -= 1.0;
 
-// Generate deterministic seed from room ID
-// This ensures the same room ID always produces the same world
-function getSeedFromRoomId(roomId: string): number {
-    let hash = 0;
-    for (let i = 0; i < roomId.length; i++) {
-        const char = roomId.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash) % 1000000;
-}
-
-// Get player's current room
-function getPlayerRoom(socket: Socket): RoomState | null {
-    for (const [, room] of rooms) {
-        if (room.players.has(socket.id)) {
-            return room;
-        }
-    }
-    return null;
-}
-
-// Create default player state
-function createPlayerState(socket: Socket, name: string): PlayerState {
-    return {
-        id: socket.id,
-        name: name || `Player_${socket.id.substring(0, 6)}`,
-        position: { x: 32, y: 80, z: 32 },
-        rotation: { x: 0, y: 0 },
-        animation: 'idle',
-        heldItem: '',
-        joinedAt: Date.now()
-    };
-}
-
-// ============ Connection Handler ============
-
-io.on('connection', (socket: Socket) => {
-    console.log('[Socket.IO] Client connected:', socket.id);
-
-    // === Room: Create ===
-    socket.on('room:create', (data, callback) => {
-        try {
-            const roomId = data.roomId || generateRoomId();
-
-            if (rooms.has(roomId)) {
-                if (callback) callback({ error: 'Room already exists' });
-                return;
-            }
-
-            // Use deterministic seed from room ID for consistent worlds
-            const worldSeed = data.worldSeed || getSeedFromRoomId(roomId);
-
-            // Create room
-            const room: RoomState = {
-                id: roomId,
-                worldSeed,
-                hostId: socket.id,
-                players: new Map(),
-                createdAt: Date.now()
-            };
-
-            // Add host as first player
-            const player = createPlayerState(socket, data.playerName);
-            room.players.set(socket.id, player);
-            rooms.set(roomId, room);
-
-            // Store roomId on socket
-            socket.data.roomId = roomId;
-
-            // Join Socket.IO room
-            socket.join(roomId);
-
-            console.log(`[Socket.IO] Room created: ${roomId} by ${socket.id}`);
-
-            // Send acknowledgment
-            if (callback) {
-                callback({ roomId, worldSeed });
-            }
-
-            // Emit room joined event
-            socket.emit('room:joined', {
-                roomId,
-                worldSeed,
-                isHost: true,
-                players: [player]
-            });
-
-        } catch (error) {
-            console.error('[Socket.IO] Room create error:', error);
-            if (callback) {
-                callback({ error: 'Failed to create room' });
-            }
-        }
+        // Broadcast time every 2 seconds roughly (or every tick? 1 sec is fine)
+        // To save bandwidth, we could only sync occasionally, but 1Hz is low overhead.
+        io.to(roomId).emit('world:time', room.time);
     });
+}, 1000);
 
-    // === Room: Join ===
-    socket.on('room:join', (data, callback) => {
-        try {
-            const roomId = data.roomId;
-            let room = rooms.get(roomId);
+interface Room {
+    id: string;
+    players: string[];
+    worldSeed: number;
+    createdAt: number;
+    time: number; // 0.0 to 1.0
+}
 
-            // Auto-create room if it doesn't exist
-            if (!room) {
-                const worldSeed = getSeedFromRoomId(roomId);
-                room = {
-                    id: roomId,
-                    worldSeed,
-                    hostId: socket.id,
-                    players: new Map(),
-                    createdAt: Date.now()
-                };
-                rooms.set(roomId, room);
-                console.log(`[Socket.IO] Room auto-created: ${roomId}`);
+const rooms = new Map<string, Room>();
+
+io.on('connection', (socket) => {
+    console.log(`[Socket] Client connected: ${socket.id}`);
+
+    socket.on('join_game', async () => {
+        let roomToJoin: Room | undefined;
+
+        // 1. Try to find an existing room with space
+        for (const [id, room] of rooms) {
+            if (room.players.length < MAX_PLAYERS_PER_ROOM) {
+                roomToJoin = room;
+                break;
             }
+        }
 
-            // Check if player is already in this room
-            if (room.players.has(socket.id)) {
-                console.log(`[Socket.IO] Player ${socket.id} already in room ${roomId}`);
-                if (callback) {
-                    callback({
-                        roomId,
-                        worldSeed: room.worldSeed,
-                        playerCount: room.players.size
-                    });
+        // 2. If no available room, create one or restore from Firebase
+        if (!roomToJoin) {
+            const newRoomId = Math.random().toString(36).substring(2, 9);
+
+            // Check if this room exists in Firebase (for persistence)
+            let existingMetadata = null;
+            try {
+                existingMetadata = await Promise.race([
+                    worldPersistence.getRoomMetadata(newRoomId),
+                    new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)) // 1s timeout
+                ]);
+            } catch (e) { console.error('Failed to load room metadata', e); }
+
+            const worldSeed = existingMetadata?.worldSeed ?? Math.floor(Math.random() * 1000000);
+
+            roomToJoin = {
+                id: newRoomId,
+                players: [],
+                worldSeed,
+                createdAt: existingMetadata?.createdAt ?? Date.now(),
+                time: 0.25 // Default to Noon
+            };
+            rooms.set(newRoomId, roomToJoin);
+
+            // Save room metadata to Firebase for persistence (don't await this critical step)
+            worldPersistence.saveRoomMetadata(newRoomId, worldSeed).catch(e => console.error('Failed to save room metadata', e));
+            console.log(`[Socket] Created new room: ${newRoomId} with seed: ${worldSeed}`);
+        }
+
+        // 3. Join the room
+        const roomId = roomToJoin.id;
+        socket.join(roomId);
+        roomToJoin.players.push(socket.id);
+
+        console.log(`[Socket] Player ${socket.id} joined room ${roomId} (${roomToJoin.players.length}/${MAX_PLAYERS_PER_ROOM})`);
+
+        // 4. Emit success event
+        socket.emit('room:joined', {
+            roomId: roomId,
+            worldSeed: roomToJoin.worldSeed,
+            players: roomToJoin.players,
+            isHost: roomToJoin.players.length === 1, // First player is host
+            time: roomToJoin.time
+        });
+
+        // Send persisted block changes to the new player
+        try {
+            // Use race to prevent hanging
+            const blockChanges = await Promise.race([
+                worldPersistence.getBlockChanges(roomId),
+                new Promise<Map<string, string | null>>(resolve => setTimeout(() => resolve(new Map()), 1000))
+            ]) || new Map();
+
+            if (blockChanges.size > 0) {
+                const blocksArray: { x: number; y: number; z: number; type: string | null }[] = [];
+                for (const [key, type] of blockChanges) {
+                    const [x, y, z] = key.split('_').map(Number);
+                    blocksArray.push({ x, y, z, type });
                 }
+                socket.emit('blocks:initial', blocksArray);
+                console.log(`[Socket] Sent ${blocksArray.length} persisted blocks to ${socket.id}`);
+            }
+        } catch (e) {
+            console.error('Failed to load/send persisted blocks', e);
+        }
+
+        // Notify others
+        socket.to(roomId).emit('player:joined', { id: socket.id });
+
+        // Handle player movement
+        socket.on('player:move', (data) => {
+            // Relay to others in the room
+            if (roomId) {
+                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY });
+            }
+        });
+
+        // Handle block changes (place/break)
+        socket.on('block:change', async (data: { x: number; y: number; z: number; type: string | null }) => {
+            console.log(`[DEBUG] Received block:change from ${socket.id}:`, data);
+            if (!roomId) {
+                console.log(`[DEBUG] No roomId for socket ${socket.id}, skipping block change`);
                 return;
             }
 
-            // Create player state
-            const player = createPlayerState(socket, data.playerName);
-            room.players.set(socket.id, player);
+            // 1. Broadcast to all other players in the room (real-time sync)
+            socket.to(roomId).emit('block:change', {
+                id: socket.id,
+                x: data.x,
+                y: data.y,
+                z: data.z,
+                type: data.type
+            });
+            console.log(`[DEBUG] Broadcasted block:change to room ${roomId}`);
 
-            // Store roomId on socket for robust disconnect handling
-            socket.data.roomId = roomId;
+            // 2. Persist to Firebase (durable storage)
+            console.log(`[DEBUG] Calling worldPersistence.saveBlockChange for room ${roomId}`);
+            await worldPersistence.saveBlockChange(roomId, data.x, data.y, data.z, data.type);
+            console.log(`[DEBUG] Completed worldPersistence.saveBlockChange call`);
+        });
 
-            // Join Socket.IO room
-            socket.join(roomId);
+        // Handle time changes (e.g. from "K" key)
+        socket.on('world:set_time', (time: number) => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            if (room) {
+                room.time = time;
+                // Immediate broadcast
+                io.to(roomId).emit('world:time', room.time);
+                console.log(`[Socket] Room ${roomId} time set to ${time} by ${socket.id}`);
+            }
+        });
 
-            console.log(`[Socket.IO] Player ${socket.id} joined room ${roomId} (${room.players.size} players)`);
-
-            // Send acknowledgment
-            if (callback) {
-                callback({
-                    roomId,
-                    worldSeed: room.worldSeed,
-                    playerCount: room.players.size
+        // WebRTC Signaling relay
+        socket.on('signal', (data) => {
+            if (data.to) {
+                io.to(data.to).emit('signal', {
+                    from: socket.id,
+                    signal: data.signal
                 });
             }
+        });
+    });
 
-            // Emit room joined to the joining player
-            socket.emit('room:joined', {
-                roomId,
-                worldSeed: room.worldSeed,
-                isHost: room.hostId === socket.id,
-                players: Array.from(room.players.values())
-            });
+    socket.on('disconnect', () => {
+        console.log(`[Socket] Client disconnected: ${socket.id}`);
+        // Cleanup logic
+        for (const [id, room] of rooms) {
+            const index = room.players.indexOf(socket.id);
+            if (index !== -1) {
+                room.players.splice(index, 1);
+                io.to(id).emit('player:left', socket.id);
 
-            // Notify other players in the room
-            socket.to(roomId).emit('player:joined', player);
-
-        } catch (error) {
-            console.error('[Socket.IO] Room join error:', error);
-            if (callback) {
-                callback({ error: 'Failed to join room' });
+                // If room empty, delete after a delay (or immediately for simplicity)
+                if (room.players.length === 0) {
+                    rooms.delete(id);
+                    console.log(`[Socket] Room ${id} deleted (empty)`);
+                }
+                break;
             }
         }
     });
-
-    // ... (other handlers) ...
-
-    // Use socket.data.roomId in helper
-    function getPlayerRoom(socket: Socket): RoomState | null {
-        if (socket.data.roomId) {
-            return rooms.get(socket.data.roomId) || null;
-        }
-        // Fallback to iteration
-        for (const [, room] of rooms) {
-            if (room.players.has(socket.id)) return room;
-        }
-        return null;
-    }
-
-    // === Room: Leave ===
-    socket.on('room:leave', () => {
-        handlePlayerLeave(socket);
-    });
-
-    // === Player: Update ===
-    socket.on('player:update', (data) => {
-        const room = getPlayerRoom(socket);
-        if (!room) return;
-
-        const player = room.players.get(socket.id);
-        if (!player) return;
-
-        // Update player state
-        if (data.position) {
-            player.position = data.position;
-        }
-        if (data.rotation) {
-            player.rotation = data.rotation;
-        }
-        if (data.animation !== undefined) {
-            player.animation = data.animation;
-        }
-        if (data.heldItem !== undefined) {
-            player.heldItem = data.heldItem;
-        }
-
-        // Broadcast to other players in room (excluding sender)
-        socket.to(room.id).emit('player:update', {
-            id: socket.id,
-            position: player.position,
-            rotation: player.rotation,
-            animation: player.animation,
-            heldItem: player.heldItem
-        });
-    });
-
-    // === Block: Change ===
-    socket.on('block:change', (data) => {
-        const room = getPlayerRoom(socket);
-        if (!room) return;
-
-        // Broadcast to all other players in room
-        socket.to(room.id).emit('block:changed', {
-            x: data.x,
-            y: data.y,
-            z: data.z,
-            blockType: data.blockType,
-            playerId: socket.id
-        });
-    });
-
-    // === Disconnect ===
-    socket.on('disconnect', (reason) => {
-        console.log(`[Socket.IO] Client disconnected: ${socket.id} (${reason})`);
-        handlePlayerLeave(socket);
-    });
-
-    // === Error ===
-    socket.on('error', (error) => {
-        console.error('[Socket.IO] Socket error:', socket.id, error);
-    });
 });
-
-// Handle player leaving (disconnect or explicit leave)
-function handlePlayerLeave(socket: Socket) {
-    const room = getPlayerRoom(socket);
-    if (!room) return;
-
-    // Remove player from room
-    room.players.delete(socket.id);
-    socket.leave(room.id);
-
-    // Notify other players
-    io.to(room.id).emit('player:left', socket.id);
-
-    console.log(`[Socket.IO] Player ${socket.id} left room ${room.id} (${room.players.size} remaining)`);
-
-    // Clean up empty rooms
-    if (room.players.size === 0) {
-        rooms.delete(room.id);
-        console.log(`[Socket.IO] Room ${room.id} deleted (empty)`);
-    } else if (room.hostId === socket.id) {
-        // Transfer host to another player
-        const newHost = room.players.keys().next().value;
-        if (newHost) {
-            room.hostId = newHost;
-            console.log(`[Socket.IO] Room ${room.id} host transferred to ${newHost}`);
-        }
-    }
-}
 
 // ============ REST API ============
 
@@ -365,38 +250,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        connections: io.engine.clientsCount
-    });
-});
-
-// Get active rooms
-app.get('/api/rooms', (req, res) => {
-    const roomList = Array.from(rooms.values()).map(room => ({
-        id: room.id,
-        playerCount: room.players.size,
-        worldSeed: room.worldSeed,
-        createdAt: room.createdAt
-    }));
-    res.json(roomList);
-});
-
-// Get room info
-app.get('/api/rooms/:roomId', (req, res) => {
-    const room = rooms.get(req.params.roomId);
-    if (!room) {
-        return res.status(404).json({ error: 'Room not found' });
-    }
-
-    res.json({
-        id: room.id,
-        playerCount: room.players.size,
-        worldSeed: room.worldSeed,
-        createdAt: room.createdAt,
-        players: Array.from(room.players.values()).map(p => ({
-            id: p.id,
-            name: p.name,
-            joinedAt: p.joinedAt
-        }))
+        activeRooms: rooms.size,
+        connectedClients: io.engine.clientsCount
     });
 });
 
@@ -404,5 +259,4 @@ app.get('/api/rooms/:roomId', (req, res) => {
 
 httpServer.listen(port, () => {
     console.log(`[Server] Listening on http://localhost:${port}`);
-    console.log(`[Socket.IO] Multiplayer ready`);
 });

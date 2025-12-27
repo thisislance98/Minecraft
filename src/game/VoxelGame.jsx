@@ -27,8 +27,7 @@ import { Environment } from './systems/Environment.js';
 
 import { WeatherSystem } from './systems/WeatherSystem.js';
 import { Dragon } from './entities/animals/Dragon.js';
-import { SocketManager } from './systems/SocketManager.js';
-import { RemotePlayer } from './entities/RemotePlayer.js';
+
 import { WorldParticleSystem } from './systems/WorldParticleSystem.js';
 import { SoundManager } from './systems/SoundManager.js';
 import { StructureGenerator } from '../world/StructureGenerator.js';
@@ -39,6 +38,7 @@ import { SpellSystem } from './systems/SpellSystem.js';
 import { Tornado } from './entities/Tornado.js';
 import { WaterSystem } from './systems/WaterSystem.js';
 import { StoreUI } from './ui/StoreUI.js';
+import { SocketManager } from './systems/SocketManager.js';
 
 
 export class VoxelGame {
@@ -58,6 +58,10 @@ export class VoxelGame {
 
         // Essential for children of camera to be visible
         this.scene.add(this.camera);
+
+        // Voice Chat: Audio Listener for spatial audio
+        this.audioListener = new THREE.AudioListener();
+        this.camera.add(this.audioListener);
 
         // Check for bare-bones mode via URL parameter
         const urlParams = new URLSearchParams(window.location.search);
@@ -145,6 +149,11 @@ export class VoxelGame {
         this.spellSystem = new SpellSystem(this);
         this.waterSystem = new WaterSystem(this);
 
+        // Multiplayer Delta Sync tracking
+        this._lastSentPos = new THREE.Vector3();
+        this._lastSentRotY = 0;
+        this._isCurrentlyMoving = false;
+
         this.spawnPlayer();
 
         this.camera.position.copy(this.player.position);
@@ -174,70 +183,14 @@ export class VoxelGame {
         // Check for offline mode via URL parameter
         // Check for offline mode via URL parameter - urlParams already declared at top of constructor
         // const urlParams = new URLSearchParams(window.location.search);
-        this.isOffline = urlParams.get('offline') === 'true';
-        this.isUIOnly = urlParams.get('ui-only') === 'true';
-
-        if (this.isUIOnly) {
-            console.log('[Game] UI-Only Mode: World/Entities disabled.');
-        }
-
         if (this.isOffline || this.isUIOnly) {
             console.log('[Game] Offline Mode: Network disabled.');
-            this.networkManager = null;
-            this.remotePlayers = new Map();
         } else {
-            // Network Manager (Socket.IO)
-            this.networkManager = new SocketManager(this);
-            this.remotePlayers = new Map(); // playerId -> RemotePlayer
-
-            // Setup Network Callbacks (Socket.IO) - using new on() API
-            this.networkManager
-                .on('onPlayerJoin', (playerId, playerData) => {
-                    console.log('Player joined:', playerId);
-                    if (this.remotePlayers.has(playerId)) {
-                        console.warn(`[Game] Duplicate join for ${playerId}, disposing old instance`);
-                        this.remotePlayers.get(playerId).dispose();
-                    }
-                    const remotePlayer = new RemotePlayer(this, playerId, null);
-                    this.remotePlayers.set(playerId, remotePlayer);
-                    this.uiManager.addChatMessage('system', `${playerData?.name || 'Player'} joined`);
-                })
-                .on('onPlayerLeave', (playerId) => {
-                    console.log('Player left:', playerId);
-                    const remotePlayer = this.remotePlayers.get(playerId);
-                    if (remotePlayer) {
-                        remotePlayer.dispose();
-                        this.remotePlayers.delete(playerId);
-                        this.uiManager.addChatMessage('system', `Player left`);
-                    }
-                })
-                .on('onBlockChange', (x, y, z, blockType) => {
-                    // Apply block change without broadcasting back
-                    this.setBlock(x, y, z, blockType, false, true); // true = skipBroadcast
-                })
-                .on('onWorldSeed', (seed) => {
-                    console.log('[Game] Received world seed from network:', seed);
-
-                    // If we already have a different seed, we need to regenerate the world
-                    if (this.worldSeed !== seed) {
-                        console.log(`[Game] Seed mismatch! Local: ${this.worldSeed}, Network: ${seed}`);
-                        this.regenerateWithSeed(seed);
-                    }
-                });
+            console.log('[Game] Singleplayer Mode.');
         }
 
-        // Multiplayer connection is now handled manually via UI buttons (Create Room / Connect)
-        // No auto-connect - user must click buttons in the multiplayer menu
-
-        // Check for ?room=ROOM_ID in URL for direct connection
-        const roomParam = urlParams.get('room');
-        if (roomParam && !this.isOffline) {
-            console.log('[Game] Found room parameter, auto-joining:', roomParam);
-            // Auto-join after a brief delay to ensure initialization
-            setTimeout(() => {
-                this.joinRoomWithRetry(roomParam);
-            }, 500);
-        }
+        // Multiplayer logic
+        this.socketManager = new SocketManager(this);
 
         // Agent debug command handler
         if (this.agent.setupDebugCommandHandler) {
@@ -251,15 +204,6 @@ export class VoxelGame {
             }
             if (e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.storeUI.toggle();
-            }
-            // Debug: 0 key toggles remote player updates
-            if (e.key === '0' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
-                this._disableRemotePlayers = !this._disableRemotePlayers;
-                console.log(`[Debug] Remote player updates: ${this._disableRemotePlayers ? 'DISABLED' : 'ENABLED'}`);
-                // Also hide/show remote player meshes
-                for (const rp of this.remotePlayers.values()) {
-                    rp.mesh.visible = !this._disableRemotePlayers;
-                }
             }
         });
 
@@ -320,6 +264,9 @@ export class VoxelGame {
 
         // Initialize Store UI
         this.storeUI = new StoreUI(this);
+
+        // Initialize persisted blocks storage
+        this.persistedBlocks = new Map(); // key: chunkKey, value: Array<{lx, ly, lz, type}>
     }
 
     // Helper for Debug Toggle (called by InputManager)
@@ -335,6 +282,12 @@ export class VoxelGame {
     }
 
     setDaytime() {
+        if (this.socketManager && this.socketManager.isConnected()) {
+            this.socketManager.sendSetTime(0.25); // Noon
+            this.uiManager?.addChatMessage('system', 'Requesting daytime sync...');
+            return;
+        }
+
         if (this.environment) {
             // Set time to noon
             this.environment.time = 0.25;
@@ -483,55 +436,6 @@ export class VoxelGame {
         }, 1000);
     }
 
-    /**
-     * Join a room with retry logic to handle initial connection failures
-     */
-    async joinRoomWithRetry(roomId, retries = 5, delay = 1000) {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                this.uiManager?.showNetworkStatus(`Joining... (${attempt}/${retries})`);
-                await this.networkManager.joinRoom(roomId);
-                console.log(`[Game] ✅ Successfully joined room (attempt ${attempt})`);
-                return; // Success!
-            } catch (e) {
-                console.warn(`[Game] Join attempt ${attempt}/${retries} failed:`, e.message || e);
-
-                if (attempt < retries) {
-                    console.log(`[Game] Retrying in ${delay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 1.5; // Mild exponential backoff
-                } else {
-                    console.error('[Game] ❌ Failed to join room after all retries.');
-                    this.uiManager?.showNetworkStatus('Connection Failed');
-                    this.uiManager?.addChatMessage('system', `Failed to join room: ${e.message}`);
-                }
-            }
-        }
-    }
-
-    /**
-     * Auto-host multiplayer session with retry logic for development.
-     * Handles the race condition where page loads before server is ready.
-     */
-    async autoHostWithRetry(retries = 5, delay = 1000) {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            try {
-                this.networkManager.game.uiManager?.showNetworkStatus(`Creating... (${attempt}/${retries})`);
-                await this.networkManager.createRoom();
-                console.log(`[Game] ✅ Connected to Socket.IO (attempt ${attempt})`);
-                return; // Success!
-            } catch (e) {
-                console.warn(`[Game] Auto-host attempt ${attempt}/${retries} failed:`, e.message || e);
-                if (attempt < retries) {
-                    console.log(`[Game] Retrying in ${delay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                }
-            }
-        }
-        console.error('[Game] ❌ Auto-host failed after all retries. Refresh the page once the server is running.');
-        this.networkManager.game.uiManager?.showNetworkStatus('Host Failed');
-    }
 
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
@@ -818,8 +722,9 @@ export class VoxelGame {
             this.updateChunks(); // Trigger mesh update for interactive changes
         }
 
-        if (!skipBroadcast && this.networkManager.isConnected()) {
-            this.networkManager.sendBlockChange(x, y, z, type);
+        // Network sync: broadcast block change to other players and persist
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendBlockChange(x, y, z, type);
         }
     }
 
@@ -984,6 +889,47 @@ export class VoxelGame {
         // chunkGenQueue will be processed in animate()
     }
 
+
+
+    /**
+     * Store and apply persisted blocks from server
+     * Handles race condition where chunks might not be generated yet
+     */
+    addPersistedBlocks(blocks) {
+        console.log(`[Game] Processing ${blocks.length} persisted blocks...`);
+        let appliedCount = 0;
+        let storedCount = 0;
+
+        for (const block of blocks) {
+            const { cx, cy, cz, lx, ly, lz } = this.worldToChunk(block.x, block.y, block.z);
+            const chunkKey = this.getChunkKey(cx, cy, cz);
+
+            // Group by chunk for efficient storage/application
+            if (!this.persistedBlocks.has(chunkKey)) {
+                this.persistedBlocks.set(chunkKey, []);
+            }
+            this.persistedBlocks.get(chunkKey).push({ lx, ly, lz, type: block.type });
+
+            // If chunk exists and is generated, apply immediately
+            // But if it's NOT generated, we just store it and wait for generation
+            const chunk = this.chunks.get(chunkKey);
+            if (chunk && chunk.isGenerated) {
+                chunk.setBlock(lx, ly, lz, block.type);
+                chunk.dirty = true; // Mark for rebuild
+                appliedCount++;
+            } else {
+                storedCount++;
+            }
+        }
+
+        console.log(`[Game] Persisted blocks: ${appliedCount} applied immediately, ${storedCount} queued for generation`);
+
+        if (appliedCount > 0) {
+            this.updateChunks();
+        }
+    }
+
+    // Process queue of chunks to generate
     processChunkQueue() {
         if (this.chunkGenQueue.length === 0) return;
         if (this._idleCallbackScheduled) return; // Already scheduled
@@ -1015,8 +961,24 @@ export class VoxelGame {
                 if (this.chunks.has(req.key)) continue;
 
                 // Generate
-                this.worldGen.generateChunk(req.cx, req.cy, req.cz);
+                const chunk = this.worldGen.generateChunk(req.cx, req.cy, req.cz);
                 this.generatedChunks.add(req.cx + ',' + req.cy + ',' + req.cz);
+
+                // --- CRITICAL FIX START ---
+                // Apply persisted blocks to this newly generated chunk
+                const chunkKey = this.getChunkKey(req.cx, req.cy, req.cz);
+                const pendingBlocks = this.persistedBlocks.get(chunkKey);
+                if (pendingBlocks) {
+                    console.log(`[Game] Applying ${pendingBlocks.length} pending blocks to generated chunk ${chunkKey}`);
+                    for (const pb of pendingBlocks) {
+                        chunk.setBlock(pb.lx, pb.ly, pb.lz, pb.type);
+                    }
+                    chunk.dirty = true; // Ensure mesh is built with these changes
+
+                    // We can clear them if we want to save memory, OR keep them if we unload/reload chunks later
+                    // keeping them is safer for now if we implement unloading
+                }
+                // --- CRITICAL FIX END ---
 
                 this.spawnManager.spawnChunk(req.cx, req.cz);
                 processed++;
@@ -1129,7 +1091,43 @@ export class VoxelGame {
             this._lastSceneCount = now;
             let count = 0;
             this.scene.traverse(() => count++);
-            console.log(`[Scene] Total objects: ${count}, Animals: ${this.animals.length}, Remote players: ${this.remotePlayers.size}`);
+            console.log(`[Scene] Total objects: ${count}, Animals: ${this.animals.length}`);
+        }
+
+        // Multiplayer: Send position update every 100ms, only if moved or stopping
+        if (!this._lastPosUpdate || now - this._lastPosUpdate > 100) {
+            this._lastPosUpdate = now;
+
+            if (this.socketManager && this.socketManager.isConnected()) {
+                const currentPos = this.player.position;
+                const currentRotY = this.player.rotation.y;
+
+                const posDist = currentPos.distanceTo(this._lastSentPos);
+                const rotDiff = Math.abs(currentRotY - this._lastSentRotY);
+
+                // Send if moved significantly (> 0.05) or rotated significantly (> 0.01 rad ~0.57 degrees)
+                // Lower rotation threshold ensures mouse-only look updates are synced
+                const isMoving = posDist > 0.05;
+                const isRotating = rotDiff > 0.01;
+                const shouldSend = isMoving || isRotating;
+
+
+
+                if (shouldSend) {
+                    this.socketManager.sendPosition(currentPos, currentRotY);
+                    this._lastSentPos.copy(currentPos);
+                    this._lastSentRotY = currentRotY;
+                    this._isCurrentlyMoving = isMoving;
+                    this._isCurrentlyRotating = isRotating;
+                } else if (this._isCurrentlyMoving || this._isCurrentlyRotating) {
+                    // Send one last "stop" packet to ensure final position/rotation sync
+                    this.socketManager.sendPosition(currentPos, currentRotY);
+                    this._lastSentPos.copy(currentPos);
+                    this._lastSentRotY = currentRotY;
+                    this._isCurrentlyMoving = false;
+                    this._isCurrentlyRotating = false;
+                }
+            }
         }
     }
 
@@ -1299,43 +1297,7 @@ export class VoxelGame {
             }
         }
 
-        // Send State to Server (Socket.IO)
-        // Respect debug toggle to isolate network performance
-        // Send State to Server (Socket.IO)
-        // Respect debug toggle to isolate network performance
-        if (this.networkManager && this.networkManager.isConnected() && !this._disableRemotePlayers) {
-            const now = performance.now();
-            // Throttle updates to 20Hz (every 50ms)
-            if (now - (this.lastNetworkUpdate || 0) > 50) {
-                this.lastNetworkUpdate = now;
 
-                const animation = (this.inputManager.keys['w'] || this.inputManager.keys['s'] ||
-                    this.inputManager.keys['a'] || this.inputManager.keys['d']) ? 'walking' : 'idle';
-
-                // Sanitize and flatten data to ensure minimal payload size
-                // (Prevent potentially sending large Three.js structures or circular references)
-                const sanitizedPos = {
-                    x: Math.round(this.player.position.x * 100) / 100,
-                    y: Math.round(this.player.position.y * 100) / 100,
-                    z: Math.round(this.player.position.z * 100) / 100
-                };
-                const sanitizedRot = {
-                    x: Math.round(this.player.rotation.x * 100) / 100,
-                    y: Math.round(this.player.rotation.y * 100) / 100
-                };
-
-                // heldItem should be just the ID string (e.g., 'sword') or null
-                let heldItemId = this.inventory.getSelectedItem()?.item;
-                if (typeof heldItemId !== 'string') heldItemId = null;
-
-                this.networkManager.sendPlayerUpdate(
-                    sanitizedPos,
-                    sanitizedRot,
-                    animation,
-                    heldItemId
-                );
-            }
-        }
 
         this.updateDebug();
         this.renderer.render(this.scene, this.camera);

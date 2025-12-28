@@ -66,6 +66,7 @@ export class VoxelGame {
         // Check for bare-bones mode via URL parameter
         const urlParams = new URLSearchParams(window.location.search);
         this.isBareBones = urlParams.get('bare-bones') === 'true';
+        this.isOffline = urlParams.get('offline') === 'true';
 
         if (this.isBareBones) {
             console.log('[Game] Bare Bones Mode: Minimal renderer only.');
@@ -91,7 +92,6 @@ export class VoxelGame {
         this.chunkGenQueue = []; // Queue for chunks to be generated
 
         // For raycasting - we need to track individual block positions
-        // this.blockData = new Map(); // REMOVED: Redundant storage
 
         // Frustum for culling
         this.frustum = new THREE.Frustum();
@@ -116,7 +116,6 @@ export class VoxelGame {
         this.gameState = new GameState(this);
 
         // Debug Flags (Initialize BEFORE UIManager) - Now in GameState
-        // this.debugFlags = { ... }; // Removed
 
         // Sub-modules
         this.uiManager = new UIManager(this);
@@ -174,15 +173,11 @@ export class VoxelGame {
         // PhysicsManager constructor adds it to game.scene if we passed game.
         // Yes: this.game.scene.add(this.highlightBox); in PhysicsManager.
 
-        // FPS counter removed from here (moved to UIManager instantiation)
 
-        // Spawn Animals - Manager initialized earlier
-        // this.animals = [];
-        // this.spawnManager = new SpawnManager(this);
 
-        // Check for offline mode via URL parameter
+
+
         // Check for offline mode via URL parameter - urlParams already declared at top of constructor
-        // const urlParams = new URLSearchParams(window.location.search);
         if (this.isOffline || this.isUIOnly) {
             console.log('[Game] Offline Mode: Network disabled.');
         } else {
@@ -392,7 +387,7 @@ export class VoxelGame {
         }, 1000); // Poll every 1 second for responsiveness
     }
 
-    // Removing setupDebugPanel() as it is in UIManager now
+
 
     /**
      * Poll for game state inspection code (eval)
@@ -716,11 +711,7 @@ export class VoxelGame {
     setBlock(x, y, z, type, skipMeshUpdate = false, skipBroadcast = false) {
         const { cx, cy, cz, lx, ly, lz } = this.worldToChunk(x, y, z);
 
-        // We no longer maintain this.blockData
-        // const key = this.getBlockKey(x, y, z); 
-
         if (type === null) {
-            // this.blockData.delete(key);
             const chunkKey = this.getChunkKey(cx, cy, cz);
             const chunk = this.chunks.get(chunkKey);
             if (chunk) {
@@ -729,7 +720,6 @@ export class VoxelGame {
                 this.markNeighborsDirty(Math.floor(x), Math.floor(y), Math.floor(z));
             }
         } else {
-            // this.blockData.set(key, type);
             const chunk = this.getOrCreateChunk(cx, cy, cz);
             chunk.setBlock(lx, ly, lz, type);
             // Also mark neighboring chunks as dirty if on edge
@@ -974,6 +964,18 @@ export class VoxelGame {
         }
     }
 
+    unloadChunk(key) {
+        const chunk = this.chunks.get(key);
+        if (chunk) {
+            if (chunk.dispose) chunk.dispose();
+            if (chunk.mesh) {
+                this.scene.remove(chunk.mesh);
+            }
+            this.chunks.delete(key);
+            this.generatedChunks.delete(key);
+        }
+    }
+
     checkChunks() {
         if (this.gameState.debug && !this.gameState.debug.chunks) return;
 
@@ -1103,16 +1105,14 @@ export class VoxelGame {
 
         this.chunkGenQueue.sort((a, b) => a.distSq - b.distSq);
 
-        // Schedule idle callback to process chunks when browser is free
-        this._idleCallbackScheduled = true;
-
         const processInIdle = (deadline) => {
             this._idleCallbackScheduled = false;
 
             let processed = 0;
+            const isInitialLoad = this.generatedChunks.size < 9; // 3x3 chunks
 
-            // Process as many chunks as we can while there's idle time
-            while (this.chunkGenQueue.length > 0 && deadline.timeRemaining() > 2) {
+            // Process as many chunks as we can while there's idle time OR if we are in initial load
+            while (this.chunkGenQueue.length > 0 && (deadline.timeRemaining() > 2 || isInitialLoad)) {
                 const req = this.chunkGenQueue.shift();
 
                 // Double check if loaded (rare case)
@@ -1122,7 +1122,6 @@ export class VoxelGame {
                 const chunk = this.worldGen.generateChunk(req.cx, req.cy, req.cz);
                 this.generatedChunks.add(req.cx + ',' + req.cy + ',' + req.cz);
 
-                // --- CRITICAL FIX START ---
                 // Apply persisted blocks to this newly generated chunk
                 const chunkKey = this.getChunkKey(req.cx, req.cy, req.cz);
                 const pendingBlocks = this.persistedBlocks.get(chunkKey);
@@ -1132,11 +1131,7 @@ export class VoxelGame {
                         chunk.setBlock(pb.lx, pb.ly, pb.lz, pb.type);
                     }
                     chunk.dirty = true; // Ensure mesh is built with these changes
-
-                    // We can clear them if we want to save memory, OR keep them if we unload/reload chunks later
-                    // keeping them is safer for now if we implement unloading
                 }
-                // --- CRITICAL FIX END ---
 
                 this.spawnManager.spawnChunk(req.cx, req.cz);
                 processed++;
@@ -1146,12 +1141,13 @@ export class VoxelGame {
                 this.updateBlockCount();
 
                 // Spawn initial animals and dragon AFTER enough chunks are generated
-                // Wait for at least 50 chunks to ensure the world around player is loaded
                 if (!this._initialSpawnDone && this.generatedChunks.size >= 50) {
                     this._initialSpawnDone = true;
                     console.log(`[Game] ${this.generatedChunks.size} chunks generated, spawning animals...`);
 
-                    this.spawnAnimals();
+                    // New: Mark world ready so deferred spawns are released
+                    this.spawnManager.setWorldReady();
+
                     this.spawnManager.spawnKangaroosNearPlayer();
                     this.spawnManager.spawnPugasusNearPlayer();
                     this.spawnManager.spawnSnowmenNearPlayer();
@@ -1166,17 +1162,18 @@ export class VoxelGame {
             }
         };
 
-        requestIdleCallback(processInIdle, { timeout: 100 });
-    }
+        // Schedule idle callback to process chunks when browser is free
+        this._idleCallbackScheduled = true;
 
-    unloadChunk(key) {
-        const chunk = this.chunks.get(key);
-        if (chunk) {
-            chunk.dispose();
-            this.chunks.delete(key);
-            // No need to cleanup blockData anymore
+        // Initial load: Run immediately to avoid waiting for idle time
+        if (this.generatedChunks.size < 9) {
+            setTimeout(() => processInIdle({ timeRemaining: () => 999 }), 0);
+        } else {
+            requestIdleCallback(processInIdle, { timeout: 100 });
         }
     }
+
+
 
     // cleanupBlockData removed as it's no longer needed
 
@@ -1307,20 +1304,23 @@ export class VoxelGame {
             return;
         }
 
+        // Update physics and player only when locked (active play)
         if (this.controls.isLocked) {
             this.player.update(deltaTime);
             this.physicsManager.update();
-
-            // Throttle chunk checking (expensive)
-            if (this.frameCount % 15 === 0) {
-                this.checkChunks();
-            }
-
-            // Update dirty chunks every frame (throttled internally)
-            this.updateChunks();
-
-            this.frameCount = (this.frameCount || 0) + 1;
         }
+
+        // Always update chunks and check for new ones, so the world generates around you even before starting
+        // Throttle chunk checking (expensive)
+        if (this.frameCount % 15 === 0) {
+            this.checkChunks();
+        }
+
+        // Update dirty chunks every frame (throttled internally)
+        this.updateChunks();
+
+        this.frameCount = (this.frameCount || 0) + 1;
+
         this.agent.update(this.lastTime / 1000, this.player);
         if (this.studio) this.studio.update(deltaTime);
 

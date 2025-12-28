@@ -36,6 +36,9 @@ class WorldPersistenceService {
     private flushTimer: NodeJS.Timeout | null = null;
     private readonly FLUSH_INTERVAL_MS = 500; // Batch writes every 500ms
 
+    private flushPromise: Promise<void> | null = null;
+    private isResetting: boolean = false;
+
     /**
      * Save a block change to Firebase RTDB
      * @param roomId - The room ID (IGNORED - using global world)
@@ -47,6 +50,9 @@ class WorldPersistenceService {
     async saveBlockChange(roomId: string, x: number, y: number, z: number, blockType: string | null): Promise<void> {
         // Use global ID
         const targetId = GLOBAL_WORLD_ID;
+
+        // If resetting, ignore new writes to prevent pollution
+        if (this.isResetting) return;
 
         console.log(`[WorldPersistence DEBUG] saveBlockChange called for room ${roomId} (mapped to ${targetId}), block at (${x},${y},${z}) type:${blockType}`);
         if (!realtimeDb) {
@@ -70,11 +76,29 @@ class WorldPersistenceService {
      * Flush pending writes to Firebase in a batch
      */
     private async flushWrites(): Promise<void> {
+        // If resetting, abort flush and clear queues
+        if (this.isResetting) {
+            this.writeQueue = [];
+            this.entityWriteQueue = [];
+            this.signWriteQueue = [];
+            this.flushTimer = null;
+            return;
+        }
+
         this.flushTimer = null;
 
-        await this.flushBlockWrites();
-        await this.flushEntityWrites();
-        await this.flushSignWrites();
+        // Track this flush operation
+        let resolveFlush: () => void;
+        this.flushPromise = new Promise(resolve => { resolveFlush = resolve; });
+
+        try {
+            await this.flushBlockWrites();
+            await this.flushEntityWrites();
+            await this.flushSignWrites();
+        } finally {
+            this.flushPromise = null;
+            if (resolveFlush!) resolveFlush();
+        }
     }
 
     private async flushBlockWrites(): Promise<void> {
@@ -207,6 +231,10 @@ class WorldPersistenceService {
      */
     async saveEntity(roomId: string, entityId: string, data: any): Promise<void> {
         const targetId = GLOBAL_WORLD_ID;
+
+        // If resetting, ignore new writes
+        if (this.isResetting) return;
+
         // console.log(`[WorldPersistence] saveEntity called for ${entityId}`);
         if (!realtimeDb) return;
 
@@ -269,6 +297,10 @@ class WorldPersistenceService {
     }
     async saveSignText(roomId: string, x: number, y: number, z: number, text: string): Promise<void> {
         const targetId = GLOBAL_WORLD_ID;
+
+        // If resetting, ignore new writes
+        if (this.isResetting) return;
+
         if (!realtimeDb) return;
 
         const key = `${Math.floor(x)}_${Math.floor(y)}_${Math.floor(z)}`;
@@ -334,20 +366,44 @@ class WorldPersistenceService {
             return;
         }
 
-        try {
-            // Clear the global world data (blocks, entities, signs)
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/blocks`).remove();
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/entities`).remove();
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/signs`).remove();
+        // 1. Mark as resetting to block new writes
+        this.isResetting = true;
 
-            // Clear any pending writes
+        try {
+            // 2. Clear pending local API queues immediately
+            if (this.flushTimer) {
+                clearTimeout(this.flushTimer);
+                this.flushTimer = null;
+            }
             this.writeQueue = [];
             this.entityWriteQueue = [];
             this.signWriteQueue = [];
 
+            // 3. Wait for any active flush to complete
+            if (this.flushPromise) {
+                console.log('[WorldPersistence] Waiting for active flush before reset...');
+                await this.flushPromise;
+            }
+
+            // 4. Clear the global world data (blocks, entities, signs)
+            console.log('[WorldPersistence] Executing world reset...');
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/blocks`).remove();
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/entities`).remove();
+            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/signs`).remove();
+
             console.log('[WorldPersistence] World reset complete - cleared all blocks, entities, and signs');
+
+            // Keep the lock active for a grace period to prevent clients from 
+            // re-saving old entities before they reload
+            setTimeout(() => {
+                this.isResetting = false;
+                console.log('[WorldPersistence] World reset grace period ended. Writes enabled.');
+            }, 5000);
+
+            // Do NOT set isResetting = false here immediately
         } catch (error) {
             console.error('[WorldPersistence] Failed to reset world:', error);
+            this.isResetting = false; // Release lock on error
             throw error;
         }
     }

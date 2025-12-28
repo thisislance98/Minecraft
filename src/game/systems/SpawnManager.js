@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../../utils/SeededRandom.js';
+import { Blocks } from '../core/Blocks.js';
 import {
     Pig, Horse, Chicken, Bunny, Frog, Wolf, Elephant, Lion, Bear, Tiger,
     Deer, Giraffe, Fish, Turtle, Duck, Squirrel, Monkey, Reindeer, Sheep,
     Goat, Turkey, Mouse, Snake, Zombie, Skeleton, Enderman, Creeper, Kangaroo, Pugasus, Cow, Snowman, Owl, SantaClaus, Unicorn,
     Panda, Camel, Snail, Fox, FennecFox,
-    Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever
+    Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Dragon
 } from '../AnimalRegistry.js';
 /**
  * SpawnManager handles all animal spawning logic.
@@ -17,7 +18,10 @@ export class SpawnManager {
 
         this.spawnedChunks = new Set();
         this.isSpawningEnabled = true;
-        this.hasLoadedPersistedEntities = false; // Set true when server sends entities:initial
+        // Initialize Sync State
+        // If offline, we are ready immediately. If online, wait for server.
+        this.waitingForInitialSync = !this.game.isOffline;
+
         this.allowedAnimals = new Set(); // If empty, all allowed. If not empty, only those in set.
         // Actually, better to default to ALL allowed.
         // Let's use a flag or assume if it's in the set it's allowed.
@@ -25,6 +29,10 @@ export class SpawnManager {
         // So let's initialize it empty and say "empty means all"? Or just logic in DebugPanel?
         // Let's make it robust:
         this.allowedAnimals = null; // null = all allowed. Set = filter.
+
+        // Deferred spawning - wait until world is ready
+        this.isWorldReady = false;
+        this.pendingSpawns = []; // Queue of {cx, cz} to spawn when world is ready
 
 
         // Biome spawn configuration
@@ -143,6 +151,7 @@ export class SpawnManager {
             { class: Unicorn, weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] },
             { class: MagicalCreature, weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] }, // Unicorn-fox-toucan hybrid!
             { class: TRex, weight: 0.02, packSize: [1, 1], biomes: ['JUNGLE', 'FOREST', 'PLAINS'] }, // HUGE T-REX
+            { class: Dragon, weight: 0.02, packSize: [1, 1], biomes: ['MOUNTAIN', 'SNOW', 'PLAINS', 'DESERT'] }, // Flying Dragons
             { class: Lampost, weight: 0.04, packSize: [1, 1], biomes: ['PLAINS', 'FOREST', 'SNOW'] }, // Walking Lampost (Narnia vibes)
             { class: Pumpkin, weight: 0.05, packSize: [3, 5], biomes: ['FOREST', 'PLAINS'] }, // Flying Pumpkins
             { class: Lorax, weight: 0.1, packSize: [1, 1], biomes: ['FOREST'] }, // Speaks for the trees!
@@ -184,6 +193,34 @@ export class SpawnManager {
 
         for (const data of entitiesList) {
             this.handleRemoteSpawn(data);
+        }
+
+        // Mark sync as complete (even if list was empty)
+        this.markInitialSyncComplete();
+    }
+
+    markInitialSyncComplete() {
+        if (!this.waitingForInitialSync) return;
+
+        console.log('[SpawnManager] Initial entity sync complete.');
+        this.waitingForInitialSync = false;
+
+        // If world is also ready, process the queue now
+        if (this.isWorldReady) {
+            this.processPendingSpawns();
+        }
+    }
+
+    processPendingSpawns() {
+        console.log(`[SpawnManager] Processing ${this.pendingSpawns.length} queued chunk spawns...`);
+
+        const queue = [...this.pendingSpawns];
+        this.pendingSpawns = []; // Clear queue
+
+        for (const req of queue) {
+            const key = `${req.cx},${req.cz} `;
+            this.spawnedChunks.delete(key); // Allow re-run
+            this.spawnChunk(req.cx, req.cz);
         }
     }
 
@@ -274,8 +311,16 @@ export class SpawnManager {
         if (!this.isSpawningEnabled) return;
 
         // Skip chunk-based spawning if persisted entities were loaded
-        // This prevents duplicates since persisted entities have moved from their original spawn positions
         if (this.hasLoadedPersistedEntities) return;
+
+        // --- DEFERRED SPAWNING LOGIC START ---
+        // If world is not ready OR we are waiting for server sync, queue it
+        if (!this.isWorldReady || this.waitingForInitialSync) {
+            // console.log(`[SpawnManager] Queuing spawn for chunk ${cx}, ${cz} (Ready: ${this.isWorldReady}, Sync: ${!this.waitingForInitialSync})`);
+            this.pendingSpawns.push({ cx, cz });
+            return;
+        }
+        // --- DEFERRED SPAWNING LOGIC END ---
 
         // Cap max entities (Reduced from 200 for performance)
         if (this.game.animals.length > 50) return;
@@ -292,9 +337,16 @@ export class SpawnManager {
         // Pick a random block in this chunk (deterministic)
         const bx = cx * chunkSize + Math.floor(chunkRng.next() * chunkSize);
         const bz = cz * chunkSize + Math.floor(chunkRng.next() * chunkSize);
+
+        // --- GROUND CHECK FIX ---
+        // Ensure the column is actually loaded before we try to spawn
+        // We need to check if we can find ground here
+        // If not, we should probably SKIP spawning here rather than fallback to terrain height
+        // Because terrain height might put them in the air if the chunk mesh isn't there
+        // But biome calculation relies on 2D noise which is always available.
         const biome = worldGen.getBiome(bx, bz);
 
-        console.log(`Spawning attempt in chunk ${cx}, ${cz} (Biome: ${biome})`);
+        // console.log(`Spawning attempt in chunk ${cx}, ${cz} (Biome: ${biome})`);
 
         // Spawn biome-specific animals
         const config = this.biomeSpawnConfig[biome];
@@ -314,7 +366,34 @@ export class SpawnManager {
         this.trySpawnHostile(bx, bz, chunkRng);
     }
 
+    /**
+     * Mark world as ready and process queued spawns
+     */
+    setWorldReady() {
+        if (this.isWorldReady) return;
+        this.isWorldReady = true;
+
+        console.log(`[SpawnManager] World ready! Processing ${this.pendingSpawns.length} queued chunk spawns...`);
+
+        // Sort queue by distance to player? Optional but nice.
+        // For now just process all.
+        // Note: processing specific chunks might still fail if their neighbors aren't generated?
+        // But by "World Ready" we assume initial area is largely done.
+
+        // Process queue
+
+        // Only process queue if we are ALSO synced (or offline)
+        if (!this.waitingForInitialSync) {
+            this.processPendingSpawns();
+        } else {
+            console.log('[SpawnManager] World ready, but waiting for initial sync before processing queue.');
+        }
+    }
+
     trySpawnHostile(bx, bz, rng) {
+        // Only spawn hostile mobs at night
+        if (this.game.environment && !this.game.environment.isNight()) return;
+
         // Only 10% chance for a hostile pack per successful spawn event
         if (rng.next() > 0.1) return;
 
@@ -432,11 +511,24 @@ export class SpawnManager {
             // Find actual ground level by checking blocks, not just terrain height
             // This prevents spawning in mid-air when chunks aren't loaded yet
             const groundY = this.findGroundLevel(x, y, z);
+
+            // DEBUG: Log spawn diagnostics
+            const terrainY = this.game.worldGen.getTerrainHeight(x, z);
+            const chunkKey = this.game.worldToChunk(x, y, z).cx + ',' + this.game.worldToChunk(x, y, z).cy + ',' + this.game.worldToChunk(x, y, z).cz;
+            const hasChunk = this.game.chunks.has(chunkKey);
+
             if (groundY === null) {
                 // No valid ground found, skip spawning this animal
-                // console.log(`Skipping spawn of ${AnimalClass.name} at ${x},${z} - no ground found`);
+                console.warn(`[SpawnManager] SKIP ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)} (Terrain:${terrainY}). CheckY:${y}. Chunk:${chunkKey} Loaded:${hasChunk}`);
                 return;
             }
+
+            if (Math.abs(groundY - terrainY) > 5) {
+                console.log(`[SpawnManager] HIGH DEV ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)}. Terrain:${terrainY} Ground:${groundY}. Chunk:${chunkKey} Loaded:${hasChunk}`);
+            } else {
+                console.log(`[SpawnManager] SPAWN ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)}. Terrain:${terrainY} Ground:${groundY}. Chunk:${chunkKey} Loaded:${hasChunk}`);
+            }
+
             spawnY = groundY;
         }
 
@@ -463,6 +555,8 @@ export class SpawnManager {
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
         this.entities.set(animal.id, animal);
+
+        return animal; // Return the animal so callers can send entity:spawn for manual spawns
 
         // Notify server that we spawned this (if it's not a remote echo)
         // But wait, chunk gen happens on ALL clients. We don't want everyone to send "spawn".
@@ -506,6 +600,13 @@ export class SpawnManager {
         for (let checkY = startY; checkY >= startY - searchRange; checkY--) {
             const block = this.game.getBlock(checkX, checkY, checkZ);
             if (block && block.type !== 'water') {
+                // Ignore Leaves and Logs
+                if (block.type === Blocks.LEAVES || block.type === Blocks.PINE_LEAVES || block.type === Blocks.BIRCH_LEAVES ||
+                    block.type === Blocks.LOG || block.type === Blocks.PINE_LOG || block.type === Blocks.BIRCH_LOG ||
+                    block.type === Blocks.PINE_WOOD || block.type === Blocks.BIRCH_WOOD) { // Check log variants too
+                    continue;
+                }
+
                 // Found solid ground - spawn one block above it
                 // Also verify there's air above to stand in
                 const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
@@ -519,6 +620,13 @@ export class SpawnManager {
         for (let checkY = startY + 1; checkY <= startY + searchRange; checkY++) {
             const block = this.game.getBlock(checkX, checkY, checkZ);
             if (block && block.type !== 'water') {
+                // Ignore Leaves and Logs
+                if (block.type === Blocks.LEAVES || block.type === Blocks.PINE_LEAVES || block.type === Blocks.BIRCH_LEAVES ||
+                    block.type === Blocks.LOG || block.type === Blocks.PINE_LOG || block.type === Blocks.BIRCH_LOG ||
+                    block.type === Blocks.PINE_WOOD || block.type === Blocks.BIRCH_WOOD) {
+                    continue;
+                }
+
                 const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
                 if (!blockAbove || blockAbove.type === 'water') {
                     return checkY + 1;
@@ -534,6 +642,12 @@ export class SpawnManager {
      * Spawn kangaroos near the player's starting position
      */
     spawnKangaroosNearPlayer() {
+        // Skip if we've loaded persisted entities to prevent duplicates
+        if (this.hasLoadedPersistedEntities) {
+            console.log('[SpawnManager] Skipping kangaroo spawn (persisted entities exist)');
+            return;
+        }
+
         const player = this.game.player;
         const worldGen = this.game.worldGen;
 
@@ -564,6 +678,12 @@ export class SpawnManager {
      * These mythical chimera creatures greet the player!
      */
     spawnPugasusNearPlayer() {
+        // Skip if we've loaded persisted entities to prevent duplicates
+        if (this.hasLoadedPersistedEntities) {
+            console.log('[SpawnManager] Skipping Pugasus spawn (persisted entities exist)');
+            return;
+        }
+
         const player = this.game.player;
         const worldGen = this.game.worldGen;
 
@@ -594,6 +714,12 @@ export class SpawnManager {
      * These festive friends walk around and talk with speech bubbles!
      */
     spawnSnowmenNearPlayer() {
+        // Skip if we've loaded persisted entities to prevent duplicates
+        if (this.hasLoadedPersistedEntities) {
+            console.log('[SpawnManager] Skipping Snowmen spawn (persisted entities exist)');
+            return;
+        }
+
         const player = this.game.player;
         const worldGen = this.game.worldGen;
 
@@ -656,25 +782,18 @@ export class SpawnManager {
             // Always spawn on the ground, not at player's height
             const spawnY = terrainH + 1;
 
-            const animal = this.createAnimal(EntityClass, tx, spawnY, tz, true, rng.next());
+            const animal = this.createAnimal(EntityClass, tx, spawnY, tz, false, rng.next());
             if (animal && this.game.socketManager) {
                 this.game.socketManager.sendEntitySpawn(animal.serialize());
             }
         }
-        console.log(`Debug spawned ${count} ${EntityClass.name}`);
+        console.log(`Debug spawned ${count} ${EntityClass.name} `);
 
-        // For debug spawns, we DO want to persist and sync them?
-        // Since they are random/local to the user who pressed the key.
-        // Yes, these should be treated as "Manual Spawns".
-        // But `createAnimal` logic above doesn't send `entity:spawn`.
-        // We need a way to explicitly "Network Spawn".
-        // We can iterate the spawned animals (requires refactoring createAnimal to return it)
-        // Or just let `Animal` checkSync handle it? 
-        // `checkSync` updates position. But `entity:spawn` is needed for others to create it.
-
-        // Let's rely on the fact that if I debug spawn, it has a random ID.
-        // I should send `entity:spawn` for it.
-        // But `createAnimal` returns void.
-        // Let's update `createAnimal` to return the animal.
+        // Return information about the spawned entities
+        return {
+            count: count,
+            creature: EntityClass.name,
+            position: { x: cx, y: cy, z: cz }
+        };
     }
 }

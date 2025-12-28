@@ -27,8 +27,8 @@ export const VOICE_RECONNECT_DELAY = 500;
 
 // Gemini models
 export const GEMINI_MODEL_VOICE = "gemini-2.5-flash-native-audio-preview-12-2025"
-export const GEMINI_MODEL_TEXT = "gemini-3-flash-preview";
-export const GEMINI_MODEL_CODE = "gemini-3-flash-preview";
+export const GEMINI_MODEL_TEXT = "gemini-2.0-flash-exp";
+export const GEMINI_MODEL_CODE = "gemini-2.0-flash-exp";
 
 // WebSocket
 export const GEMINI_WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent";

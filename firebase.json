@@ -1,6 +1,6 @@
 {
     "hosting": {
-        "site": "minecraft-clone-trackit-v2",
+        "site": "worldcraft",
         "public": "dist",
         "ignore": [
             "firebase.json",

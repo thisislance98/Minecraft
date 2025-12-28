@@ -25,7 +25,7 @@ import {
 } from '../ai/constants.js';
 import { Config } from '../core/Config.js';
 
-// Retry configuration for API calls (gemini-3-flash-preview can be unstable)
+// Retry configuration for API calls
 const API_MAX_RETRIES = 3;
 const API_INITIAL_DELAY_MS = 1000;
 
@@ -95,6 +95,9 @@ export class Agent {
 
         // Voice Config
         this.voiceName = localStorage.getItem('agent_voice') || DEFAULT_VOICE;
+
+        // Streaming Mode - loaded from localStorage via UIManager
+        this.streamingMode = localStorage.getItem('settings_ai_streaming') === 'true';
 
         // Create minimal status indicator
         this.game.uiManager.updateVoiceStatus(false, 'Voice Off (V)');
@@ -491,12 +494,18 @@ export class Agent {
                 };
             }
 
-            this.game.uiManager.addChatMessage('ai', `🐾 ${result}`);
+            let outputMsg = result;
+            if (typeof result === 'object' && result.position) {
+                const { x, y, z } = result.position;
+                outputMsg = `Spawned ${result.count} ${result.creature} at coordinates: x=${x.toFixed(1)}, y=${y.toFixed(1)}, z=${z.toFixed(1)}`;
+            }
+
+            this.game.uiManager.addChatMessage('ai', `🐾 ${outputMsg}`);
 
             // Clear debug ID
             this.currentDebugId = null;
 
-            return { output: { result } };
+            return { output: { result: outputMsg } };
         } else if (name === 'get_scene_info') {
             console.log('[Agent] Getting scene info');
             const info = this.getSceneInfo();
@@ -796,9 +805,13 @@ export class Agent {
         }
 
         // Use SpawnManager to spawn in front of player
-        this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, count);
-        const plural = count > 1 ? 's' : '';
-        return `Spawned ${count} ${CreatureClass.name}${plural} in front of you!`;
+        // Use SpawnManager to spawn in front of player
+        const spawnResult = this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, count);
+
+        // Announce it (System message)
+        this.game.uiManager.addChatMessage('system', `Spawned ${count} ${CreatureClass.name} (Debug)`);
+
+        return spawnResult || `Spawned ${count} ${CreatureClass.name} in front of you!`;
     }
 
     /**
@@ -844,6 +857,14 @@ export class Agent {
                     const name = animal.constructor.name;
                     nearbyCreatures[name] = (nearbyCreatures[name] || 0) + 1;
                 }
+            }
+        }
+
+        // Explicitly check for Dragon/T-Rex (stored separately in VoxelGame)
+        if (this.game.dragon && this.game.dragon.mesh) {
+            const dist = this.game.dragon.mesh.position.distanceTo(pos);
+            if (dist < CREATURE_DETECTION_RADIUS) {
+                nearbyCreatures['T-Rex (Dragon)'] = 1;
             }
         }
 
@@ -987,7 +1008,85 @@ export class Agent {
                 const transform = this.getPlayerTransform();
                 const contextMsg = `[PLAYER CONTEXT - Position: x=${transform.position.x.toFixed(2)}, y=${transform.position.y.toFixed(2)}, z=${transform.position.z.toFixed(2)}, Orientation: pitch=${transform.rotation.x.toFixed(2)}, yaw=${transform.rotation.y.toFixed(2)}]\n${text}`;
 
-                // Send message with retry logic for 500 errors
+                // Use streaming mode if enabled
+                if (this.streamingMode) {
+                    // Remove "Thinking..." message before streaming
+                    this.game.uiManager.removeChatMessage?.(thinkingMsgId);
+
+                    // Create a placeholder message for logging outputs
+                    const streamMsgId = this.game.uiManager.addChatMessage('ai', '');
+                    let fullText = '';
+                    let turns = 0;
+
+                    // Recursive function to handle the stream and potential tool calls
+                    const processStream = async (resultPromise) => {
+                        if (turns > MAX_TOOL_CALL_TURNS) return;
+
+                        try {
+                            const result = await resultPromise; // Wait for the stream initialization
+
+                            for await (const chunk of result.stream) {
+                                const chunkText = chunk.text();
+                                if (chunkText) {
+                                    fullText += chunkText;
+                                    this.game.uiManager.updateChatMessageContent?.(streamMsgId, fullText);
+                                }
+
+                                // Check for tool calls in this chunk
+                                // Note: In some SDK versions, functionCalls() might only be available on the final response,
+                                // but we try to check it on chunks if supported or accumulatively.
+                                // However, standard pattern is to consume the stream, then check the aggregate response for tools.
+                                // BUT, for true streaming tool calls, we often need to check `chunk.functionCalls()`.
+                            }
+
+                            // After stream finishes, check for tool calls in the aggregated response
+                            const response = await result.response;
+                            const functionCalls = response.functionCalls();
+
+                            if (functionCalls && functionCalls.length > 0) {
+                                turns++;
+                                // Log that we are executing tools
+                                // fullText += '\n[Executing tools...]';
+                                // this.game.uiManager.updateChatMessageContent?.(streamMsgId, fullText);
+
+                                const functionResponses = [];
+                                for (const call of functionCalls) {
+                                    const executionResult = await this.executeTool(call.name, call.args);
+                                    functionResponses.push({
+                                        functionResponse: {
+                                            name: call.name,
+                                            response: executionResult.output
+                                        }
+                                    });
+                                }
+
+                                // Send function results back and stream the next response
+                                // Recursively call processStream with the new stream
+                                console.log('[Agent] Sending tool responses:', functionResponses);
+                                await processStream(this.chatSession.sendMessageStream(functionResponses)); // Recursive call
+                            }
+
+                        } catch (e) {
+                            console.error('[Agent] Streaming error:', e);
+                            fullText += `\n[Error: ${e.message}]`;
+                            this.game.uiManager.updateChatMessageContent?.(streamMsgId, fullText);
+                        }
+                    };
+
+                    // Start the initial stream
+                    await processStream(this.chatSession.sendMessageStream(contextMsg));
+
+                    // Add to shared history
+                    if (fullText) {
+                        this.conversationHistory.push({ role: 'model', text: fullText });
+                        this.trimConversationHistory();
+                    }
+
+                    this.currentDebugId = null;
+                    return; // Exit early for streaming mode
+                }
+
+                // Non-streaming mode: send message with retry logic for 500 errors
                 let result;
                 let lastError;
                 for (let attempt = 1; attempt <= API_MAX_RETRIES; attempt++) {

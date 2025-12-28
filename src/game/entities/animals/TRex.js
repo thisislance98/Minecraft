@@ -4,126 +4,196 @@ import { Animal } from '../Animal.js';
 export class TRex extends Animal {
     constructor(game, x, y, z) {
         super(game, x, y, z);
-        // Make it huge
         this.width = 2.0;
-        this.height = 4.0;
-        this.depth = 4.0;
-        this.speed = 3.5; // Big strides but maybe not super fast acceleration? Or scary fast? Let's go with moderate.
+        this.height = 5.0;
+        this.depth = 6.0;
+        this.speed = 4.0;
+        this.health = 50;
+        this.maxHealth = 50;
+        this.damage = 10;
+        this.detectionRange = 40;
+        this.attackRange = 6;
+        this.isHostile = true;
         this.createBody();
+
+        // Scale the model
+        this.mesh.scale.set(1.5, 1.5, 1.5);
+
+        // Make T-Rex immune to proximity flee (it's the apex predator!)
+        this.fleeOnProximity = false;
     }
 
     createBody() {
-        // T-Rex: Green
-        const skinColor = 0x4C9A2A; // Forest Green
-        const bellyColor = 0x8FBC8F; // Dark Sea Green
-        const clawColor = 0x333333; // Dark Grey
+        // Materials
+        const skinColor = 0x556B2F; // Dark Olive Green
+        const bellyColor = 0x8FBC8F; // Dark Sea Green (lighter belly)
+        const toothColor = 0xFFFFFF;
+        const clawColor = 0x2F2F2F;
 
         const mat = new THREE.MeshLambertMaterial({ color: skinColor });
         const bellyMat = new THREE.MeshLambertMaterial({ color: bellyColor });
+        const toothMat = new THREE.MeshLambertMaterial({ color: toothColor });
         const clawMat = new THREE.MeshLambertMaterial({ color: clawColor });
 
-        // Main Body (Hips/Torso)
-        // Angled slightly up
-        const bodyGeo = new THREE.BoxGeometry(1.8, 2.0, 3.5);
-        const body = new THREE.Mesh(bodyGeo, mat);
-        body.position.set(0, 3.5, 0); // High up
-        body.rotation.x = -0.2; // Tilt up slightly
-        this.mesh.add(body);
+        // --- Main Body Group ---
+        // Pivot point at feet center? No, Animal.js usually centers at 0,0,0 (feet level) or center of body?
+        // Animal.js: this.mesh.position.copy(this.position);
+        // And usually animals have feet at Y=0 relative to mesh, or mesh intersects ground?
+        // Pig.js body is at Y=0.6, legs go down. Feet at Y ~= 0.
+        // So we build from Y=0 upwards.
 
-        // Neck (thick)
-        const neckGeo = new THREE.BoxGeometry(1.2, 1.5, 1.2);
+        // 1. Torso (Horizontal)
+        const torsoGeo = new THREE.BoxGeometry(1.4, 1.6, 2.8);
+        const torso = new THREE.Mesh(torsoGeo, mat);
+        torso.position.set(0, 2.5, 0); // High up
+        this.mesh.add(torso);
+
+        // Belly Patch
+        const bellyGeo = new THREE.BoxGeometry(1.2, 0.1, 2.0);
+        const belly = new THREE.Mesh(bellyGeo, bellyMat);
+        belly.position.set(0, 1.71, 0);
+        this.mesh.add(belly);
+
+        // 2. Neck (Angled Upwards)
+        const neckGeo = new THREE.BoxGeometry(1.0, 1.2, 1.0);
         const neck = new THREE.Mesh(neckGeo, mat);
-        neck.position.set(0, 4.8, 1.5);
-        neck.rotation.x = -0.4;
+        neck.position.set(0, 3.2, 1.6); // Up and Forward (+Z)
+        neck.rotation.x = -0.4; // Tilt back/up
         this.mesh.add(neck);
 
-        // Head
-        const headGeo = new THREE.BoxGeometry(1.4, 1.5, 2.2);
-        const head = new THREE.Mesh(headGeo, mat);
-        head.position.set(0, 5.8, 2.2);
-        this.mesh.add(head);
+        // 3. Head (Blocky T-Rex head)
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 3.8, 2.2);
+        this.mesh.add(headGroup);
 
-        // Jaw/Mouth (Let's make it look open or distinct)
-        const jawGeo = new THREE.BoxGeometry(1.2, 0.4, 1.8);
+        // Cranium
+        const craniumGeo = new THREE.BoxGeometry(1.1, 1.0, 1.2);
+        const cranium = new THREE.Mesh(craniumGeo, mat);
+        cranium.position.set(0, 0, 0);
+        headGroup.add(cranium);
+
+        // Snout
+        const snoutGeo = new THREE.BoxGeometry(0.9, 0.7, 1.0);
+        const snout = new THREE.Mesh(snoutGeo, mat);
+        snout.position.set(0, -0.1, 1.0); // Forward from cranium
+        headGroup.add(snout);
+
+        // Jaw (Lower) - Can articulate?
+        const jawGeo = new THREE.BoxGeometry(0.8, 0.3, 1.8);
         const jaw = new THREE.Mesh(jawGeo, bellyMat);
-        jaw.position.set(0, 5.2, 2.4);
-        jaw.rotation.x = 0.1; // Open mouth slightly
-        this.mesh.add(jaw);
+        jaw.position.set(0, -0.6, 0.5);
+        jaw.rotation.x = 0.1; // Slightly open
+        headGroup.add(jaw);
+
+        // Teeth
+        for (let i = -1; i <= 1; i += 2) {
+            // Upper teeth
+            const toothGeo = new THREE.BoxGeometry(0.05, 0.15, 0.05);
+            for (let j = 0; j < 4; j++) {
+                const t = new THREE.Mesh(toothGeo, toothMat);
+                t.position.set(i * 0.35, -0.45, 0.8 + j * 0.2);
+                headGroup.add(t);
+            }
+        }
 
         // Eyes
-        const eyeColor = 0xFFFF00; // Yellow eyes
+        const eyeColor = 0xFFFF00;
         const eyeMat = new THREE.MeshLambertMaterial({ color: eyeColor });
-        const pupilMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
+        const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
 
-        const eyeGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
         const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.7, 6.0, 2.5);
-        this.mesh.add(leftEye);
+        leftEye.position.set(0.56, 0.1, 0.3);
+        headGroup.add(leftEye);
 
         const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        rightEye.position.set(0.7, 6.0, 2.5);
-        this.mesh.add(rightEye);
+        rightEye.position.set(-0.56, 0.1, 0.3);
+        headGroup.add(rightEye);
 
-        // Tail (thick base, tapering)
-        const tailGeo1 = new THREE.BoxGeometry(1.4, 1.4, 2.5);
-        const tail1 = new THREE.Mesh(tailGeo1, mat);
-        tail1.position.set(0, 3.0, -2.0);
-        tail1.rotation.x = -0.1;
-        this.mesh.add(tail1);
+        // 4. Tail (Thick and tapering)
+        const tailGroup = new THREE.Group();
+        tailGroup.position.set(0, 2.8, -1.4); // Back of torso
+        this.mesh.add(tailGroup);
 
-        const tailGeo2 = new THREE.BoxGeometry(1.0, 1.0, 2.5);
-        const tail2 = new THREE.Mesh(tailGeo2, mat);
-        tail2.position.set(0, 2.8, -4.0);
-        tail2.rotation.x = -0.05;
-        this.mesh.add(tail2);
+        const tailSegments = 4;
+        let lastZ = 0;
+        let w = 1.2, h = 1.4;
 
-        // Legs (Huge hind legs)
-        const legGeo = new THREE.BoxGeometry(1.0, 2.5, 1.4);
+        for (let i = 0; i < tailSegments; i++) {
+            const segLen = 1.2;
+            const geo = new THREE.BoxGeometry(w, h, segLen);
+            const mesh = new THREE.Mesh(geo, mat);
+            // Each segment moves back (-Z)
+            mesh.position.set(0, 0, lastZ - segLen / 2);
+            tailGroup.add(mesh);
 
-        // Thighs
-        const leftThigh = new THREE.Mesh(legGeo, mat);
-        leftThigh.position.set(-1.1, 2.5, 0);
+            lastZ -= (segLen - 0.1); // Overlap slightly
+            w *= 0.8;
+            h *= 0.8;
+            // Slight curve down?
+            // mesh.rotation.x = -0.1 * i;
+        }
+
+        // 5. Thighs (Big legs)
+        const thighGeo = new THREE.BoxGeometry(0.8, 1.4, 1.0);
+
+        const leftThigh = new THREE.Mesh(thighGeo, mat);
+        leftThigh.position.set(0.9, 1.8, -0.5);
         this.mesh.add(leftThigh);
 
-        const rightThigh = new THREE.Mesh(legGeo, mat);
-        rightThigh.position.set(1.1, 2.5, 0);
+        const rightThigh = new THREE.Mesh(thighGeo, mat);
+        rightThigh.position.set(-0.9, 1.8, -0.5);
         this.mesh.add(rightThigh);
 
-        // Lower Legs (The parts that move)
-        const shinGeo = new THREE.BoxGeometry(0.8, 2.0, 0.8);
+        // 6. Lower Legs & Feet
+        const shinGeo = new THREE.BoxGeometry(0.5, 1.2, 0.6);
+        const footGeo = new THREE.BoxGeometry(0.7, 0.3, 1.0);
+
         const makeLeg = (x, z) => {
-            const pivot = new THREE.Group();
-            pivot.position.set(x, 1.5, z); // Pivot at knee
+            const group = new THREE.Group();
+            group.position.set(x, 1.5, z); // Knee pivot?
+
             const shin = new THREE.Mesh(shinGeo, mat);
-            shin.position.set(0, -1.0, 0);
-            pivot.add(shin);
+            shin.position.set(0, -0.6, 0.2); // Angled forward?
+            // shin.rotation.x = -0.2;
+            group.add(shin);
 
-            // Foot
-            const footGeo = new THREE.BoxGeometry(1.0, 0.5, 1.5);
-            const foot = new THREE.Mesh(footGeo, clawMat);
-            foot.position.set(0, -2.0, 0.5);
-            pivot.add(foot);
+            const foot = new THREE.Mesh(footGeo, mat);
+            foot.position.set(0, -1.2, 0.3);
+            group.add(foot);
 
-            this.mesh.add(pivot);
-            return pivot;
+            // Claws
+            for (let k = -1; k <= 1; k++) {
+                const claw = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), clawMat);
+                claw.position.set(k * 0.2, -1.25, 0.85);
+                group.add(claw);
+            }
+
+            this.mesh.add(group);
+            return group;
         };
 
         this.legParts = [
-            makeLeg(-1.1, 0.2), // Left
-            makeLeg(1.1, 0.2)   // Right
+            makeLeg(0.9, -0.5),
+            makeLeg(-0.9, -0.5)
         ];
 
-        // Tiny Arms
-        const armGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+        // 7. Tiny Arms
+        const armGeo = new THREE.BoxGeometry(0.25, 0.6, 0.25);
 
-        const leftArm = new THREE.Mesh(armGeo, mat);
-        leftArm.position.set(-1.0, 3.5, 1.5);
-        leftArm.rotation.x = -0.5; // Point forward/down
-        this.mesh.add(leftArm);
+        const makeArm = (x) => {
+            const arm = new THREE.Mesh(armGeo, mat);
+            arm.position.set(x, 2.2, 1.4);
+            arm.rotation.x = -0.8; // Point forward/down
+            this.mesh.add(arm);
 
-        const rightArm = new THREE.Mesh(armGeo, mat);
-        rightArm.position.set(1.0, 3.5, 1.5);
-        rightArm.rotation.x = -0.5;
-        this.mesh.add(rightArm);
+            // Forearm
+            const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.2), mat);
+            forearm.position.set(0, -0.3, 0.1);
+            forearm.rotation.x = -0.6;
+            arm.add(forearm);
+        };
+
+        makeArm(0.8);
+        makeArm(-0.8);
     }
 }

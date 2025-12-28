@@ -48,7 +48,6 @@ export class UIManager {
 
 
         this.createMuteButton();
-        this.createNetworkHUD();
         this.createSignInputUI();
         this.setupSettingsMenu();
     }
@@ -148,6 +147,25 @@ export class UIManager {
             });
         }
 
+        // AI Streaming toggle
+        this.aiStreamingToggle = document.getElementById('settings-ai-streaming-toggle');
+        if (this.aiStreamingToggle) {
+            const savedStreaming = localStorage.getItem('settings_ai_streaming') === 'true';
+            this.aiStreamingToggle.checked = savedStreaming;
+            // Notify agent of initial state
+            if (this.game.agent) {
+                this.game.agent.streamingMode = savedStreaming;
+            }
+
+            this.aiStreamingToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_ai_streaming', enabled);
+                if (this.game.agent) {
+                    this.game.agent.streamingMode = enabled;
+                }
+            });
+        }
+
         // Reset World button
         if (this.resetWorldBtn) {
             this.resetWorldBtn.addEventListener('click', () => {
@@ -167,76 +185,41 @@ export class UIManager {
         }
     }
 
-    createNetworkHUD() {
-        if (this.networkHUD) return;
+    // Remote players HUD - positioned next to version info
+    createRemotePlayersHUD() {
+        if (this.remotePlayersHUD) return;
 
         const div = document.createElement('div');
-        div.id = 'network-hud';
+        div.id = 'remote-players-hud';
         div.style.cssText = `
-            position: fixed; top: 10px; left: 10px;
-            background: rgba(0,0,0,0.5); color: #fff;
-            padding: 8px 12px; border-radius: 4px;
-            font-family: 'VT323', monospace; font-size: 16px;
-            z-index: 1000; display: flex; flex-direction: column; gap: 4px;
-            pointer-events: none;
+            position: fixed; top: 20px; left: 340px;
+            background: rgba(0,0,0,0.7); color: #fff;
+            padding: 10px 14px; border-radius: 4px;
+            font-family: 'VT323', monospace; font-size: 14px;
+            z-index: 100; pointer-events: none;
+            display: none;
         `;
-
-        div.innerHTML = `
-            <div id="net-status" style="color: #ffaa00;">Connecting...</div>
-            <div id="net-role" style="font-size: 14px; color: #aaa; display: none;"></div>
-            <div id="net-room" style="font-size: 14px; color: #aaa; display: none;"></div>
-            <div id="voice-transmit" style="font-size: 18px; color: #00ffcc; display: none; margin-top: 5px;">🎤 Transmitting...</div>
-            <div id="net-players" style="font-size: 12px; color: #ccc; margin-top: 5px; border-top: 1px solid #444; padding-top: 2px;"></div>
-        `;
+        div.innerHTML = `<div id="remote-players-list"></div>`;
 
         document.body.appendChild(div);
-        this.networkHUD = div;
-        this.netStatusEl = div.querySelector('#net-status');
-        this.netRoleEl = div.querySelector('#net-role');
-        this.netRoomEl = div.querySelector('#net-room');
-        this.voiceTransmitEl = div.querySelector('#voice-transmit');
-        this.netPlayersEl = div.querySelector('#net-players');
-        this.remotePlayers = new Map(); // id -> {x, y, z}
+        this.remotePlayersHUD = div;
+        this.remotePlayersList = div.querySelector('#remote-players-list');
+        this.remotePlayers = new Map();
     }
 
     updateNetworkStatus(status, role, roomId) {
-        if (!this.networkHUD) this.createNetworkHUD();
-
-        if (status) {
-            this.netStatusEl.textContent = status;
-            if (status === 'Connected' || status === 'In Room') {
-                this.netStatusEl.style.color = '#00ff00';
-            } else if (status === 'Disconnected') {
-                this.netStatusEl.style.color = '#ff0000';
-            } else {
-                this.netStatusEl.style.color = '#ffaa00';
-            }
-        }
-
-        if (role) {
-            this.netRoleEl.textContent = `Role: ${role}`;
-            this.netRoleEl.style.display = 'block';
-        } else {
-            this.netRoleEl.style.display = 'none';
-        }
-
-        if (roomId) {
-            this.netRoomEl.textContent = `Room: ${roomId}`;
-            this.netRoomEl.style.display = 'block';
-        }
+        // Network status removed - no-op (only remote player positions shown)
     }
 
     updateRemotePlayerStatus(id, pos, rotY) {
-        if (!this.networkHUD) this.createNetworkHUD();
+        if (!this.remotePlayersHUD) this.createRemotePlayersHUD();
         if (!this.remotePlayers) this.remotePlayers = new Map();
 
         if (pos === null) {
             this.remotePlayers.delete(id);
         } else if (pos && typeof pos.x === 'number') {
-            // Store both position and rotation
             this.remotePlayers.set(id, { pos, rotY: rotY ?? 0 });
         } else {
-            // Ignore malformed updates
             return;
         }
 
@@ -246,17 +229,22 @@ export class UIManager {
             if (data && data.pos && typeof data.pos.x === 'number') {
                 const sid = String(pid).substring(0, 4);
                 const p = data.pos;
-                const rotDeg = ((data.rotY ?? 0) * 180 / Math.PI).toFixed(0);
-                html += `<div>${sid}: pos(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) rot:${rotDeg}°</div>`;
+                html += `<p style="margin: 4px 0;">👤 ${sid}: ${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}</p>`;
             }
         });
-        if (this.netPlayersEl) this.netPlayersEl.innerHTML = html;
+
+        if (this.remotePlayersList) {
+            this.remotePlayersList.innerHTML = html;
+        }
+
+        // Show/hide based on whether there are remote players
+        if (this.remotePlayersHUD) {
+            this.remotePlayersHUD.style.display = this.remotePlayers.size > 0 ? 'block' : 'none';
+        }
     }
 
     toggleVoiceTransmitIndicator(active) {
-        if (this.voiceTransmitEl) {
-            this.voiceTransmitEl.style.display = active ? 'block' : 'none';
-        }
+        // Voice transmit indicator removed - no-op
     }
 
     createMuteButton() {
@@ -859,15 +847,52 @@ export class UIManager {
     }
 
     addChatMessage(sender, text) {
-        if (!this.chatMessages) return;
+        if (!this.chatMessages) return null;
 
+        const msgId = 'chat-msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
         const msgDiv = document.createElement('div');
+        msgDiv.id = msgId;
         msgDiv.className = `message ${sender}`;
         msgDiv.innerHTML = `<div class="message-content">${this.escapeHTML(text)}</div>`;
         this.chatMessages.appendChild(msgDiv);
 
         // Auto-scroll
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+
+        return msgId;
+    }
+
+    updateChatMessageContent(msgId, text) {
+        if (!msgId) return;
+        const msgDiv = document.getElementById(msgId);
+        if (msgDiv) {
+            const contentDiv = msgDiv.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = this.escapeHTML(text);
+                // Auto-scroll to show latest content
+                if (this.chatMessages) {
+                    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                }
+            }
+        }
+    }
+
+    removeChatMessage(msgId) {
+        if (!msgId) return;
+        const msgDiv = document.getElementById(msgId);
+        if (msgDiv) {
+            msgDiv.remove();
+        }
+    }
+
+    getLastAiMessage() {
+        if (!this.chatMessages) return null;
+        const messages = this.chatMessages.getElementsByClassName('message ai');
+        if (messages.length > 0) {
+            const lastMsg = messages[messages.length - 1];
+            return lastMsg.textContent.trim();
+        }
+        return null;
     }
 
     escapeHTML(text) {

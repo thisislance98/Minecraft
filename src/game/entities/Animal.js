@@ -207,15 +207,12 @@ export class Animal {
             this.mesh.rotation.y = this.rotation;
         }
 
-        // Hostile mobs are only visible at night
+        // Hostile mobs behavior
         if (this.isHostile && this.game.environment) {
             const isNight = this.game.environment.isNight();
-            this.mesh.visible = isNight;
-            // Skip AI updates during the day
-            if (!isNight) {
-                this.isMoving = false;
-                this.state = 'idle';
-            }
+            // We removed the visibility check as requested.
+            // We can still suppress AI if we want, but usually if they are there, they should act.
+            // For now, let's allow them to move/act if they exist.
         }
 
         // Persistence / Sync Check

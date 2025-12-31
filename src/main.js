@@ -6,7 +6,10 @@ import { VoxelGame } from './game/VoxelGame.jsx';
 // Initialize the game when the window loads
 window.addEventListener('load', () => {
     generateHotbarIcons();
-    new VoxelGame();
+    const game = new VoxelGame();
+    if (window.antigravityClient) {
+        window.antigravityClient.setGame(game);
+    }
 });
 
 // HMR Update Notifications

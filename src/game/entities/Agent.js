@@ -9,7 +9,7 @@ import {
     BIOME_ALIASES,
     CREATURE_ALIASES,
     MAX_SPAWN_COUNT
-} from '../ai/constants.js';
+} from '../constants.js';
 
 export class Agent {
     constructor(game) {
@@ -23,10 +23,12 @@ export class Agent {
         this.currentStreamMsgId = null;
         this.lastToolMsgId = null;
         this.isChatOpen = false;
+        this.isStreaming = false;
 
-        // Connection
-        this.ws = null;
-        this.connectAntigravity();
+        // Connection (Delegate to global client)
+        if (window.antigravityClient) {
+            this.unsubscribe = window.antigravityClient.addListener(this.handleClientMessage.bind(this));
+        }
 
         // Voice Toggles (Legacy/Placeholder)
         this.setupKeyboardToggle();
@@ -86,82 +88,50 @@ export class Agent {
     }
 
     // =========================================================================
-    // ANTIGRAVITY CLIENT LOGIC
+    // ANTIGRAVITY CLIENT LOGIC (Shims to Window Client)
     // =========================================================================
 
-    connectAntigravity() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const url = `${protocol}//${window.location.host}/api/antigravity`;
-
-        console.log('[Agent] Connecting to Antigravity Brain:', url);
-        this.ws = new WebSocket(url);
-
-        this.ws.onopen = () => {
-            console.log('[Agent] Connected.');
-            // this.game.uiManager.addChatMessage('system', 'Connected to Antigravity Brain.');
-        };
-
-        this.ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                this.handleServerMessage(msg);
-            } catch (e) {
-                console.error('[Agent] Failed to parse message:', event.data);
-            }
-        };
-
-        this.ws.onclose = () => {
-            console.log('[Agent] Disconnected. Retrying in 3s...');
-            setTimeout(() => this.connectAntigravity(), 3000);
-        };
-    }
-
     sendTextMessage(text) {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (window.antigravityClient) {
+            window.antigravityClient.send({ type: 'input', text: text });
+        } else {
             this.game.uiManager.addChatMessage('error', 'Agent offline.');
             return;
         }
 
         this.game.uiManager.addChatMessage('user', text);
 
-        // Reset current stream ID so new response starts a new bubble
+        // UI Updates
         this.currentStreamMsgId = null;
-
-        // Show Stop Button
         this.game.uiManager.toggleStopButton(true);
-
-        this.ws.send(JSON.stringify({
-            type: 'input',
-            text: text
-        }));
     }
 
     interruptGeneration() {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (window.antigravityClient) {
+            window.antigravityClient.send({ type: 'interrupt' });
+        }
 
         console.log('[Agent] Interrupting generation...');
-        this.ws.send(JSON.stringify({ type: 'interrupt' }));
-
         this.game.uiManager.addChatMessage('system', 'Generation stopped by user.');
         this.game.uiManager.toggleStopButton(false);
+        this.isStreaming = false;
     }
 
     updateConfig(config) {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (window.antigravityClient) {
+            console.log('[Agent] Sending config update:', config);
+            window.antigravityClient.send({ type: 'config', config });
+        }
+    }
 
-        console.log('[Agent] Sending config update:', config);
-        this.ws.send(JSON.stringify({
-            type: 'config',
-            config
-        }));
+    handleClientMessage(msg) {
+        this.handleServerMessage(msg);
     }
 
     // Tool Name Mapping
     getFriendlyToolName(name, args = {}) {
         const formatPath = (p) => {
             if (!p) return '';
-            // keep it short, maybe just basename or last 2 segments if long?
-            // For now, let's try just the filename if it's a file
             const parts = p.split(/[/\\]/);
             return parts.length > 1 ? parts.slice(-2).join('/') : p;
         };
@@ -212,6 +182,7 @@ export class Agent {
             case 'token':
                 this.lastToolMsgId = null; // Reset so next tool batch gets fresh msg
                 this.streamToUI(msg.text);
+
                 break;
             case 'thought':
                 this.streamThoughtToUI(msg.text);
@@ -233,6 +204,10 @@ export class Agent {
                 break;
             case 'error':
                 this.game.uiManager.addChatMessage('error', msg.message);
+                break;
+            case 'complete':
+                this.game.uiManager.toggleStopButton(false);
+                this.isStreaming = false;
                 break;
         }
     }
@@ -283,11 +258,13 @@ export class Agent {
             result = { error: e.message };
         }
 
-        this.ws.send(JSON.stringify({
-            type: 'tool_response',
-            id,
-            result
-        }));
+        if (window.antigravityClient) {
+            window.antigravityClient.send({
+                type: 'tool_response',
+                id,
+                result
+            });
+        }
     }
 
     // =========================================================================

@@ -60,14 +60,14 @@ export class Elephant extends Animal {
 
         // Left Ear
         const leftEarPivot = new THREE.Group();
-        leftEarPivot.position.set(-0.5, 2.3, 1.2);
+        leftEarPivot.position.set(-0.5, 2.6, 1.2);
 
         const leftEar = new THREE.Mesh(earGeo, mat);
-        leftEar.position.set(-0.4, 0, 0);
+        leftEar.position.set(-0.4, -0.4, 0);
         leftEarPivot.add(leftEar);
 
         const leftInnerEar = new THREE.Mesh(innerEarGeo, pinkMat);
-        leftInnerEar.position.set(-0.35, 0, 0);
+        leftInnerEar.position.set(-0.35, -0.4, 0);
         leftEarPivot.add(leftInnerEar);
 
         leftEarPivot.rotation.z = 0.3; // Flop outward
@@ -76,14 +76,14 @@ export class Elephant extends Animal {
 
         // Right Ear
         const rightEarPivot = new THREE.Group();
-        rightEarPivot.position.set(0.5, 2.3, 1.2);
+        rightEarPivot.position.set(0.5, 2.6, 1.2);
 
         const rightEar = new THREE.Mesh(earGeo, mat);
-        rightEar.position.set(0.4, 0, 0);
+        rightEar.position.set(0.4, -0.4, 0);
         rightEarPivot.add(rightEar);
 
         const rightInnerEar = new THREE.Mesh(innerEarGeo, pinkMat);
-        rightInnerEar.position.set(0.35, 0, 0);
+        rightInnerEar.position.set(0.35, -0.4, 0);
         rightEarPivot.add(rightInnerEar);
 
         rightEarPivot.rotation.z = -0.3;

@@ -158,6 +158,13 @@ export class InputManager {
                     if (!e.repeat) {
                         this.game.player.toggleFlying();
                     }
+                } else if (this.game.player.mount) {
+                    this.game.player.dismount();
+                } else {
+                    const animal = this.game.physicsManager.getHitAnimal();
+                    if (animal && animal.interact) {
+                        animal.interact();
+                    }
                 }
             }
 

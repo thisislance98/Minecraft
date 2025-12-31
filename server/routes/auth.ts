@@ -33,29 +33,37 @@ router.post('/login', async (req: Request, res: Response) => {
         const { uid, email, picture, name } = decodedToken;
         console.log(`[Auth] User verified: ${uid} (${email})`);
 
-        // Create or update user in Firestore
+        // Create reference
         const userRef = db.collection('users').doc(uid);
+
+        // Check if user exists to determine if we need to give initial tokens
+        const userDocRef = await userRef.get();
+        const userData = userDocRef.data();
+        let currentTokens = userData?.tokens;
+
+        // Give 1000 tokens to new users OR existing users with no token field
+        if (currentTokens === undefined) {
+            console.log(`[Auth] Initializing user ${uid} with 1000 tokens (New/Retroactive)`);
+            currentTokens = 1000;
+            // logic below will merge this
+        }
 
         try {
             await userRef.set({
                 email,
                 displayName: name || '',
                 photoURL: picture || '',
-                lastLogin: admin.firestore.FieldValue.serverTimestamp(),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                tokens: currentTokens, // Persist the determined token count
+                lastLogin: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp()
             }, { merge: true });
         } catch (e) {
             console.error('[Auth] Firestore set failed:', e);
-            // Don't fail the login if DB write fails, but log it.
-            // Or should we fail? Better to fail.
-            // checking if we can at least get the user
-            // If set fails, likely get will fail too.
             throw e;
         }
 
-        // Get current tokens
-        const userDoc = await userRef.get();
-        const tokens = userDoc.data()?.tokens || 0;
+        // Get current tokens (should be what we just set/read)
+        const tokens = currentTokens;
 
         res.json({
             status: 'success',
@@ -65,7 +73,9 @@ router.post('/login', async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error('[Auth] Unexpected error:', error);
+        console.error('[Auth] Unexpected error during login processing:', error);
+        console.error('[Auth] Error stack:', error.stack);
+        if (error.code) console.error('[Auth] Error code:', error.code);
         res.status(500).json({
             error: 'Internal Server Error',
             details: error.message

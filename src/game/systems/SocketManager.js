@@ -50,6 +50,11 @@ export class SocketManager {
             this.game.uiManager?.updateNetworkStatus('Disconnected', null, null);
         });
 
+        this.socket.on('connect_error', (err) => {
+            console.error('[SocketManager] Connection Error:', err);
+            this.game.uiManager?.updateNetworkStatus('Connection Error');
+        });
+
         this.socket.on('room:joined', (data) => {
             console.log('[SocketManager] Joined room:', data);
             this.roomId = data.roomId;

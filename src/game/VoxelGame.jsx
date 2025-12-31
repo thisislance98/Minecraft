@@ -346,19 +346,18 @@ export class VoxelGame {
         this.inventory.addItem('physics_ball', 64, 'tool');
         this.inventory.addItem('physics_ball', 64, 'tool');
 
-        // Poll for AI spawn requests every 2 seconds
-        this.startSpawnQueuePolling();
 
-        // Poll for chat test prompts (for curl-based testing)
-        this.startChatTestPolling();
-
-        // Poll for eval requests (for game state inspection)
-        this.startEvalPolling();
 
         // Chat Button Listener & Debug Panel handled by UIManager/InputManager now
 
         // Initialize Store UI
         this.storeUI = new StoreUI(this);
+
+        // Connect Auth Button
+        const authBtn = document.getElementById('auth-btn');
+        if (authBtn) {
+            authBtn.onclick = () => this.storeUI.toggle(true);
+        }
 
         // Initialize persisted blocks storage
         this.persistedBlocks = new Map(); // key: chunkKey, value: Array<{lx, ly, lz, type}>
@@ -422,93 +421,9 @@ export class VoxelGame {
         }
     }
 
-    /**
-     * Poll for AI-requested creature spawns
-     */
-    startSpawnQueuePolling() {
-        setInterval(async () => {
-            try {
-                const res = await fetch('/api/god-mode/spawns');
-                const data = await res.json();
 
-                if (data.spawns && data.spawns.length > 0) {
-                    for (const spawn of data.spawns) {
-                        console.log('[Game] Processing spawn request:', spawn);
 
-                        // Import AnimalClasses dynamically to get the creature
-                        const { AnimalClasses } = await import('./AnimalRegistry.js');
 
-                        // Try to find the creature class
-                        let CreatureClass = AnimalClasses[spawn.creature];
-
-                        // Case-insensitive fallback
-                        if (!CreatureClass) {
-                            const normalized = spawn.creature.charAt(0).toUpperCase() + spawn.creature.slice(1).toLowerCase();
-                            CreatureClass = AnimalClasses[normalized];
-                        }
-
-                        if (CreatureClass) {
-                            this.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, spawn.count || 1);
-                            this.uiManager?.addChatMessage('system', `Spawned ${spawn.count || 1}x ${spawn.creature}!`);
-                            console.log(`[Game] Spawned ${spawn.count || 1}x ${spawn.creature}`);
-                        } else {
-                            console.warn(`[Game] Unknown creature: ${spawn.creature}`);
-                            this.uiManager?.addChatMessage('system', `Unknown creature: ${spawn.creature}`);
-                        }
-                    }
-                }
-            } catch (e) {
-                // Silently ignore polling errors (server might not be ready)
-            }
-        }, 2000); // Poll every 2 seconds
-    }
-
-    /**
-     * Poll for chat test prompts (curl-based testing of in-game AI)
-     */
-    startChatTestPolling() {
-        setInterval(async () => {
-            try {
-                const res = await fetch('/api/chat-test/poll');
-                const data = await res.json();
-
-                if (data.prompt && this.agent) {
-                    const { testId, message } = data.prompt;
-                    console.log(`[ChatTest] Processing prompt (${testId}): ${message}`);
-
-                    try {
-                        // Send the message through the agent's text chat
-                        await this.agent.sendTextMessage(message);
-
-                        // Report success - get the last AI message from chat
-                        const lastAiMessage = this.uiManager?.getLastAiMessage?.() || 'Message processed';
-
-                        await fetch('/api/chat-test/response', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                testId,
-                                aiResponse: lastAiMessage,
-                                toolsCalled: []
-                            })
-                        });
-                    } catch (e) {
-                        // Report error
-                        await fetch('/api/chat-test/response', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                testId,
-                                error: e.message
-                            })
-                        });
-                    }
-                }
-            } catch (e) {
-                // Silently ignore polling errors
-            }
-        }, 1000); // Poll every 1 second for responsiveness
-    }
 
 
 
@@ -516,47 +431,7 @@ export class VoxelGame {
      * Poll for game state inspection code (eval)
      * CAUTION: Only for development use!
      */
-    startEvalPolling() {
-        setInterval(async () => {
-            try {
-                const res = await fetch('/api/test/eval/poll');
-                const data = await res.json();
 
-                if (data.item) {
-                    const { evalId, code } = data.item;
-                    console.log(`[Eval] Inspecting: ${code}`);
-
-                    try {
-                        // Execute the inspection code
-                        // We provide 'game' and 'window' context
-                        // The code should return a JSON-serializable value
-                        const game = this;
-                        const result = await (new Function('game', 'window', `return (async () => { ${code} })()`))(game, window);
-
-                        await fetch('/api/test/eval/result', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                evalId,
-                                result: result
-                            })
-                        });
-                    } catch (e) {
-                        await fetch('/api/test/eval/result', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                evalId,
-                                error: e.message
-                            })
-                        });
-                    }
-                }
-            } catch (e) {
-                // Silently ignore
-            }
-        }, 1000);
-    }
 
 
     spawnPlayer() {

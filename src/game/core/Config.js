@@ -9,7 +9,7 @@ export const Config = {
     WORLD: {
         CHUNK_SIZE: 16,
         RENDER_DISTANCE: 4,
-        GRAVITY: 0.0064,
+        GRAVITY: 0.0032,
         SEA_LEVEL: 30,
         BEDROCK_LEVEL: 0,
         MAX_HEIGHT: 256

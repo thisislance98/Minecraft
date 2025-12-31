@@ -100,32 +100,67 @@ export function generateTexture(type, size = 16) {
 
     switch (type) {
         case 'grass_top':
+            console.log('Generating grass_top texture... (DEBUG VERSION)');
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
-                    ctx.fillStyle = palettes.grass_top[Math.floor(seededRandom(seed++) * palettes.grass_top.length)];
+                    const noise = seededRandom(seed++);
+                    // Base green
+                    let colorIdx = Math.floor(noise * palettes.grass_top.length);
+
+                    // DEBUG: Force red to verify update
+                    if (x < 5 && y < 5) {
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(x, y, 1, 1);
+                        continue;
+                    }
+
+
+                    // Simple "blade" attempt: occasional lighter pixels
+                    if (noise > 0.8) {
+                        // Pick the lightest color
+                        colorIdx = Math.max(0, palettes.grass_top.length - 1);
+                    } else if (noise < 0.2) {
+                        // Darker patches
+                        colorIdx = 0;
+                    }
+
+                    ctx.fillStyle = palettes.grass_top[colorIdx];
                     ctx.fillRect(x, y, 1, 1);
                 }
+            }
+            // Add some "noise specks" for texture
+            for (let i = 0; i < size * 2; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillStyle = palettes.grass_top[Math.floor(seededRandom(seed++) * palettes.grass_top.length)];
+                ctx.fillRect(rx, ry, 1, 1);
             }
             break;
 
         case 'grass_side':
-            // Grass top part
-            for (let y = 0; y < 4; y++) {
-                for (let x = 0; x < size; x++) {
-                    const depth = y + (seededRandom(seed++) > 0.6 ? 1 : 0);
-                    if (depth < 3) {
+            // Grass top part with uneven "drips"
+            for (let x = 0; x < size; x++) {
+                // Random depth for the grass layer on the side (2 to 5 pixels)
+                const grassDepth = 3 + Math.floor(seededRandom(seed++) * 3);
+
+                for (let y = 0; y < size; y++) {
+                    if (y < grassDepth) {
+                        // Use grass palette
                         ctx.fillStyle = palettes.grass_side.grass[Math.floor(seededRandom(seed++) * palettes.grass_side.grass.length)];
                     } else {
+                        // Use dirt palette
                         ctx.fillStyle = palettes.grass_side.dirt[Math.floor(seededRandom(seed++) * palettes.grass_side.dirt.length)];
                     }
                     ctx.fillRect(x, y, 1, 1);
                 }
             }
-            // Dirt bottom part
-            for (let y = 4; y < size; y++) {
-                for (let x = 0; x < size; x++) {
-                    ctx.fillStyle = palettes.grass_side.dirt[Math.floor(seededRandom(seed++) * palettes.grass_side.dirt.length)];
-                    ctx.fillRect(x, y, 1, 1);
+            // Add specific dirt specks in the dirt area
+            for (let i = 0; i < 10; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = 6 + Math.floor(seededRandom(seed++) * (size - 6));
+                if (ry < size) {
+                    ctx.fillStyle = palettes.dirt[Math.floor(seededRandom(seed++) * 2)]; // Darker dirt bits
+                    ctx.fillRect(rx, ry, 1, 1);
                 }
             }
             break;

@@ -18,22 +18,16 @@ export const AnimalClasses = {};
 // Populate AnimalClasses from the loaded modules
 for (const path in modules) {
     const module = modules[path];
-    // We assume each file exports the class as a named export matching the filename
-    // OR as 'default' if we enforced that.
-    // The previous pattern was named exports.
-    // Let's iterate all exports and find the class.
-
     for (const key in module) {
-        // Simple heuristic: Class name usually matches export name
-        // And we want to exclude utility exports if any.
-        // For now, take all functions that look like Classes (start with Uppercase?)
-        // Or just take explicit known exports?
-        // Let's rely on the assumption that the main export matches the type name.
         if (typeof module[key] === 'function' && /^[A-Z]/.test(key)) {
             AnimalClasses[key] = module[key];
         }
     }
 }
+
+// Manual additions if any (for debugging or special cases)
+import { Slime } from './entities/monsters/Slime.js';
+AnimalClasses['Slime'] = Slime;
 
 /**
  * Show HMR notification in the UI

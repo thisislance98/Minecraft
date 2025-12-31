@@ -861,6 +861,17 @@ canvas {
     transform: scale(1.05);
 }
 
+#send-chat.stop-btn {
+    background: rgba(255, 68, 68, 0.2);
+    border: 1px solid #ff4444;
+    color: #ff4444;
+}
+
+#send-chat.stop-btn:hover {
+    background: rgba(255, 68, 68, 0.4);
+    transform: scale(1.05);
+}
+
 /* HMR Update Notifications */
 #hmr-notifications {
     position: fixed;
@@ -1534,5 +1545,129 @@ canvas {
     #debug,
     #chat-button {
         display: none !important;
+    }
+}
+
+/* =========================================
+   Mobile UI & Button Styles (Extracted)
+   ========================================= */
+
+/* Auth and Settings Buttons (Extracted from inline) */
+#auth-btn {
+    position: fixed;
+    top: 10px;
+    right: 350px;
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: 1px solid #00ffcc;
+    cursor: pointer;
+    z-index: 2100;
+    font-size: 16px;
+    border-radius: 4px;
+    font-family: 'VT323', monospace;
+    transition: all 0.2s ease;
+}
+
+#auth-btn:hover {
+    background: rgba(0, 255, 204, 0.2);
+    transform: scale(1.05);
+}
+
+#settings-btn {
+    position: fixed;
+    top: 10px;
+    right: 300px;
+    padding: 5px 10px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: 1px solid white;
+    cursor: pointer;
+    z-index: 2100;
+    font-size: 16px;
+    font-family: 'VT323', monospace;
+    transition: all 0.2s ease;
+}
+
+#settings-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+
+    /* Move Tokens/Auth Button to avoid overlap with Mobile Top Bar */
+    #auth-btn {
+        top: 80px;
+        /* Move below the top bar (which is at top: 10px with ~50px height) */
+        right: auto;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        border: 2px solid #00ffcc;
+        padding: 5px 15px;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+    }
+
+    /* Scale down Hotbar */
+    #hud {
+        bottom: 5px;
+        width: 98%;
+        padding-bottom: 0;
+        z-index: 2001;
+        /* Ensure above joystick (z-index 1000) */
+        pointer-events: none;
+        /* Container passes through */
+    }
+
+    #hotbar {
+        gap: 2px;
+        padding: 3px;
+        border-width: 2px;
+        border-radius: 4px;
+        pointer-events: auto;
+        /* Slots capture events */
+    }
+
+    .slot {
+        width: 30px;
+        height: 30px;
+        border-width: 1px;
+    }
+
+    /* Hide slot tooltip on touch */
+    .slot[data-item-name]:hover::after {
+        display: none;
+    }
+
+    .slot-count {
+        font-size: 8px;
+        right: 1px;
+        bottom: 0;
+    }
+
+    .slot-key {
+        display: none;
+        /* Hide numbers on mobile */
+    }
+
+    /* Adjust Status Bars (Hearts/Hunger) */
+    #status-bars {
+        bottom: 45px;
+        /* Just above the smaller hotbar */
+        width: 280px;
+        /* Fit within screen */
+    }
+
+    #health-hearts .heart,
+    #hunger-drumsticks .drumstick {
+        font-size: 16px;
+    }
+
+    /* Move chat button on mobile to avoid clutter if visible */
+    #chat-button {
+        top: 130px;
     }
 }

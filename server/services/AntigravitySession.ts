@@ -6,6 +6,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getAntigravitySystemPrompt } from '../ai/antigravity_prompt';
 import { getAntigravityTools } from '../ai/antigravity_tools';
 
+import { auth } from '../config';
+import { addTokens, getUserTokens } from './tokenService';
+import { IncomingMessage } from 'http';
+
 const PENDING_TOOL_CALLS = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
 
 export class AntigravitySession {
@@ -13,8 +17,10 @@ export class AntigravitySession {
     private genAI: GoogleGenerativeAI;
     private model: any;
     private contents: any[] = [];
+    private userId: string | null = null;
+    private COST_PER_REQUEST = 10;
 
-    constructor(ws: WebSocket, apiKey: string) {
+    constructor(ws: WebSocket, apiKey: string, req: IncomingMessage) {
         this.ws = ws;
         this.genAI = new GoogleGenerativeAI(apiKey);
         this.model = this.genAI.getGenerativeModel({
@@ -23,10 +29,30 @@ export class AntigravitySession {
             systemInstruction: getAntigravitySystemPrompt()
         });
 
-        this.init();
+        // Extract token from URL
+        const url = new URL(req.url || '', `http://${req.headers.host}`);
+        const token = url.searchParams.get('token');
+
+        this.init(token);
     }
 
-    private init() {
+    private async init(token: string | null) {
+        // Verify Auth asynchronously
+        if (token) {
+            try {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decoded = await auth.verifyIdToken(token);
+                this.userId = decoded.uid;
+                console.log(`[Antigravity] Authenticated user: ${this.userId}`);
+                this.sendBalanceUpdate();
+            } catch (e) {
+                console.error('[Antigravity] Auth failed:', e);
+                this.send('error', { message: 'Authentication failed' });
+            }
+        } else {
+            console.log('[Antigravity] No auth token provided. Running as guest (limited?).');
+        }
+
         this.ws.on('message', async (data) => {
             try {
                 const msg = JSON.parse(data.toString());
@@ -78,6 +104,15 @@ export class AntigravitySession {
     }
 
     private async generateAndProcess() {
+        // 1. Check Balance
+        if (this.userId) {
+            const currentBalance = await getUserTokens(this.userId);
+            if (currentBalance < this.COST_PER_REQUEST) {
+                this.send('error', { message: 'Insufficient tokens. Please purchase more to continue using AI.' });
+                return;
+            }
+        }
+
         console.log('[Antigravity] Starting generation with thinking config...');
         this.isInterrupted = false; // Reset flag
 
@@ -146,13 +181,32 @@ export class AntigravitySession {
                 if (this.isInterrupted) return; // Don't run tools if aborted
                 await this.executeTools(finalToolCalls);
             }
-
         } catch (e: any) {
             // Ignore abort errors usually, but log others
             if (this.isInterrupted) return;
             console.error("[Antigravity] Stream Error FULL:", e);
             this.sendError("Stream Error: " + e.message);
+        } finally {
+            if (!this.isInterrupted) {
+                this.send('complete', {});
+
+                // Deduct cost if successful (and authenticated)
+                if (this.userId) {
+                    try {
+                        await addTokens(this.userId, -this.COST_PER_REQUEST, 'ai_usage', 'Gemini Prompts');
+                        this.sendBalanceUpdate();
+                    } catch (e) {
+                        console.error('[Antigravity] Failed to deduct tokens:', e);
+                    }
+                }
+            }
         }
+    }
+
+    private async sendBalanceUpdate() {
+        if (!this.userId) return;
+        const balance = await getUserTokens(this.userId);
+        this.send('balance_update', { tokens: balance });
     }
 
     private async executeTools(toolCalls: any[]) {
@@ -213,27 +267,38 @@ export class AntigravitySession {
         switch (name) {
             case 'list_dir': {
                 const targetPath = path.resolve(cwd, args.DirectoryPath || '.');
-                // Allow /tmp or other harmless dirs? adhering to cwd for now.
-                if (!targetPath.startsWith(cwd)) throw new Error("Access Denied: Can only read within server directory");
+                const projectRoot = path.resolve(cwd, '..');
+                if (!targetPath.startsWith(cwd) && !targetPath.startsWith(projectRoot)) {
+                    throw new Error("Access Denied: Can only read within project directory");
+                }
                 const files = await fs.readdir(targetPath, { withFileTypes: true });
                 return { files: files.slice(0, 50).map(f => ({ name: f.name, isDir: f.isDirectory() })) };
             }
             case 'view_file': {
                 const targetPath = path.resolve(cwd, args.AbsolutePath);
-                if (!targetPath.startsWith(cwd)) throw new Error("Access Denied: Can only read within server directory");
+                const projectRoot = path.resolve(cwd, '..');
+                if (!targetPath.startsWith(cwd) && !targetPath.startsWith(projectRoot)) {
+                    throw new Error("Access Denied: Can only read within project directory");
+                }
                 const content = await fs.readFile(targetPath, 'utf8');
                 return { content: content.slice(0, 10000) };
             }
             case 'write_to_file': {
                 const targetPath = path.resolve(cwd, args.TargetFile);
-                if (!targetPath.startsWith(cwd)) throw new Error("Access Denied: Can only write within server directory");
+                const projectRoot = path.resolve(cwd, '..');
+                if (!targetPath.startsWith(cwd) && !targetPath.startsWith(projectRoot)) {
+                    throw new Error("Access Denied: Can only write within project directory");
+                }
                 await fs.mkdir(path.dirname(targetPath), { recursive: true });
                 await fs.writeFile(targetPath, args.CodeContent);
                 return { success: true, path: args.TargetFile };
             }
             case 'replace_file_content': {
                 const targetPath = path.resolve(cwd, args.TargetFile);
-                if (!targetPath.startsWith(cwd)) throw new Error("Access Denied");
+                const projectRoot = path.resolve(cwd, '..');
+                if (!targetPath.startsWith(cwd) && !targetPath.startsWith(projectRoot)) {
+                    throw new Error("Access Denied: Can only edit within project directory");
+                }
                 const content = await fs.readFile(targetPath, 'utf8');
                 const newContent = content.replace(args.TargetContent, args.ReplacementContent);
                 if (newContent === content) return { error: "Target content not found" };

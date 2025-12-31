@@ -1221,6 +1221,7 @@ export class UIManager {
             display: flex; align-items: center; gap: 10px;
         `;
         div.innerHTML = `
+            <div id="ai-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333; margin-right: 8px;" title="AI Connection"></div>
             <div id="voice-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333;"></div>
             <span id="voice-status-text">Voice Off (V)</span>
             <select id="voice-select" style="
@@ -1238,6 +1239,7 @@ export class UIManager {
         `;
         document.body.appendChild(div);
         this.statusDiv = div;
+        this.aiIndicator = div.querySelector('#ai-indicator');
         this.voiceIndicator = div.querySelector('#voice-indicator');
         this.statusText = div.querySelector('#voice-status-text');
 
@@ -1390,6 +1392,15 @@ export class UIManager {
 
         this.taskListDiv = taskList;
         this.taskItemsDiv = taskList.querySelector('#task-items');
+    }
+
+    updateAIStatus(status) {
+        if (!this.statusDiv) this.createStatusIndicator();
+        if (this.aiIndicator) {
+            const color = status === 'Connected' ? '#00ffcc' : '#333';
+            this.aiIndicator.style.background = color;
+            this.aiIndicator.title = `AI Status: ${status}`;
+        }
     }
 
     updateVoiceStatus(active, text) {
@@ -1705,19 +1716,19 @@ export class UIManager {
     setupChatPanelListeners() {
         if (!this.chatPanel) return;
 
-        this.stopBtn = document.getElementById('stop-generation-btn');
-        this.stopContainer = document.getElementById('chat-stop-container');
+        if (this.sendBtn) {
+            this.sendBtn.addEventListener('click', () => {
+                if (this.game.agent && this.game.agent.isStreaming) {
+                    this.game.agent.interruptGeneration();
+                } else {
+                    this.handleSendMessage();
+                }
+            });
+        }
 
-        this.sendBtn.addEventListener('click', () => this.handleSendMessage());
         this.closeBtn.addEventListener('click', () => {
             if (this.game.agent) this.game.agent.toggleChat();
         });
-
-        if (this.stopBtn) {
-            this.stopBtn.addEventListener('click', () => {
-                if (this.game.agent) this.game.agent.interruptGeneration();
-            });
-        }
 
         if (this.copyChatBtn) {
             this.copyChatBtn.onclick = () => this.copyChatToClipboard();
@@ -1726,6 +1737,9 @@ export class UIManager {
         if (this.chatInput) {
             this.chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
+                    // Prevent sending if currently streaming to avoid confusion, 
+                    // or could make Enter act as Stop? For now, just block Send.
+                    if (this.game.agent && this.game.agent.isStreaming) return;
                     this.handleSendMessage();
                 }
             });
@@ -1772,8 +1786,16 @@ export class UIManager {
     }
 
     toggleStopButton(visible) {
-        if (this.stopContainer) {
-            this.stopContainer.style.display = visible ? 'flex' : 'none';
+        if (!this.sendBtn) return;
+
+        if (visible) {
+            this.sendBtn.innerText = "Stop";
+            this.sendBtn.classList.add('stop-btn');
+            if (this.game.agent) this.game.agent.isStreaming = true; // Flag for button logic
+        } else {
+            this.sendBtn.innerText = "Send";
+            this.sendBtn.classList.remove('stop-btn');
+            if (this.game.agent) this.game.agent.isStreaming = false;
         }
     }
 
@@ -3103,6 +3125,46 @@ export class UIManager {
         this.invadersState = null;
     }
 
+    toggleSettingsModal() {
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) {
+            if (settingsModal.classList.contains('hidden')) {
+                settingsModal.classList.remove('hidden');
+                if (this.game.inputManager) this.game.inputManager.unlock();
+            } else {
+                settingsModal.classList.add('hidden');
+            }
+        }
+    }
+
+    toggleSprint() {
+        const isSprinting = this.game.inputManager.actions['SPRINT'];
+        this.game.inputManager.actions['SPRINT'] = !isSprinting;
+        // Visual toggle state
+        if (!isSprinting) {
+            this.mobileSprintBtn.style.background = 'rgba(0, 255, 204, 0.4)';
+            this.mobileSprintBtn.style.borderColor = '#00ffcc';
+        } else {
+            this.mobileSprintBtn.style.background = 'rgba(0, 0, 0, 0.6)';
+            this.mobileSprintBtn.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+        }
+    }
+
+    toggleFly() {
+        if (this.game.player) {
+            this.game.player.toggleFlying();
+            // Visual sync is hard because flight can end by collision, but accurate enough for toggle
+            const isFlying = this.game.player.isFlying; // State after toggle
+            if (isFlying) {
+                this.mobileFlyBtn.style.background = 'rgba(0, 255, 204, 0.4)';
+                this.mobileFlyBtn.style.borderColor = '#00ffcc';
+            } else {
+                this.mobileFlyBtn.style.background = 'rgba(0, 0, 0, 0.6)';
+                this.mobileFlyBtn.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+            }
+        }
+    }
+
     initTouchControls() {
         if (this.joystickContainer) return;
         // 1. Create Joystick
@@ -3194,7 +3256,7 @@ export class UIManager {
             transform: translateX(-50%);
             display: flex;
             gap: 15px;
-            z-index: 1000;
+            z-index: 2500;
         `;
 
         // Inventory Button
@@ -3282,7 +3344,145 @@ export class UIManager {
         });
         this.mobileTopBar.appendChild(this.mobileChatBtn);
 
+        // Settings Button (Moved from Desktop UI)
+        this.mobileSettingsBtn = document.createElement('div');
+        this.mobileSettingsBtn.id = 'mobile-settings-btn';
+        this.mobileSettingsBtn.innerHTML = '⚙️';
+        this.mobileSettingsBtn.style.cssText = `
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            touch-action: manipulation;
+            user-select: none;
+            cursor: pointer;
+        `;
+        this.mobileSettingsBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.toggleSettingsModal();
+        }, { passive: false });
+        this.mobileSettingsBtn.addEventListener('click', () => {
+            this.toggleSettingsModal();
+        });
+        this.mobileTopBar.appendChild(this.mobileSettingsBtn);
+
+        // Camera Button (Cycle View)
+        this.mobileCameraBtn = document.createElement('div');
+        this.mobileCameraBtn.id = 'mobile-camera-btn';
+        this.mobileCameraBtn.innerHTML = '🎥';
+        this.mobileCameraBtn.style.cssText = `
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            touch-action: manipulation;
+            user-select: none;
+            cursor: pointer;
+        `;
+        this.mobileCameraBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.game.cycleCamera();
+        }, { passive: false });
+        this.mobileCameraBtn.addEventListener('click', () => {
+            this.game.cycleCamera();
+        });
+        this.mobileTopBar.appendChild(this.mobileCameraBtn);
+
+        // Sprint Toggle Button
+        this.mobileSprintBtn = document.createElement('div');
+        this.mobileSprintBtn.id = 'mobile-sprint-btn';
+        this.mobileSprintBtn.innerHTML = '🏃';
+        this.mobileSprintBtn.style.cssText = `
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            touch-action: manipulation;
+            user-select: none;
+            cursor: pointer;
+        `;
+        this.mobileSprintBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.toggleSprint();
+        }, { passive: false });
+        this.mobileSprintBtn.addEventListener('click', () => {
+            this.toggleSprint();
+        });
+        this.mobileTopBar.appendChild(this.mobileSprintBtn);
+
+        // Fly Toggle Button
+        this.mobileFlyBtn = document.createElement('div');
+        this.mobileFlyBtn.id = 'mobile-fly-btn';
+        this.mobileFlyBtn.innerHTML = '🕊️';
+        this.mobileFlyBtn.style.cssText = `
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            touch-action: manipulation;
+            user-select: none;
+            cursor: pointer;
+        `;
+        this.mobileFlyBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.toggleFly();
+        }, { passive: false });
+        this.mobileFlyBtn.addEventListener('click', () => {
+            this.toggleFly();
+        });
+        this.mobileTopBar.appendChild(this.mobileFlyBtn);
+
+
         document.body.appendChild(this.mobileTopBar);
+
+        // 5. Create Drop Button (near action cluster)
+        this.dropBtn = document.createElement('div');
+        this.dropBtn.id = 'touch-drop';
+        this.dropBtn.innerHTML = '🗑️'; // or a down arrow
+        this.dropBtn.style.cssText = `
+            position: fixed;
+            bottom: 220px;
+            right: 50px;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 68, 68, 0.2);
+            border: 2px solid rgba(255, 68, 68, 0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            z-index: 1000;
+            touch-action: manipulation;
+            cursor: pointer;
+        `;
+        this.dropBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (this.game.inventory) {
+                this.game.inventory.dropCurrentItem();
+            }
+        }, { passive: false });
+        document.body.appendChild(this.dropBtn);
 
         // Joystick Logic
         let joystickActive = false;
@@ -3597,7 +3797,18 @@ export class UIManager {
         if (this.lookJoystickContainer) this.lookJoystickContainer.style.display = display;
         if (this.jumpBtn) this.jumpBtn.style.display = display;
         if (this.interactBtn) this.interactBtn.style.display = display;
+        if (this.dropBtn) this.dropBtn.style.display = display;
         if (this.mobileTopBar) this.mobileTopBar.style.display = display;
+
+        // Toggle Desktop UI elements
+        const desktopSettingsBtn = document.getElementById('settings-btn');
+        const desktopChatBtn = document.getElementById('chat-button');
+        const desktopFeedbackBtn = document.getElementById('feedback-btn');
+
+        if (desktopSettingsBtn) desktopSettingsBtn.style.display = visible ? 'none' : 'block';
+        if (desktopChatBtn) desktopChatBtn.style.display = visible ? 'none' : 'block';
+        if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = visible ? 'none' : 'block';
+
     }
 
     createFeedbackButton() {

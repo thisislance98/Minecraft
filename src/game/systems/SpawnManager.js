@@ -52,6 +52,7 @@ export class SpawnManager {
                 { type: 'Kangaroo', weight: 0.15, packSize: [2, 5] },
                 { type: 'Cow', weight: 0.2, packSize: [2, 5] },
                 { type: 'Fox', weight: 0.1, packSize: [1, 2] },
+                { type: 'FireFox', weight: 0.05, packSize: [1, 1] },
                 { type: 'Ladybug', weight: 0.15, packSize: [3, 6] },
                 { type: 'Gymnast', weight: 0.05, packSize: [1, 2] },
                 { type: 'Raccoon', weight: 0.08, packSize: [1, 2] },

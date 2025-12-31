@@ -98,5 +98,5 @@ export function getAntigravityTools() {
                 }
             }
         ]
-    }];
+    }] as any;
 }

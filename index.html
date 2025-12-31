@@ -78,8 +78,10 @@
     <div id="drag-icon" class="hidden"></div>
 
     <div id="fps-counter">FPS: <span id="fps">0</span></div>
-    <button id="settings-btn"
-        style="position: fixed; top: 10px; right: 300px; padding: 5px 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid white; cursor: pointer; z-index: 2100; font-size: 16px;">⚙️</button>
+
+    <button id="auth-btn">👤 Sign In</button>
+
+    <button id="settings-btn">⚙️</button>
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="hidden">
@@ -151,7 +153,7 @@
     </div>
 
     <div id="debug">
-        <p>v1.0.961</p>
+        <p>v1.0.982</p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -181,15 +183,8 @@
         <div id="chat-messages">
             <!-- Messages will be added here -->
             <div class="message ai">
-                <div class="message-content">Hello! I am ready. Press 'T' to toggle this panel.</div>
-            </div>
-            <!-- Stop Button (hidden by default) -->
-            <div id="chat-stop-container" class="hidden"
-                style="display: none; justify-content: center; margin-bottom: 10px;">
-                <button id="stop-generation-btn"
-                    style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: 'VT323', monospace; font-size: 16px;">
-                    ⏹ Stop Generating
-                </button>
+                <div class="message-content">Greetings, traveler. I am the Wizard of Code. How may I assist you in
+                    shaping this world?</div>
             </div>
         </div>
         <div class="chat-input-container">
@@ -200,6 +195,11 @@
 
 
 
+    <script type="module">
+        import { AntigravityClient } from '/src/game/ai/AntigravityClient.js';
+        // Initialize AI Client immediately, independent of Game logic
+        window.antigravityClient = new AntigravityClient();
+    </script>
     <script type="module" src="/src/main.js"></script>
 </body>
 

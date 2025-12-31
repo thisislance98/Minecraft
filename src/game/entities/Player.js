@@ -981,7 +981,7 @@ export class Player {
         // 3rd Person Back
         if (this.cameraMode === 1) {
             this.body.position.copy(this.position);
-            this.body.position.y += 1.25;
+            this.body.position.y += 1.57;
             this.body.rotation.set(0, this.rotation.y, 0);
 
             // Camera is now child of head, so no manual update needed here
@@ -990,7 +990,7 @@ export class Player {
         } else if (this.cameraMode === 2) {
             // 3rd Person Front (Selfie)
             this.body.position.copy(this.position);
-            this.body.position.y += 1.25;
+            this.body.position.y += 1.57;
             this.body.rotation.set(0, this.rotation.y, 0);
 
             const camDist = 4;
@@ -1006,7 +1006,7 @@ export class Player {
         } else if (this.cameraMode === 3) {
             // Orbit Mode
             this.body.position.copy(this.position);
-            this.body.position.y += 1.25;
+            this.body.position.y += 1.57;
             this.body.rotation.set(0, this.rotation.y, 0);
 
             const radius = 5;
@@ -1825,7 +1825,7 @@ export class Player {
             this.game.camera.add(this.body);
 
             // Position relative to camera to see arms
-            this.body.position.set(0, -0.3, -0.4);
+            this.body.position.set(0, -0.03, -0.4);
             this.body.rotation.set(0, 0, 0);
 
             // Hide head in 1st person to prevent clipping

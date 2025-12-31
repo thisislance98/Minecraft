@@ -382,6 +382,9 @@ export class Chunk {
                             neighbor === Blocks.WATER ||
                             neighbor === Blocks.GLASS ||
                             neighbor === Blocks.LEAVES ||
+                            neighbor === Blocks.PINE_LEAVES ||
+                            neighbor === Blocks.BIRCH_LEAVES ||
+                            neighbor === Blocks.SLIME ||
                             neighbor === Blocks.FENCE ||
                             neighbor === Blocks.IRON_BARS ||
                             neighbor === Blocks.WINDOW_FRAME ||

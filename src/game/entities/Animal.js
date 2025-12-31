@@ -25,7 +25,7 @@ export class Animal {
 
         // Stats
         this.speed = 2.0; // units/sec
-        this.gravity = 30.0;
+        this.gravity = 15.0;
 
         // State
         this.onGround = false;

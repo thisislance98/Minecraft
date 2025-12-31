@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { FallingTree } from '../entities/animals/FallingTree.js';
 import { ShipEntity } from '../entities/ShipEntity.js';
 import { Blocks } from '../core/Blocks.js';
+import { Config } from '../core/Config.js';
 
 /**
  * PhysicsManager handles raycasting, block interaction, and entity collision detection.
@@ -599,5 +600,30 @@ export class PhysicsManager {
         for (const b of blocks) {
             this.game.setBlock(b.x, b.y, b.z, Blocks.AIR);
         }
+    }
+    /**
+     * Get the Y coordinate of the highest solid block at (x, z).
+     * Used by entities (e.g., Horse) for ground collision.
+     */
+    getGroundHeight(x, z) {
+        const bx = Math.floor(x);
+        const bz = Math.floor(z);
+
+        // Start from max height and scan down
+        for (let y = Config.WORLD.MAX_HEIGHT; y >= 0; y--) {
+            const block = this.game.getBlock(bx, y, bz);
+            // Treat water as transparent for walking (sink in) or solid?
+            // Usually horses swim, but for "GroundHeight" let's find solid land.
+            // If we want them to float on water, we'd include water here.
+            // Let's exclude water so they sink/swim (handled by other logic? Horse.js simple physics might just fall).
+            // Horse.js: if (pos.y < groundY) pos.y = groundY;
+            // If we exclude water, groundY will be the riverbed. The horse will walk on the bottom of the ocean.
+            // To prevent drowning immediately, maybe we should return water level?
+            // For now, let's treat generic blocks as ground.
+            if (block && block !== Blocks.AIR) {
+                return y + 1;
+            }
+        }
+        return 0;
     }
 }

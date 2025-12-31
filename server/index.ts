@@ -67,22 +67,23 @@ const wss = new WebSocketServer({ noServer: true });
 
 httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url || '';
-    if (pathname === '/api/antigravity') {
+    if (pathname.startsWith('/api/antigravity')) {
         wss.handleUpgrade(request, socket, head, (ws) => {
             wss.emit('connection', ws, request);
         });
     }
 });
 
-wss.on('connection', (ws) => {
-    console.log('[Antigravity] Client connected to Agent Brain');
+wss.on('connection', (ws, req) => {
+    console.log('[Antigravity] Client connected to Agent Brain. Verifying configuration...');
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        console.error('[Antigravity] Missing GEMINI_API_KEY');
-        ws.close(1011, 'Server configuration error');
+        console.error('[Antigravity] CRITICAL: Missing GEMINI_API_KEY in environment variables.');
+        ws.close(1011, 'Server configuration error: Missing API Key');
         return;
     }
-    new AntigravitySession(ws, apiKey);
+    console.log('[Antigravity] API Key present. Initializing session...');
+    new AntigravitySession(ws, apiKey, req);
 });
 
 // Simple in-memory room storage

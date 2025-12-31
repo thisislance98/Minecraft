@@ -18,9 +18,14 @@ export class StoreUI {
         auth.onAuthStateChanged((user) => {
             this.user = user;
             this.updateUI();
+
+            const authBtn = document.getElementById('auth-btn');
             if (user) {
                 // Determine user token balance from backend
                 this.syncWithBackend();
+                if (authBtn) authBtn.textContent = `💎 ${this.tokens.toLocaleString()}`;
+            } else {
+                if (authBtn) authBtn.textContent = '👤 Sign In';
             }
         });
 
@@ -242,7 +247,10 @@ export class StoreUI {
                 const data = await res.json();
                 console.log('Backend sync success:', data);
                 this.tokens = data.tokens || 0;
+                this.tokens = data.tokens || 0;
                 this.updateUI(); // Refresh balance display
+                const authBtn = document.getElementById('auth-btn');
+                if (authBtn) authBtn.textContent = `💎 ${this.tokens.toLocaleString()}`;
             } else {
                 console.error('Backend sync failed:', await res.text());
             }
@@ -320,5 +328,16 @@ document.addEventListener('buy-tokens', (e) => {
     // Hack: Attach to window.__VOXEL_GAME__.storeUI
     if (window.__VOXEL_GAME__ && window.__VOXEL_GAME__.storeUI) {
         window.__VOXEL_GAME__.storeUI.buyPackage(e.detail);
+    }
+});
+
+document.addEventListener('token-balance-update', (e) => {
+    if (window.__VOXEL_GAME__ && window.__VOXEL_GAME__.storeUI) {
+        const store = window.__VOXEL_GAME__.storeUI;
+        store.tokens = e.detail;
+        store.updateUI();
+        // Also update Auth Button text
+        const authBtn = document.getElementById('auth-btn');
+        if (authBtn) authBtn.textContent = `💎 ${store.tokens.toLocaleString()}`;
     }
 });

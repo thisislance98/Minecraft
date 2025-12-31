@@ -62,8 +62,17 @@ export class AntigravityClient {
 
         this.isExplicitlyDisconnected = false;
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        let url = `${protocol}//${window.location.host}/api/antigravity`;
+        const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // Use configured VITE_SERVER_URL (production Cloud Run) or fallback to local/origin
+        const baseUrl = import.meta.env.VITE_SERVER_URL || (isDev ? 'http://localhost:2567' : window.location.origin);
+
+        if (!isDev && baseUrl === window.location.origin) {
+            console.warn('[AntigravityClient] WARNING: Connecting via same-origin (Firebase Proxy). This is known to be unreliable for WebSockets. Please set VITE_SERVER_URL to the direct Cloud Run URL.');
+        }
+
+        // Construct WebSocket URL (replace http/https with ws/wss)
+        let wsUrl = baseUrl.replace(/^http/, 'ws');
+        let url = `${wsUrl}/api/antigravity`;
 
         // Add token if authenticated
         if (auth.currentUser) {

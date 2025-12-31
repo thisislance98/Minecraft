@@ -555,6 +555,7 @@ export class SpawnManager {
 
         const animal = new AnimalClass(this.game, x, spawnY, z, seed);
         console.log(`[SpawnManager] Created animal instance: ${AnimalClass.name} at ${x},${spawnY},${z}`);
+        console.trace(`[SpawnManager] Trace for ${AnimalClass.name} spawn`);
 
         // If this is a LOCALLY generated animal (via chunk gen or debug), 
         // we might check if it conflicts with a persisted entity?

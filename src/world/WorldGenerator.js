@@ -45,6 +45,17 @@ export class WorldGenerator {
         const chunk = this.game.getOrCreateChunk(cx, cy, cz);
         if (chunk.isGenerated) return chunk;
 
+        // Void (Below Bedrock)
+        if (cy < 0) {
+            chunk.isGenerated = true;
+            return chunk; // Empty
+        }
+
+        // Moon Generation
+        if (cy >= Config.WORLD.MOON_CHUNK_Y_START && cy < Config.WORLD.MOON_CHUNK_Y_START + Config.WORLD.MOON_CHUNK_HEIGHT) {
+            return this.generateMoonChunk(chunk, cx, cy, cz);
+        }
+
         const startX = cx * this.game.chunkSize;
         const startY = cy * this.game.chunkSize;
         const startZ = cz * this.game.chunkSize;
@@ -126,6 +137,53 @@ export class WorldGenerator {
 
         // Structure Generation (Trees, etc.)
         this.generateFeatures(cx, cy, cz);
+
+        chunk.isGenerated = true;
+        return chunk;
+    }
+
+    generateMoonChunk(chunk, cx, cy, cz) {
+        const startX = cx * this.game.chunkSize;
+        const startY = cy * this.game.chunkSize;
+        const startZ = cz * this.game.chunkSize;
+
+        // Base height of Moon surface relative to global Y=0
+        const moonBaseY = Config.WORLD.MOON_CHUNK_Y_START * this.game.chunkSize + 32;
+
+        for (let x = 0; x < this.game.chunkSize; x++) {
+            for (let z = 0; z < this.game.chunkSize; z++) {
+                const wx = startX + x;
+                const wz = startZ + z;
+
+                // Moon Terrain Noise
+                // Craters and dunes
+                const baseNoise = this.noise.get2D(wx, wz, 0.02, 1);
+                const detailNoise = this.noise.get2D(wx, wz, 0.05, 1);
+
+                let height = moonBaseY + baseNoise * 15 + detailNoise * 3;
+
+                // Crater Logic (Simple)
+                // Use a different noise freq to dig "craters"
+                const craterNoise = this.noise.get2D(wx + 1000, wz + 1000, 0.01, 1);
+                if (craterNoise > 0.6) {
+                    const depth = (craterNoise - 0.6) * 40; // Dig deep
+                    height -= depth;
+
+                    // Rim
+                    if (craterNoise < 0.65) {
+                        height += 2;
+                    }
+                }
+
+                for (let y = 0; y < this.game.chunkSize; y++) {
+                    const wy = startY + y;
+
+                    if (wy <= height) {
+                        this.game.setBlock(wx, wy, wz, Blocks.STONE, true, true);
+                    }
+                }
+            }
+        }
 
         chunk.isGenerated = true;
         return chunk;

@@ -8,8 +8,9 @@ WORKDIR /usr/src/app
 # Copy application dependency manifests to the container image.
 # A wildcard is used to ensure both package.json AND package-lock.json are copied.
 # Copying this separately prevents re-running npm install on every code change.
-COPY package*.json ./
-COPY tsconfig.json ./
+# NOTE: Build context must be PROJECT ROOT.
+COPY server/package*.json ./
+COPY server/tsconfig.json ./
 
 # Install production dependencies.
 # If you add a package-lock.json speed your build by switching to 'npm ci'.
@@ -17,7 +18,11 @@ COPY tsconfig.json ./
 RUN npm install
 
 # Copy local code to the container image.
-COPY . .
+COPY server/ .
+
+# Copy game source code (needed for AI agent context)
+COPY src/ ../src
+COPY .agent/ ../.agent
 
 # Build the TypeScript code
 # (Assuming you don't have a build step in package.json, we can just run ts-node directly in production 

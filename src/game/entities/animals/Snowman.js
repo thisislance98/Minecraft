@@ -19,8 +19,8 @@ const SNOWMAN_PHRASES = [
 ];
 
 export class Snowman extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 4.0;
         this.height = 8.0;
         this.depth = 4.0;

@@ -80,8 +80,7 @@ export class Animal {
         this.fleeOnProximity = false;
         this.fleeRange = 8.0;
 
-        // Water avoidance - land animals should avoid water
-        this.avoidsWater = true;
+        this.avoidsWater = false;
 
         // Stuck detection
         this.lastPosition = new THREE.Vector3().copy(this.position);
@@ -194,7 +193,7 @@ export class Animal {
             // Update rider position
             this.rider.position.copy(this.position);
             this.rider.position.y += this.height * 0.8;
-            
+
             const input = this.game.inputManager;
             if (input && this.handleRiding) {
                 const moveForward = (input.keys['KeyW'] || input.actions['FORWARD'] ? 1 : 0) - (input.keys['KeyS'] || input.actions['BACKWARD'] ? 1 : 0);
@@ -283,6 +282,62 @@ export class Animal {
         }
     }
 
+    // Explicit sync trigger (e.g. after scale change)
+    checkSync(force = false) {
+        if (!this.game.socketManager || !this.game.socketManager.isConnected()) return;
+
+        if (force) {
+            this.game.socketManager.sendEntityUpdate(this.serialize());
+            if (this.lastSyncPos) this.lastSyncPos.copy(this.position);
+            return;
+        }
+
+        if (!this.lastSyncPos) this.lastSyncPos = this.position.clone();
+
+        const dist = this.position.distanceTo(this.lastSyncPos);
+        if (dist > 1.0) {
+            this.game.socketManager.sendEntityUpdate(this.serialize());
+            this.lastSyncPos.copy(this.position);
+        }
+    }
+
+    setScale(scale) {
+        this.mesh.scale.setScalar(scale);
+        this.data.scale = scale; // Persist
+        this.checkSync(true);
+    }
+
+    setColor(color) {
+        // Try to interpret color
+        let hex = 0xFFFFFF;
+        if (typeof color === 'string') {
+            hex = new THREE.Color(color).getHex();
+        } else if (typeof color === 'number') {
+            hex = color;
+        }
+
+        this.data.color = hex;
+
+        this.mesh.traverse((child) => {
+            if (child.isMesh && child.material) {
+                // If using userData.originalColor logic, update that too so it recovers to new color after damage
+                if (!child.material.userData) child.material.userData = {};
+
+                // Set current color
+                child.material.color.setHex(hex);
+
+                // Update 'original' so damage flash restores to this new color
+                if (child.material.userData.originalColor) {
+                    child.material.userData.originalColor.setHex(hex);
+                } else {
+                    child.material.userData.originalColor = new THREE.Color(hex);
+                }
+            }
+        });
+
+        this.checkSync(true);
+    }
+
     serialize() {
         return {
             id: this.id,
@@ -292,7 +347,9 @@ export class Animal {
             z: this.position.z,
             seed: this.seed,
             health: this.health,
-            state: this.state
+            state: this.state,
+            scale: this.data.scale !== undefined ? this.data.scale : 1.0,
+            color: this.data.color !== undefined ? this.data.color : null
         };
     }
 
@@ -302,6 +359,16 @@ export class Animal {
             this.mesh.position.copy(this.position);
         }
         if (data.health !== undefined) this.health = data.health;
+
+        if (data.scale !== undefined) {
+            this.data.scale = data.scale;
+            this.mesh.scale.setScalar(data.scale);
+        }
+
+        if (data.color !== undefined && data.color !== null) {
+            this.setColor(data.color);
+        }
+
         // Don't override state blindly if we are currently reacting to something, 
         // but for initial load it's fine.
     }
@@ -985,7 +1052,7 @@ export class Animal {
 
     checkWater(x, y, z) {
         const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
-        return block === Blocks.WATER;
+        return block && block.type === Blocks.WATER;
     }
 
     checkBodyCollision(x, y, z) {

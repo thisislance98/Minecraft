@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Animal } from '../Animal.js';
 
 export class MagicalCreature extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.type = 'magical_creature';
         this.speed = 2.5; // Increased speed
         this.wanderRadius = 20;

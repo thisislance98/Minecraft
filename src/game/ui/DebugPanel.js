@@ -56,8 +56,9 @@ export class DebugPanel {
                     <label><input type="checkbox" id="dbg-chunks" checked> Update Chunks</label>
                     <label><input type="checkbox" id="dbg-terrain" checked> Show Terrain</label>
                     <label><input type="checkbox" id="dbg-env" checked> Day/Night Cycle</label>
+                    <label><input type="checkbox" id="dbg-moon" checked> Show Moon</label>
                     <label><input type="checkbox" id="dbg-particles" checked> Particles</label>
-                    <label><input type="checkbox" id="dbg-shadows" checked> Shadows</label>
+                    <label><input type="checkbox" id="dbg-shadows" checked> Terrain Shadows</label>
                     <label><input type="checkbox" id="dbg-water" checked> Water</label>
                     <label><input type="checkbox" id="dbg-weather" checked> Weather</label>
                 </div>
@@ -172,13 +173,20 @@ export class DebugPanel {
             this.settings.world.dayNightCycle = val;
             if (this.game.gameState) this.game.gameState.debug.environment = val;
         });
+        this.bindCheckbox('dbg-moon', (val) => {
+            if (this.game.environment) this.game.environment.toggleMoon(val);
+        });
+        this.bindCheckbox('dbg-particles', (val) => {
+            this.settings.world.particles = val;
+            if (this.game.gameState) this.game.gameState.debug.particles = val;
+        });
         this.bindCheckbox('dbg-particles', (val) => {
             this.settings.world.particles = val;
             if (this.game.gameState) this.game.gameState.debug.particles = val;
         });
         this.bindCheckbox('dbg-shadows', (val) => {
             this.settings.world.shadows = val;
-            if (this.game.toggleShadows) this.game.toggleShadows(val);
+            if (this.game.toggleTerrainShadows) this.game.toggleTerrainShadows(val);
         });
         this.bindCheckbox('dbg-water', (val) => {
             this.settings.world.water = val;

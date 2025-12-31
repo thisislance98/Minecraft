@@ -87,7 +87,20 @@ const palettes = {
     parkour_platform: ['#444444', '#555555', '#333333', '#666666'], // Grey stone look
     playground_block: { primary: '#FFD700', secondary: '#4169E1', accent: '#DC143C' }, // Yellow, Blue, Red
     slide_block: '#FF4500', // Orange-Red plastic
-    mob_waves_block: { base: ['#0f0f0f', '#1a1a1a'], wave: '#ff0000', accent: '#800000' }
+    mob_waves_block: { base: ['#0f0f0f', '#1a1a1a'], wave: '#ff0000', accent: '#800000' },
+    cactus: ['#2E8B57', '#006400', '#556B2F'], // SeaGreen, DarkGreen, DarkOliveGreen
+
+    // Enterprise Palettes
+    enterprise_hull: ['#E3E3E3', '#D0D0D0', '#C0C0C0', '#F0F0F0'], // Smooth pearl white/grey
+    enterprise_floor: ['#A0A0A0', '#909090', '#B0B0B0'], // Darker grey floor
+    enterprise_engine: ['#404040', '#505050', '#303030'], // Dark mechanical
+    enterprise_dish: { center: ['#B8860B', '#DAA520'], ring: ['#00FFFF', '#00CED1'] }, // Copper/Gold and Cyan
+    enterprise_nacelle: { front: ['#FF4500', '#FF0000', '#FFA500'], side: ['#0000FF', '#4169E1', '#00BFFF'] }, // Red/Orange and Blue glow
+    // Bridge Palettes
+    enterprise_panel: ['#202020', '#FF9900', '#9933FF', '#3366FF'], // Dark grey bg, LCARS colors (Orange/Purple/Blue)
+    enterprise_screen: ['#000000', '#FFFFFF', '#00FF00'], // Black, stars
+    enterprise_console: ['#404040', '#A0A0A0', '#00FFFF'], // Console grey with cyan interface
+    enterprise_chair: ['#800000', '#303030'] // Dark Red, Black base
 };
 
 export function generateTexture(type, size = 16) {
@@ -798,20 +811,174 @@ export function generateTexture(type, size = 16) {
             const colors = palettes.tapestry;
             ctx.fillStyle = colors[0];
             ctx.fillRect(0, 0, size, size);
-
-            // Simple cross pattern
+            // Simple pattern
             ctx.fillStyle = colors[1];
-            ctx.fillRect(2, 2, size - 4, size - 4);
-
+            ctx.fillRect(4, 4, 8, 8);
             ctx.fillStyle = colors[2];
-            // Central emblem
             ctx.fillRect(6, 6, 4, 4);
-            // Fringes at bottom
-            for (let i = 0; i < size; i += 2) {
-                ctx.fillRect(i, size - 2, 1, 2);
-            }
             break;
         }
+
+        // --- Enterprise Textures ---
+
+        case 'enterprise_hull':
+            // Smooth metal with panel lines
+            const hullPalette = palettes.enterprise_hull;
+            ctx.fillStyle = hullPalette[0];
+            ctx.fillRect(0, 0, size, size);
+
+            // Random subtle noise
+            for (let i = 0; i < size * size; i++) {
+                if (seededRandom(seed++) > 0.8) {
+                    const x = i % size;
+                    const y = Math.floor(i / size);
+                    ctx.fillStyle = hullPalette[Math.floor(seededRandom(seed++) * hullPalette.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+
+            // Panel lines (subtle)
+            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            if (seededRandom(seed++) > 0.5) {
+                ctx.beginPath();
+                ctx.moveTo(size / 2, 0);
+                ctx.lineTo(size / 2, size);
+                ctx.stroke();
+            }
+            break;
+
+        case 'enterprise_floor':
+            const floorPalette = palettes.enterprise_floor;
+            ctx.fillStyle = floorPalette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Grid pattern
+            ctx.strokeStyle = '#808080';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, size, size);
+            ctx.fillStyle = floorPalette[1];
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            break;
+
+        case 'enterprise_engine':
+            const engPalette = palettes.enterprise_engine;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = engPalette[Math.floor(seededRandom(seed++) * engPalette.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Pipes or vents
+            ctx.fillStyle = '#202020';
+            ctx.fillRect(4, 0, 2, size);
+            ctx.fillRect(10, 0, 2, size);
+            break;
+
+        case 'enterprise_dish_center':
+            ctx.fillStyle = palettes.enterprise_dish.center[0];
+            ctx.fillRect(0, 0, size, size);
+            // Concentric circles (approx)
+            ctx.fillStyle = palettes.enterprise_dish.center[1];
+            ctx.fillRect(4, 4, 8, 8);
+            ctx.fillStyle = '#DDDD00'; // Bright center
+            ctx.fillRect(7, 7, 2, 2);
+            break;
+
+        case 'enterprise_dish_ring':
+            ctx.fillStyle = palettes.enterprise_dish.ring[0];
+            ctx.fillRect(0, 0, size, size);
+            // Glowing effect
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            break;
+
+        case 'enterprise_nacelle_front': // Bussard
+            const bussard = palettes.enterprise_nacelle.front;
+            // Swirling red/orange
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const n = seededRandom(seed++);
+                    ctx.fillStyle = bussard[Math.floor(n * bussard.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Glow center
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.4)';
+            ctx.fillRect(4, 4, 8, 8);
+            break;
+
+        case 'enterprise_nacelle_side': // Warp field
+            const warp = palettes.enterprise_nacelle.side;
+            ctx.fillStyle = '#000033'; // Dark blue base
+            ctx.fillRect(0, 0, size, size);
+            // Horizontal glowing lines
+            for (let y = 2; y < size; y += 4) {
+                ctx.fillStyle = warp[Math.floor(seededRandom(seed++) * warp.length)];
+                ctx.fillRect(0, y, size, 2);
+            }
+            break;
+
+        case 'enterprise_panel':
+            // LCARS style: Dark background, Colored bars
+            const lcars = palettes.enterprise_panel;
+            ctx.fillStyle = lcars[0]; // Dark BG
+            ctx.fillRect(0, 0, size, size);
+
+            // Side bar
+            ctx.fillStyle = lcars[1]; // Orange
+            ctx.fillRect(0, 0, 4, size);
+            // Curve top
+            ctx.fillRect(4, 0, size - 4, 4);
+
+            // Random buttons/rectangles
+            for (let i = 0; i < 4; i++) {
+                ctx.fillStyle = lcars[Math.floor(seededRandom(seed++) * (lcars.length - 1)) + 1];
+                let rx = 6 + Math.floor(seededRandom(seed++) * (size - 8));
+                let ry = 6 + Math.floor(seededRandom(seed++) * (size - 8));
+                let rw = 4 + Math.floor(seededRandom(seed++) * 8);
+                let rh = 2 + Math.floor(seededRandom(seed++) * 4);
+                ctx.fillRect(rx, ry, rw, rh);
+            }
+            break;
+
+        case 'enterprise_screen':
+            // Viewscreen: Black with stars
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, size, size);
+            // Stars
+            ctx.fillStyle = '#FFFFFF';
+            for (let i = 0; i < 10; i++) {
+                if (seededRandom(seed++) > 0.5) {
+                    ctx.fillRect(seededRandom(seed++) * size, seededRandom(seed++) * size, 1, 1);
+                }
+            }
+            break;
+
+        case 'enterprise_console':
+            // Angled interface visualization
+            ctx.fillStyle = palettes.enterprise_console[0];
+            ctx.fillRect(0, 0, size, size);
+            // Cyan Grid
+            ctx.strokeStyle = palettes.enterprise_console[2];
+            ctx.lineWidth = 1;
+            ctx.strokeRect(2, 2, size - 4, size - 4);
+            // Buttons
+            ctx.fillStyle = palettes.enterprise_console[1];
+            ctx.fillRect(4, 4, 4, 4);
+            ctx.fillRect(10, 4, 4, 4);
+            ctx.fillRect(4, 10, 8, 4);
+            break;
+
+        case 'enterprise_chair':
+            // Leather/Fabric texture
+            ctx.fillStyle = palettes.enterprise_chair[0];
+            ctx.fillRect(0, 0, size, size);
+            // Shading
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fillRect(0, size - 4, size, 4); // Base shadow
+            break;
+
+
 
         case 'levitation_wand':
         case 'wand':
@@ -1314,6 +1481,41 @@ export function generateTexture(type, size = 16) {
                     const val = 150 + Math.floor(seededRandom(seed++) * 105);
                     ctx.fillStyle = `rgb(${val},${val},${val})`;
                     ctx.fillRect(i, j, 2, 2);
+                }
+            }
+            break;
+        }
+
+        case 'cactus_side': {
+            const colors = palettes.cactus;
+            ctx.fillStyle = colors[1]; // Dark base
+            ctx.fillRect(0, 0, size, size);
+            // Vertical ribs
+            ctx.fillStyle = colors[0];
+            for (let i = 2; i < size; i += 4) {
+                ctx.fillRect(i, 0, 2, size);
+            }
+            // Spines
+            ctx.fillStyle = '#F0E68C'; // Khaki
+            for (let y = 3; y < size; y += 4) {
+                for (let x = 1; x < size; x += 4) {
+                    if (seededRandom(seed++) > 0.3) {
+                        ctx.fillRect(x, y, 2, 1);
+                    }
+                }
+            }
+            break;
+        }
+
+        case 'cactus_top': {
+            const colors = palettes.cactus;
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(0, 0, size, size);
+            // Rings or dots
+            ctx.fillStyle = colors[1];
+            for (let i = 0; i < size; i += 2) {
+                for (let j = 0; j < size; j += 2) {
+                    if ((i + j) % 4 === 0) ctx.fillRect(i, j, 1, 1);
                 }
             }
             break;

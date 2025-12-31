@@ -161,11 +161,22 @@ Usage:
 `;
 
     // User Context
+    const { lastSpawnedIds } = context?.agentContext || {};
+
+    let interactionContext = '';
+    if (lastSpawnedIds && lastSpawnedIds.length > 0) {
+        interactionContext = `\nLast Spawned Entities: ${JSON.stringify(lastSpawnedIds)}`;
+    }
+
     const userContext = `
 <user_context>
 The USER is currently playing the game.
 Player Position: x=${position?.x ?? 0}, y=${position?.y ?? 0}, z=${position?.z ?? 0}
-Player Rotation: ${JSON.stringify(rotation ?? {})}
+Player Rotation: ${JSON.stringify(rotation ?? {})}${interactionContext}
+
+CONTEXT INSTRUCTIONS:
+- If the user says "it", "them", "that", refer to 'Last Spawned Entities' IDs.
+- Use 'update_entity' tool with these IDs to modify them.
 </user_context>
 `;
 

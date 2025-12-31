@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DebugPanel } from '../ui/DebugPanel.js';
 import { IdeasButton } from '../ui/IdeasButton.js';
-import { FeedbackUI } from '../ui/FeedbackUI.js';
+import { CommunityUI } from '../ui/CommunityUI.js';
 
 /**
  * UIManager centralizes all HUD/UI updates.
@@ -23,8 +23,8 @@ export class UIManager {
         // Ideas Button
         this.ideasButton = new IdeasButton(game);
 
-        // Feedback UI
-        this.feedbackUI = new FeedbackUI(game);
+        // Community/Feedback UI
+        this.communityUI = new CommunityUI(game);
         this.createFeedbackButton();
 
         // Escape Room UI
@@ -40,8 +40,7 @@ export class UIManager {
 
         // Agent UI elements
         this.statusDiv = null;
-        this.voiceIndicator = null;
-        this.statusText = null;
+
         this.taskItemsDiv = null;
         this.tasks = [];
 
@@ -859,6 +858,21 @@ export class UIManager {
         }
         this.joustState = null;
     }
+    openSettings() {
+        if (!this.settingsModal) return;
+        this.settingsModal.classList.remove('hidden');
+
+        // Sync toggle states with current settings
+        if (this.audioToggle && this.game.soundManager) {
+            this.audioToggle.checked = !this.game.soundManager.isMuted;
+        }
+
+        // Refresh Store UI
+        if (this.game.storeUI) {
+            this.game.storeUI.refresh();
+        }
+    }
+
     setupSettingsMenu() {
         // Cache DOM elements
         this.settingsModal = document.getElementById('settings-modal');
@@ -911,12 +925,9 @@ export class UIManager {
         }
 
         // Settings button click - open modal
+        // Settings button click - open modal
         this.settingsBtn.addEventListener('click', () => {
-            this.settingsModal.classList.remove('hidden');
-            // Sync toggle states with current settings
-            if (this.audioToggle && this.game.soundManager) {
-                this.audioToggle.checked = !this.game.soundManager.isMuted;
-            }
+            this.openSettings();
         });
 
         // Close button
@@ -942,6 +953,26 @@ export class UIManager {
                 // Update mute button icon
                 if (this.muteBtn) {
                     this.muteBtn.textContent = enabled ? '🔊' : '🔇';
+                }
+            });
+        }
+
+        // Voice Chat toggle
+        this.voiceToggle = document.getElementById('settings-voice-toggle');
+        if (this.voiceToggle) {
+            const savedVoice = localStorage.getItem('settings_voice') === 'true'; // Default false
+            this.voiceToggle.checked = savedVoice;
+
+            // Apply initial state if socket manager exists (might be too early, handled in SocketManager init too)
+            if (this.game.socketManager) {
+                this.game.socketManager.setVoiceChatEnabled(savedVoice);
+            }
+
+            this.voiceToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_voice', enabled);
+                if (this.game.socketManager) {
+                    this.game.socketManager.setVoiceChatEnabled(enabled);
                 }
             });
         }
@@ -993,24 +1024,8 @@ export class UIManager {
             });
         }
 
-        // AI Streaming toggle
-        this.aiStreamingToggle = document.getElementById('settings-ai-streaming-toggle');
-        if (this.aiStreamingToggle) {
-            const savedStreaming = localStorage.getItem('settings_ai_streaming') === 'true';
-            this.aiStreamingToggle.checked = savedStreaming;
-            // Notify agent of initial state
-            if (this.game.agent) {
-                this.game.agent.streamingMode = savedStreaming;
-            }
 
-            this.aiStreamingToggle.addEventListener('change', (e) => {
-                const enabled = e.target.checked;
-                localStorage.setItem('settings_ai_streaming', enabled);
-                if (this.game.agent) {
-                    this.game.agent.streamingMode = enabled;
-                }
-            });
-        }
+
 
         // Fullscreen Toggle (Mobile Only)
         this.fullscreenBtn = document.getElementById('settings-fullscreen-btn');
@@ -1266,43 +1281,10 @@ export class UIManager {
         `;
         div.innerHTML = `
             <div id="ai-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333; margin-right: 8px;" title="AI Connection"></div>
-            <div id="voice-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333;"></div>
-            <span id="voice-status-text">Voice Off (V)</span>
-            <select id="voice-select" style="
-                background: rgba(0,0,0,0.5); border: 1px solid #00ffcc; 
-                color: #00ffcc; font-family: inherit; font-size: 12px; 
-                border-radius: 4px; outline: none; margin-left: 5px; cursor: pointer;
-                padding: 2px 5px;
-            ">
-                <option value="Puck">Puck</option>
-                <option value="Charon">Charon</option>
-                <option value="Kore">Kore</option>
-                <option value="Fenrir">Fenrir</option>
-                <option value="Aoede">Aoede</option>
-            </select>
         `;
         document.body.appendChild(div);
         this.statusDiv = div;
         this.aiIndicator = div.querySelector('#ai-indicator');
-        this.voiceIndicator = div.querySelector('#voice-indicator');
-        this.statusText = div.querySelector('#voice-status-text');
-
-        // Setup voice selector
-        const voiceSelect = div.querySelector('#voice-select');
-        const currentVoice = localStorage.getItem('agent_voice') || 'Puck';
-        voiceSelect.value = currentVoice;
-
-        voiceSelect.addEventListener('change', (e) => {
-            // Unfocus to prevent keyboard capture (like 'W' for walking) affecting the select
-            e.target.blur();
-            if (this.game.agent) {
-                this.game.agent.setVoice(e.target.value);
-            }
-        });
-
-        // Prevent key presses in the dropdown from triggering game actions
-        voiceSelect.addEventListener('keydown', (e) => e.stopPropagation());
-        voiceSelect.addEventListener('keyup', (e) => e.stopPropagation());
 
         this.createTaskListUI();
     }
@@ -1448,14 +1430,7 @@ export class UIManager {
     }
 
     updateVoiceStatus(active, text) {
-        // Ensure UI exists
-        if (!this.statusDiv) this.createStatusIndicator();
-
-        this.voiceIndicator.style.background = active ? '#00ff00' : '#333';
-        if (!active && text === 'Error') {
-            this.voiceIndicator.style.background = '#ff0000';
-        }
-        this.statusText.textContent = text;
+        // Voice UI disabled
     }
 
     addTask(name, backendTaskId = null) {
@@ -1899,7 +1874,28 @@ export class UIManager {
 
     handleSendMessage() {
         const text = this.chatInput.value.trim();
-        if (text && this.game.agent) {
+        if (!text) return;
+
+        // Command Handling
+        if (text.toLowerCase() === '/spaceship') {
+            if (this.game.spaceShipManager && this.game.player) {
+                const pos = this.game.player.position.clone();
+                // Spawn slightly forward and up
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.game.player.quaternion);
+                pos.add(forward.multiplyScalar(20)); // 20 blocks ahead
+                pos.y += 2;
+
+                this.game.spaceShipManager.spawnShip(pos);
+                this.addChatMessage('system', 'Spaceship spawned ahead!');
+            } else {
+                this.addChatMessage('error', 'Spaceship Manager not ready.');
+            }
+            this.chatInput.value = '';
+            this.toggleChatPanel(false); // Close chat
+            return;
+        }
+
+        if (this.game.agent) {
             this.game.agent.sendTextMessage(text);
             this.chatInput.value = '';
             // Clear suggestions on sending a message? Maybe desirable.
@@ -3836,6 +3832,14 @@ export class UIManager {
         if (visible && !this.joystickContainer) {
             this.initTouchControls();
         }
+
+        // Toggle body class for CSS targeting
+        if (visible) {
+            document.body.classList.add('mobile-controls-active');
+        } else {
+            document.body.classList.remove('mobile-controls-active');
+        }
+
         const display = visible ? 'flex' : 'none';
         if (this.joystickContainer) this.joystickContainer.style.display = display;
         if (this.lookJoystickContainer) this.lookJoystickContainer.style.display = display;
@@ -3858,7 +3862,7 @@ export class UIManager {
     createFeedbackButton() {
         const btn = document.createElement('button');
         btn.id = 'feedback-btn';
-        btn.innerHTML = '📝 Feedback';
+        btn.innerHTML = '💬 Community';
         btn.style.cssText = `
             position: fixed;
             top: 70px;
@@ -3888,11 +3892,106 @@ export class UIManager {
         };
 
         btn.onclick = () => {
-            this.feedbackUI.toggle();
+            this.communityUI.toggle();
             btn.blur();
         };
 
         document.body.appendChild(btn);
         this.feedbackBtn = btn;
+    }
+
+    showSpaceShipControls(visible) {
+        if (this.spaceShipModal) {
+            this.spaceShipModal.style.display = visible ? 'flex' : 'none';
+            if (visible) {
+                if (this.game.inputManager) this.game.inputManager.unlock();
+            } else {
+                if (this.game.inputManager) this.game.inputManager.lock();
+            }
+            return;
+        }
+
+        if (!visible) return;
+
+        // Create Modal
+        const modal = document.createElement('div');
+        modal.id = 'spaceship-controls';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 4000;
+            font-family: 'Courier New', monospace; color: cyan;
+        `;
+
+        const panel = document.createElement('div');
+        panel.style.cssText = `
+            background: #001122; border: 2px solid cyan; padding: 40px;
+            border-radius: 10px; width: 600px; text-align: center;
+            box-shadow: 0 0 50px cyan;
+        `;
+
+        panel.innerHTML = `
+            <h1 style="margin-bottom: 30px; text-shadow: 0 0 10px cyan;">🚀 STARSHIP CONTROL DECK 🚀</h1>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                <button id="ship-launch" style="padding: 15px; background: transparent; border: 1px solid cyan; color: cyan; cursor: pointer; font-size: 18px; transition: all 0.3s;">
+                    INITIATE LAUNCH
+                </button>
+                <button id="ship-hyperdrive" style="padding: 15px; background: transparent; border: 1px solid magenta; color: magenta; cursor: pointer; font-size: 18px; transition: all 0.3s;">
+                    ENGAGE HYPERDRIVE
+                </button>
+                <button id="ship-scan" style="padding: 15px; background: transparent; border: 1px solid lime; color: lime; cursor: pointer; font-size: 18px; transition: all 0.3s;">
+                    SCAN SECTOR
+                </button>
+                <button id="ship-destruct" style="padding: 15px; background: #330000; border: 1px solid red; color: red; cursor: pointer; font-size: 18px; transition: all 0.3s;">
+                    SELF DESTRUCT
+                </button>
+            </div>
+            <button id="ship-close" style="padding: 10px 30px; background: #333; color: white; border: none; cursor: pointer; font-size: 16px;">
+                LEAVE CONTROLS
+            </button>
+        `;
+
+        modal.appendChild(panel);
+        document.body.appendChild(modal);
+        this.spaceShipModal = modal;
+
+        // Handlers
+        document.getElementById('ship-close').onclick = () => this.showSpaceShipControls(false);
+
+        // Hover effects
+        const buttons = panel.querySelectorAll('button');
+        buttons.forEach(btn => {
+            const originalBg = btn.style.background;
+            btn.onmouseover = () => {
+                if (btn.id !== 'ship-close') btn.style.background = 'rgba(255,255,255,0.1)';
+                btn.style.boxShadow = `0 0 15px ${btn.style.color}`;
+            };
+            btn.onmouseout = () => {
+                btn.style.background = originalBg;
+                btn.style.boxShadow = 'none';
+            };
+        });
+
+        // Actions
+        document.getElementById('ship-launch').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.launchShip();
+        };
+
+        document.getElementById('ship-hyperdrive').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.hyperDrive();
+        };
+
+        document.getElementById('ship-scan').onclick = () => {
+            this.addChatMessage('system', 'Scanning... Life signs detected: ' + this.game.animals.length);
+        };
+
+        document.getElementById('ship-destruct').onclick = () => {
+            this.showSpaceShipControls(false);
+            this.addChatMessage('system', 'Self Destruct sequence not implemented (Safety First!)');
+        };
+
+        if (this.game.inputManager) this.game.inputManager.unlock();
     }
 }

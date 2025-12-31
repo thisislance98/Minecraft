@@ -15,8 +15,8 @@ const PHRASES = [
 ];
 
 export class Pig extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.9;
         this.height = 0.9;
         this.depth = 1.3;

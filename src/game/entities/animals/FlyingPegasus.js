@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Pegasus } from './Pegasus.js';
 
 export class FlyingPegasus extends Pegasus {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.gravity = 0;
         this.flying = true;
         this.targetAltitude = y + 10;

@@ -18,7 +18,13 @@ export class AntigravitySession {
     private model: any;
     private contents: any[] = [];
     private userId: string | null = null;
-    private COST_PER_REQUEST = 10;
+    // private userId: string | null = null; // Removed duplicate
+
+    // Pricing Configuration (Gemini 3.0 Flash)
+    private PRICE_INPUT_1M = 0.50;      // $0.50 per 1M input tokens
+    private PRICE_OUTPUT_1M = 3.00;     // $3.00 per 1M output tokens
+    private OVERHEAD_MULTIPLIER = 2.5;  // 60% Profit Margin (1 / 0.40)
+    private USD_PER_GAME_TOKEN = 0.001; // $1.00 = 1000 Tokens (from Stripe config)
 
     constructor(ws: WebSocket, apiKey: string, req: IncomingMessage) {
         this.ws = ws;
@@ -37,21 +43,15 @@ export class AntigravitySession {
     }
 
     private async init(token: string | null) {
-        // Verify Auth asynchronously
-        if (token) {
-            try {
-                if (!auth) throw new Error('Auth service unavailable');
-                const decoded = await auth.verifyIdToken(token);
-                this.userId = decoded.uid;
-                console.log(`[Antigravity] Authenticated user: ${this.userId}`);
-                this.sendBalanceUpdate();
-            } catch (e) {
-                console.error('[Antigravity] Auth failed:', e);
-                this.send('error', { message: 'Authentication failed' });
-            }
-        } else {
-            console.log('[Antigravity] No auth token provided. Running as guest (limited?).');
-        }
+        // Register Event Handlers IMMEDIATELEY to handle early errors/disconnects without crashing
+        this.ws.on('error', (err) => {
+            console.error('[Antigravity] WebSocket error:', err);
+        });
+
+        this.ws.on('close', () => {
+            console.log(`[Antigravity] Session closed for user: ${this.userId || 'guest'}`);
+            this.isInterrupted = true;
+        });
 
         this.ws.on('message', async (data) => {
             try {
@@ -71,6 +71,22 @@ export class AntigravitySession {
                 this.sendError(e.message);
             }
         });
+
+        // Verify Auth asynchronously
+        if (token) {
+            try {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decoded = await auth.verifyIdToken(token);
+                this.userId = decoded.uid;
+                console.log(`[Antigravity] Authenticated user: ${this.userId}`);
+                this.sendBalanceUpdate();
+            } catch (e) {
+                console.error('[Antigravity] Auth failed:', e);
+                this.send('error', { message: 'Authentication failed' });
+            }
+        } else {
+            console.log('[Antigravity] No auth token provided. Running as guest (limited?).');
+        }
     }
 
     private isInterrupted = false;
@@ -105,9 +121,10 @@ export class AntigravitySession {
 
     private async generateAndProcess() {
         // 1. Check Balance
+        // 1. Check Balance
         if (this.userId) {
             const currentBalance = await getUserTokens(this.userId);
-            if (currentBalance < this.COST_PER_REQUEST) {
+            if (currentBalance < 5) { // Minimum threshold to start a request
                 this.send('error', { message: 'Insufficient tokens. Please purchase more to continue using AI.' });
                 return;
             }
@@ -115,6 +132,9 @@ export class AntigravitySession {
 
         console.log('[Antigravity] Starting generation with thinking config...');
         this.isInterrupted = false; // Reset flag
+
+        let result: any;
+        let thoughtCharCount = 0;
 
         try {
             // Use streaming with thinking config
@@ -125,7 +145,7 @@ export class AntigravitySession {
                 }
             };
 
-            const result = await this.model.generateContentStream(request);
+            result = await this.model.generateContentStream(request);
 
             let accumulatedText = '';
             const capturedSignatures: string[] = [];
@@ -148,6 +168,8 @@ export class AntigravitySession {
                         }
                         // @ts-ignore
                         if (part.thought) {
+                            // @ts-ignore
+                            thoughtCharCount += part.text.length;
                             this.send('thought', { text: part.text });
                             // @ts-ignore
                         } else if (part.text) {
@@ -176,6 +198,17 @@ export class AntigravitySession {
             // Add full model response to history
             this.contents.push(content);
 
+            // Report Token Usage
+            if (response.usageMetadata) {
+                const thoughtTokens = Math.ceil(thoughtCharCount / 4); // Estimate
+                this.send('token_usage', {
+                    promptTokens: response.usageMetadata.promptTokenCount,
+                    candidatesTokens: response.usageMetadata.candidatesTokenCount,
+                    thoughtTokens: thoughtTokens,
+                    totalTokens: response.usageMetadata.totalTokenCount + thoughtTokens
+                });
+            }
+
             const finalToolCalls = response.functionCalls();
             if (finalToolCalls && finalToolCalls.length > 0) {
                 if (this.isInterrupted) return; // Don't run tools if aborted
@@ -191,9 +224,26 @@ export class AntigravitySession {
                 this.send('complete', {});
 
                 // Deduct cost if successful (and authenticated)
-                if (this.userId) {
+                // Calculate Cost & Deduct Tokens
+                if (this.userId && result.response.usageMetadata) {
                     try {
-                        await addTokens(this.userId, -this.COST_PER_REQUEST, 'ai_usage', 'Gemini Prompts');
+                        const usage = result.response.usageMetadata;
+                        const thoughtTokens = Math.ceil(thoughtCharCount / 4);
+
+                        const inputCost = (usage.promptTokenCount / 1000000) * this.PRICE_INPUT_1M;
+                        const outputCost = ((usage.candidatesTokenCount + thoughtTokens) / 1000000) * this.PRICE_OUTPUT_1M;
+                        const totalApiCost = inputCost + outputCost;
+
+                        // Apply Profit Margin and Convert to Game Tokens
+                        const targetRevenue = totalApiCost * this.OVERHEAD_MULTIPLIER;
+                        const tokensToDeduct = Math.ceil(targetRevenue / this.USD_PER_GAME_TOKEN);
+
+                        // Ensure minimum 1 token deduction if any usage occurred
+                        const finalDeduction = Math.max(1, tokensToDeduct);
+
+                        console.log(`[Antigravity] Cost: $${totalApiCost.toFixed(6)} -> Charge: ${finalDeduction} tokens`);
+
+                        await addTokens(this.userId, -finalDeduction, 'ai_usage', 'Gemini Generation');
                         this.sendBalanceUpdate();
                     } catch (e) {
                         console.error('[Antigravity] Failed to deduct tokens:', e);
@@ -257,7 +307,7 @@ export class AntigravitySession {
     }
 
     private isClientTool(name: string) {
-        return ['spawn_creature', 'teleport_player', 'get_scene_info'].includes(name);
+        return ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity'].includes(name);
     }
 
     // SERVER TOOL EXECUTORS

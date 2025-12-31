@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Animal } from '../Animal.js';
 
 export class Cow extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.9;
         this.height = 1.2;
         this.depth = 1.8;

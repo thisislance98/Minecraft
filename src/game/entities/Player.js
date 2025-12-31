@@ -284,6 +284,7 @@ export class Player {
         this.createRideWand();
         this.createWizardTowerWand();
         this.createBroom();
+        this.createBinoculars();
         this.createFoodModels();
         this.createFurnitureModels();
         this.updateHeldItemVisibility();
@@ -697,6 +698,38 @@ export class Player {
         this.rightArm.add(this.couchModel);
     }
 
+    createBinoculars() {
+        const binoculars = new THREE.Group();
+        const material = new THREE.MeshLambertMaterial({ color: 0x333333, depthTest: false }); // Dark grey
+
+        // Left Tube
+        const leftTube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 8), material);
+        leftTube.rotation.x = Math.PI / 2;
+        leftTube.position.set(-0.06, 0, 0);
+        leftTube.renderOrder = 999;
+        binoculars.add(leftTube);
+
+        // Right Tube
+        const rightTube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 8), material);
+        rightTube.rotation.x = Math.PI / 2;
+        rightTube.position.set(0.06, 0, 0);
+        rightTube.renderOrder = 999;
+        binoculars.add(rightTube);
+
+        // Bridge
+        const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), material);
+        bridge.position.set(0, 0, 0);
+        bridge.renderOrder = 999;
+        binoculars.add(bridge);
+
+        // Position - adjusted to look held
+        binoculars.position.set(0, -0.3, 0);
+
+        this.toolAttachment.add(binoculars);
+        this.binoculars = binoculars;
+        this.binoculars.visible = false;
+    }
+
     createBow() {
         const bowGroup = new THREE.Group();
 
@@ -752,6 +785,7 @@ export class Player {
         if (this.pickaxe) this.pickaxe.visible = itemType === 'pickaxe';
         if (this.sword) this.sword.visible = itemType === 'sword';
         if (this.bow) this.bow.visible = itemType === 'bow';
+        if (this.binoculars) this.binoculars.visible = itemType === 'binoculars';
         if (this.apple) this.apple.visible = itemType === 'apple';
         if (this.bread) this.bread.visible = itemType === 'bread';
         if (this.chocolateBar) this.chocolateBar.visible = itemType === 'chocolate_bar';
@@ -918,6 +952,11 @@ export class Player {
                     this.highestY = this.position.y;
                 } else {
                     this.highestY = Math.max(this.highestY, this.position.y);
+                }
+
+                // Void Damage
+                if (this.position.y < -64) {
+                    this.takeDamage(10); // Take damage every frame until death
                 }
 
                 // Apply gravity

@@ -96,6 +96,26 @@ export function getAntigravityTools() {
                     type: SchemaType.OBJECT,
                     properties: {},
                 }
+            },
+            {
+                name: "update_entity",
+                description: "Update properties of an existing entity (e.g. scale, color, position).",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        entityId: { type: SchemaType.STRING, description: "ID of the entity to update" },
+                        updates: {
+                            type: SchemaType.OBJECT,
+                            description: "Object containing updates to apply (e.g. { scale: 2.0, color: 'blue' })",
+                            properties: {
+                                scale: { type: SchemaType.NUMBER, description: "Scale factor (1.0 is default)" },
+                                color: { type: SchemaType.STRING, description: "Color name or hex code" },
+                                // future: position, rotation, etc.
+                            }
+                        }
+                    },
+                    required: ["entityId", "updates"]
+                }
             }
         ]
     }] as any;

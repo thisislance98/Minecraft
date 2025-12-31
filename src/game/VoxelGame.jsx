@@ -48,6 +48,7 @@ import { ParkourManager } from './systems/ParkourManager.js';
 import { PlaygroundManager } from './systems/PlaygroundManager.js';
 import { DiscoRoomManager } from './systems/DiscoRoomManager.js';
 import { DestinationManager } from './systems/DestinationManager.js';
+import { SpaceShipManager } from './systems/SpaceShipManager.js';
 
 // Visual Improvements: Post-Processing
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -124,9 +125,11 @@ export class VoxelGame {
 
         // World data - chunk based
         this.chunks = new Map();
+        this.persistedBlocks = new Map(); // Stores blocks from server that arrive before chunks are generated
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
         this.renderDistance = Config.WORLD.RENDER_DISTANCE;
         this.terrainVisible = true; // Default visibility
+        this.terrainShadowsEnabled = true; // Default shadow state
         this.generatedChunks = new Set();
         this.chunkGenQueue = []; // Queue for chunks to be generated
 
@@ -149,6 +152,10 @@ export class VoxelGame {
 
         // Thruster Data (Map<"x,y,z", direction_int>)
         this.thrusterData = new Map();
+
+        // Sign Data and Meshes
+        this.signData = new Map();
+        this.signMeshes = new Map();
 
         // Ships
         this.ships = [];
@@ -216,24 +223,18 @@ export class VoxelGame {
         };
 
         // Initial Giant Trees!
-        setTimeout(() => {
-            for (let i = 0; i < 5; i++) {
-                const angle = (i / 5) * Math.PI * 2;
-                const dist = 20 + Math.random() * 10;
-                const tx = this.player.position.x + Math.cos(angle) * dist;
-                const tz = this.player.position.z + Math.sin(angle) * dist;
-                const ty = this.worldGen.getTerrainHeight(tx, tz);
-                const proj = new GiantTreeProjectile(this, new THREE.Vector3(tx, ty + 10, tz), new THREE.Vector3(0, -1, 0));
-                if (!this.projectiles) this.projectiles = [];
-                this.projectiles.push(proj);
-            }
+        for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2;
+            const dist = 20 + Math.random() * 10;
+            const tx = this.player.position.x + Math.cos(angle) * dist;
+            const tz = this.player.position.z + Math.sin(angle) * dist;
+            const ty = this.worldGen.getTerrainHeight(tx, tz);
+            const proj = new GiantTreeProjectile(this, new THREE.Vector3(tx, ty + 10, tz), new THREE.Vector3(0, -1, 0));
+            if (!this.projectiles) this.projectiles = [];
+            this.projectiles.push(proj);
+        }
 
-            // Spawn the Hotel!
-            const hx = Math.floor(this.player.position.x) + 10;
-            const hz = Math.floor(this.player.position.z) + 10;
-            const hy = Math.floor(this.worldGen.getTerrainHeight(hx, hz));
-            this.worldGen.structureGenerator.generateHotel(hx, hy + 1, hz);
-        }, 2000);
+
 
         // Multiplayer Delta Sync tracking
         this._lastSentPos = new THREE.Vector3();
@@ -291,7 +292,7 @@ export class VoxelGame {
                 this.setDaytime();
             }
             if (e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
-                this.storeUI.toggle();
+                this.uiManager.openSettings();
             }
         });
 
@@ -344,7 +345,8 @@ export class VoxelGame {
         this.inventory.addItem(Blocks.ESCAPE_ROOM_BLOCK, 10, 'block');
         this.inventory.addItem(Blocks.XBOX, 64, 'block');
         this.inventory.addItem('physics_ball', 64, 'tool');
-        this.inventory.addItem('physics_ball', 64, 'tool');
+        this.inventory.addItem('spaceship_spawner', 1, 'tool');
+        this.inventory.addItem('binoculars', 1, 'tool');
 
 
 
@@ -356,7 +358,7 @@ export class VoxelGame {
         // Connect Auth Button
         const authBtn = document.getElementById('auth-btn');
         if (authBtn) {
-            authBtn.onclick = () => this.storeUI.toggle(true);
+            authBtn.onclick = () => this.uiManager.openSettings();
         }
 
         // Initialize persisted blocks storage
@@ -381,6 +383,9 @@ export class VoxelGame {
         // Destination Manager
         this.destinationManager = new DestinationManager(this);
 
+        // Spaceship Manager
+        this.spaceShipManager = new SpaceShipManager(this);
+
         // Handle initial warp if present (give it a moment for things to settle?)
         if (this.warpId) {
             // Defer slightly to ensure player/world is ready
@@ -388,6 +393,26 @@ export class VoxelGame {
                 this.destinationManager.handleWarp(this.warpId);
             }, 1000);
         }
+
+        // Auto-Spawn Enterprise
+        // Spawn 40 blocks ahead of player
+        if (!this.isUIOnly && !this.isBareBones) {
+            const spawnPos = this.player.position.clone();
+            spawnPos.z -= 40; // 40 blocks Forward (assuming -Z is forward)
+            spawnPos.y += 10; // Slightly up
+            this.spaceShipManager.spawnShip(spawnPos);
+        }
+
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+            // Also update composer if it exists
+            if (this.composer) {
+                this.composer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
     }
 
     // Helper for Debug Toggle (called by InputManager)
@@ -501,6 +526,14 @@ export class VoxelGame {
             this.gameState.selection.block = null;
         }
 
+        // Reset FOV if not holding binoculars
+        // We check if the selected item is binoculars. If not, reset FOV.
+        const isBinoculars = slot && slot.item === 'binoculars';
+        if (!isBinoculars && this.camera.fov !== 75) {
+            this.camera.fov = 75;
+            this.camera.updateProjectionMatrix();
+        }
+
         // UI is handled by Inventory class now
 
         // Update visual model
@@ -576,6 +609,10 @@ export class VoxelGame {
         target = this.physicsManager.getTargetBlock();
         if (target) {
             // Escape Room Game Interaction first?
+            if (this.spaceShipManager && this.spaceShipManager.handleBlockInteraction(target.x, target.y, target.z)) {
+                return true;
+            }
+
             if (this.escapeRoomManager && this.escapeRoomManager.isActive) {
                 const handled = this.escapeRoomManager.handleBlockInteraction(target.x, target.y, target.z);
                 if (handled) return true;
@@ -1079,7 +1116,7 @@ export class VoxelGame {
             this.player.position.z
         );
 
-        const { cx, cz } = playerChunk;
+        const { cx, cy, cz } = playerChunk;
 
         // Optimization: Only update if we moved to a new chunk (roughly)
         // But we need to ensure we fill the queue if it's empty even if we haven't moved chunks?
@@ -1112,8 +1149,16 @@ export class VoxelGame {
         // Generate chunks around the player
         for (let x = cx - this.renderDistance; x <= cx + this.renderDistance; x++) {
             for (let z = cz - this.renderDistance; z <= cz + this.renderDistance; z++) {
-                // Determine vertical range
-                for (let y = -4; y < 8; y++) {
+
+                // Finite World Horizontal Limit
+                const radius = (Config && Config.WORLD && Config.WORLD.WORLD_RADIUS_CHUNKS) ? Config.WORLD.WORLD_RADIUS_CHUNKS : 1000;
+                if (Math.abs(x) > radius || Math.abs(z) > radius) {
+                    continue;
+                }
+
+                // Determine vertical range dynamically around player (supports Moon travel)
+                // cy is derived from playerChunk above
+                for (let y = cy - this.renderDistance; y <= cy + this.renderDistance; y++) {
                     const chunkKey = `${x},${y},${z}`;
 
                     // Skip if already loaded
@@ -1150,9 +1195,15 @@ export class VoxelGame {
      * Handles race condition where chunks might not be generated yet
      */
     addPersistedBlocks(blocks) {
+        if (!blocks) return;
         console.log(`[Game] Processing ${blocks.length} persisted blocks...`);
         let appliedCount = 0;
         let storedCount = 0;
+
+        // Ensure initialization
+        if (!this.persistedBlocks) {
+            this.persistedBlocks = new Map();
+        }
 
         for (const block of blocks) {
             const { cx, cy, cz, lx, ly, lz } = this.worldToChunk(block.x, block.y, block.z);
@@ -1652,6 +1703,19 @@ export class VoxelGame {
         this.updateChunks();
 
         console.log('[Game] World regenerated with seed:', seed);
+    }
+
+    toggleTerrainShadows(enabled) {
+        this.terrainShadowsEnabled = enabled; // Store state for new chunks
+        console.log(`[Game] Toggling terrain shadows: ${enabled}`);
+
+        // Update existing chunks
+        for (const chunk of this.chunks.values()) {
+            if (chunk && chunk.mesh) {
+                chunk.mesh.castShadow = enabled;
+                chunk.mesh.receiveShadow = enabled;
+            }
+        }
     }
 
     toggleTerrain(visible) {

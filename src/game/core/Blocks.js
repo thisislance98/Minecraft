@@ -71,5 +71,20 @@ export const Blocks = {
     DISCO_BALL: 'disco_ball',
     MOB_WAVES_BLOCK: 'mob_waves_block',
     DESTINATION_BLOCK: 'destination_block',
-    SLIME: 'slime'
+    SLIME: 'slime',
+
+    // Starship Enterprise Blocks
+    ENTERPRISE_HULL: 'enterprise_hull',
+    ENTERPRISE_FLOOR: 'enterprise_floor',
+    ENTERPRISE_ENGINE: 'enterprise_engine',
+    ENTERPRISE_DISH: 'enterprise_dish_center', // Deflector dish center
+    ENTERPRISE_DISH_RING: 'enterprise_dish_ring', // Deflector dish outer
+    ENTERPRISE_NACELLE_FRONT: 'enterprise_nacelle_front', // Bussard collector
+    ENTERPRISE_NACELLE_SIDE: 'enterprise_nacelle_side', // Warp glow
+
+    // Enterprise Bridge Blocks
+    ENTERPRISE_PANEL: 'enterprise_panel',
+    ENTERPRISE_SCREEN: 'enterprise_screen',
+    ENTERPRISE_CONSOLE: 'enterprise_console',
+    ENTERPRISE_CHAIR: 'enterprise_chair'
 };

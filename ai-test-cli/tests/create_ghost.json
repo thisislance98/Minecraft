@@ -1,0 +1,9 @@
+{
+    "name": "Create Ghost Entity",
+    "prompt": "Create a new creature called Ghost that is a subclass of Animal. It should float and be transparent. Do not read any files, just write the code.",
+    "expectedTool": "write_to_file",
+    "expectedArgs": {
+        "TargetFile": "Ghost.js"
+    },
+    "timeout": 60000
+}

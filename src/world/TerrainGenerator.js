@@ -52,6 +52,14 @@ export class TerrainGenerator {
         // -- Combine --
         let height = baseNoise * 10 + 35; // Base height ~35
 
+        // Deepen the ocean locally (Ocean Bias)
+        if (height < this.seaLevel) {
+            // "Shallow edges" fix: steeper dropoff
+            // Multiply the depth by a factor
+            const depth = this.seaLevel - height;
+            height -= depth * 1.5; // Significantly deeper currently, was 3.0. Reduced to 1.5 for FPS.
+        }
+
         // Apply Desert
         if (desertFactor > 0) {
             const desertHeight = desertNoise * 10 + 35;
@@ -95,7 +103,8 @@ export class TerrainGenerator {
             // Current height could be anything.
 
             // let's blend current height towards river bed height based on factor
-            const riverBedHeight = Math.max(this.seaLevel - 5, height - 8);
+            // Carve deeper for new ocean depth. Clamp at 5 to avoid bedrock.
+            const riverBedHeight = Math.max(this.seaLevel - 25, height - 8);
 
             // simple subtraction might not be enough for mountains
             // let's interpolate

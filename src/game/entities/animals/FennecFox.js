@@ -3,8 +3,8 @@ import { Animal } from '../Animal.js';
 import { Mouse } from './Mouse.js';
 
 export class FennecFox extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.35;
         this.height = 0.45;
         this.depth = 0.8;

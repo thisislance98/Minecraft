@@ -3,8 +3,8 @@ import { Animal } from '../Animal.js';
 import { Wolf } from './Wolf.js';
 
 export class Bunny extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.4;
         this.height = 0.6;
         this.depth = 0.6;

@@ -5,8 +5,8 @@ import { Mouse } from './Mouse.js';
 import { Chicken } from './Chicken.js';
 
 export class Fox extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.5;
         this.height = 0.6;
         this.depth = 1.2;

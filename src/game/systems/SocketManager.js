@@ -15,7 +15,7 @@ export class SocketManager {
         this.peerJs = null; // PeerJS instance
         this.activeCalls = new Map(); // peerId -> MediaConnection
         this.pendingStreams = new Map(); // id -> MediaStream (if mesh not ready)
-        this.voiceEnabled = false;
+        this.voiceEnabled = localStorage.getItem('settings_voice') === 'true';
         this.lastVoiceState = false;
 
         this.connect();
@@ -41,7 +41,9 @@ export class SocketManager {
             this.joinGame();
 
             // Initialize voice chat
-            this.initVoiceChat();
+            if (this.voiceEnabled) {
+                this.initVoiceChat();
+            }
         });
 
         this.socket.on('disconnect', () => {
@@ -71,6 +73,24 @@ export class SocketManager {
             if (data.time !== undefined && this.game.environment) {
                 this.game.environment.setTimeOfDay(data.time);
                 console.log(`[SocketManager] Initial Room Time: ${data.time}`);
+            }
+
+            // Sync existing players
+            if (data.playerStates) {
+                console.log('[SocketManager] Syncing existing players:', Object.keys(data.playerStates).length);
+                for (const [pid, state] of Object.entries(data.playerStates)) {
+                    if (pid === this.socketId) continue; // Skip self
+
+                    if (state.pos) {
+                        console.log(`[SocketManager] Creating mesh for existing player ${pid} at`, state.pos);
+                        this.updatePlayerMesh(pid, state.pos, state.rotY);
+                    }
+                }
+            }
+
+            // Send our initial position immediately so server has it for others
+            if (this.game.player) {
+                this.sendPosition(this.game.player.position, this.game.player.rotation.y);
             }
         });
 
@@ -205,7 +225,13 @@ export class SocketManager {
         requestAnimationFrame(() => this.animateRemotePlayers());
 
         // 0. Update Push-to-Talk
-        const voiceActive = this.game.inputManager.isActionActive('VOICE');
+        let voiceActive = this.game.inputManager.isActionActive('VOICE');
+
+        // Only allow voice if enabled in settings AND if there are other players
+        if (!this.voiceEnabled || this.playerMeshes.size === 0) {
+            voiceActive = false;
+        }
+
         if (voiceActive !== this.lastVoiceState) {
             this.lastVoiceState = voiceActive;
             if (this.localStream) {
@@ -389,7 +415,38 @@ export class SocketManager {
         return 'mc_' + socketId.replace(/[^a-zA-Z0-9]/g, '');
     }
 
+    setVoiceChatEnabled(enabled) {
+        this.voiceEnabled = enabled;
+        console.log(`[SocketManager] Voice Chat Setting: ${enabled}`);
+
+        if (enabled) {
+            this.initVoiceChat();
+        } else {
+            // Disable logic:
+            // 1. Mute local stream
+            if (this.localStream) {
+                this.localStream.getAudioTracks().forEach(t => t.enabled = false);
+            }
+            // 2. We don't fully destroy PeerJS connection to avoid re-handshake complexity on toggle,
+            // but we ensure we don't transmit.
+            // Ideally we could close calls, but just muting writes is safer for quick toggle.
+
+            // If we wanted to fully shut down:
+            /*
+            if (this.peerJs) {
+                this.peerJs.destroy();
+                this.peerJs = null;
+            }
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => track.stop());
+                this.localStream = null;
+            }
+            */
+        }
+    }
+
     initVoiceChat() {
+        if (!this.voiceEnabled) return; // double check
         if (this.localStream) return;
 
         console.log('[SocketManager] Initializing PeerJS Voice Chat...');
@@ -411,7 +468,6 @@ export class SocketManager {
 
                 this.peerJs.on('open', (id) => {
                     console.log('[SocketManager] PeerJS connected with ID:', id);
-                    // Broadcast our PeerJS ID to the room
                     if (this.socket && this.roomId) {
                         this.socket.emit('peerjs:id', { peerId: id });
                     }
@@ -419,7 +475,6 @@ export class SocketManager {
 
                 this.peerJs.on('call', (call) => {
                     console.log(`[SocketManager] Incoming call from ${call.peer}`);
-                    // Answer with our stream
                     call.answer(this.localStream);
 
                     call.on('stream', (remoteStream) => {

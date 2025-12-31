@@ -3,8 +3,8 @@ import { Animal } from '../Animal.js';
 
 // HMR test - 12:51 - with registry
 export class Sheep extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.9;
         this.height = 1.0;
         this.depth = 1.1; // Slightly longer

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Animal } from '../Animal.js';
 
 export class Giraffe extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 1.0;
         this.height = 4.5; // Very tall
         this.depth = 1.5;

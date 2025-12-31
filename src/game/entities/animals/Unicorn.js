@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Horse } from './Horse.js';
 
 export class Unicorn extends Horse {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
 
         // Override body creation or modify materials after super?
         // Horse creates body in constructor. We can rebuild it or modify it.

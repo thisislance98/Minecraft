@@ -14,7 +14,7 @@ export class Environment {
         this.dayDuration = 1800; // seconds (30 minutes total cycle, 15m day / 15m night)
 
         // Lighting
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
         this.scene.add(this.ambientLight);
 
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
@@ -22,7 +22,7 @@ export class Environment {
         this.sunLight.shadow.mapSize.width = 2048;
         this.sunLight.shadow.mapSize.height = 2048;
         this.sunLight.shadow.camera.near = 0.5;
-        this.sunLight.shadow.camera.far = 500;
+        this.sunLight.shadow.camera.far = 2500;
 
         // Large shadow area for player
         const d = 100;
@@ -40,8 +40,27 @@ export class Environment {
         // Visual Improvements: Sky Gradient
         this.createSkyGradient();
 
+        // Visual Improvements: Sun
+        this.createSun();
+
+        // Visual Improvements: Moon
+        this.createMoon();
+
         // Initial update to ensure lights and sky are not dark on frame 0
         this.updateDayNightCycle(0, new THREE.Vector3(0, 0, 0));
+
+        this.moonEnabled = true;
+    }
+
+    toggleMoon(enabled) {
+        this.moonEnabled = enabled;
+        if (!enabled) {
+            if (this.moonMesh) this.moonMesh.visible = false;
+            if (this.moonLight) {
+                this.moonLight.visible = false;
+                this.moonLight.castShadow = false;
+            }
+        }
     }
 
     updateDayNightCycle(dt, playerPos) {
@@ -55,7 +74,7 @@ export class Environment {
         // angle 0 = sunrise, PI/2 = noon, PI = sunset, 3PI/2 = midnight
         const angle = this.time * Math.PI * 2;
 
-        const distance = 200;
+        const distance = 1500;
         const x = Math.cos(angle) * distance;
         const y = Math.sin(angle) * distance;
         const z = Math.sin(angle * 0.5) * distance * 0.2; // slight tilt
@@ -68,48 +87,158 @@ export class Environment {
         this.sunLight.target.position.copy(playerPos);
         this.sunLight.target.updateMatrixWorld();
 
+        if (this.sunMesh) {
+            this.sunMesh.position.copy(this.sunLight.position);
+        }
+
+        // Update shadow camera far plane based on altitude to ensure ground is shadowed
+        // Base far is 500. If player is at Y=600, light is at ~800. Ground at 30. Dist ~770.
+        this.sunLight.shadow.camera.far = 2500 + Math.max(0, playerPos.y * 1.5);
+        this.sunLight.shadow.camera.updateProjectionMatrix();
+
+        // Update Skybox position to follow player
+        if (this.skyMesh) {
+            this.skyMesh.position.copy(playerPos);
+        }
+        if (this.starField) {
+            this.starField.position.copy(playerPos);
+        }
+        if (this.shootingStarGroup) {
+            this.shootingStarGroup.position.copy(playerPos);
+        }
+
         // Update intensity and colors
         const sunAboveHorizon = Math.max(0, Math.sin(angle));
         this.sunLight.intensity = sunAboveHorizon * 1.2;
 
+        // PERFORMANCE FIX: Only cast shadows when sun is actually up
+        // This prevents double shadow-map rendering when both Moon and Sun are in the scene (one underground)
+        const isSunUp = sunAboveHorizon > 0.01;
+        this.sunLight.castShadow = isSunUp;
+        this.sunLight.visible = isSunUp;
+
+        // Moon Logic
+        if (this.moonMesh) {
+            if (!this.moonEnabled) {
+                this.moonMesh.visible = false;
+                if (this.moonLight) {
+                    this.moonLight.visible = false;
+                    this.moonLight.castShadow = false;
+                }
+            } else {
+                this.moonMesh.visible = true;
+
+                // Moon is opposite to sun
+                const moonAngle = angle + Math.PI;
+                const moonX = Math.cos(moonAngle) * distance;
+                const moonY = Math.sin(moonAngle) * distance;
+                const moonZ = Math.sin(moonAngle * 0.5) * distance * 0.2;
+
+                this.moonMesh.position.set(
+                    playerPos.x + moonX,
+                    playerPos.y + moonY,
+                    playerPos.z + moonZ
+                );
+                this.moonMesh.lookAt(playerPos);
+
+                // Update Moon Light
+                // Moon light is active when sun is down
+                const moonAboveHorizon = Math.max(0, Math.sin(moonAngle));
+                if (this.moonLight) {
+                    this.moonLight.position.copy(this.moonMesh.position);
+                    this.moonLight.target.position.copy(playerPos);
+                    this.moonLight.target.updateMatrixWorld();
+
+                    // Max moon intensity 0.2, fade in/out near horizon
+                    this.moonLight.intensity = moonAboveHorizon * 0.2;
+
+                    // PERFORMANCE FIX: Only cast shadows when moon is up
+                    const isMoonUp = moonAboveHorizon > 0.01;
+                    this.moonLight.castShadow = isMoonUp;
+                    this.moonLight.visible = isMoonUp;
+                }
+            }
+        }
+
+        // Calculate space transition factor
+        const playerY = playerPos.y;
+        const spaceStart = 200;
+        const spaceFull = 600;
+        let spaceFactor = 0;
+
+        if (playerY > spaceStart) {
+            spaceFactor = Math.min(1, Math.max(0, (playerY - spaceStart) / (spaceFull - spaceStart)));
+        }
+
         // Sky color interpolation
         const skyLerp = Math.max(0, Math.min(1, sunAboveHorizon * 2.0));
-        this.game.renderer.setClearColor(this.nightColor.clone().lerp(this.skyColor, skyLerp));
+        const atmosphericSkyColor = this.nightColor.clone().lerp(this.skyColor, skyLerp);
 
-        this.ambientLight.intensity = 0.2 + sunAboveHorizon * 0.5;
+        // Blend towards black space color based on altitude
+        const spaceColor = new THREE.Color(0x000000);
+        const currentSkyColor = atmosphericSkyColor.clone().lerp(spaceColor, spaceFactor);
 
-        // Visual Improvements: Update Fog Color to match sky
-        const currentSkyColor = this.nightColor.clone().lerp(this.skyColor, skyLerp);
-        this.scene.fog.color.copy(currentSkyColor);
-        // Also update renderer clear color just in case (though sky sphere covers it)
         this.game.renderer.setClearColor(currentSkyColor);
+
+        this.ambientLight.intensity = (0.1 + sunAboveHorizon * 0.3) * (1.0 - spaceFactor * 0.3); // Slightly dimmer in space
+
+        // Visual Improvements: Fog
+        // Underwater fog overrides everything
+        const waterLevel = 30; // Approximate water level
+        const isUnderwater = this.game.player && this.game.player.position.y < waterLevel && this.isPlayerInWater();
+
+        if (isUnderwater) {
+            this.scene.fog.color.setHex(0x1a5276);
+            this.scene.fog.density = 0.08;
+        } else {
+            // Update Fog Color to match sky
+            this.scene.fog.color.copy(currentSkyColor);
+
+            // Fade out fog FASTER as we go to space to avoid "flashlight" effect on ground
+            // At spaceStart (200), we want distinct visibility improvement.
+            // At 400 we want almost no fog on the ground.
+
+            const baseDensity = 0.0025;
+            // Use squared falloff for rapid clearing
+            const fogFactor = Math.max(0, 1.0 - spaceFactor * 1.5);
+            this.scene.fog.density = baseDensity * (fogFactor * fogFactor);
+        }
 
         // Update Sky Shader uniforms
         if (this.skyMesh) {
             this.skyMesh.material.uniforms.topColor.value.copy(currentSkyColor);
-            // Horizon is slightly lighter/desaturated version of top
-            const horizonColor = currentSkyColor.clone().offsetHSL(0.0, -0.1, 0.2);
+            // Horizon is slightly lighter/desaturated version of top, but in space it should just be black
+            const baseHorizon = currentSkyColor.clone().offsetHSL(0.0, -0.1, 0.2);
+            // If in space, horizon also becomes black
+            const horizonColor = baseHorizon.lerp(spaceColor, spaceFactor);
+
             this.skyMesh.material.uniforms.bottomColor.value.copy(horizonColor);
             this.skyMesh.material.uniforms.offset.value = 33;
             this.skyMesh.material.uniforms.exponent.value = 0.6;
 
-            // Update star visibility based on night
+            // Update star visibility based on night OR space
             if (this.starField) {
-                this.starField.visible = this.isNight();
-            }
-        }
+                // Stars are visible at night (1.0) or in space (1.0) or blended
+                // Night opacity: 1.0 when full night, 0.0 when full day
+                const nightOpacity = this.isNight() ? 1.0 : 0.0;
+                // However, isNight is boolean. We want smooth transition if possible, 
+                // but for now let's respect the existing boolean logic for night, 
+                // keeping it 1.0 if night.
 
-        // Visual Improvements: Underwater Fog
-        if (this.game.player) {
-            const playerY = this.game.player.position.y;
-            const waterLevel = 30; // Approximate water level
-            const isUnderwater = playerY < waterLevel && this.isPlayerInWater();
+                // Better approach with existing logic:
+                // If it's night, we want stars.
+                // If we are in space, we want stars even during day.
 
-            if (isUnderwater) {
-                this.scene.fog.color.setHex(0x1a5276);
-                this.scene.fog.density = 0.08;
-            } else {
-                this.scene.fog.density = 0.0025;
+                let targetOpacity = nightOpacity;
+
+                // If strictly boolean isNight is used, it snaps. 
+                // Let's use sun position for smoother star fade if we want, but sticking to logic:
+                if (spaceFactor > 0) {
+                    targetOpacity = Math.max(targetOpacity, spaceFactor);
+                }
+
+                this.starField.material.opacity = targetOpacity;
+                this.starField.visible = targetOpacity > 0.01;
             }
         }
 
@@ -187,7 +316,7 @@ export class Environment {
             exponent: { value: 0.6 }
         };
 
-        const skyGeo = new THREE.SphereGeometry(800, 32, 15);
+        const skyGeo = new THREE.SphereGeometry(2000, 32, 15);
         const skyMat = new THREE.ShaderMaterial({
             uniforms: uniforms,
             vertexShader: vertexShader,
@@ -211,7 +340,7 @@ export class Environment {
             // Random position on a sphere
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2 * Math.random() - 1);
-            const radius = 700;
+            const radius = 1900;
 
             positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
             positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
@@ -223,11 +352,13 @@ export class Environment {
         const material = new THREE.PointsMaterial({
             color: 0xffffff,
             size: 2,
-            sizeAttenuation: false
+            sizeAttenuation: false,
+            transparent: true,
+            opacity: 0
         });
 
         this.starField = new THREE.Points(geometry, material);
-        this.starField.visible = false; // Start hidden
+        this.starField.visible = true;
         this.scene.add(this.starField);
 
         // Visual Improvements: Shooting Stars
@@ -294,7 +425,7 @@ export class Environment {
         // Random starting position on the sky dome (upper hemisphere only)
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.random() * Math.PI * 0.4 + 0.1; // Keep in upper sky
-        const radius = 650;
+        const radius = 1800;
 
         star.position.set(
             radius * Math.sin(phi) * Math.cos(theta),
@@ -439,6 +570,41 @@ export class Environment {
         }
 
         this.scene.add(this.clouds);
+    }
+
+    createSun() {
+        const sunGeo = new THREE.SphereGeometry(60, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({
+            color: 0xffffaa, // Warm yellow
+            fog: false // Sun shouldn't be affected by fog
+        });
+        this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+        this.scene.add(this.sunMesh);
+    }
+
+    createMoon() {
+        // Create Moon Mesh
+        const moonGeo = new THREE.SphereGeometry(20, 32, 32);
+        const moonMat = new THREE.MeshBasicMaterial({ color: 0xdddddd });
+        this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        this.scene.add(this.moonMesh);
+
+        // Create Moon Light (Cold/Blueish night light)
+        this.moonLight = new THREE.DirectionalLight(0x6666ff, 0.2);
+        this.moonLight.castShadow = true;
+        this.moonLight.shadow.mapSize.width = 1024; // Lower res than sun is fine
+        this.moonLight.shadow.mapSize.height = 1024;
+        this.moonLight.shadow.camera.near = 0.5;
+        this.moonLight.shadow.camera.far = 3500;
+
+        const d = 100;
+        this.moonLight.shadow.camera.left = -d;
+        this.moonLight.shadow.camera.right = d;
+        this.moonLight.shadow.camera.top = d;
+        this.moonLight.shadow.camera.bottom = -d;
+
+        this.scene.add(this.moonLight);
+        this.scene.add(this.moonLight.target); // Important for direction
     }
 
     updateClouds(dt, playerPos) {

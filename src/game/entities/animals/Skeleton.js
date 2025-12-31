@@ -3,8 +3,8 @@ import { Animal } from '../Animal.js';
 import { Arrow } from '../projectiles/Arrow.js';
 
 export class Skeleton extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.6;
         this.height = 1.95;
         this.depth = 0.6;

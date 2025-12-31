@@ -349,6 +349,41 @@ export class AssetManager {
         const mobWavesBlock = this.getOrCreateMat('mob_waves_block');
         this.registerBlockMaterials('mob_waves_block', mobWavesBlock);
 
+        // Enterprise Blocks
+        const entHull = this.getOrCreateMat('enterprise_hull');
+        this.registerBlockMaterials('enterprise_hull', entHull);
+
+        const entFloor = this.getOrCreateMat('enterprise_floor');
+        this.registerBlockMaterials('enterprise_floor', entFloor);
+
+        const entEngine = this.getOrCreateMat('enterprise_engine');
+        this.registerBlockMaterials('enterprise_engine', entEngine);
+
+        const entDishCenter = this.getOrCreateMat('enterprise_dish_center', true); // Glow?
+        this.registerBlockMaterials('enterprise_dish_center', entDishCenter);
+
+        const entDishRing = this.getOrCreateMat('enterprise_dish_ring', true);
+        this.registerBlockMaterials('enterprise_dish_ring', entDishRing);
+
+        const entNacelleFront = this.getOrCreateMat('enterprise_nacelle_front', true);
+        this.registerBlockMaterials('enterprise_nacelle_front', entNacelleFront);
+
+        const entNacelleSide = this.getOrCreateMat('enterprise_nacelle_side', true);
+        this.registerBlockMaterials('enterprise_nacelle_side', entNacelleSide);
+
+        // Bridge Materials
+        const entPanel = this.getOrCreateMat('enterprise_panel', true); // Glows
+        this.registerBlockMaterials('enterprise_panel', entPanel);
+
+        const entScreen = this.getOrCreateMat('enterprise_screen', true);
+        this.registerBlockMaterials('enterprise_screen', entScreen);
+
+        const entConsole = this.getOrCreateMat('enterprise_console');
+        this.registerBlockMaterials('enterprise_console', entConsole);
+
+        const entChair = this.getOrCreateMat('enterprise_chair');
+        this.registerBlockMaterials('enterprise_chair', entChair);
+
         // Break Stages
         this.breakMaterials = [];
         for (let i = 0; i <= 9; i++) {
@@ -423,11 +458,6 @@ export class AssetManager {
                     '#include <begin_vertex>',
                     `
                     #include <begin_vertex>
-                    // Wind Logic
-                    // Simple logic: move top vertices based on Y > 0.5 (assuming block is 0..1 in local space? No, usually -0.5 to 0.5)
-                    // Or check world position?
-                    // InstancedMesh local coordinates are usually 0..1 or -0.5..0.5 depending on geometry.
-                    // Let's assume standard cube geometry -0.5 to 0.5. Top is > 0.0.
                     
                     float isTop = step(0.1, position.y); // 1.0 if y > 0.1
                     
@@ -441,6 +471,36 @@ export class AssetManager {
             };
             // Ensure we create the list if it doesn't exist (also done above)
             if (!this.windMaterials) this.windMaterials = [];
+        }
+
+        // Floating Logic for Enterprise Blocks
+        if (name.includes('enterprise')) {
+            mat.onBeforeCompile = (shader) => {
+                shader.uniforms.time = { value: 0 };
+                if (!this.windMaterials) this.windMaterials = [];
+                this.windMaterials.push(shader);
+
+                shader.vertexShader = `
+                    uniform float time;
+                ` + shader.vertexShader;
+
+                // Move entire block up and down slightly
+                // Use World Position ideally, but 'transformed' is local.
+                // However, for static blocks, local is relative to chunk mesh.
+                // We actually want to move the WHOLE ship together.
+                // Since this receives time, we can use sin(time).
+                // But we want them to move in sync, which is fine.
+                // Amplitude 0.2 (20% of block height)
+
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    float floatY = sin(time * 0.5) * 0.2; // Slow sway
+                    transformed.y += floatY;
+                    `
+                );
+            };
         }
 
         const idx = this.materialArray.length;

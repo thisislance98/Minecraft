@@ -72,17 +72,18 @@ export class Chunk {
         };
 
         const faces = [
-            { dir: [1, 0, 0], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], normal: [1, 0, 0], name: 'right', idx: 0 },
-            { dir: [-1, 0, 0], corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]], normal: [-1, 0, 0], name: 'left', idx: 1 },
-            { dir: [0, 1, 0], corners: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], normal: [0, 1, 0], name: 'top', idx: 2 },
-            { dir: [0, -1, 0], corners: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]], normal: [0, -1, 0], name: 'bottom', idx: 3 },
+            { dir: [1, 0, 0], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], normal: [1, 0, 0], name: 'right', idx: 0, shade: 0.8 },
+            { dir: [-1, 0, 0], corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]], normal: [-1, 0, 0], name: 'left', idx: 1, shade: 0.8 },
+            { dir: [0, 1, 0], corners: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], normal: [0, 1, 0], name: 'top', idx: 2, shade: 1.0 },
+            { dir: [0, -1, 0], corners: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]], normal: [0, -1, 0], name: 'bottom', idx: 3, shade: 0.5 },
             {
                 dir: [0, 0, 1],
                 corners: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
                 normal: [0, 0, 1],
                 name: 'front',
                 idx: 4,
-                uvs: [0, 0, 1, 0, 1, 1, 0, 1]
+                uvs: [0, 0, 1, 0, 1, 1, 0, 1],
+                shade: 0.8
             },
             {
                 dir: [0, 0, -1],
@@ -90,9 +91,97 @@ export class Chunk {
                 normal: [0, 0, -1],
                 name: 'back',
                 idx: 5,
-                uvs: [1, 0, 0, 0, 0, 1, 1, 1]
+                uvs: [1, 0, 0, 0, 0, 1, 1, 1],
+                shade: 0.8
             }
         ];
+
+        // AO Lookup Table: [FaceIdx][VertexIdx][3 neighbors (x,y,z)]
+        // Neighbors are relative to the *Block Position* (lx,ly,lz).
+        // For a face pointing in direction N, the "air" block is at N. 
+        // We check blocks surrounding that air block.
+        // Actually, simpler mental model:
+        // For 'Top' face (y+1):
+        //   Corners are (0,1,0), (0,1,1), (1,1,1), (1,1,0)
+        //   For corner (0,1,0) -> Neighbors are (-1,1,0), (-1,1,-1), (0,1,-1)?
+        //   We check the plane of the face.
+
+        // AO Offsets relative to the Current Block (assuming we are looking effectively at the neighbor "air" voxel)
+        // Let's rely on standard patterns.
+        // Right (X+):
+        // 0: (1,0,0) -> Bottom-Front? No, (1,0,0) is y=0, z=0. 
+        // Let's match existing corners order:
+        // Right: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]
+        //   0: 1,0,0 (Bottom-Back?) Z=0. 
+        //   1: 1,1,0 (Top-Back?)
+        //   2: 1,1,1 (Top-Front?)
+        //   3: 1,0,1 (Bottom-Front?)
+
+        // Offsets need to be carefully mapped.
+        // Helper to check opacity
+        const isSolid = (x, y, z) => {
+            const b = this.getBlock(x, y, z);
+            // Treat null/undefined as solid (chunk edge) or air? usually air for consistency?
+            // Actually, treating chunk edge as 'air' avoids black borders.
+            if (!b) return false;
+            if (b === Blocks.AIR) return false;
+            // Check transparency
+            // Ideally we cache 'isTransparent' logic, but reusing from below:
+            const isTransparent = b === Blocks.WATER || b === Blocks.GLASS || b === Blocks.LEAVES || this.plantTypes.has(b);
+            return !isTransparent;
+        };
+
+        // Standard offsets (Side1, Side2, Corner)
+        // Right Face (x+1)
+        const aoRight = [
+            [[1, -1, 0], [1, 0, -1], [1, -1, -1]], // 0: (1,0,0) - Bot, Back?
+            [[1, 1, 0], [1, 0, -1], [1, 1, -1]],   // 1: (1,1,0) - Top, Back
+            [[1, 1, 0], [1, 0, 1], [1, 1, 1]],     // 2: (1,1,1) - Top, Front
+            [[1, -1, 0], [1, 0, 1], [1, -1, 1]]    // 3: (1,0,1) - Bot, Front
+        ];
+        // Left Face (x-1)
+        const aoLeft = [
+            [[-1, -1, 1], [-1, 0, 1], [-1, -1, 2]], // Fail? existing corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]]
+            // 0: 0,0,1 (Bot, Front) -> Neigh: Left-Down, Left-Front, Corner
+            // offsets: x=-1. y=-1, z=0 (Bot). y=0, z=1 (Front). y=-1, z=1 (Corner)
+            [[-1, -1, 0], [-1, 0, 1], [-1, -1, 1]],
+            // 1: 0,1,1 (Top, Front)
+            [[-1, 1, 0], [-1, 0, 1], [-1, 1, 1]],
+            // 2: 0,1,0 (Top, Back)
+            [[-1, 1, 0], [-1, 0, -1], [-1, 1, -1]],
+            // 3: 0,0,0 (Bot, Back)
+            [[-1, -1, 0], [-1, 0, -1], [-1, -1, -1]]
+        ];
+        // Top Face (y+1) corners: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]
+        const aoTop = [
+            [[-1, 1, 0], [0, 1, -1], [-1, 1, -1]], // 0: 0,1,0 (Back Left)
+            [[-1, 1, 0], [0, 1, 1], [-1, 1, 1]],   // 1: 0,1,1 (Front Left)
+            [[1, 1, 0], [0, 1, 1], [1, 1, 1]],     // 2: 1,1,1 (Front Right)
+            [[1, 1, 0], [0, 1, -1], [1, 1, -1]]    // 3: 1,1,0 (Back Right)
+        ];
+        // Bottom Face (y-1) corners: [[0, 0, 1], [0, 0, 0], [1, 0, 0], [1, 0, 1]]
+        const aoBottom = [
+            [[-1, -1, 0], [0, -1, 1], [-1, -1, 1]], // 0: 0,0,1 (Front Left)
+            [[-1, -1, 0], [0, -1, -1], [-1, -1, -1]], // 1: 0,0,0 (Back Left)
+            [[1, -1, 0], [0, -1, -1], [1, -1, -1]], // 2: 1,0,0 (Back Right)
+            [[1, -1, 0], [0, -1, 1], [1, -1, 1]]    // 3: 1,0,1 (Front Right)
+        ];
+        // Front Face (z+1) corners: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]
+        const aoFront = [
+            [[-1, 0, 1], [0, -1, 1], [-1, -1, 1]], // 0: 0,0,1 (Bot Left)
+            [[1, 0, 1], [0, -1, 1], [1, -1, 1]],   // 1: 1,0,1 (Bot Right)
+            [[1, 0, 1], [0, 1, 1], [1, 1, 1]],     // 2: 1,1,1 (Top Right)
+            [[-1, 0, 1], [0, 1, 1], [-1, 1, 1]]    // 3: 0,1,1 (Top Left)
+        ];
+        // Back Face (z-1) corners: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]]
+        const aoBack = [
+            [[1, 0, -1], [0, -1, -1], [1, -1, -1]], // 0: 1,0,0 (Bot Right)
+            [[-1, 0, -1], [0, -1, -1], [-1, -1, -1]], // 1: 0,0,0 (Bot Left)
+            [[-1, 0, -1], [0, 1, -1], [-1, 1, -1]],   // 2: 0,1,0 (Top Left)
+            [[1, 0, -1], [0, 1, -1], [1, 1, -1]]    // 3: 1,1,0 (Top Right)
+        ];
+
+        const aoTables = [aoRight, aoLeft, aoTop, aoBottom, aoFront, aoBack];
 
         let hasGeom = false;
 
@@ -100,7 +189,7 @@ export class Chunk {
             for (let ly = 0; ly < this.size; ly++) {
                 for (let lx = 0; lx < this.size; lx++) {
                     const blockType = this.blocks[this.getIndex(lx, ly, lz)];
-                    if (!blockType) continue;
+                    if (!blockType || blockType === Blocks.AIR) continue;
 
                     let materials = this.game.blockMaterialIndices[blockType];
                     if (!materials) {
@@ -246,12 +335,12 @@ export class Chunk {
                         const addBox = (x1, y1, z1, x2, y2, z2) => {
                             // 6 Fases
                             const boxFaces = [
-                                { corners: [[x2, y1, z1], [x2, y2, z1], [x2, y2, z2], [x2, y1, z2]], dir: [1, 0, 0] }, // Right
-                                { corners: [[x1, y1, z2], [x1, y2, z2], [x1, y2, z1], [x1, y1, z1]], dir: [-1, 0, 0] }, // Left
-                                { corners: [[x1, y2, z1], [x1, y2, z2], [x2, y2, z2], [x2, y2, z1]], dir: [0, 1, 0] }, // Top
-                                { corners: [[x1, y1, z2], [x1, y1, z1], [x2, y1, z1], [x2, y1, z2]], dir: [0, -1, 0] }, // Bottom
-                                { corners: [[x1, y1, z2], [x2, y1, z2], [x2, y2, z2], [x1, y2, z2]], dir: [0, 0, 1] }, // Front
-                                { corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z2]], dir: [0, 0, -1] } // Back (Fix corner 4 Z)
+                                { corners: [[x2, y1, z1], [x2, y2, z1], [x2, y2, z2], [x2, y1, z2]], dir: [1, 0, 0], shade: 0.8 }, // Right
+                                { corners: [[x1, y1, z2], [x1, y2, z2], [x1, y2, z1], [x1, y1, z1]], dir: [-1, 0, 0], shade: 0.8 }, // Left
+                                { corners: [[x1, y2, z1], [x1, y2, z2], [x2, y2, z2], [x2, y2, z1]], dir: [0, 1, 0], shade: 1.0 }, // Top
+                                { corners: [[x1, y1, z2], [x1, y1, z1], [x2, y1, z1], [x2, y1, z2]], dir: [0, -1, 0], shade: 0.5 }, // Bottom
+                                { corners: [[x1, y1, z2], [x2, y1, z2], [x2, y2, z2], [x1, y2, z2]], dir: [0, 0, 1], shade: 0.8 }, // Front
+                                { corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z2]], dir: [0, 0, -1], shade: 0.8 } // Back (Fix corner 4 Z)
                             ];
                             // Fix Back Face corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z1]]
                             boxFaces[5].corners = [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z1]];
@@ -260,7 +349,8 @@ export class Chunk {
                                 for (const c of f.corners) {
                                     buffer.positions.push(wx + c[0], wy + c[1], wz + c[2]);
                                     buffer.normals.push(...f.dir);
-                                    buffer.colors.push(1, 1, 1); // No AO for now
+                                    let light = f.shade !== undefined ? f.shade : 1.0;
+                                    buffer.colors.push(light, light, light);
                                 }
                                 buffer.uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
                             }
@@ -278,12 +368,12 @@ export class Chunk {
                         const addBox = (x1, y1, z1, x2, y2, z2) => {
                             // 6 Faces
                             const boxFaces = [
-                                { corners: [[x2, y1, z1], [x2, y2, z1], [x2, y2, z2], [x2, y1, z2]], dir: [1, 0, 0] }, // Right
-                                { corners: [[x1, y1, z2], [x1, y2, z2], [x1, y2, z1], [x1, y1, z1]], dir: [-1, 0, 0] }, // Left
-                                { corners: [[x1, y2, z1], [x1, y2, z2], [x2, y2, z2], [x2, y2, z1]], dir: [0, 1, 0] }, // Top
-                                { corners: [[x1, y1, z2], [x1, y1, z1], [x2, y1, z1], [x2, y1, z2]], dir: [0, -1, 0] }, // Bottom
-                                { corners: [[x1, y1, z2], [x2, y1, z2], [x2, y2, z2], [x1, y2, z2]], dir: [0, 0, 1] }, // Front
-                                { corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z2]], dir: [0, 0, -1] } // Back
+                                { corners: [[x2, y1, z1], [x2, y2, z1], [x2, y2, z2], [x2, y1, z2]], dir: [1, 0, 0], shade: 0.8 }, // Right
+                                { corners: [[x1, y1, z2], [x1, y2, z2], [x1, y2, z1], [x1, y1, z1]], dir: [-1, 0, 0], shade: 0.8 }, // Left
+                                { corners: [[x1, y2, z1], [x1, y2, z2], [x2, y2, z2], [x2, y2, z1]], dir: [0, 1, 0], shade: 1.0 }, // Top
+                                { corners: [[x1, y1, z2], [x1, y1, z1], [x2, y1, z1], [x2, y1, z2]], dir: [0, -1, 0], shade: 0.5 }, // Bottom
+                                { corners: [[x1, y1, z2], [x2, y1, z2], [x2, y2, z2], [x1, y2, z2]], dir: [0, 0, 1], shade: 0.8 }, // Front
+                                { corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z2]], dir: [0, 0, -1], shade: 0.8 } // Back
                             ];
                             // Fix Back Face corners: [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z1]]
                             boxFaces[5].corners = [[x2, y1, z1], [x1, y1, z1], [x1, y2, z1], [x2, y2, z1]];
@@ -292,7 +382,8 @@ export class Chunk {
                                 for (const c of f.corners) {
                                     buffer.positions.push(wx + c[0], wy + c[1], wz + c[2]);
                                     buffer.normals.push(...f.dir);
-                                    buffer.colors.push(1, 1, 1);
+                                    let light = f.shade !== undefined ? f.shade : 1.0;
+                                    buffer.colors.push(light, light, light);
                                 }
                                 buffer.uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
                             }
@@ -402,7 +493,8 @@ export class Chunk {
                             // Add face vertices
                             const terrainH = this.game.worldGen.getTerrainHeight(wx, wz);
 
-                            for (const corner of face.corners) {
+                            for (let i = 0; i < face.corners.length; i++) {
+                                const corner = face.corners[i];
                                 buffer.positions.push(wx + corner[0], wy + corner[1], wz + corner[2]);
                                 buffer.normals.push(...face.normal);
 
@@ -413,6 +505,40 @@ export class Chunk {
                                     const depth = terrainH - vy;
                                     light = Math.max(0.15, 1.0 - (depth * 0.08));
                                 }
+
+                                // Apply directional shading
+                                if (face.shade) {
+                                    light *= face.shade;
+                                }
+
+                                // Apply Ambient Occlusion
+                                // Calculate AO using the lookup table
+                                const neighbors = aoTables[face.idx][i]; // i corresponds to corner index in face.corners loop?
+                                // Loop below iterates 'face.corners'. We need index.
+                                // We can change loop to: face.corners.forEach((corner, i) => ...)
+                                // But currently it is "for (const corner of face.corners)".
+                                // Let's use index.
+                                if (neighbors) { // Safety check
+                                    const s1 = isSolid(lx + neighbors[0][0], ly + neighbors[0][1], lz + neighbors[0][2]);
+                                    const s2 = isSolid(lx + neighbors[1][0], ly + neighbors[1][1], lz + neighbors[1][2]);
+                                    const c = isSolid(lx + neighbors[2][0], ly + neighbors[2][1], lz + neighbors[2][2]);
+
+                                    let aoVal = 0;
+                                    if (s1 && s2) {
+                                        aoVal = 3;
+                                    } else {
+                                        aoVal = (s1 ? 1 : 0) + (s2 ? 1 : 0) + (c ? 1 : 0);
+                                    }
+
+                                    // Map 0-3 to shading factor (1.0 down to ~0.5)
+                                    // 0 -> 1.0
+                                    // 1 -> 0.82
+                                    // 2 -> 0.65
+                                    // 3 -> 0.5
+                                    const aoFactors = [1.0, 0.82, 0.65, 0.5];
+                                    light *= aoFactors[aoVal];
+                                }
+
                                 buffer.colors.push(light, light, light);
                             }
 
@@ -473,8 +599,10 @@ export class Chunk {
         this.mesh = new THREE.Mesh(geometry, this.game.materialArray);
         this.mesh.userData.isChunk = true;
         this.mesh.userData.chunk = this;
-        this.mesh.castShadow = true;
-        this.mesh.receiveShadow = true;
+        // Use global setting from game
+        const shadowsEnabled = this.game.terrainShadowsEnabled !== false;
+        this.mesh.castShadow = shadowsEnabled;
+        this.mesh.receiveShadow = shadowsEnabled;
 
         // Respect global visibility toggle
         if (this.game.terrainVisible === false) {

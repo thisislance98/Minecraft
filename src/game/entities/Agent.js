@@ -25,13 +25,18 @@ export class Agent {
         this.isChatOpen = false;
         this.isStreaming = false;
 
+        // Context state for AI
+        this.agentContext = {
+            lastSpawnedIds: []
+        };
+
         // Connection (Delegate to global client)
         if (window.antigravityClient) {
             this.unsubscribe = window.antigravityClient.addListener(this.handleClientMessage.bind(this));
         }
 
         // Voice Toggles (Legacy/Placeholder)
-        this.setupKeyboardToggle();
+
     }
 
     createMesh() {
@@ -63,13 +68,7 @@ export class Agent {
         this.mesh.userData.agent = this;
     }
 
-    setupKeyboardToggle() {
-        document.addEventListener('keydown', (e) => {
-            if ((e.key === 'v' || e.key === 'V') && e.target.tagName !== 'INPUT') {
-                this.game.uiManager.addChatMessage('system', "Voice not supported in this version.");
-            }
-        });
-    }
+
 
     update(time, player) {
         this.time += 0.05;
@@ -93,7 +92,11 @@ export class Agent {
 
     sendTextMessage(text) {
         if (window.antigravityClient) {
-            window.antigravityClient.send({ type: 'input', text: text });
+            window.antigravityClient.send({
+                type: 'input',
+                text: text,
+                context: this.agentContext
+            });
         } else {
             this.game.uiManager.addChatMessage('error', 'Agent offline.');
             return;
@@ -251,6 +254,8 @@ export class Agent {
                 result = this.teleportPlayer(args.location);
             } else if (name === 'get_scene_info') {
                 result = this.getSceneInfo();
+            } else if (name === 'update_entity') {
+                result = this.updateEntity(args);
             } else {
                 throw new Error(`Unknown client tool: ${name}`);
             }
@@ -320,7 +325,40 @@ export class Agent {
         }
 
         const spawnResult = this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, count);
-        return { success: true, message: `Spawned ${count} ${CreatureClass.name}` };
+
+        // Track spawned IDs for context
+        if (spawnResult && spawnResult.length > 0) {
+            // Keep only last 10 interactions
+            this.agentContext.lastSpawnedIds = [...spawnResult.map(e => e.id), ...this.agentContext.lastSpawnedIds].slice(0, 10);
+            console.log('[Agent] Updated context with spawned IDs:', this.agentContext.lastSpawnedIds);
+        }
+
+        return { success: true, message: `Spawned ${count} ${CreatureClass.name}`, ids: spawnResult.map(e => e.id) };
+    }
+
+    updateEntity(args) {
+        const { entityId, updates } = args;
+        const entity = this.game.spawnManager.entities.get(entityId);
+
+        if (!entity) {
+            return { error: `Entity ${entityId} not found.` };
+        }
+
+        console.log(`[Agent] Updating entity ${entityId}:`, updates);
+
+        if (updates.scale) {
+            if (entity.setScale) entity.setScale(updates.scale);
+            else entity.mesh.scale.setScalar(updates.scale);
+        }
+
+        if (updates.color) {
+            if (entity.setColor) entity.setColor(updates.color);
+        }
+
+        // Trigger sync for persistence
+        if (entity.checkSync) entity.checkSync(true); // Force sync
+
+        return { success: true, message: `Updated entity ${entityId}` };
     }
 
     getSceneInfo() {

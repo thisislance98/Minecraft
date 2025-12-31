@@ -1484,7 +1484,7 @@ canvas {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: #1a1a2e;
+    background: #00008B;
     z-index: 99999;
     align-items: center;
     justify-content: center;
@@ -1541,20 +1541,7 @@ canvas {
    Show warning only on portrait devices smaller than 900px wide.
    This covers most phones and vertical tablets.
 */
-@media screen and (max-width: 900px) and (orientation: portrait) {
-    #landscape-warning {
-        display: flex !important;
-    }
 
-    /* Hide game UI elements behind the warning to prevent interaction/visual clutter */
-    #game-container,
-    #hud,
-    #status-bars,
-    #debug,
-    #chat-button {
-        display: none !important;
-    }
-}
 
 /* =========================================
    Mobile UI & Button Styles (Extracted)
@@ -1677,5 +1664,32 @@ canvas {
     /* Move chat button on mobile to avoid clutter if visible */
     #chat-button {
         top: 130px;
+    }
+
+    /* Further reduction when mobile controls are strictly active (to avoid overlap with joysticks) */
+    body.mobile-controls-active .slot {
+        width: 22px;
+        height: 22px;
+        border-width: 1px;
+    }
+
+    body.mobile-controls-active #hotbar {
+        padding: 2px;
+        gap: 1px;
+        border-width: 1px;
+        background: rgba(0, 0, 0, 0.4);
+        /* Make it slightly more transparent */
+    }
+
+    body.mobile-controls-active #status-bars {
+        bottom: 38px;
+        /* Move closer to bottom since hotbar is smaller */
+        width: 200px;
+        /* Shrink width to fit between controls */
+    }
+
+    body.mobile-controls-active #health-hearts .heart,
+    body.mobile-controls-active #hunger-drumsticks .drumstick {
+        font-size: 12px;
     }
 }

@@ -102,6 +102,10 @@
                         <input type="checkbox" id="settings-audio-toggle" checked>
                         <span>Sound Effects</span>
                     </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-voice-toggle">
+                        <span>Voice Chat</span>
+                    </label>
                 </div>
 
                 <!-- Display Settings -->
@@ -134,14 +138,11 @@
                 </div>
 
                 <!-- AI Settings -->
-                <div class="settings-section">
-                    <h4>🤖 AI Chat</h4>
-                    <label class="settings-toggle">
-                        <input type="checkbox" id="settings-ai-streaming-toggle">
-                        <span>Streaming Mode (text streams in real-time)</span>
-                    </label>
-
+                <div class="settings-section" id="settings-store-section">
+                    <h4>💎 Account & Store</h4>
+                    <div id="store-content-placeholder"></div>
                 </div>
+
 
                 <!-- World Settings -->
                 <div class="settings-section">
@@ -159,7 +160,7 @@
     </div>
 
     <div id="debug">
-        <p>v1.0.986</p>
+        <p>v1.0.1000</p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>

@@ -11,8 +11,8 @@ import { Animal } from '../Animal.js';
  * - Horns (like a goat)
  */
 export class Pugasus extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
         this.width = 0.6;
         this.height = 0.8;
         this.depth = 1.4; // Long like a dachshund

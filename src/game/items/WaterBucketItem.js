@@ -8,6 +8,7 @@ export class WaterBucketItem extends Item {
     constructor() {
         super('water_bucket', 'Water Bucket');
         this.maxStack = 16;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {

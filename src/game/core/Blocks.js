@@ -56,5 +56,20 @@ export const Blocks = {
     LADDER: 'ladder',
     TORCH: 'torch',
     FIRE: 'fire',
-    SIGN: 'sign'
+    FIRE: 'fire',
+    SIGN: 'sign',
+    THRUSTER: 'thruster',
+    SURVIVAL_BLOCK: 'survival_block',
+    MAZE_BLOCK: 'maze_block',
+    ESCAPE_ROOM_BLOCK: 'escape_room_block',
+    XBOX: 'xbox',
+    PARKOUR_BLOCK: 'parkour_block',
+    PARKOUR_PLATFORM: 'parkour_platform',
+    PLAYGROUND_BLOCK: 'playground_block',
+    SLIDE_BLOCK: 'slide_block',
+    DISCO_ROOM_BLOCK: 'disco_room_block',
+    DISCO_BALL: 'disco_ball',
+    MOB_WAVES_BLOCK: 'mob_waves_block',
+    DESTINATION_BLOCK: 'destination_block',
+    SLIME: 'slime'
 };

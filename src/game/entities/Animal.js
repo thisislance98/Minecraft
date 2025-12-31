@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../../utils/SeededRandom.js';
+import { Blocks } from '../core/Blocks.js';
 
 export class Animal {
     constructor(game, x, y, z, seed) {
@@ -79,6 +80,9 @@ export class Animal {
         this.fleeOnProximity = false;
         this.fleeRange = 8.0;
 
+        // Water avoidance - land animals should avoid water
+        this.avoidsWater = true;
+
         // Stuck detection
         this.lastPosition = new THREE.Vector3().copy(this.position);
         this.stuckTimer = 0;
@@ -86,6 +90,39 @@ export class Animal {
 
         // Levitation
         this.levitationTimer = 0;
+
+        // Visual Improvements: Blob Shadow
+        this.createBlobShadow();
+    }
+
+    createBlobShadow() {
+        // Create a simple dark circular sprite for a shadow
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+
+        // Draw radial gradient (dark center, transparent edges)
+        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 64, 64);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false
+        });
+
+        this.blobShadow = new THREE.Sprite(material);
+        this.blobShadow.scale.set(this.width * 1.5, this.depth * 1.5, 1);
+        this.blobShadow.position.set(0, 0.01, 0); // Just above ground
+        this.blobShadow.rotation.x = -Math.PI / 2; // Flat on ground
+
+        this.mesh.add(this.blobShadow);
     }
 
     takeDamage(amount, attacker) {
@@ -146,12 +183,26 @@ export class Animal {
     }
 
     update(dt) {
-        // Clamp dt to prevent physics explosions (max 0.1s)
+        if (this.game.gameState && this.game.gameState.flags.isTimeStopped) {
+            // Still sync mesh position in case it was moved by other means (though it shouldn't be)
+            this.mesh.position.copy(this.position);
+            return;
+        }
         dt = Math.min(dt, 0.1);
 
         if (this.rider) {
-            // Ridden behavior: Input controlled by handleRiding called by Player
-            // We still run physics, but AI is disabled
+            // Update rider position
+            this.rider.position.copy(this.position);
+            this.rider.position.y += this.height * 0.8;
+            
+            const input = this.game.inputManager;
+            if (input && this.handleRiding) {
+                const moveForward = (input.keys['KeyW'] || input.actions['FORWARD'] ? 1 : 0) - (input.keys['KeyS'] || input.actions['BACKWARD'] ? 1 : 0);
+                const moveRight = (input.keys['KeyD'] || input.actions['RIGHT'] ? 1 : 0) - (input.keys['KeyA'] || input.actions['LEFT'] ? 1 : 0);
+                const jump = input.keys['Space'] || input.actions['JUMP'];
+                const rotationY = this.game.camera.rotation.y;
+                this.handleRiding(moveForward, moveRight, jump, rotationY, dt);
+            }
         } else {
             this.updateAI(dt);
         }
@@ -535,6 +586,15 @@ export class Animal {
             const checkX = startX + direction.x * distance;
             const checkZ = startZ + direction.z * distance;
             const baseY = Math.floor(this.position.y);
+
+            // Water avoidance for land animals
+            if (this.avoidsWater && this.checkWater(checkX, baseY, checkZ)) {
+                return true; // Water detected, avoid
+            }
+            // Also check if there's water at feet level (where they would step)
+            if (this.avoidsWater && this.checkWater(checkX, baseY - 1, checkZ)) {
+                return true; // Water ahead at ground level
+            }
 
             // Check if there's a solid block at feet level or body level
             // that we can't step over (more than 1 block high)
@@ -921,6 +981,11 @@ export class Animal {
 
     checkSolid(x, y, z) {
         return !!this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+    }
+
+    checkWater(x, y, z) {
+        const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+        return block === Blocks.WATER;
     }
 
     checkBodyCollision(x, y, z) {

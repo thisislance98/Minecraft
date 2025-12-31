@@ -54,10 +54,10 @@ class WorldPersistenceService {
         // If resetting, ignore new writes to prevent pollution
         if (this.isResetting) return;
 
-        console.log(`[WorldPersistence DEBUG] saveBlockChange called for room ${roomId} (mapped to ${targetId}), block at (${x},${y},${z}) type:${blockType}`);
+        // console.log(`[WorldPersistence DEBUG] saveBlockChange called for room ${roomId} (mapped to ${targetId}), block at (${x},${y},${z}) type:${blockType}`);
         if (!realtimeDb) {
             // Silently skip when RTDB not configured (warning is logged once at startup)
-            console.log(`[WorldPersistence DEBUG] realtimeDb is NULL - skipping save`);
+            // console.log(`[WorldPersistence DEBUG] realtimeDb is NULL - skipping save`);
             return;
         }
 
@@ -127,7 +127,7 @@ class WorldPersistenceService {
                 }
 
                 await realtimeDb!.ref().update(updates);
-                console.log(`[WorldPersistence] Saved ${blocks.size} block(s) for room ${roomId}`);
+                // console.log(`[WorldPersistence] Saved ${blocks.size} block(s) for room ${roomId}`);
             } catch (error) {
                 console.error(`[WorldPersistence] Failed to save blocks for room ${roomId}:`, error);
             }
@@ -163,7 +163,7 @@ class WorldPersistenceService {
                         result.set(key, blockType);
                     }
                 }
-                console.log(`[WorldPersistence] Loaded ${result.size} block change(s) for room ${roomId} (from ${targetId})`);
+                // console.log(`[WorldPersistence] Loaded ${result.size} block change(s) for room ${roomId} (from ${targetId})`);
             }
         } catch (error) {
             console.error(`[WorldPersistence] Failed to load blocks for room ${roomId} (target: ${targetId}):`, error);
@@ -188,7 +188,7 @@ class WorldPersistenceService {
                 worldSeed,
                 createdAt: Date.now()
             });
-            console.log(`[WorldPersistence] Saved metadata for room ${roomId}`);
+            // console.log(`[WorldPersistence] Saved metadata for room ${roomId}`);
         } catch (error) {
             console.error(`[WorldPersistence] Failed to save room metadata:`, error);
         }
@@ -266,7 +266,7 @@ class WorldPersistenceService {
                     updates[`rooms/${roomId}/entities/${entityId}`] = data;
                 }
                 await realtimeDb!.ref().update(updates);
-                console.log(`[WorldPersistence] Saved ${entities.size} entity updates for room ${roomId}`);
+                // console.log(`[WorldPersistence] Saved ${entities.size} entity updates for room ${roomId}`);
             } catch (error) {
                 console.error(`[WorldPersistence] Failed to save entities for room ${roomId}:`, error);
             }
@@ -288,7 +288,7 @@ class WorldPersistenceService {
                 for (const [id, entityData] of Object.entries(data)) {
                     result.set(id, entityData);
                 }
-                console.log(`[WorldPersistence] Loaded ${result.size} entities for room ${roomId}`);
+                // console.log(`[WorldPersistence] Loaded ${result.size} entities for room ${roomId}`);
             }
         } catch (error) {
             console.error(`[WorldPersistence] Failed to load entities:`, error);
@@ -330,7 +330,7 @@ class WorldPersistenceService {
                     updates[`rooms/${roomId}/signs/${key}`] = text;
                 }
                 await realtimeDb!.ref().update(updates);
-                console.log(`[WorldPersistence] Saved ${signs.size} signs for room ${roomId}`);
+                // console.log(`[WorldPersistence] Saved ${signs.size} signs for room ${roomId}`);
             } catch (error) {
                 console.error(`[WorldPersistence] Failed to save signs:`, error);
             }

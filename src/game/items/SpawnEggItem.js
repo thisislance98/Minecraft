@@ -29,12 +29,13 @@ export class SpawnEggItem extends Item {
             // Ignore player or self
             if (hit.object.isPlayer || hit.object === player.mesh) continue;
 
-            if (hit.distance < 10) {
+            if (hit.distance < 100) {
                 // Spawn the animal
                 // Position: hit point + slight up
                 const pos = hit.point;
-                // Add a bit of height so it doesn't get stuck in floor
-                game.spawnManager.createAnimal(this.AnimalClass, pos.x, pos.y + 1.0, pos.z);
+                // Add a bit of height so it doesn't get stuck in floor, but don't snap to terrain height (ground)
+                // Pass false for snapToGround to use exact coordinates
+                game.spawnManager.createAnimal(this.AnimalClass, pos.x, pos.y + 0.1, pos.z, false);
 
                 // Show particle effect?
 

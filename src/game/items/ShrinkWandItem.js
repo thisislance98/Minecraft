@@ -6,6 +6,7 @@ export class ShrinkWandItem extends Item {
     constructor() {
         super('shrink_wand', 'Shrink Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -17,5 +18,9 @@ export class ShrinkWandItem extends Item {
 
         game.spawnShrinkProjectile(spawnPos, velocity);
         return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

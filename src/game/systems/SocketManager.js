@@ -71,10 +71,8 @@ export class SocketManager {
 
         this.socket.on('player:joined', (data) => {
             console.log('[SocketManager] Another player joined:', data.id);
-            // With PeerJS, we call the new player if we have a stream
-            if (this.localStream && this.peerJs) {
-                this.callPeer(data.id);
-            }
+            // With PeerJS, we wait for 'peerjs:id' event to know they are ready and have their ID
+            // So we don't call callPeer() here.
         });
 
         this.socket.on('player:left', (id) => {

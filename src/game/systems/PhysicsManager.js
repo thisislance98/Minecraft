@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FallingTree } from '../entities/animals/FallingTree.js';
+import { ShipEntity } from '../entities/ShipEntity.js';
 import { Blocks } from '../core/Blocks.js';
 
 /**
@@ -306,18 +307,10 @@ export class PhysicsManager {
             }
 
             if (this.breakProgress >= 1.0) {
-                // Check if this is a tree base before breaking
-                // Log types: 'log', 'wood', 'pine_wood', 'birch_wood'
-                const logTypes = [Blocks.LOG, Blocks.PINE_WOOD, Blocks.BIRCH_WOOD];
-
-                if (logTypes.includes(blockType)) {
-                    this.checkAndFellTree(target.x, target.y, target.z, blockType);
-                } else {
-                    // Standard break
-                    this.game.spawnDrop(target.x, target.y, target.z, blockType);
-                    this.game.setBlock(target.x, target.y, target.z, null);
-                    this.game.updateBlockCount();
-                }
+                // Standard break - always break single block only
+                this.game.spawnDrop(target.x, target.y, target.z, blockType);
+                this.game.setBlock(target.x, target.y, target.z, null);
+                this.game.updateBlockCount();
 
                 // Reset progress
                 this.breakingBlock = null;
@@ -510,6 +503,101 @@ export class PhysicsManager {
                 // re-selecting the current slot will refresh the game.selectedBlock and player hand
                 this.game.selectSlot(this.game.inventoryManager.selectedSlot);
             }
+        }
+    }
+
+    /**
+     * Activate Thruster Logic
+     */
+    activateThruster() {
+        const target = this.getTargetBlock();
+        if (!target) return;
+
+        // Must click a thruster to activate the ship?
+        // Or click any block connected to a thruster?
+        // Let's require clicking the thruster or a connected block.
+        // Simplifying: Click ANY block. If it connects to a thruster, launch.
+
+        // Flood fill
+        const startNode = { x: target.x, y: target.y, z: target.z };
+        const queue = [startNode];
+        const visited = new Set();
+        const blocks = []; // {x, y, z, type, dir}
+        const key = (x, y, z) => `${x},${y},${z}`;
+
+        visited.add(key(target.x, target.y, target.z));
+
+        let hasThruster = false;
+
+        // Safety limit
+        const MAX_BLOCKS = 500;
+
+        while (queue.length > 0 && blocks.length < MAX_BLOCKS) {
+            const node = queue.shift();
+            const type = this.game.getBlock(node.x, node.y, node.z);
+
+            if (type && type !== Blocks.AIR && type !== Blocks.WATER && type !== Blocks.BEDROCK) {
+                const blockData = {
+                    x: node.x, y: node.y, z: node.z,
+                    type: type,
+                    dir: type === Blocks.THRUSTER ? this.game.getThrusterData(node.x, node.y, node.z) : 0
+                };
+                blocks.push(blockData);
+
+                if (type === Blocks.THRUSTER) hasThruster = true;
+
+                // Neighbors
+                const neighbors = [
+                    { x: node.x + 1, y: node.y, z: node.z },
+                    { x: node.x - 1, y: node.y, z: node.z },
+                    { x: node.x, y: node.y + 1, z: node.z },
+                    { x: node.x, y: node.y - 1, z: node.z },
+                    { x: node.x, y: node.y, z: node.z + 1 },
+                    { x: node.x, y: node.y, z: node.z - 1 }
+                ];
+
+                for (const n of neighbors) {
+                    const k = key(n.x, n.y, n.z);
+                    if (!visited.has(k)) {
+                        const nType = this.game.getBlock(n.x, n.y, n.z);
+                        if (nType && nType !== Blocks.AIR && nType !== Blocks.WATER && nType !== Blocks.BEDROCK) {
+                            visited.add(k);
+                            queue.push(n);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!hasThruster) {
+            this.game.uiManager.addChatMessage('system', "No connected thrusters found.");
+            return;
+        }
+
+        if (blocks.length === 0) return;
+
+        // Identify pivot (center of mass approximations or just first block)
+        // Let's use the clicked block as origin? Or center?
+        // Using startNode as origin.
+        const origin = new THREE.Vector3(target.x, target.y, target.z);
+
+        // Convert to relative coordinate blocks
+        const relBlocks = blocks.map(b => ({
+            relX: b.x - origin.x,
+            relY: b.y - origin.y,
+            relZ: b.z - origin.z,
+            type: b.type,
+            dir: b.dir
+        }));
+
+        // Create Ship
+        const ship = new ShipEntity(this.game, origin, relBlocks);
+        this.game.ships.push(ship);
+
+        // Remove blocks from world
+        // Sort logic? No need.
+        for (const b of blocks) {
+            this.game.setBlock(b.x, b.y, b.z, Blocks.AIR);
         }
     }
 }

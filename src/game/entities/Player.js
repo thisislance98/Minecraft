@@ -224,6 +224,24 @@ export class Player {
         }
     }
 
+    mountEntity(entity) {
+        if (this.mount) this.dismount();
+        this.mount = entity;
+        entity.rider = this;
+        // Move player to entity position
+        this.position.copy(entity.position);
+        this.velocity.set(0, 0, 0);
+    }
+
+    dismount() {
+        if (this.mount) {
+            this.mount.rider = null;
+            this.mount = null;
+            // Pop player up slightly
+            this.velocity.y = 5;
+        }
+    }
+
     createPickaxe() {
         const handleColor = 0x5C4033; // Dark wood
         const headColor = 0x00CED1;   // Diamond mostly
@@ -267,6 +285,7 @@ export class Player {
         this.createWizardTowerWand();
         this.createBroom();
         this.createFoodModels();
+        this.createFurnitureModels();
         this.updateHeldItemVisibility();
     }
 
@@ -577,60 +596,151 @@ export class Player {
         this.bread.rotation.y = Math.PI / 2; // Hold it lengthwise
         this.bread.visible = false;
         this.rightArm.add(this.bread);
+
+        // Chocolate Bar Model
+        this.chocolateBar = new THREE.Group();
+        const chocoColor = 0x5c3317; // Dark chocolate
+        const wrapperColor = 0xC0C0C0; // Silver
+
+        const barGeo = new THREE.BoxGeometry(0.25, 0.05, 0.4);
+        const barMat = new THREE.MeshLambertMaterial({ color: chocoColor, depthTest: false });
+        const bar = new THREE.Mesh(barGeo, barMat);
+        bar.renderOrder = 999;
+        this.chocolateBar.add(bar);
+
+        // Wrapper (bottom half)
+        const wrapGeo = new THREE.BoxGeometry(0.26, 0.06, 0.2);
+        const wrapMat = new THREE.MeshLambertMaterial({ color: wrapperColor, depthTest: false });
+        const wrap = new THREE.Mesh(wrapGeo, wrapMat);
+        wrap.renderOrder = 999;
+        wrap.position.z = 0.1;
+        this.chocolateBar.add(wrap);
+
+        this.chocolateBar.position.set(0, -0.35, -0.15);
+        this.chocolateBar.rotation.y = Math.PI / 2;
+        this.chocolateBar.visible = false;
+        this.rightArm.add(this.chocolateBar);
+    }
+
+    createFurnitureModels() {
+        // Chair Model (Mini)
+        this.chairModel = new THREE.Group();
+        const woodMat = new THREE.MeshLambertMaterial({ color: 0x8B4513, depthTest: false }); // Saddle Brown
+
+        // Seat
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.3), woodMat);
+        seat.position.y = 0;
+        this.chairModel.add(seat);
+
+        // Legs
+        const legGeo = new THREE.BoxGeometry(0.05, 0.25, 0.05);
+        const fl = new THREE.Mesh(legGeo, woodMat); fl.position.set(-0.1, -0.15, -0.1); this.chairModel.add(fl);
+        const fr = new THREE.Mesh(legGeo, woodMat); fr.position.set(0.1, -0.15, -0.1); this.chairModel.add(fr);
+        const bl = new THREE.Mesh(legGeo, woodMat); bl.position.set(-0.1, -0.15, 0.1); this.chairModel.add(bl);
+        const br = new THREE.Mesh(legGeo, woodMat); br.position.set(0.1, -0.15, 0.1); this.chairModel.add(br);
+
+        // Back
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.05), woodMat);
+        back.position.set(0, 0.15, -0.12);
+        this.chairModel.add(back);
+
+        this.chairModel.position.set(0, -0.5, 0);
+        this.chairModel.scale.set(0.8, 0.8, 0.8);
+        this.chairModel.visible = false;
+
+        // Add to hand (toolAttachment is better for tools, rightArm direct add for items usually)
+        // Let's use rightArm like food
+        this.rightArm.add(this.chairModel);
+
+        // Table Model (Mini)
+        this.tableModel = new THREE.Group();
+        const tableMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false });
+
+        const top = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), tableMat);
+        top.position.y = 0.1;
+        this.tableModel.add(top);
+
+        // Legs
+        const tLegGeo = new THREE.BoxGeometry(0.05, 0.3, 0.05);
+        const tfl = new THREE.Mesh(tLegGeo, tableMat); tfl.position.set(-0.15, -0.05, -0.15); this.tableModel.add(tfl);
+        const tfr = new THREE.Mesh(tLegGeo, tableMat); tfr.position.set(0.15, -0.05, -0.15); this.tableModel.add(tfr);
+        const tbl = new THREE.Mesh(tLegGeo, tableMat); tbl.position.set(-0.15, -0.05, 0.15); this.tableModel.add(tbl);
+        const tbr = new THREE.Mesh(tLegGeo, tableMat); tbr.position.set(0.15, -0.05, 0.15); this.tableModel.add(tbr);
+
+        this.tableModel.position.set(0, -0.5, 0);
+        this.tableModel.scale.set(0.8, 0.8, 0.8);
+        this.tableModel.visible = false;
+        this.rightArm.add(this.tableModel);
+
+        // Couch Model (Mini)
+        this.couchModel = new THREE.Group();
+        const fabricMat = new THREE.MeshLambertMaterial({ color: 0xAA3333, depthTest: false });
+
+        const cBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.25), fabricMat);
+        this.couchModel.add(cBase);
+
+        const cBack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.25, 0.05), fabricMat);
+        cBack.position.set(0, 0.2, -0.1);
+        this.couchModel.add(cBack);
+
+        const cLeft = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.25), fabricMat);
+        cLeft.position.set(-0.25, 0.1, 0);
+        this.couchModel.add(cLeft);
+
+        const cRight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.25), fabricMat);
+        cRight.position.set(0.25, 0.1, 0);
+        this.couchModel.add(cRight);
+
+        this.couchModel.position.set(0, -0.5, 0);
+        this.couchModel.scale.set(0.6, 0.6, 0.6); // Slightly smaller to fit
+        this.couchModel.visible = false;
+        this.rightArm.add(this.couchModel);
     }
 
     createBow() {
         const bowGroup = new THREE.Group();
 
-        // Bow Body (Simple Arc approximated by 3 segments for "curved" look)
+        // Bow Body - wood material
         const woodMat = new THREE.MeshLambertMaterial({ color: 0x8B4513, depthTest: false });
 
-        // Center handle
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.2, 0.05);
+        // Center handle (grip)
+        const handleGeo = new THREE.BoxGeometry(0.04, 0.15, 0.05);
         const handle = new THREE.Mesh(handleGeo, woodMat);
         handle.renderOrder = 999;
+        handle.position.y = -0.3; // In hand position
         bowGroup.add(handle);
 
         // Upper Limb
-        const upperGeo = new THREE.BoxGeometry(0.03, 0.3, 0.04);
+        const upperGeo = new THREE.BoxGeometry(0.03, 0.25, 0.04);
         const upper = new THREE.Mesh(upperGeo, woodMat);
         upper.renderOrder = 999;
-        upper.position.set(0, 0.22, -0.05);
+        upper.position.set(0, -0.15, -0.08);
         upper.rotation.x = -0.4;
         bowGroup.add(upper);
 
         // Lower Limb
-        const lowerGeo = new THREE.BoxGeometry(0.03, 0.3, 0.04);
+        const lowerGeo = new THREE.BoxGeometry(0.03, 0.25, 0.04);
         const lower = new THREE.Mesh(lowerGeo, woodMat);
         lower.renderOrder = 999;
-        lower.position.set(0, -0.22, -0.05);
+        lower.position.set(0, -0.45, -0.08);
         lower.rotation.x = 0.4;
         bowGroup.add(lower);
 
-        // Single String
+        // Bowstring
         const stringMat = new THREE.LineBasicMaterial({ color: 0xDDDDDD });
         const stringGeo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0.35, -0.12), // Top tip approx
-            new THREE.Vector3(0, -0.35, -0.12) // Bottom tip approx
+            new THREE.Vector3(0, -0.05, -0.18),  // Top tip
+            new THREE.Vector3(0, -0.55, -0.18)   // Bottom tip
         ]);
         const string = new THREE.Line(stringGeo, stringMat);
+        string.renderOrder = 999;
         bowGroup.add(string);
 
-        // Position attached to hand
-        // Move it forward (Z) and rotate to face forward 
-        // Arm is vertical, so we need to rotate bow
-        bowGroup.position.set(0, -0.2, 0.2); // Stick out front
-        bowGroup.rotation.y = -Math.PI / 2; // Face forward relative to camera/body
-        bowGroup.rotation.z = Math.PI / 2;  // Vertical orientation
+        // Position like pickaxe - attach to toolAttachment
+        bowGroup.position.set(0, 0, 0);
+        bowGroup.rotation.set(0, 0, 0);
 
-        // Adjust for "holding in front"
-        // Actually, let's just place it nicely in the hand.
-        // If we want the player to "hold it out", we need to raise the arm in animation.
-        // For now, let's just orient the bow so it projects forward from the hand.
-        bowGroup.position.set(0, -0.6, 0.4); // Hand is at -0.35 approx? Let's guess. Arm height is 0.7. Hand is bottom.
-        bowGroup.rotation.set(0, -Math.PI / 2, Math.PI / 2);
-
-        this.rightArm.add(bowGroup);
+        this.toolAttachment.add(bowGroup);
         this.bow = bowGroup;
         this.bow.visible = false;
     }
@@ -644,6 +754,7 @@ export class Player {
         if (this.bow) this.bow.visible = itemType === 'bow';
         if (this.apple) this.apple.visible = itemType === 'apple';
         if (this.bread) this.bread.visible = itemType === 'bread';
+        if (this.chocolateBar) this.chocolateBar.visible = itemType === 'chocolate_bar';
         if (this.wand) this.wand.visible = itemType === 'wand';
         if (this.levitationWand) this.levitationWand.visible = itemType === 'levitation_wand';
         if (this.shrinkWand) this.shrinkWand.visible = itemType === 'shrink_wand';
@@ -656,6 +767,10 @@ export class Player {
             // Only show held broom if we are NOT flying
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
         }
+
+        if (this.chairModel) this.chairModel.visible = itemType === 'chair';
+        if (this.tableModel) this.tableModel.visible = itemType === 'table';
+        if (this.couchModel) this.couchModel.visible = itemType === 'couch';
     }
 
     swingArm() {
@@ -825,6 +940,15 @@ export class Player {
                     const gravityAccel = this.game.gravity * REF_FPS * REF_FPS;
                     this.velocity.y -= gravityAccel * deltaTime;
 
+                    // Apply friction to horizontal momentum (knockback)
+                    const friction = this.onGround ? 6.0 : 1.0;
+                    const damping = Math.max(0, 1 - friction * deltaTime);
+                    this.velocity.x *= damping;
+                    this.velocity.z *= damping;
+                    // Cutoff small velocities
+                    if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0;
+                    if (Math.abs(this.velocity.z) < 0.1) this.velocity.z = 0;
+
                     // Jump
                     if (input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
                         this.velocity.y = this.jumpForce * REF_FPS;
@@ -837,7 +961,7 @@ export class Player {
 
                 // Move with collision detection
                 // Apply delta time integration here
-                this.moveWithCollision(velX * deltaTime, this.velocity.y * deltaTime, velZ * deltaTime);
+                this.moveWithCollision((velX + this.velocity.x) * deltaTime, this.velocity.y * deltaTime, (velZ + this.velocity.z) * deltaTime);
 
                 // Check for mounting
                 this.checkMountCollision();
@@ -911,6 +1035,48 @@ export class Player {
             camera.rotation.order = 'YXZ';
             camera.rotation.y = this.rotation.y;
             camera.rotation.x = this.rotation.x;
+
+            // Visual Improvements: Weapon Inertia (Hand Sway)
+            // Calculate how much we turned this frame
+            const deltaY = this.rotation.y - (this.lastRotationY || this.rotation.y);
+            this.lastRotationY = this.rotation.y;
+
+            const deltaX = this.rotation.x - (this.lastRotationX || this.rotation.x);
+            this.lastRotationX = this.rotation.x;
+
+            // Apply inertia to the tool attachment group
+            if (this.toolAttachment) {
+                // Target is 0 (centered)
+                // We drag it opposite to the turn direction
+                // Limit the drag so it doesn't spin around
+                const inertiaStrength = 0.1;
+                const recoverySpeed = 10.0 * deltaTime;
+
+                // Current inertia
+                if (!this.inertiaRotation) this.inertiaRotation = { x: 0, y: 0 };
+
+                // Add drag
+                this.inertiaRotation.y -= deltaY * inertiaStrength;
+                this.inertiaRotation.x -= deltaX * inertiaStrength;
+
+                // Clamp
+                const maxInertia = 0.1;
+                this.inertiaRotation.x = Math.max(-maxInertia, Math.min(maxInertia, this.inertiaRotation.x));
+                this.inertiaRotation.y = Math.max(-maxInertia, Math.min(maxInertia, this.inertiaRotation.y));
+
+                // Recover to 0
+                this.inertiaRotation.x -= this.inertiaRotation.x * recoverySpeed;
+                this.inertiaRotation.y -= this.inertiaRotation.y * recoverySpeed;
+
+                // Apply to toolAttachment (on top of its base rotation of PI/2, PI/2, 0)
+                // toolAttachment base: .rotation.set(Math.PI / 2, Math.PI / 2, 0);
+                // We add the inertia offset
+                this.toolAttachment.rotation.set(
+                    (Math.PI / 2) + this.inertiaRotation.x,
+                    (Math.PI / 2) + this.inertiaRotation.y,
+                    0
+                );
+            }
         }
 
         // Animate arms and legs
@@ -999,10 +1165,41 @@ export class Player {
             setTimeout(() => damageOverlay.classList.remove('active'), 200);
         }
 
+        // Visual Improvements: Camera Shake
+        this.triggerCameraShake(0.1, 150); // intensity, duration ms
+
         // Check for death
         if (this.health <= 0) {
             this.onDeath();
         }
+    }
+
+    triggerCameraShake(intensity, durationMs) {
+        if (!this.game.camera) return;
+
+        const originalPosition = this.game.camera.position.clone();
+        const startTime = performance.now();
+
+        const shake = () => {
+            const elapsed = performance.now() - startTime;
+            if (elapsed > durationMs) {
+                // Reset camera position (handled by normal update loop)
+                return;
+            }
+
+            const progress = elapsed / durationMs;
+            const currentIntensity = intensity * (1 - progress); // Fade out
+
+            // Add random offset
+            this.cameraShakeOffset = {
+                x: (Math.random() - 0.5) * 2 * currentIntensity,
+                y: (Math.random() - 0.5) * 2 * currentIntensity
+            };
+
+            requestAnimationFrame(shake);
+        };
+
+        shake();
     }
 
     knockback(direction, force) {
@@ -1012,7 +1209,7 @@ export class Player {
         const REF_FPS = 60.0;
         this.velocity.x += direction.x * force * REF_FPS;
         this.velocity.z += direction.z * force * REF_FPS;
-        this.velocity.y = 0.2 * REF_FPS; // Small hop
+        this.velocity.y = 0.1 * REF_FPS; // Reduced hop (was 0.2)
         this.onGround = false;
     }
 
@@ -1131,6 +1328,10 @@ export class Player {
         // Set player as dead (prevents movement/input)
         this.isDead = true;
 
+        // Save death position for respawning
+        // Clone so we don't hold a reference to a changing vector
+        this.deathPosition = this.position.clone();
+
         // Show death screen via UIManager
         if (this.game.uiManager) {
             this.game.uiManager.showDeathScreen();
@@ -1142,14 +1343,55 @@ export class Player {
         this.isDead = false;
         this.health = this.maxHealth;
         this.hunger = this.maxHunger;
+        this.highestY = -Infinity; // Reset fall damage tracker
 
-        // Respawn at a safe location
-        if (this.game.spawnPlayer) {
-            this.game.spawnPlayer();
-        } else {
-            // Fallback if mechanism fails
-            this.position.set(32, 80, 32);
+        // Respawn Logic:
+        // 1. If death position is valid (not in void), respawn there.
+        // 2. Otherwise fall back to global spawn.
+
+        let respawnPos = null;
+
+        if (this.deathPosition && this.deathPosition.y > 0) {
+            respawnPos = this.deathPosition.clone();
+            // Ensure we don't spawn Inside a block? 
+            // The death position should be valid as we were there.
+            // Maybe bump Y slightly to be safe?
+            respawnPos.y += 0.5;
+        }
+
+        if (respawnPos) {
+            this.position.copy(respawnPos);
             this.velocity.set(0, 0, 0);
+
+            // Sync camera
+            if (this.game.camera) {
+                this.game.camera.position.copy(this.position);
+                this.game.camera.position.y += 1.6;
+            }
+
+            if (this.game.uiManager) {
+                this.game.uiManager.hideDeathScreen();
+            }
+
+            // Clear stored position
+            this.deathPosition = null;
+
+            // Reset highestY to current Y to prevent immediate fall damage
+            this.highestY = this.position.y;
+        } else {
+            // Fallback to default spawn
+            if (this.game.spawnPlayer) {
+                this.game.spawnPlayer();
+            } else {
+                // Fallback if mechanism fails
+                this.position.set(32, 80, 32);
+                this.velocity.set(0, 0, 0);
+                this.highestY = 80;
+
+                if (this.game.uiManager) {
+                    this.game.uiManager.hideDeathScreen();
+                }
+            }
         }
 
         // Update HUD

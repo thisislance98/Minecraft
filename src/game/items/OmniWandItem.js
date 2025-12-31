@@ -6,6 +6,7 @@ export class OmniWandItem extends Item {
     constructor() {
         super('omni_wand', 'Omni Wand');
         this.maxStack = 1;
+        this.isTool = true;
 
         // Default spells
         this.spells = [
@@ -68,5 +69,9 @@ export class OmniWandItem extends Item {
             this.game.uiManager.updateSpellSelector(this.spells, this.currentSpellIndex);
         }
         return this.currentSpell;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

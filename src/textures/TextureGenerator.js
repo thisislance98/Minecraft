@@ -26,6 +26,7 @@ const palettes = {
     water: ['#1a5f7a', '#2980b9', '#3498db', '#5dade2'],
     brick: { brick: ['#8b4513', '#a0522d', '#b5653d'], mortar: ['#a0a0a0', '#b0b0b0'] },
     glass: ['rgba(200, 230, 255, 0.3)', 'rgba(220, 240, 255, 0.4)', 'rgba(180, 220, 250, 0.35)'],
+    slime: ['rgba(100, 255, 100, 0.6)', 'rgba(120, 255, 120, 0.7)', 'rgba(80, 230, 80, 0.65)'],
     flower_red: { center: ['#FFD700'], petals: ['#FF0000', '#DC143C', '#B22222'] },
     flower_yellow: { center: ['#FFA500'], petals: ['#FFFF00', '#FFD700', '#F0E68C'] },
     mushroom_red: { cap: ['#FF0000', '#DC143C'], stem: ['#F5DEB3', '#FFE4C4'] },
@@ -69,12 +70,24 @@ const palettes = {
     half_timber: { wood: ['#3e2723', '#4e342e'], plaster: ['#F5F5DC', '#FAEBD7'] },
     mossy_stone: ['#555555', '#666666', '#777777'],
     iron_bars: ['#4a4a4a', '#5a5a5a', '#6a6a6a'],
+    // Survival Block (skull/danger theme)
+    survival_block: { base: ['#2a1a1a', '#3a2020', '#1a0f0f'], skull: ['#d0d0d0', '#e8e8e8'], danger: ['#ff3333', '#cc2222'] },
     // Animal Textures
     penguin_black: ['#111111', '#1a1a1a', '#0a0a0a'],
     penguin_white: ['#FFFFFF', '#F0F0F0', '#E8E8E8'],
     penguin_beak: ['#FFA500', '#FF8C00', '#FFB732'],
     lampost_metal: ['#222222', '#2a2a2a', '#1a1a1a', '#333333'], // Dark iron
-    lampost_glass: ['#FFFFE0', '#FFFACD', '#FFFFF0'] // Warm white
+    lampost_glass: ['#FFFFE0', '#FFFACD', '#FFFFF0'], // Warm white
+    maze_block: ['#2e003e', '#3a004d', '#4b0064', '#1a0024'], // Dark purple mystic look
+    obsidian: ['#1a101f', '#20122e', '#24143a', '#15091a'], // Very dark purple/black
+    escape_room_block: { base: ['#3e2723', '#4e342e'], emblem: ['#FFD700', '#FFC107'], glow: ['#00FFFF', '#00CED1'] },
+    diamond_block: ['#00FFFF', '#00CED1', '#40E0D0', '#E0FFFF'],
+    xbox: { base: ['#0e0e0e', '#1a1a1a', '#222222'], logo: ['#107c10', '#107c10', '#107c10'], light: ['#ffffff', '#aaffaa'] },
+    parkour_block: { base: ['#ff00ff', '#800080', '#4b0082'], glow: ['#00ffff', '#00ffcc'], trim: ['#ffffff'] },
+    parkour_platform: ['#444444', '#555555', '#333333', '#666666'], // Grey stone look
+    playground_block: { primary: '#FFD700', secondary: '#4169E1', accent: '#DC143C' }, // Yellow, Blue, Red
+    slide_block: '#FF4500', // Orange-Red plastic
+    mob_waves_block: { base: ['#0f0f0f', '#1a1a1a'], wave: '#ff0000', accent: '#800000' }
 };
 
 export function generateTexture(type, size = 16) {
@@ -153,6 +166,196 @@ export function generateTexture(type, size = 16) {
                     ctx.fillRect(rx, ry, w, h);
                 }
             }
+            break;
+
+        case 'slime':
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.slime[Math.floor(seededRandom(seed++) * palettes.slime.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add a darker inner core effect
+            ctx.fillStyle = 'rgba(50, 180, 50, 0.8)';
+            ctx.fillRect(size * 0.25, size * 0.25, size * 0.5, size * 0.5);
+            break;
+
+        case 'obsidian':
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = palettes.obsidian[Math.floor(noise * palettes.obsidian.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add purple crystalline specks
+            for (let i = 0; i < 8; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillStyle = '#4a256a';
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+            break;
+
+        case 'escape_room_block': {
+            const { base, emblem, glow } = palettes.escape_room_block;
+            // Base wood
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = base[Math.floor(seededRandom(seed++) * base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Golden Lock/Emblem
+            ctx.fillStyle = emblem[0];
+            ctx.fillRect(4, 4, 8, 8);
+            ctx.fillStyle = emblem[1];
+            ctx.fillRect(5, 5, 6, 6);
+            // Keyhole
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(7, 6, 2, 3);
+            ctx.fillRect(6, 8, 4, 1);
+            // Glowing corners
+            ctx.fillStyle = glow[0];
+            ctx.fillRect(1, 1, 2, 2);
+            ctx.fillRect(13, 1, 2, 2);
+            ctx.fillRect(1, 13, 2, 2);
+            ctx.fillRect(13, 13, 2, 2);
+            break;
+        }
+
+        case 'parkour_block': {
+            const { base, glow, trim } = palettes.parkour_block;
+            // Base neon purple/magenta
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = base[Math.floor(seededRandom(seed++) * base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Glowing neon borders
+            ctx.fillStyle = glow[0];
+            ctx.fillRect(0, 0, size, 1);
+            ctx.fillRect(0, size - 1, size, 1);
+            ctx.fillRect(0, 0, 1, size);
+            ctx.fillRect(size - 1, 0, 1, size);
+
+            // X emblem or crosshair in center
+            ctx.fillStyle = trim[0];
+            ctx.fillRect(7, 3, 2, 10);
+            ctx.fillRect(3, 7, 10, 2);
+
+            // Secondary glow dots
+            ctx.fillStyle = glow[1];
+            ctx.fillRect(2, 2, 2, 2);
+            ctx.fillRect(12, 2, 2, 2);
+            ctx.fillRect(2, 12, 2, 2);
+            ctx.fillRect(12, 12, 2, 2);
+            break;
+        }
+
+        case 'parkour_platform': {
+            const colors = palettes.parkour_platform;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = colors[Math.floor(seededRandom(seed++) * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add a subtle border
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            break;
+        }
+            break;
+
+        case 'playground_block': {
+            const { primary, secondary, accent } = palettes.playground_block;
+
+            // Ensure opaque background first
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, size, size);
+
+            // Four square pattern
+            const half = size / 2;
+
+            ctx.fillStyle = primary;
+            ctx.fillRect(0, 0, half, half);
+            ctx.fillStyle = secondary;
+            ctx.fillRect(half, 0, half, half);
+            ctx.fillStyle = accent;
+            ctx.fillRect(0, half, half, half);
+            ctx.fillStyle = primary;
+            ctx.fillRect(half, half, half, half);
+
+            // Border
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            // Stroke inside the canvas to avoid clipping or alpha bleeding
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            break;
+        }
+
+        case 'slide_block': {
+            ctx.fillStyle = palettes.slide_block;
+            ctx.fillRect(0, 0, size, size);
+
+            // Glossy highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(2, 2, size - 4, 2);
+            ctx.fillRect(2, 4, 2, size - 8);
+
+            // Border
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            break;
+        }
+
+        case 'mob_waves_block': {
+            const { base, wave, accent } = palettes.mob_waves_block;
+            // Dark base
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = base[Math.floor(seededRandom(seed++) * base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+
+            // Draw Sine Wave symbol
+            ctx.fillStyle = wave;
+            for (let x = 2; x < size - 2; x++) {
+                // simple sine: y = A * sin(B * x) + C
+                // Map x (2..14) to phase
+                const phase = (x - 2) / (size - 4) * Math.PI * 2;
+                const yOffset = Math.sin(phase) * 3;
+                const y = Math.floor((size / 2) + yOffset);
+
+                ctx.fillRect(x, y, 1, 2); // thickness 2
+            }
+
+            // Corner accents
+            ctx.fillStyle = accent;
+            ctx.fillRect(0, 0, 3, 3);
+            ctx.fillRect(size - 3, 0, 3, 3);
+            ctx.fillRect(0, size - 3, 3, 3);
+            ctx.fillRect(size - 3, size - 3, 3, 3);
+            break;
+        }
+
+        case 'diamond_block':
+            ctx.fillStyle = palettes.diamond_block[0];
+            ctx.fillRect(0, 0, size, size);
+            // Shiny border
+            ctx.fillStyle = palettes.diamond_block[1];
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, 0, 2, size);
+            ctx.fillStyle = palettes.diamond_block[2];
+            ctx.fillRect(0, size - 2, size, 2);
+            ctx.fillRect(size - 2, 0, 2, size);
+            // Center shine
+            ctx.fillStyle = palettes.diamond_block[3];
+            ctx.fillRect(4, 4, 8, 8);
             break;
 
         case 'wood_side':
@@ -796,8 +999,31 @@ export function generateTexture(type, size = 16) {
             ctx.fillStyle = palettes.polished_stone[3];
             ctx.fillRect(0, 0, size, 1);
             ctx.fillRect(0, 0, 1, size);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.fillRect(2, 2, 4, 4);
+            break;
+        }
+
+        case 'maze_block': {
+            // Dark mystical pattern with shifting runes concept (static for now)
+            ctx.fillStyle = palettes.maze_block[0];
+            ctx.fillRect(0, 0, size, size);
+
+            // Abstract geometric patterns
+            ctx.fillStyle = palettes.maze_block[2];
+            for (let i = 0; i < 5; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                const w = 2 + Math.floor(seededRandom(seed++) * 6);
+                const h = 1;
+                ctx.fillRect(rx, ry, w, h);
+                ctx.fillRect(rx + 1, ry - 1, w - 2, 1);
+                ctx.fillRect(rx + 1, ry + 1, w - 2, 1);
+            }
+
+            // Glowing center eye?
+            ctx.fillStyle = '#ff00ff';
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(6, 6, 4, 4);
+            ctx.globalAlpha = 1.0;
             break;
         }
 
@@ -939,6 +1165,134 @@ export function generateTexture(type, size = 16) {
             break;
         }
 
+        case 'survival_block': {
+            const { base, skull, danger } = palettes.survival_block;
+            // Dark base
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = base[Math.floor(seededRandom(seed++) * base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Danger border
+            ctx.fillStyle = danger[0];
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, size - 2, size, 2);
+            ctx.fillRect(0, 0, 2, size);
+            ctx.fillRect(size - 2, 0, 2, size);
+            // Skull icon (simplified)
+            ctx.fillStyle = skull[0];
+            // Skull head
+            ctx.fillRect(5, 4, 6, 5);
+            ctx.fillRect(6, 3, 4, 1);
+            // Eye sockets
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(6, 5, 2, 2);
+            ctx.fillRect(9, 5, 2, 2);
+            // Nose
+            ctx.fillRect(8, 7, 1, 1);
+            // Teeth
+            ctx.fillStyle = skull[0];
+            ctx.fillRect(6, 9, 5, 2);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(7, 9, 1, 2);
+            ctx.fillRect(9, 9, 1, 2);
+            // Timer/hourglass below
+            ctx.fillStyle = danger[1];
+            ctx.fillRect(6, 12, 4, 1);
+            ctx.fillRect(7, 13, 2, 1);
+            ctx.fillRect(6, 14, 4, 1);
+            break;
+        }
+
+        case 'xbox_top':
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.xbox.base[Math.floor(seededRandom(seed++) * palettes.xbox.base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Large circular vent/logo in middle
+            ctx.fillStyle = '#107c10';
+            ctx.beginPath();
+            ctx.arc(8, 8, 4, 0, Math.PI * 2);
+            ctx.fill();
+            // The "X"
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(6, 6); ctx.lineTo(10, 10);
+            ctx.moveTo(10, 6); ctx.lineTo(6, 10);
+            ctx.stroke();
+            break;
+
+        case 'xbox_front':
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.xbox.base[Math.floor(seededRandom(seed++) * palettes.xbox.base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Power button
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(12, 4, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            // Disc slot
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(2, 8, 12, 1);
+            break;
+
+        case 'xbox_side':
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = palettes.xbox.base[Math.floor(seededRandom(seed++) * palettes.xbox.base.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Small vent holes
+            ctx.fillStyle = '#000000';
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    ctx.fillRect(2 + i * 3, 2 + j * 3, 1, 1);
+                }
+            }
+            break;
+
+        case 'disco_room_block': {
+            // Funky colorful noise
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const r = Math.floor(seededRandom(seed++) * 255);
+                    const g = Math.floor(seededRandom(seed++) * 255);
+                    const b = Math.floor(seededRandom(seed++) * 255);
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Border
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            break;
+        }
+
+        case 'disco_ball': {
+            // Shiny mirrored facets
+            ctx.fillStyle = '#C0C0C0'; // Silver base
+            ctx.fillRect(0, 0, size, size);
+
+            for (let i = 0; i < size; i += 2) {
+                for (let j = 0; j < size; j += 2) {
+                    // Random light reflection
+                    const val = 150 + Math.floor(seededRandom(seed++) * 105);
+                    ctx.fillStyle = `rgb(${val},${val},${val})`;
+                    ctx.fillRect(i, j, 2, 2);
+                }
+            }
+            break;
+        }
+
         default:
             // Fallback: Generate a visible debug texture (magenta/pink checkered)
             // This makes missing textures obvious rather than pure black
@@ -951,14 +1305,15 @@ export function generateTexture(type, size = 16) {
                     ctx.fillRect(x, y, 1, 1);
                 }
             }
+
+
             break;
     }
-
     return canvas;
 }
 
 export function generateHotbarIcons() {
-    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf', 'door_closed'];
+    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf', 'door_closed', 'playground_block', 'disco_room_block'];
     blocks.forEach(block => {
         const canvas = document.getElementById(`slot-${block}`);
         if (canvas) {

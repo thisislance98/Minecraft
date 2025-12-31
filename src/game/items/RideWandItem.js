@@ -4,6 +4,7 @@ export class RideWandItem extends Item {
     constructor() {
         super('ride_wand', 'Ride Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -13,5 +14,9 @@ export class RideWandItem extends Item {
             return true;
         }
         return false;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

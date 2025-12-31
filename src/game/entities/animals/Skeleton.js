@@ -111,10 +111,10 @@ export class Skeleton extends Animal {
         targetPos.y += 1.0; // Aim for chest
 
         const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
-        const speed = 15;
+        const speed = 0.8; // Slower for realistic projectile physics
         const velocity = dir.multiplyScalar(speed);
 
-        const arrow = new Arrow(this.game, startPos, velocity);
+        const arrow = new Arrow(this.game, startPos, velocity, this);
         this.game.scene.add(arrow.mesh);
         if (!this.game.projectiles) this.game.projectiles = [];
         this.game.projectiles.push(arrow);

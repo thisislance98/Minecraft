@@ -5,6 +5,7 @@ export class GrowthWandItem extends Item {
     constructor() {
         super('growth_wand', 'Growth Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -16,5 +17,9 @@ export class GrowthWandItem extends Item {
 
         game.spawnGrowthProjectile(spawnPos, velocity);
         return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

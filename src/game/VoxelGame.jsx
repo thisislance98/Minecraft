@@ -14,6 +14,7 @@ import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
 import { LevitationProjectile } from './entities/projectiles/LevitationProjectile.js';
 import { GiantProjectile } from './entities/projectiles/GiantProjectile.js';
 import { WizardTowerProjectile } from './entities/projectiles/WizardTowerProjectile.js';
+import { GiantTreeProjectile } from './entities/projectiles/GiantTreeProjectile.js';
 
 import { GrowthProjectile } from './entities/projectiles/GrowthProjectile.js';
 import { FloatingBlock } from './entities/FloatingBlock.js';
@@ -39,8 +40,22 @@ import { Tornado } from './entities/Tornado.js';
 import { WaterSystem } from './systems/WaterSystem.js';
 import { StoreUI } from './ui/StoreUI.js';
 import { SocketManager } from './systems/SocketManager.js';
+import { AnimalClasses } from './AnimalRegistry.js';
+import { EscapeRoomManager } from './systems/EscapeRoomManager.js';
+import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
+import { MazeManager } from './systems/MazeManager.js';
+import { ParkourManager } from './systems/ParkourManager.js';
+import { PlaygroundManager } from './systems/PlaygroundManager.js';
+import { DiscoRoomManager } from './systems/DiscoRoomManager.js';
+import { DestinationManager } from './systems/DestinationManager.js';
+
+// Visual Improvements: Post-Processing
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 
+// Antigravity was here.
 export class VoxelGame {
     constructor() {
         // Expose game globally for HMR to update existing creatures
@@ -54,7 +69,28 @@ export class VoxelGame {
         this.renderer.setClearColor(0x4682B4); // Steel blue
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Visual Improvements: Tone Mapping
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
         this.container.appendChild(this.renderer.domElement);
+
+        // Visual Improvements: Post-Processing (Bloom)
+        // NOTE: Bloom is disabled for now as it washes out sky colors.
+        // To re-enable, uncomment the bloom pass below.
+        this.composer = new EffectComposer(this.renderer);
+        const renderPass = new RenderPass(this.scene, this.camera);
+        this.composer.addPass(renderPass);
+
+        // Bloom pass disabled - was washing out sky
+        // const bloomPass = new UnrealBloomPass(
+        //     new THREE.Vector2(window.innerWidth, window.innerHeight),
+        //     0.15,  // Strength
+        //     0.3,   // Radius
+        //     0.95   // Threshold
+        // );
+        // this.composer.addPass(bloomPass);
+        // this.bloomPass = bloomPass;
 
         // Essential for children of camera to be visible
         this.scene.add(this.camera);
@@ -83,6 +119,9 @@ export class VoxelGame {
             return; // STOP initialization here
         }
 
+        // Warp ID Check (store for after init)
+        this.warpId = urlParams.get('warp');
+
         // World data - chunk based
         this.chunks = new Map();
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
@@ -108,6 +147,12 @@ export class VoxelGame {
         this.materialArray = this.assetManager.materialArray;
         this.blockMaterialIndices = this.assetManager.blockMaterialIndices;
 
+        // Thruster Data (Map<"x,y,z", direction_int>)
+        this.thrusterData = new Map();
+
+        // Ships
+        this.ships = [];
+
         // Physics
         // Physics
         this.gravity = Config.WORLD.GRAVITY;
@@ -118,17 +163,15 @@ export class VoxelGame {
         // Debug Flags (Initialize BEFORE UIManager) - Now in GameState
 
         // Sub-modules
+        this.inputManager = new InputManager(this); // Replaces controls
+        this.controls = this.inputManager;
+
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
         this.itemManager = new ItemManager(this);
         this.inventory = new Inventory(this, this.inventoryManager); // Inventory is now UI
         this.player = new Player(this);
         this.agent = new Agent(this);
-        this.inputManager = new InputManager(this); // Replaces controls
-        // this.controls = new Controls(this); // specific controls logic moved to inputManager
-        // But other files might access game.controls?
-        // Let's alias it for now or check usage.
-        this.controls = this.inputManager;
         // Initialize world seed - use a fixed hardcoded seed so everyone sees the same world
         this.worldSeed = 1337; // Fixed seed for consistency
         console.log('[Game] using hardcoded world seed:', this.worldSeed);
@@ -147,6 +190,50 @@ export class VoxelGame {
         this.soundManager.init();
         this.spellSystem = new SpellSystem(this);
         this.waterSystem = new WaterSystem(this);
+        this.survivalGameManager = new SurvivalGameManager(this);
+        this.AnimalClasses = AnimalClasses;
+        this.parkourManager = new ParkourManager(this);
+        this.updateTimeStop = (dt) => {
+            if (this.gameState && this.gameState.timers.timeStop > 0) {
+                this.gameState.timers.timeStop -= dt;
+                if (this.gameState.timers.timeStop <= 0) {
+                    this.gameState.timers.timeStop = 0;
+                    this.gameState.flags.isTimeStopped = false;
+                    console.log("Time resumed!");
+                }
+            }
+        };
+        this.startTimeStop = (duration) => {
+            this.gameState.timers.timeStop = duration;
+            this.gameState.flags.isTimeStopped = true;
+            console.log("Time stopped for", duration, "seconds!");
+        };
+
+        this.spawnGiantTreeProjectile = (position, velocity) => {
+            const proj = new GiantTreeProjectile(this, position, velocity);
+            if (!this.projectiles) this.projectiles = [];
+            this.projectiles.push(proj);
+        };
+
+        // Initial Giant Trees!
+        setTimeout(() => {
+            for (let i = 0; i < 5; i++) {
+                const angle = (i / 5) * Math.PI * 2;
+                const dist = 20 + Math.random() * 10;
+                const tx = this.player.position.x + Math.cos(angle) * dist;
+                const tz = this.player.position.z + Math.sin(angle) * dist;
+                const ty = this.worldGen.getTerrainHeight(tx, tz);
+                const proj = new GiantTreeProjectile(this, new THREE.Vector3(tx, ty + 10, tz), new THREE.Vector3(0, -1, 0));
+                if (!this.projectiles) this.projectiles = [];
+                this.projectiles.push(proj);
+            }
+
+            // Spawn the Hotel!
+            const hx = Math.floor(this.player.position.x) + 10;
+            const hz = Math.floor(this.player.position.z) + 10;
+            const hy = Math.floor(this.worldGen.getTerrainHeight(hx, hz));
+            this.worldGen.structureGenerator.generateHotel(hx, hy + 1, hz);
+        }, 2000);
 
         // Multiplayer Delta Sync tracking
         this._lastSentPos = new THREE.Vector3();
@@ -187,13 +274,19 @@ export class VoxelGame {
         // Multiplayer logic
         this.socketManager = new SocketManager(this);
 
+
         // Agent debug command handler
         if (this.agent.setupDebugCommandHandler) {
             this.agent.setupDebugCommandHandler();
         }
 
-        // Add daytime switch hotkey (K)
+        // Add daytime switch hotkey (K) and store hotkey (B)
         window.addEventListener('keydown', (e) => {
+
+            // Block hotkeys when typing in chat input
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput && document.activeElement === chatInput) return;
+
             if (e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.setDaytime();
             }
@@ -240,11 +333,18 @@ export class VoxelGame {
         this.animate();
 
         // Add the new wand to the inventory for testing
+        this.inventory.addItem(Blocks.PARKOUR_BLOCK, 64, 'block');
+        this.inventory.addItem(Blocks.MAZE_BLOCK, 10, 'block'); // Priority: Slot 1
         this.inventory.addItem('growth_wand', 1, 'tool');
         this.inventory.addItem('wizard_tower_wand', 1, 'tool');
-
+        this.inventory.addItem(Blocks.PLAYGROUND_BLOCK, 10, 'block');
+        this.inventory.addItem(Blocks.DISCO_ROOM_BLOCK, 10, 'block');
 
         this.inventory.addItem(Blocks.DOOR_CLOSED, 64, 'block');
+        this.inventory.addItem(Blocks.ESCAPE_ROOM_BLOCK, 10, 'block');
+        this.inventory.addItem(Blocks.XBOX, 64, 'block');
+        this.inventory.addItem('physics_ball', 64, 'tool');
+        this.inventory.addItem('physics_ball', 64, 'tool');
 
         // Poll for AI spawn requests every 2 seconds
         this.startSpawnQueuePolling();
@@ -266,6 +366,29 @@ export class VoxelGame {
         // Sign Data (text)
         this.signData = new Map(); // key: "x,y,z", value: text
         this.signMeshes = new Map(); // key: "x,y,z", value: THREE.Mesh (text mesh)
+
+        // Escape Room Manager
+        this.escapeRoomManager = new EscapeRoomManager(this);
+
+        // Maze Manager
+        this.mazeManager = new MazeManager(this);
+
+        // Playground Manager
+        this.playgroundManager = new PlaygroundManager(this);
+
+        // Disco Room Manager
+        this.discoRoomManager = new DiscoRoomManager(this);
+
+        // Destination Manager
+        this.destinationManager = new DestinationManager(this);
+
+        // Handle initial warp if present (give it a moment for things to settle?)
+        if (this.warpId) {
+            // Defer slightly to ensure player/world is ready
+            setTimeout(() => {
+                this.destinationManager.handleWarp(this.warpId);
+            }, 1000);
+        }
     }
 
     // Helper for Debug Toggle (called by InputManager)
@@ -283,7 +406,7 @@ export class VoxelGame {
     setDaytime() {
         if (this.socketManager && this.socketManager.isConnected()) {
             this.socketManager.sendSetTime(0.25); // Noon
-            this.uiManager?.addChatMessage('system', 'Requesting daytime sync...');
+            // this.uiManager?.addChatMessage('system', 'Requesting daytime sync...');
             return;
         }
 
@@ -553,18 +676,42 @@ export class VoxelGame {
         return false;
     }
 
+    getWorldHeight(x, z) {
+        if (this.worldGen) return this.worldGen.getTerrainHeight(x, z);
+        return 0;
+    }
+
     onRightClickDown() {
-        // 1. Check for Block Interaction (Doors, etc.)
-        const target = this.physicsManager.getTargetBlock();
+        let target = this.physicsManager.getTargetBlock();
         if (target) {
+            const blockType = this.getBlockWorld(target.x, target.y, target.z);
+            if (blockType === Blocks.XBOX) {
+                this.uiManager.showXboxUI();
+                return;
+            }
+        }
+        // 1. Entity Interaction (Mounting)
+        const hitAnimal = this.physicsManager.getHitAnimal();
+        if (hitAnimal && hitAnimal.handleRiding) {
+            this.player.mountEntity(hitAnimal);
+            return;
+        }
+
+        // 2. Check for Block Interaction (Doors, Signs, Survival Block)
+        target = this.physicsManager.getTargetBlock();
+        if (target) {
+            // Escape Room Game Interaction first?
+            if (this.escapeRoomManager && this.escapeRoomManager.isActive) {
+                const handled = this.escapeRoomManager.handleBlockInteraction(target.x, target.y, target.z);
+                if (handled) return true;
+            }
+
             const block = this.getBlockWorld(target.x, target.y, target.z);
             if (block === Blocks.DOOR_CLOSED) {
                 this.setBlock(target.x, target.y, target.z, Blocks.DOOR_OPEN);
                 this.soundManager.playSound('click'); // consistent feedback
                 return true; // Handled
             } else if (block === Blocks.DOOR_OPEN) {
-                // Check if player is inside the door before closing interaction?
-                // For now, just close it. Collision will handle pushing out or getting stuck.
                 this.setBlock(target.x, target.y, target.z, Blocks.DOOR_CLOSED);
                 this.soundManager.playSound('click');
                 return true; // Handled
@@ -581,18 +728,82 @@ export class VoxelGame {
                     }, currentText);
                 }
                 return true;
+            } else if (block === Blocks.SURVIVAL_BLOCK) {
+                // Start survival mini-game
+                if (this.survivalGameManager && !this.survivalGameManager.isActive) {
+                    this.survivalGameManager.start();
+                    this.soundManager.playSound('click');
+                }
+                return true;
+            } else if (block === Blocks.MAZE_BLOCK) {
+                // Generate Maze
+                this.mazeManager.generateMaze(this.player.position);
+                this.soundManager.playSound('click');
+                return true;
+            } else if (block === Blocks.ESCAPE_ROOM_BLOCK) {
+                // Start Escape Room
+                if (this.escapeRoomManager && !this.escapeRoomManager.isActive) {
+                    this.escapeRoomManager.start(new THREE.Vector3(target.x, target.y, target.z));
+                    this.soundManager.playSound('click');
+                }
+                return true;
+            } else if (block === Blocks.PARKOUR_BLOCK) {
+                // Start Parkour
+                if (this.parkourManager && !this.parkourManager.isActive) {
+                    this.parkourManager.start(new THREE.Vector3(target.x, target.y, target.z));
+                    this.soundManager.playSound('click');
+                }
+                return true;
+            } else if (block === Blocks.PLAYGROUND_BLOCK) {
+                // Spawn Playground
+                if (this.playgroundManager) {
+                    this.playgroundManager.spawnPlayground(new THREE.Vector3(target.x, target.y, target.z));
+                    this.soundManager.playSound('click');
+                }
+                return true;
+            } else if (block === Blocks.DISCO_ROOM_BLOCK) {
+                // Spawn Disco Room
+                if (this.discoRoomManager) {
+                    this.discoRoomManager.spawnDiscoRoom(new THREE.Vector3(target.x, target.y, target.z));
+                    this.soundManager.playSound('click');
+                }
+                return true;
             }
         }
-
-        // 2. Item Usage
-        const item = this.inventory.getSelectedItem();
-        if (item && item.item) {
-            // Retrieve item ID
-            const itemId = item.item;
-            const handled = this.itemManager.handleItemDown(itemId);
-            if (handled) return true;
+        // 3. Item Use
+        const selectedItem = this.inventory.getSelectedItem();
+        if (selectedItem && selectedItem.item) {
+            const handled = this.itemManager.handleItemDown(selectedItem.item);
+            if (handled) return;
         }
-        return false;
+
+        // 4. Block Placement
+        // Reuse 'target' from block interaction check if it exists
+        if (target && selectedItem && selectedItem.type === 'block') {
+            const bx = target.x + target.normal.x;
+            const by = target.y + target.normal.y;
+            const bz = target.z + target.normal.z;
+            // Check for player collision before placing
+            this.setBlock(bx, by, bz, selectedItem.item);
+            this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
+
+            // Handle Destination Block Placement
+            if (selectedItem.item === Blocks.DESTINATION_BLOCK) {
+                this.destinationManager.createDestination(bx, by, bz).then(id => {
+                    if (id) {
+                        const url = window.location.origin + '?warp=' + id;
+                        this.uiManager.addChatMessage('system', 'Destination created!');
+                        this.uiManager.addChatMessage('system', 'Share this URL: ' + url);
+                        // Also copy to clipboard if possible
+                        navigator.clipboard.writeText(url).then(() => {
+                            this.uiManager.addChatMessage('system', '(Copied to clipboard)');
+                        }).catch(() => { });
+                    } else {
+                        this.uiManager.addChatMessage('system', 'Failed to create destination.');
+                    }
+                });
+            }
+        }
     }
 
     onRightClickUp() {
@@ -604,8 +815,8 @@ export class VoxelGame {
         return false;
     }
 
-    spawnArrow(pos, vel) {
-        const arrow = new Arrow(this, pos, vel);
+    spawnArrow(pos, vel, owner = null) {
+        const arrow = new Arrow(this, pos, vel, owner || this.player);
         this.projectiles.push(arrow);
         this.scene.add(arrow.mesh);
         console.log('Arrow fired!');
@@ -761,6 +972,22 @@ export class VoxelGame {
         this.updateSignMesh(x, y, z, text);
     }
 
+    // Thruster Data
+    setThrusterData(x, y, z, dir) {
+        const key = this.getBlockKey(x, y, z);
+        this.thrusterData.set(key, dir);
+        // Mark chunk dirty?
+        const start = performance.now();
+        const chunkKey = this.getChunkKey(Math.floor(x / this.chunkSize), Math.floor(y / this.chunkSize), Math.floor(z / this.chunkSize));
+        const chunk = this.chunks.get(chunkKey);
+        if (chunk) chunk.dirty = true;
+    }
+
+    getThrusterData(x, y, z) {
+        const key = this.getBlockKey(x, y, z);
+        return this.thrusterData.get(key) || 0; // Default 0
+    }
+
     removeSignText(x, y, z) {
         const key = this.getBlockKey(x, y, z);
         this.signData.delete(key);
@@ -850,14 +1077,6 @@ export class VoxelGame {
         // For simplified v1, we will just make it look at the player or stick to one side?
         // Let's stick it to the side facing the player when placed? 
         // Or simpler: billboards? No, signs are static.
-        // For now, let's just place it on all 4 sides? No that's expensive.
-        // Let's defaulted to Z+ face for now or try to deduce from placement?
-        // Actually, SignItem knows placement. But here we just have x,y,z.
-        // Let's put it on top of the block effectively standing up?
-        // Or centered in the block if it's a "Sign Post" style.
-        // Since we use a full block for SIGN, let's put it on the faces.
-
-        // Actually, let's make it a Sprite for simplicity? No, Sprites rotate.
         // Let's just put it on the North and South faces for visibility.
 
         mesh.position.set(x + 0.5, y + 0.5, z + 0.55); // Front face (Z+)
@@ -1304,11 +1523,13 @@ export class VoxelGame {
             return;
         }
 
-        // Update physics and player only when locked (active play)
-        if (this.controls.isLocked) {
+        // Update physics and player only when locked (active play) OR mobile controls are enabled
+        if (this.controls.isLocked || this.gameState.flags.mobileControls) {
+            this.updateTimeStop(deltaTime);
             this.player.update(deltaTime);
             this.physicsManager.update();
         }
+
 
         // Always update chunks and check for new ones, so the world generates around you even before starting
         // Throttle chunk checking (expensive)
@@ -1326,6 +1547,11 @@ export class VoxelGame {
 
         // Update animals
         this.animals.forEach(animal => animal.update(deltaTime));
+
+        // Update mini-games
+        if (this.survivalGameManager) this.survivalGameManager.update(deltaTime);
+        if (this.parkourManager) this.parkourManager.update(deltaTime);
+        if (this.escapeRoomManager) this.escapeRoomManager.update(deltaTime);
 
         // Helper to remove dead animals
         for (let i = this.animals.length - 1; i >= 0; i--) {
@@ -1419,6 +1645,18 @@ export class VoxelGame {
             }
         }
 
+        // Update Ships
+        if (this.ships) {
+            for (let i = this.ships.length - 1; i >= 0; i--) {
+                const ship = this.ships[i];
+                const alive = ship.update(deltaTime);
+                if (!alive) {
+                    this.scene.remove(ship.mesh);
+                    this.ships.splice(i, 1);
+                }
+            }
+        }
+
         // Frustum culling for performance
         this.updateFrustumCulling();
 
@@ -1447,6 +1685,11 @@ export class VoxelGame {
             this.waterSystem.update(deltaTime);
         }
 
+        // Visual Improvements: Update Wind
+        if (this.assetManager) {
+            this.assetManager.updateWind(now / 1000);
+        }
+
         // Update Remote Players (toggle with P key for debugging)
         if (!this._disableRemotePlayers && this.remotePlayers) {
             const remoteDelta = deltaTime;
@@ -1458,7 +1701,13 @@ export class VoxelGame {
 
 
         this.updateDebug();
-        this.renderer.render(this.scene, this.camera);
+
+        // Visual Improvements: Use EffectComposer for post-processing (Bloom)
+        if (this.composer) {
+            this.composer.render();
+        } else {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
     killAllAnimals() {
         for (const animal of this.animals) {

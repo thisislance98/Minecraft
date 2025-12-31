@@ -143,7 +143,11 @@ export class Drop {
         this.mesh.rotation.y += this.rotationSpeed.y * deltaTime;
 
         // Sync mesh position
+        // Sync mesh position and add visual bobbing
         this.mesh.position.copy(this.position);
+        // Visual Improvements: Bobbing animation
+        // 0.15 height amplitude, 3.0 speed frequency
+        this.mesh.position.y += Math.sin(this.age * 3.0) * 0.15;
 
         return !this.isDead;
     }

@@ -7,134 +7,180 @@ export class Horse extends Animal {
         this.width = 0.8;
         this.height = 1.2;
         this.depth = 1.6;
-        this.speed = 4.0;
-        this.legSwingSpeed = 10; // Faster animation for horses
+        this.speed = 5.0; // Slightly faster
+        this.legSwingSpeed = 12; // Dynamic movement
         this.createBody();
-        this.mesh.scale.set(0.75, 0.75, 0.75);
+        this.mesh.scale.set(0.8, 0.8, 0.8);
     }
 
     createBody() {
-        // Horse: Brown
-        const skinColor = 0xA0522D;
-        const mat = new THREE.MeshLambertMaterial({ color: skinColor });
-        const darkMat = new THREE.MeshLambertMaterial({ color: 0x4B2510 }); // Hooves/Mane
-        const whiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF }); // Eyes
-        const blackMat = new THREE.MeshLambertMaterial({ color: 0x111111 }); // Pupils
+        // Horse Colors
+        const skinColor = 0x8B4513; // Saddle Brown
+        const darkSkinColor = 0x5D2E0C;
+        const maneColor = 0x2A1506;
+        const whiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const blackMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+        const hoofMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        const skinMat = new THREE.MeshLambertMaterial({ color: skinColor });
+        const darkSkinMat = new THREE.MeshLambertMaterial({ color: darkSkinColor });
 
-        // Body
-        const bodyGeo = new THREE.BoxGeometry(0.9, 0.8, 1.4);
-        const body = new THREE.Mesh(bodyGeo, mat);
+        // Main Body
+        const bodyGeo = new THREE.BoxGeometry(0.85, 0.9, 1.5);
+        const body = new THREE.Mesh(bodyGeo, skinMat);
         body.position.set(0, 1.1, 0);
         this.mesh.add(body);
 
-        // Neck/Head
-        const neckGeo = new THREE.BoxGeometry(0.4, 0.7, 0.4);
-        const neck = new THREE.Mesh(neckGeo, mat);
-        neck.position.set(0, 1.5, 0.7);
-        neck.rotation.x = Math.PI / 4; // Angled forward
-        this.mesh.add(neck);
+        // Neck
+        const neckPivot = new THREE.Group();
+        neckPivot.position.set(0, 1.3, 0.6);
+        this.mesh.add(neckPivot);
 
-        const headGeo = new THREE.BoxGeometry(0.55, 0.55, 1.0);
-        const head = new THREE.Mesh(headGeo, mat);
-        head.position.set(0, 1.9, 1.15); // Lower and closer to body
-        head.rotation.x = Math.PI / 6; // leveling head (nose down)
-        this.mesh.add(head);
+        const neckGeo = new THREE.BoxGeometry(0.4, 0.9, 0.5);
+        const neck = new THREE.Mesh(neckGeo, skinMat);
+        neck.position.set(0, 0.35, 0.1);
+        neck.rotation.x = -Math.PI / 6;
+        neckPivot.add(neck);
+
+        // Head
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.8, 0.3);
+        neckPivot.add(headGroup);
+
+        const headGeo = new THREE.BoxGeometry(0.45, 0.45, 0.6);
+        const head = new THREE.Mesh(headGeo, skinMat);
+        headGroup.add(head);
+
+        // Muzzle
+        const muzzleGeo = new THREE.BoxGeometry(0.35, 0.35, 0.4);
+        const muzzle = new THREE.Mesh(muzzleGeo, skinMat);
+        muzzle.position.set(0, -0.05, 0.4);
+        headGroup.add(muzzle);
+
+        // Blaze (white stripe on face)
+        const blazeGeo = new THREE.BoxGeometry(0.12, 0.46, 0.1);
+        const blaze = new THREE.Mesh(blazeGeo, whiteMat);
+        blaze.position.set(0, 0.05, 0.65);
+        headGroup.add(blaze);
+
+        // Nostrils
+        const nostrilGeo = new THREE.BoxGeometry(0.08, 0.08, 0.05);
+        const leftNostril = new THREE.Mesh(nostrilGeo, blackMat);
+        leftNostril.position.set(-0.1, -0.1, 0.6);
+        headGroup.add(leftNostril);
+
+        const rightNostril = new THREE.Mesh(nostrilGeo, blackMat);
+        rightNostril.position.set(0.1, -0.1, 0.6);
+        headGroup.add(rightNostril);
 
         // Ears
-        const earGeo = new THREE.BoxGeometry(0.12, 0.18, 0.1);
+        const earGeo = new THREE.BoxGeometry(0.1, 0.25, 0.05);
+        const leftEar = new THREE.Mesh(earGeo, skinMat);
+        leftEar.position.set(-0.15, 0.3, -0.15);
+        headGroup.add(leftEar);
 
-        const leftEar = new THREE.Mesh(earGeo, mat);
-        leftEar.position.set(-0.2, 2.3, 0.85); // Adjusted for new head pos
-        leftEar.rotation.x = Math.PI / 6; // Match head tilt
-        this.mesh.add(leftEar);
+        const rightEar = new THREE.Mesh(earGeo, skinMat);
+        rightEar.position.set(0.15, 0.3, -0.15);
+        headGroup.add(rightEar);
 
-        const rightEar = new THREE.Mesh(earGeo, mat);
-        rightEar.position.set(0.2, 2.3, 0.85);
-        rightEar.rotation.x = Math.PI / 6;
-        this.mesh.add(rightEar);
-
-        // Eyes (on sides of head)
-        const eyeGeo = new THREE.BoxGeometry(0.08, 0.12, 0.12);
-        const pupilGeo = new THREE.BoxGeometry(0.04, 0.08, 0.08);
-
-        // Left eye
+        // Eyes
+        const eyeGeo = new THREE.BoxGeometry(0.05, 0.1, 0.1);
         const leftEye = new THREE.Mesh(eyeGeo, whiteMat);
-        leftEye.position.set(-0.28, 2.0, 1.35);
-        this.mesh.add(leftEye);
+        leftEye.position.set(-0.23, 0.1, 0.1);
+        headGroup.add(leftEye);
 
-        const leftPupil = new THREE.Mesh(pupilGeo, blackMat);
-        leftPupil.position.set(-0.31, 2.0, 1.38);
-        this.mesh.add(leftPupil);
+        const leftPupil = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), blackMat);
+        leftPupil.position.set(-0.25, 0.1, 0.12);
+        headGroup.add(leftPupil);
 
-        // Right eye
         const rightEye = new THREE.Mesh(eyeGeo, whiteMat);
-        rightEye.position.set(0.28, 2.0, 1.35);
-        this.mesh.add(rightEye);
+        rightEye.position.set(0.23, 0.1, 0.1);
+        headGroup.add(rightEye);
 
-        const rightPupil = new THREE.Mesh(pupilGeo, blackMat);
-        rightPupil.position.set(0.31, 2.0, 1.38);
-        this.mesh.add(rightPupil);
+        const rightPupil = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.06), blackMat);
+        rightPupil.position.set(0.25, 0.1, 0.12);
+        headGroup.add(rightPupil);
 
-        // Mane (along neck and top of head)
-        const maneGeo = new THREE.BoxGeometry(0.15, 0.5, 0.25);
-        const mane = new THREE.Mesh(maneGeo, darkMat);
-        mane.position.set(0, 1.7, 0.65); // Adjusted for shorter neck
-        mane.rotation.x = Math.PI / 4;
-        this.mesh.add(mane);
+        // Mane
+        const maneGeo = new THREE.BoxGeometry(0.15, 1.0, 0.2);
+        const maneMat = new THREE.MeshLambertMaterial({ color: maneColor });
+        const mane = new THREE.Mesh(maneGeo, maneMat);
+        mane.position.set(0, 0.3, -0.2);
+        mane.rotation.x = -Math.PI / 6;
+        neckPivot.add(mane);
 
-        // Mane on top of head
-        const headManeGeo = new THREE.BoxGeometry(0.12, 0.2, 0.4);
-        const headMane = new THREE.Mesh(headManeGeo, darkMat);
-        headMane.position.set(0, 2.25, 1.05); // Adjusted for new head
-        this.mesh.add(headMane);
+        const forelockGeo = new THREE.BoxGeometry(0.15, 0.2, 0.3);
+        const forelock = new THREE.Mesh(forelockGeo, maneMat);
+        forelock.position.set(0, 0.25, 0.1);
+        headGroup.add(forelock);
 
-        // Tail (at the back of the body)
+        // Tail
         const tailPivot = new THREE.Group();
-        tailPivot.position.set(0, 1.3, -0.7);
-
-        const tailGeo = new THREE.BoxGeometry(0.15, 0.6, 0.15);
-        const tail = new THREE.Mesh(tailGeo, darkMat);
-        tail.position.set(0, -0.3, 0);
-        tailPivot.add(tail);
-
-        // Tail tip (flowing part)
-        const tailTipGeo = new THREE.BoxGeometry(0.12, 0.4, 0.12);
-        const tailTip = new THREE.Mesh(tailTipGeo, darkMat);
-        tailTip.position.set(0, -0.7, 0);
-        tailPivot.add(tailTip);
-
-        tailPivot.rotation.x = 0.3; // Slight angle
+        tailPivot.position.set(0, 1.4, -0.75);
         this.mesh.add(tailPivot);
+
+        const tailGeo = new THREE.BoxGeometry(0.15, 0.8, 0.15);
+        const tail = new THREE.Mesh(tailGeo, maneMat);
+        tail.position.set(0, -0.4, 0);
+        tail.rotation.x = 0.2;
+        tailPivot.add(tail);
         this.tailPivot = tailPivot;
 
         // Legs
-        const legGeo = new THREE.BoxGeometry(0.3, 0.9, 0.3);
-
-        const makeLeg = (x, z) => {
+        const legHeight = 1.0;
+        const makeLeg = (x, z, hasSock = false) => {
             const pivot = new THREE.Group();
-            pivot.position.set(x, 0.9, z);
-            const leg = new THREE.Mesh(legGeo, mat);
-            leg.position.set(0, -0.45, 0);
-            pivot.add(leg);
+            pivot.position.set(x, 1.0, z);
+
+            // Upper leg
+            const upperLegGeo = new THREE.BoxGeometry(0.25, 0.5, 0.25);
+            const upperLeg = new THREE.Mesh(upperLegGeo, skinMat);
+            upperLeg.position.set(0, -0.25, 0);
+            pivot.add(upperLeg);
+
+            // Lower leg
+            const lowerLegGeo = new THREE.BoxGeometry(0.2, 0.5, 0.2);
+            const lowerLeg = new THREE.Mesh(lowerLegGeo, hasSock ? whiteMat : skinMat);
+            lowerLeg.position.set(0, -0.65, 0);
+            pivot.add(lowerLeg);
+
+            // Hoof
+            const hoofGeo = new THREE.BoxGeometry(0.25, 0.15, 0.25);
+            const hoof = new THREE.Mesh(hoofGeo, hoofMat);
+            hoof.position.set(0, -0.9, 0);
+            pivot.add(hoof);
+
             this.mesh.add(pivot);
             return pivot;
         };
 
         this.legParts = [
-            makeLeg(-0.3, 0.5),
-            makeLeg(0.3, 0.5),
-            makeLeg(-0.3, -0.5),
-            makeLeg(0.3, -0.5)
+            makeLeg(-0.3, 0.5, true),  // Front Left with sock
+            makeLeg(0.3, 0.5),         // Front Right
+            makeLeg(-0.3, -0.5),       // Back Left
+            makeLeg(0.3, -0.5, true)   // Back Right with sock
         ];
+
+        this.neckPivot = neckPivot;
+        this.headGroup = headGroup;
     }
 
     updateAnimation(dt) {
         super.updateAnimation(dt);
 
-        // Animate tail swishing
+        const time = this.animTime;
+
+        // Idle head/neck movement
+        if (this.neckPivot && this.speed < 0.1) {
+            this.neckPivot.rotation.y = Math.sin(time * 0.5) * 0.1;
+            this.neckPivot.rotation.x = Math.sin(time * 0.3) * 0.05;
+        }
+
+        // Tail swish
         if (this.tailPivot) {
-            const tailSwing = Math.sin(this.animTime * 0.5) * 0.2;
-            this.tailPivot.rotation.z = tailSwing;
+            const swishSpeed = this.isMoving ? 10 : 2;
+            const swishAmount = this.isMoving ? 0.4 : 0.2;
+            this.tailPivot.rotation.z = Math.sin(time * swishSpeed) * swishAmount;
+            this.tailPivot.rotation.x = 0.2 + Math.cos(time * swishSpeed * 0.5) * 0.1;
         }
     }
 }

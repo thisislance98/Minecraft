@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import GodModePlugin from './god-mode-vite-plugin.js';
-import AutoVersionBumpPlugin from './auto-version-plugin.js';
+// import AutoVersionBumpPlugin from './auto-version-plugin.js';
 
 export default defineConfig({
-  plugins: [GodModePlugin(), AutoVersionBumpPlugin()],
+  plugins: [GodModePlugin()],
   root: '.',
   publicDir: 'public',
   build: {

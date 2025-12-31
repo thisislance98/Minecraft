@@ -1,65 +1,33 @@
 /**
  * ItemRegistry - Centralized registry for all item classes with HMR support.
  * 
- * This module acts as the HMR boundary for item classes. When any item class
- * is updated, this registry accepts the update and notifies the game to show
- * a notification WITHOUT triggering a full page reload.
+ * Uses import.meta.glob to automatically discover and export all item classes
+ * from the ./items directory.
  */
 
-// Import all item classes
-import { Item } from './items/Item.js';
-import { WandItem } from './items/WandItem.js';
-import { ShrinkWandItem } from './items/ShrinkWandItem.js';
-import { GrowthWandItem } from './items/GrowthWandItem.js';
-import { BowItem } from './items/BowItem.js';
-import { FlyingBroomItem } from './items/FlyingBroomItem.js';
-import { LevitationWandItem } from './items/LevitationWandItem.js';
-import { GiantWandItem } from './items/GiantWandItem.js';
-import { WizardTowerWandItem } from './items/WizardTowerWandItem.js';
-import { OmniWandItem } from './items/OmniWandItem.js';
-import { RideWandItem } from './items/RideWandItem.js';
-import { CaptureWandItem } from './items/CaptureWandItem.js';
-import { SpawnEggItem } from './items/SpawnEggItem.js';
-import { WaterBucketItem } from './items/WaterBucketItem.js';
-import { SignItem } from './items/SignItem.js';
+// Auto-discover all item classes
+const modules = import.meta.glob('./items/*.js', { eager: true });
 
-// Export all classes for use by ItemManager and others
-export {
-    Item,
-    WandItem,
-    ShrinkWandItem,
-    GrowthWandItem,
-    BowItem,
-    FlyingBroomItem,
-    LevitationWandItem,
-    GiantWandItem,
-    WizardTowerWandItem,
-    OmniWandItem,
-    RideWandItem,
-    CaptureWandItem,
-    SpawnEggItem,
-    WaterBucketItem,
-    SignItem
-};
+export const ItemClasses = {};
 
-// Map of class names to classes for runtime lookup
-export const ItemClasses = {
-    Item,
-    WandItem,
-    ShrinkWandItem,
-    GrowthWandItem,
-    BowItem,
-    FlyingBroomItem,
-    LevitationWandItem,
-    GiantWandItem,
-    WizardTowerWandItem,
-    OmniWandItem,
-    RideWandItem,
-    CaptureWandItem,
-    SpawnEggItem,
-    WaterBucketItem,
-    SignItem
-};
+// Populate ItemClasses from the loaded modules
+for (const path in modules) {
+    const module = modules[path];
+    // Assume each module exports the item class as a named export matching the file name
+    // or as a named export that extends Item.
+    // For simplicity, we look for exports that look like item classes.
+    for (const key in module) {
+        if (typeof module[key] === 'function' && key.endsWith('Item')) {
+            ItemClasses[key] = module[key];
+        } else if (key === 'Item') {
+            ItemClasses[key] = module[key];
+        }
+    }
+}
+
+// Re-export individually for convenience if needed, though mostly ItemClasses should be used.
+// Note: We cannot dynamically create named exports in ES modules.
+// Consumers should use ItemClasses or import directly from the file if they need a specific class static import.
 
 /**
  * Show HMR notification in the UI
@@ -80,40 +48,14 @@ function showHMRNotification(modulePath) {
     }, 4000);
 }
 
-// HMR acceptance - this is the key part that prevents full page reloads
+// HMR acceptance
 if (import.meta.hot) {
-    // Accept updates to this module
-    import.meta.hot.accept((newModule) => {
-        if (newModule) {
-            // Update the exported classes in-place
-            Object.assign(ItemClasses, newModule.ItemClasses);
-            showHMRNotification('ItemRegistry.js');
-            console.log('[HMR] ItemRegistry updated');
-        }
-    });
-
-    // Accept updates to all item modules
-    const itemModules = [
-        './items/Item.js',
-        './items/WandItem.js',
-        './items/ShrinkWandItem.js',
-        './items/GrowthWandItem.js',
-        './items/BowItem.js',
-        './items/FlyingBroomItem.js',
-        './items/LevitationWandItem.js',
-        './items/GiantWandItem.js',
-        './items/WizardTowerWandItem.js',
-        './items/OmniWandItem.js',
-        './items/RideWandItem.js',
-        './items/CaptureWandItem.js',
-        './items/SpawnEggItem.js',
-        './items/WaterBucketItem.js',
-        './items/SignItem.js'
-    ];
-
-    import.meta.hot.accept(itemModules, (modules) => {
-        // When any item module updates, show notification
-        // The actual class updates are handled by the module system
-        console.log('[HMR] Item module(s) updated');
+    // Accept updates to the glob pattern
+    // import.meta.hot.accept is a bit tricky with globs, 
+    // typically Vite handles the module graph updates.
+    // We accept the module itself to trigger the notification.
+    import.meta.hot.accept(() => {
+        showHMRNotification('ItemRegistry.js');
+        console.log('[HMR] ItemRegistry updated');
     });
 }

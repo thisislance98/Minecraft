@@ -1,0 +1,17 @@
+{
+  "role": "model",
+  "parts": [
+    {
+      "functionCall": {
+        "name": "list_dir",
+        "args": {
+          "DirectoryPath": "src/game"
+        }
+      }
+    },
+    {
+      "text": ""
+    }
+  ]
+}
+---

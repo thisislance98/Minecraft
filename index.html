@@ -17,8 +17,20 @@
     <!-- Damage overlay for visual feedback -->
     <div id="damage-overlay"></div>
 
+    <!-- Visual Improvements: Vignette -->
+    <div id="vignette-overlay"></div>
+
     <!-- HMR Update Notifications -->
     <div id="hmr-notifications"></div>
+
+    <!-- Mobile Orientation Warning -->
+    <div id="landscape-warning" class="hidden">
+        <div class="warning-content">
+            <div class="rotate-icon">⟳</div>
+            <h2>Please Rotate Device</h2>
+            <p>This experience is best viewed in landscape mode.</p>
+        </div>
+    </div>
 
     <!-- Status Bars Container -->
     <div id="status-bars">
@@ -97,6 +109,20 @@
                         <input type="checkbox" id="settings-position-toggle" checked>
                         <span>Position Display</span>
                     </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-mobile-toggle">
+                        <span>Mobile Controls</span>
+                    </label>
+                </div>
+
+                <!-- Hotkey Settings -->
+                <div class="settings-section">
+                    <h4>⌨️ Hotkeys</h4>
+                    <p class="settings-description">Click a key box and press a key to reassign.</p>
+                    <label class="settings-hotkey">
+                        <span>Use Item / Interact</span>
+                        <input type="text" id="settings-hotkey-secondary" class="hotkey-input" readonly value="E">
+                    </label>
                 </div>
 
                 <!-- AI Settings -->
@@ -106,11 +132,16 @@
                         <input type="checkbox" id="settings-ai-streaming-toggle">
                         <span>Streaming Mode (text streams in real-time)</span>
                     </label>
+
                 </div>
 
                 <!-- World Settings -->
                 <div class="settings-section">
                     <h4>🌍 World</h4>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-persistence-toggle">
+                        <span>Creature Persistence (Save/Load Animals)</span>
+                    </label>
                     <p class="settings-description">Reset the world to regenerate terrain and clear all placed blocks,
                         creatures, and signs.</p>
                     <button id="reset-world-btn" class="danger-btn">🗑️ Reset World</button>
@@ -120,7 +151,7 @@
     </div>
 
     <div id="debug">
-        <p>v1.0.839</p>
+        <p>v1.0.961</p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -143,12 +174,22 @@
     <div id="chat-panel" class="hidden">
         <div class="chat-header">
             <div class="chat-title">AI ASSISTANT</div>
+            <button id="copy-chat" title="Copy Conversation"
+                style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">📋</button>
             <button id="close-chat">×</button>
         </div>
         <div id="chat-messages">
             <!-- Messages will be added here -->
             <div class="message ai">
                 <div class="message-content">Hello! I am ready. Press 'T' to toggle this panel.</div>
+            </div>
+            <!-- Stop Button (hidden by default) -->
+            <div id="chat-stop-container" class="hidden"
+                style="display: none; justify-content: center; margin-bottom: 10px;">
+                <button id="stop-generation-btn"
+                    style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: 'VT323', monospace; font-size: 16px;">
+                    ⏹ Stop Generating
+                </button>
             </div>
         </div>
         <div class="chat-input-container">

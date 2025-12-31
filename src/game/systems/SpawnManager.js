@@ -1,13 +1,8 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../../utils/SeededRandom.js';
 import { Blocks } from '../core/Blocks.js';
-import {
-    Pig, Horse, Chicken, Bunny, Frog, Wolf, Elephant, Lion, Bear, Tiger,
-    Deer, Giraffe, Fish, Turtle, Duck, Squirrel, Monkey, Reindeer, Sheep,
-    Goat, Turkey, Mouse, Snake, Zombie, Skeleton, Enderman, Creeper, Kangaroo, Pugasus, Cow, Snowman, Owl, SantaClaus, Unicorn,
-    Panda, Camel, Snail, Fox, FennecFox,
-    Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever, Dragon
-} from '../AnimalRegistry.js';
+import { AnimalClasses } from '../AnimalRegistry.js';
+
 /**
  * SpawnManager handles all animal spawning logic.
  * Uses a config-driven approach for biome-specific spawns.
@@ -22,12 +17,6 @@ export class SpawnManager {
         // If offline, we are ready immediately. If online, wait for server.
         this.waitingForInitialSync = !this.game.isOffline;
 
-        this.allowedAnimals = new Set(); // If empty, all allowed. If not empty, only those in set.
-        // Actually, better to default to ALL allowed.
-        // Let's use a flag or assume if it's in the set it's allowed.
-        // DebugPanel initializes it with all keys.
-        // So let's initialize it empty and say "empty means all"? Or just logic in DebugPanel?
-        // Let's make it robust:
         this.allowedAnimals = null; // null = all allowed. Set = filter.
 
         // Deferred spawning - wait until world is ready
@@ -36,138 +25,135 @@ export class SpawnManager {
 
 
         // Biome spawn configuration
-        // Each entry: { class, weight (0-1), packSize: [min, max] }
+        // Each entry: { type: 'ClassName', weight (0-1), packSize: [min, max] }
         this.biomeSpawnConfig = {
             OCEAN: [
-                { class: Fish, weight: 0.5, packSize: [3, 7] },
-                { class: Shark, weight: 0.1, packSize: [1, 2] },
-                { class: Turtle, weight: 0.2, packSize: [1, 2] },
-                { class: Dolphin, weight: 0.2, packSize: [3, 6] }
+                { type: 'Fish', weight: 0.5, packSize: [3, 7] },
+                { type: 'Shark', weight: 0.1, packSize: [1, 2] },
+                { type: 'Turtle', weight: 0.2, packSize: [1, 2] },
+                { type: 'Dolphin', weight: 0.2, packSize: [3, 6] }
             ],
             BEACH: [
-                { class: Turtle, weight: 0.3, packSize: [1, 2] },
-                { class: Duck, weight: 0.3, packSize: [2, 4] },
-                { class: Flamingo, weight: 0.3, packSize: [2, 5] }
+                { type: 'Turtle', weight: 0.3, packSize: [1, 2] },
+                { type: 'Duck', weight: 0.3, packSize: [2, 4] },
+                { type: 'Flamingo', weight: 0.3, packSize: [2, 5] }
             ],
             PLAINS: [
-                { class: Horse, weight: 0.25, packSize: [3, 6] },
-                { class: Pig, weight: 0.15, packSize: [2, 4] },
-                { class: Chicken, weight: 0.15, packSize: [4, 7] },
-                { class: Bunny, weight: 0.2, packSize: [2, 4] },
-                { class: Fish, weight: 0.15, packSize: [3, 5] },
-                { class: Duck, weight: 0.1, packSize: [2, 4] },
-                { class: Duck, weight: 0.1, packSize: [2, 4] },
-                { class: Sheep, weight: 0.2, packSize: [3, 5] },
-                { class: Turkey, weight: 0.1, packSize: [2, 4] },
-                { class: Mouse, weight: 0.15, packSize: [2, 4] },
-                { class: Snake, weight: 0.1, packSize: [1, 3] },
-                { class: Kangaroo, weight: 0.15, packSize: [2, 5] },
-                { class: Cow, weight: 0.2, packSize: [2, 5] },
-                { class: Fox, weight: 0.1, packSize: [1, 2] },
-                { class: Ladybug, weight: 0.15, packSize: [3, 6] },
-                { class: Gymnast, weight: 0.05, packSize: [1, 2] },
-                { class: Gymnast, weight: 0.05, packSize: [1, 2] },
-                { class: Raccoon, weight: 0.08, packSize: [1, 2] },
-                { class: Raccoon, weight: 0.08, packSize: [1, 2] },
-                { class: WienerDog, weight: 0.15, packSize: [2, 3] },
-                { class: GoldenRetriever, weight: 0.2, packSize: [1, 2] }
+                { type: 'Horse', weight: 0.25, packSize: [3, 6] },
+                { type: 'Pig', weight: 0.15, packSize: [2, 4] },
+                { type: 'Chicken', weight: 0.15, packSize: [4, 7] },
+                { type: 'Bunny', weight: 0.2, packSize: [2, 4] },
+                { type: 'Fish', weight: 0.15, packSize: [3, 5] },
+                { type: 'Duck', weight: 0.1, packSize: [2, 4] },
+                { type: 'Sheep', weight: 0.2, packSize: [3, 5] },
+                { type: 'Turkey', weight: 0.1, packSize: [2, 4] },
+                { type: 'Mouse', weight: 0.15, packSize: [2, 4] },
+                { type: 'Snake', weight: 0.1, packSize: [1, 3] },
+                { type: 'Kangaroo', weight: 0.15, packSize: [2, 5] },
+                { type: 'Cow', weight: 0.2, packSize: [2, 5] },
+                { type: 'Fox', weight: 0.1, packSize: [1, 2] },
+                { type: 'Ladybug', weight: 0.15, packSize: [3, 6] },
+                { type: 'Gymnast', weight: 0.05, packSize: [1, 2] },
+                { type: 'Raccoon', weight: 0.08, packSize: [1, 2] },
+                { type: 'WienerDog', weight: 0.15, packSize: [2, 3] },
+                { type: 'GoldenRetriever', weight: 0.2, packSize: [1, 2] }
             ],
             FOREST: [
-                { class: Wolf, weight: 0.05, packSize: [2, 4] },
-                { class: Bear, weight: 0.05, packSize: [1, 2] },
-                { class: Deer, weight: 0.05, packSize: [2, 4] },
-                { class: Squirrel, weight: 0.05, packSize: [3, 5] },
-                { class: Duck, weight: 0.05, packSize: [2, 4] },
-                { class: Chicken, weight: 0.05, packSize: [4, 7] },
-                { class: Pig, weight: 0.05, packSize: [2, 4] },
-                { class: Bunny, weight: 0.05, packSize: [2, 4] },
-                { class: Lion, weight: 0.05, packSize: [1, 2] },
-                { class: Tiger, weight: 0.05, packSize: [1, 2] },
-                { class: Elephant, weight: 0.05, packSize: [1, 2] },
-                { class: Giraffe, weight: 0.05, packSize: [1, 2] },
-                { class: Horse, weight: 0.05, packSize: [3, 5] },
-                { class: Monkey, weight: 0.05, packSize: [3, 5] },
-                { class: Frog, weight: 0.05, packSize: [2, 4] },
-                { class: Reindeer, weight: 0.05, packSize: [2, 4] },
-                { class: Turtle, weight: 0.05, packSize: [1, 2] },
-                { class: Turkey, weight: 0.1, packSize: [2, 4] },
-                { class: Mouse, weight: 0.05, packSize: [2, 4] },
-                { class: Snake, weight: 0.08, packSize: [1, 2] },
-                { class: Cow, weight: 0.08, packSize: [2, 4] },
-                { class: Snail, weight: 0.1, packSize: [2, 4] },
+                { type: 'Wolf', weight: 0.05, packSize: [2, 4] },
+                { type: 'Bear', weight: 0.05, packSize: [1, 2] },
+                { type: 'Deer', weight: 0.05, packSize: [2, 4] },
+                { type: 'Squirrel', weight: 0.05, packSize: [3, 5] },
+                { type: 'Duck', weight: 0.05, packSize: [2, 4] },
+                { type: 'Chicken', weight: 0.05, packSize: [4, 7] },
+                { type: 'Pig', weight: 0.05, packSize: [2, 4] },
+                { type: 'Bunny', weight: 0.05, packSize: [2, 4] },
+                { type: 'Lion', weight: 0.05, packSize: [1, 2] },
+                { type: 'Tiger', weight: 0.05, packSize: [1, 2] },
+                { type: 'Elephant', weight: 0.05, packSize: [1, 2] },
+                { type: 'Giraffe', weight: 0.05, packSize: [1, 2] },
+                { type: 'Horse', weight: 0.05, packSize: [3, 5] },
+                { type: 'Monkey', weight: 0.05, packSize: [3, 5] },
+                { type: 'Frog', weight: 0.05, packSize: [2, 4] },
+                { type: 'Reindeer', weight: 0.05, packSize: [2, 4] },
+                { type: 'Turtle', weight: 0.05, packSize: [1, 2] },
+                { type: 'Turkey', weight: 0.1, packSize: [2, 4] },
+                { type: 'Mouse', weight: 0.05, packSize: [2, 4] },
+                { type: 'Snake', weight: 0.08, packSize: [1, 2] },
+                { type: 'Cow', weight: 0.08, packSize: [2, 4] },
+                { type: 'Snail', weight: 0.1, packSize: [2, 4] },
                 // Some fish for water patches
-                { class: Fish, weight: 0.05, packSize: [2, 4] },
-                { class: Fox, weight: 0.08, packSize: [1, 3] },
-                { class: Ladybug, weight: 0.1, packSize: [2, 5] },
-                { class: Toucan, weight: 0.08, packSize: [2, 4] },
-                { class: Toucan, weight: 0.08, packSize: [2, 4] },
-                { class: Raccoon, weight: 0.08, packSize: [1, 3] },
-                { class: GoldenRetriever, weight: 0.1, packSize: [1, 2] }
+                { type: 'Fish', weight: 0.05, packSize: [2, 4] },
+                { type: 'Fox', weight: 0.08, packSize: [1, 3] },
+                { type: 'Ladybug', weight: 0.1, packSize: [2, 5] },
+                { type: 'Toucan', weight: 0.08, packSize: [2, 4] },
+                { type: 'Raccoon', weight: 0.08, packSize: [1, 3] },
+                { type: 'GoldenRetriever', weight: 0.1, packSize: [1, 2] }
             ],
             JUNGLE: [
-                { class: Monkey, weight: 0.3, packSize: [3, 6] },
-                { class: Tiger, weight: 0.15, packSize: [1, 2] },
-                { class: Frog, weight: 0.3, packSize: [2, 4] },
-                { class: Fish, weight: 0.15, packSize: [3, 5] },
-                { class: Turtle, weight: 0.1, packSize: [1, 2] },
-                { class: Snake, weight: 0.2, packSize: [2, 4] },
-                { class: Panda, weight: 0.15, packSize: [1, 2] },
-                { class: Snail, weight: 0.15, packSize: [2, 5] },
-                { class: Toucan, weight: 0.25, packSize: [3, 5] },
-                { class: Flamingo, weight: 0.1, packSize: [2, 4] }
+                { type: 'Monkey', weight: 0.3, packSize: [3, 6] },
+                { type: 'Tiger', weight: 0.15, packSize: [1, 2] },
+                { type: 'Frog', weight: 0.3, packSize: [2, 4] },
+                { type: 'Fish', weight: 0.15, packSize: [3, 5] },
+                { type: 'Turtle', weight: 0.1, packSize: [1, 2] },
+                { type: 'Snake', weight: 0.2, packSize: [2, 4] },
+                { type: 'Worm', weight: 0.25, packSize: [3, 6] },
+                { type: 'Panda', weight: 0.15, packSize: [1, 2] },
+                { type: 'Snail', weight: 0.15, packSize: [2, 5] },
+                { type: 'Toucan', weight: 0.25, packSize: [3, 5] },
+                { type: 'Flamingo', weight: 0.1, packSize: [2, 4] },
+                { type: 'Mouse', weight: 0.1, packSize: [2, 3] }
             ],
             DESERT: [
-                { class: Bunny, weight: 0.3, packSize: [1, 3] },
-                { class: Snake, weight: 0.4, packSize: [1, 2] },
-                { class: Kangaroo, weight: 0.3, packSize: [2, 4] },
-                { class: Camel, weight: 0.35, packSize: [2, 4] },
-                { class: FennecFox, weight: 0.25, packSize: [2, 4] }
+                { type: 'Bunny', weight: 0.3, packSize: [1, 3] },
+                { type: 'Snake', weight: 0.4, packSize: [1, 2] },
+                { type: 'Kangaroo', weight: 0.3, packSize: [2, 4] },
+                { type: 'Camel', weight: 0.35, packSize: [2, 4] },
+                { type: 'FennecFox', weight: 0.25, packSize: [2, 4] },
+                { type: 'Mouse', weight: 0.15, packSize: [1, 3] }
             ],
             SNOW: [
-                { class: Reindeer, weight: 0.3, packSize: [3, 5] },
-                { class: Bear, weight: 0.15, packSize: [1, 1] },
-                { class: Wolf, weight: 0.25, packSize: [2, 4] },
-                { class: Snowman, weight: 0.3, packSize: [1, 3] },
-                { class: Penguin, weight: 0.4, packSize: [3, 8] },
-                { class: SantaClaus, weight: 0.1, packSize: [1, 1] },
-                { class: Snowflake, weight: 0.2, packSize: [1, 3] }
+                { type: 'Reindeer', weight: 0.3, packSize: [3, 5] },
+                { type: 'Bear', weight: 0.15, packSize: [1, 1] },
+                { type: 'Wolf', weight: 0.25, packSize: [2, 4] },
+                { type: 'Snowman', weight: 0.3, packSize: [1, 3] },
+                { type: 'Penguin', weight: 0.4, packSize: [3, 8] },
+                { type: 'SantaClaus', weight: 0.1, packSize: [1, 1] },
+                { type: 'Snowflake', weight: 0.2, packSize: [1, 3] }
             ],
             MOUNTAIN: [
-                { class: Reindeer, weight: 0.3, packSize: [2, 4] },
-                { class: Sheep, weight: 0.4, packSize: [2, 4] },
-                { class: Sheep, weight: 0.4, packSize: [2, 4] },
-                { class: Goat, weight: 0.3, packSize: [1, 3] },
-                { class: SantaClaus, weight: 0.05, packSize: [1, 1] }
+                { type: 'Reindeer', weight: 0.3, packSize: [2, 4] },
+                { type: 'Sheep', weight: 0.4, packSize: [2, 4] },
+                { type: 'Goat', weight: 0.3, packSize: [1, 3] },
+                { type: 'SantaClaus', weight: 0.05, packSize: [1, 1] }
             ]
         };
 
         // Rare spawns (can occur in any biome)
         this.rareSpawns = [
-            { class: Elephant, weight: 0.02, packSize: [1, 2] },
-            { class: Giraffe, weight: 0.02, packSize: [1, 2] },
-            { class: Lion, weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'DESERT'] },
-            { class: Lion, weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'DESERT'] },
-            { class: Pugasus, weight: 0.03, packSize: [1, 2] }, // Mythical chimera creature!
-            { class: Unicorn, weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] },
-            { class: MagicalCreature, weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] }, // Unicorn-fox-toucan hybrid!
-            { class: TRex, weight: 0.02, packSize: [1, 1], biomes: ['JUNGLE', 'FOREST', 'PLAINS'] }, // HUGE T-REX
-            { class: Dragon, weight: 0.02, packSize: [1, 1], biomes: ['MOUNTAIN', 'SNOW', 'PLAINS', 'DESERT'] }, // Flying Dragons
-            { class: Lampost, weight: 0.04, packSize: [1, 1], biomes: ['PLAINS', 'FOREST', 'SNOW'] }, // Walking Lampost (Narnia vibes)
-            { class: Pumpkin, weight: 0.05, packSize: [3, 5], biomes: ['FOREST', 'PLAINS'] }, // Flying Pumpkins
-            { class: Lorax, weight: 0.1, packSize: [1, 1], biomes: ['FOREST'] }, // Speaks for the trees!
-            { class: Snowflake, weight: 0.05, packSize: [1, 2], biomes: ['SNOW', 'MOUNTAIN'] },
-            { class: Chimera, weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
-            { class: Chimera, weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
-            { class: WienerDog, weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'DESERT'] },
-            { class: GoldenRetriever, weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] }
+            { type: 'Elephant', weight: 0.02, packSize: [1, 2] },
+            { type: 'Giraffe', weight: 0.02, packSize: [1, 2] },
+            { type: 'Lion', weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'DESERT'] },
+            { type: 'Pugasus', weight: 0.03, packSize: [1, 2] }, // Mythical chimera creature!
+            { type: 'Pegasus', weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'MOUNTAIN', 'SNOW'] },
+            { type: 'Unicorn', weight: 0.02, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] },
+            { type: 'MagicalCreature', weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] }, // Unicorn-fox-toucan hybrid!
+            { type: 'TRex', weight: 0.02, packSize: [1, 1], biomes: ['JUNGLE', 'FOREST', 'PLAINS'] }, // HUGE T-REX
+            { type: 'Dragon', weight: 0.02, packSize: [1, 1], biomes: ['MOUNTAIN', 'SNOW', 'PLAINS', 'DESERT'] }, // Flying Dragons
+            { type: 'Lampost', weight: 0.04, packSize: [1, 1], biomes: ['PLAINS', 'FOREST', 'SNOW'] }, // Walking Lampost (Narnia vibes)
+            { type: 'Pumpkin', weight: 0.05, packSize: [3, 5], biomes: ['FOREST', 'PLAINS'] }, // Flying Pumpkins
+            { type: 'Lorax', weight: 0.1, packSize: [1, 1], biomes: ['FOREST'] }, // Speaks for the trees!
+            { type: 'Snowflake', weight: 0.05, packSize: [1, 2], biomes: ['SNOW', 'MOUNTAIN'] },
+            { type: 'Chimera', weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
+            { type: 'WienerDog', weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'DESERT'] },
+            { type: 'GoldenRetriever', weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] },
+            { type: 'DuneWorm', weight: 0.05, packSize: [1, 1], biomes: ['DESERT'] }
         ];
 
         // Hostile mobs (spawn always now for testing)
         this.hostileMobs = [
-            { class: Zombie, weight: 0.4, packSize: [2, 4] },
-            { class: Skeleton, weight: 0.25, packSize: [1, 3] },
-            { class: Creeper, weight: 0.25, packSize: [1, 2] },
-            { class: Enderman, weight: 0.1, packSize: [1, 1] }
+            { type: 'Zombie', weight: 0.4, packSize: [2, 4] },
+            { type: 'Skeleton', weight: 0.25, packSize: [1, 3] },
+            { type: 'Creeper', weight: 0.25, packSize: [1, 2] }
         ];
 
         // Entity Lookup (for updates)
@@ -183,6 +169,16 @@ export class SpawnManager {
 
         // Mark that we've received the initial entities event from server
         this.hasReceivedInitialEntities = true;
+
+        // Check persistence setting (Default: OFF)
+        const persistenceEnabled = localStorage.getItem('settings_persistence') === 'true';
+
+        if (!persistenceEnabled) {
+            console.log('[SpawnManager] Persistence is OFF. Ignoring server entities and generating fresh creatures.');
+            // Mark sync as complete immediately so we can start generating fresh chunks
+            this.markInitialSyncComplete();
+            return;
+        }
 
         // If there are persisted entities, disable chunk-based spawning to prevent duplicates
         // When entities list is empty, allow normal chunk spawning for fresh worlds
@@ -208,6 +204,25 @@ export class SpawnManager {
         // If world is also ready, process the queue now
         if (this.isWorldReady) {
             this.processPendingSpawns();
+
+            // Run deferred special spawns if they were attempted
+            // (only if no persisted entities - those checks are inside the methods)
+            if (this._deferredKangarooSpawn) {
+                this._deferredKangarooSpawn = false;
+                this.spawnKangaroosNearPlayer();
+            }
+            if (this._deferredPugasusSpawn) {
+                this._deferredPugasusSpawn = false;
+                this.spawnPugasusNearPlayer();
+            }
+            if (this._deferredSnowmenSpawn) {
+                this._deferredSnowmenSpawn = false;
+                this.spawnSnowmenNearPlayer();
+            }
+            if (this._deferredChristmasTreeSpawn) {
+                this._deferredChristmasTreeSpawn = false;
+                this.spawnChristmasTreeNearPlayer();
+            }
         }
     }
 
@@ -239,9 +254,6 @@ export class SpawnManager {
 
         // Find Class
         // We stored "type": this.constructor.name (e.g. "Pig")
-        // We need to map string to class.
-        // We can search through registry imports, or just iterate common ones?
-        // We don't have a direct map exposed. Let's make a map.
         const AnimalClass = this.findAnimalClass(data.type);
 
         if (AnimalClass) {
@@ -268,16 +280,7 @@ export class SpawnManager {
     }
 
     findAnimalClass(typeName) {
-        // Simple linear search or map. We imported them all above.
-        // Let's build a static map for performance next time, but for now:
-        const registry = [
-            Pig, Horse, Chicken, Bunny, Frog, Wolf, Elephant, Lion, Bear, Tiger,
-            Deer, Giraffe, Fish, Turtle, Duck, Squirrel, Monkey, Reindeer, Sheep,
-            Goat, Turkey, Mouse, Snake, Zombie, Skeleton, Enderman, Creeper, Kangaroo, Pugasus, Cow, Snowman, Owl, SantaClaus, Unicorn,
-            Panda, Camel, Snail, Fox, FennecFox,
-            Ladybug, Toucan, Gymnast, MagicalCreature, Raccoon, Shark, TRex, Lampost, Pumpkin, Lorax, Penguin, Dolphin, Snowflake, Chimera, Flamingo, WienerDog, GoldenRetriever
-        ];
-        return registry.find(cls => cls.name === typeName);
+        return AnimalClasses[typeName];
     }
 
     handleRemoteUpdate(data) {
@@ -358,7 +361,10 @@ export class SpawnManager {
         for (const rare of this.rareSpawns) {
             if (rare.biomes && !rare.biomes.includes(biome)) continue;
             if (chunkRng.next() < rare.weight) {
-                this.spawnPack(rare.class, rare.packSize, bx, bz, chunkRng);
+                const AnimalClass = AnimalClasses[rare.type];
+                if (AnimalClass) {
+                    this.spawnPack(AnimalClass, rare.packSize, bx, bz, chunkRng);
+                }
             }
         }
 
@@ -402,13 +408,16 @@ export class SpawnManager {
 
         for (const entry of this.hostileMobs) {
             // Check allowed list
-            if (this.allowedAnimals && !this.allowedAnimals.has(entry.class.name)) {
+            if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
                 continue;
             }
 
             cumulative += entry.weight;
             if (roll < cumulative) {
-                this.spawnPack(entry.class, entry.packSize, bx, bz, rng);
+                const AnimalClass = AnimalClasses[entry.type];
+                if (AnimalClass) {
+                    this.spawnPack(AnimalClass, entry.packSize, bx, bz, rng);
+                }
                 break;
             }
         }
@@ -420,13 +429,16 @@ export class SpawnManager {
 
         for (const entry of config) {
             // Check allowed list
-            if (this.allowedAnimals && !this.allowedAnimals.has(entry.class.name)) {
+            if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
                 continue;
             }
 
             cumulative += entry.weight;
             if (roll < cumulative) {
-                this.spawnPack(entry.class, entry.packSize, bx, bz, rng);
+                const AnimalClass = AnimalClasses[entry.type];
+                if (AnimalClass) {
+                    this.spawnPack(AnimalClass, entry.packSize, bx, bz, rng);
+                }
                 break;
             }
         }
@@ -444,15 +456,15 @@ export class SpawnManager {
             const terrainY = worldGen.getTerrainHeight(x, z);
 
             // Aquatic check
-            const isAquatic = (AnimalClass === Fish || AnimalClass === Turtle || AnimalClass === Duck || AnimalClass === Shark || AnimalClass === Dolphin);
+            const isAquatic = ['Fish', 'Turtle', 'Duck', 'Shark', 'Dolphin'].includes(AnimalClass.name);
 
-            if (AnimalClass === Fish || AnimalClass === Shark || AnimalClass === Dolphin) {
+            if (['Fish', 'Shark', 'Dolphin'].includes(AnimalClass.name)) {
                 // Fish spawn underwater
                 if (terrainY < worldGen.seaLevel) {
                     const waterY = worldGen.seaLevel - 1 - rng.next() * (worldGen.seaLevel - terrainY);
                     this.createAnimal(AnimalClass, x, waterY, z, false, childSeed);
                 }
-            } else if (AnimalClass === Monkey || AnimalClass === Squirrel) {
+            } else if (['Monkey', 'Squirrel'].includes(AnimalClass.name)) {
                 // Monkeys and Squirrels spawn in trees - find actual tree blocks
                 const treePos = this.findTreeSpawnPosition(x, z, terrainY);
                 if (treePos) {
@@ -465,8 +477,16 @@ export class SpawnManager {
             } else {
                 // Standard land animal
                 const y = terrainY + 1;
-                // If it's a land animal (not aquatic), don't spawn in water
-                if (!isAquatic && y <= worldGen.seaLevel + 1) continue;
+                // If it's a land animal (not aquatic), don't spawn in or on water
+                if (!isAquatic) {
+                    // Skip if below or at sea level (underwater or on water surface)
+                    if (y <= worldGen.seaLevel + 1) continue;
+                    // Also check if there's water at the spawn position
+                    const blockAtSpawn = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+                    if (blockAtSpawn && blockAtSpawn.type === 'water') continue;
+                    const blockBelow = this.game.getBlock(Math.floor(x), Math.floor(y) - 1, Math.floor(z));
+                    if (blockBelow && blockBelow.type === 'water') continue;
+                }
                 this.createAnimal(AnimalClass, x, y, z, true, childSeed);
             }
         }
@@ -533,6 +553,7 @@ export class SpawnManager {
         }
 
         const animal = new AnimalClass(this.game, x, spawnY, z, seed);
+        console.log(`[SpawnManager] Created animal instance: ${AnimalClass.name} at ${x},${spawnY},${z}`);
 
         // If this is a LOCALLY generated animal (via chunk gen or debug), 
         // we might check if it conflicts with a persisted entity?
@@ -608,9 +629,9 @@ export class SpawnManager {
                 }
 
                 // Found solid ground - spawn one block above it
-                // Also verify there's air above to stand in
+                // Also verify there's air above to stand in (NOT water - land animals shouldn't spawn on water)
                 const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
-                if (!blockAbove || blockAbove.type === 'water') {
+                if (!blockAbove) {
                     return checkY + 1;
                 }
             }
@@ -628,7 +649,7 @@ export class SpawnManager {
                 }
 
                 const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
-                if (!blockAbove || blockAbove.type === 'water') {
+                if (!blockAbove) {
                     return checkY + 1;
                 }
             }
@@ -642,7 +663,12 @@ export class SpawnManager {
      * Spawn kangaroos near the player's starting position
      */
     spawnKangaroosNearPlayer() {
-        // Skip if we've loaded persisted entities to prevent duplicates
+        // Skip if we're waiting for initial sync OR if persisted entities were loaded
+        if (this.waitingForInitialSync) {
+            console.log('[SpawnManager] Deferring kangaroo spawn (waiting for initial sync)');
+            this._deferredKangarooSpawn = true;
+            return;
+        }
         if (this.hasLoadedPersistedEntities) {
             console.log('[SpawnManager] Skipping kangaroo spawn (persisted entities exist)');
             return;
@@ -668,7 +694,9 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Kangaroo, x, y, z, true, rng.next());
+                if (AnimalClasses.Kangaroo) {
+                    this.createAnimal(AnimalClasses.Kangaroo, x, y, z, true, rng.next());
+                }
             }
         }
     }
@@ -678,7 +706,12 @@ export class SpawnManager {
      * These mythical chimera creatures greet the player!
      */
     spawnPugasusNearPlayer() {
-        // Skip if we've loaded persisted entities to prevent duplicates
+        // Skip if we're waiting for initial sync OR if persisted entities were loaded
+        if (this.waitingForInitialSync) {
+            console.log('[SpawnManager] Deferring Pugasus spawn (waiting for initial sync)');
+            this._deferredPugasusSpawn = true;
+            return;
+        }
         if (this.hasLoadedPersistedEntities) {
             console.log('[SpawnManager] Skipping Pugasus spawn (persisted entities exist)');
             return;
@@ -704,7 +737,9 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Pugasus, x, y, z, true, rng.next());
+                if (AnimalClasses.Pugasus) {
+                    this.createAnimal(AnimalClasses.Pugasus, x, y, z, true, rng.next());
+                }
             }
         }
     }
@@ -714,7 +749,12 @@ export class SpawnManager {
      * These festive friends walk around and talk with speech bubbles!
      */
     spawnSnowmenNearPlayer() {
-        // Skip if we've loaded persisted entities to prevent duplicates
+        // Skip if we're waiting for initial sync OR if persisted entities were loaded
+        if (this.waitingForInitialSync) {
+            console.log('[SpawnManager] Deferring Snowmen spawn (waiting for initial sync)');
+            this._deferredSnowmenSpawn = true;
+            return;
+        }
         if (this.hasLoadedPersistedEntities) {
             console.log('[SpawnManager] Skipping Snowmen spawn (persisted entities exist)');
             return;
@@ -740,7 +780,53 @@ export class SpawnManager {
 
             // Only spawn on valid land (above sea level)
             if (y > worldGen.seaLevel + 1) {
-                this.createAnimal(Snowman, x, y, z, true, rng.next());
+                if (AnimalClasses.Snowman) {
+                    this.createAnimal(AnimalClasses.Snowman, x, y, z, true, rng.next());
+                }
+            }
+        }
+    }
+
+    /**
+     * Spawn a Christmas Tree that chases you!
+     */
+    spawnChristmasTreeNearPlayer() {
+        // Skip if we're waiting for initial sync OR if persisted entities were loaded
+        if (this.waitingForInitialSync) {
+            console.log('[SpawnManager] Deferring ChristmasTree spawn (waiting for initial sync)');
+            this._deferredChristmasTreeSpawn = true;
+            return;
+        }
+        if (this.hasLoadedPersistedEntities) {
+            console.log('[SpawnManager] Skipping ChristmasTree spawn (persisted entities exist)');
+            return;
+        }
+
+        const player = this.game.player;
+        const worldGen = this.game.worldGen;
+
+        // Create deterministic RNG for initial spawns
+        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1004); // New seed
+        const count = 1; // Just one boss tree
+
+        console.log(`Spawning ${count} Christmas Tree near player spawn`);
+
+        for (let i = 0; i < count; i++) {
+            // Random position 15 blocks away (give player a chance to see it coming)
+            const angle = rng.next() * Math.PI * 2;
+            const distance = 15;
+            const x = player.position.x + Math.cos(angle) * distance;
+            const z = player.position.z + Math.sin(angle) * distance;
+            const terrainY = worldGen.getTerrainHeight(x, z);
+            const y = terrainY + 1;
+
+            // Only spawn on valid land (above sea level)
+            if (y > worldGen.seaLevel + 1) {
+                if (AnimalClasses.ChristmasTree) {
+                    this.createAnimal(AnimalClasses.ChristmasTree, x, y, z, true, rng.next());
+                } else {
+                    console.error('[SpawnManager] ChristmasTree class not found in AnimalRegistry!');
+                }
             }
         }
     }
@@ -754,46 +840,54 @@ export class SpawnManager {
         if (!EntityClass) return;
 
         const player = this.game.player;
-        const dist = 5;
+        let targetPos = null;
+        let snapToGround = true;
 
-        // Get direction player is facing
-        const dir = new THREE.Vector3();
-        this.game.camera.getWorldDirection(dir);
-        dir.y = 0; // Keep flat
-        dir.normalize();
+        // Use the reliable getTargetBlock from PhysicsManager
+        const target = this.game.physicsManager.getTargetBlock();
+        if (target) {
+            // Place on top of the block (like placing blocks)
+            targetPos = new THREE.Vector3(
+                target.x + target.normal.x + 0.5,
+                target.y + target.normal.y,
+                target.z + target.normal.z + 0.5
+            );
+            snapToGround = false; // Exact position
+        }
 
-        // Center point
-        const cx = player.position.x + dir.x * dist;
-        const cz = player.position.z + dir.z * dist;
-        const cy = this.game.player.position.y;
+        if (!targetPos) {
+            // Fallback: in front of player
+            const dir = new THREE.Vector3();
+            this.game.camera.getWorldDirection(dir);
+            dir.y = 0;
+            dir.normalize();
+
+            targetPos = new THREE.Vector3(
+                player.position.x + dir.x * 5,
+                player.position.y,
+                player.position.z + dir.z * 5
+            );
+            snapToGround = true;
+        }
 
         // Use SeededRandom for debug spawns so they also get seeds
-        const rng = new SeededRandom(Math.random() * 0xFFFFFF); // Random seed for the pack, but controlled children
+        const rng = new SeededRandom(Math.random() * 0xFFFFFF);
         for (let i = 0; i < count; i++) {
-            // Spread slightly
             const ox = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
             const oz = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
 
-            // Adjust Y to terrain if needed, or drop from sky
-            // Let's spawn slightly above player level or terrain level
-            const tx = cx + ox;
-            const tz = cz + oz;
-            const terrainH = this.game.worldGen.getTerrainHeight(tx, tz);
-            // Always spawn on the ground, not at player's height
-            const spawnY = terrainH + 1;
+            const animal = this.createAnimal(EntityClass, targetPos.x + ox, targetPos.y, targetPos.z + oz, snapToGround, rng.next());
 
-            const animal = this.createAnimal(EntityClass, tx, spawnY, tz, false, rng.next());
             if (animal && this.game.socketManager) {
                 this.game.socketManager.sendEntitySpawn(animal.serialize());
             }
         }
-        console.log(`Debug spawned ${count} ${EntityClass.name} `);
+        console.log(`Debug spawned ${count} ${EntityClass.name} at ${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}, ${targetPos.z.toFixed(1)}`);
 
-        // Return information about the spawned entities
         return {
             count: count,
             creature: EntityClass.name,
-            position: { x: cx, y: cy, z: cz }
+            position: targetPos
         };
     }
 }

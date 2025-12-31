@@ -5,6 +5,7 @@ export class CaptureWandItem extends Item {
     constructor() {
         super('capture_wand', 'Capture Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -48,5 +49,9 @@ export class CaptureWandItem extends Item {
         }
 
         return false;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

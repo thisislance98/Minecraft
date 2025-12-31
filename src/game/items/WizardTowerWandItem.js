@@ -6,6 +6,7 @@ export class WizardTowerWandItem extends Item {
     constructor() {
         super('wizard_tower_wand', 'Wizard Tower Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -24,5 +25,9 @@ export class WizardTowerWandItem extends Item {
             console.error("spawnWizardTowerProjectile not defined in game");
             return false;
         }
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

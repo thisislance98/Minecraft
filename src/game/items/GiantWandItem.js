@@ -6,6 +6,7 @@ export class GiantWandItem extends Item {
     constructor() {
         super('giant_wand', 'Giant Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -19,5 +20,9 @@ export class GiantWandItem extends Item {
 
         game.spawnGiantProjectile(spawnPos, velocity);
         return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

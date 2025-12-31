@@ -170,6 +170,25 @@ export class Dragon extends Animal {
         this.hoverOffset = 0;
         this.baseY = this.position.y;
         this.flyingHeight = 15; // Target height above terrain
+
+        // Dynamic flight behavior (like birds)
+        this.flightSpeed = 12.0; // Base flight speed
+        this.flightVelocity = new THREE.Vector3(
+            (Math.random() - 0.5) * this.flightSpeed,
+            0,
+            (Math.random() - 0.5) * this.flightSpeed
+        );
+        this.directionChangeTimer = 0;
+        this.directionChangeInterval = 3 + Math.random() * 4; // 3-7 seconds
+        this.targetDirection = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+        this.turnSpeed = 1.5; // How fast dragon turns
+        this.swoopTimer = Math.random() * Math.PI * 2; // For swooping motion
+        this.circleCenter = null; // For circling behavior
+        this.circleRadius = 20 + Math.random() * 15;
+        this.circleAngle = Math.random() * Math.PI * 2;
+        this.isCircling = false;
+        this.homePosition = new THREE.Vector3(this.position.x, this.position.y, this.position.z);
+        this.maxRoamDistance = 100; // How far from home position
     }
 
     createWing(boneMat) {
@@ -199,44 +218,121 @@ export class Dragon extends Animal {
     }
 
     update(dt) {
-        super.update(dt);
-
-        // Flap wings
-        this.wingFlapTimer += dt * 5;
-        const flapAngle = Math.sin(this.wingFlapTimer) * 0.4;
-
-        this.leftWing.rotation.z = flapAngle + 0.2; // Base offset + flap
-        this.rightWing.rotation.z = -flapAngle - 0.2;
-
-        // Flying behavior
-        // Target a specific height above the ground
-
-        // Find ground height below us
-        const groundY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(this.position.x, this.position.z) : 0;
-        const targetAbsY = groundY + this.flyingHeight;
-
-        // Smoothly move towards target height
-        const yDiff = targetAbsY - this.position.y;
-        this.velocity.y = yDiff * 0.5; // Simple P-controller
-
-        // Apply bobbing
-        this.hoverOffset += dt;
-        this.position.y += Math.sin(this.hoverOffset) * 0.02;
-
-        // Override gravity effects from super.updatePhysics
-        // We actually want to manually apply our Y velocity since super might zero it out on ground collision
-        this.position.y += this.velocity.y * dt;
-
-        // Ensure we don't go underground
-        if (this.position.y < groundY + 2) {
-            this.position.y = groundY + 2;
-            this.velocity.y = 0;
+        // Skip the parent update physics - we handle our own movement
+        // Just update the mesh position
+        if (this.mesh) {
+            this.mesh.position.copy(this.position);
         }
 
-        // Move forward constantly if not idle (patrol)
-        if (this.state === 'idle') {
-            this.state = 'walk'; // Force patrol
-            this.speed = 8.0; // Fast flight
+        // Flap wings - faster when flying fast
+        const speed = this.flightVelocity.length();
+        const flapRate = 3 + (speed / this.flightSpeed) * 4; // 3-7 Hz based on speed
+        this.wingFlapTimer += dt * flapRate;
+        const flapAngle = Math.sin(this.wingFlapTimer) * 0.5;
+
+        this.leftWing.rotation.z = flapAngle + 0.3;
+        this.rightWing.rotation.z = -flapAngle - 0.3;
+
+        // --- Direction Change Logic ---
+        this.directionChangeTimer += dt;
+        if (this.directionChangeTimer >= this.directionChangeInterval) {
+            this.directionChangeTimer = 0;
+            this.directionChangeInterval = 3 + Math.random() * 5;
+
+            // Randomly decide behavior: circle, swoop, or new direction
+            const behavior = Math.random();
+            if (behavior < 0.3) {
+                // Start circling
+                this.isCircling = true;
+                this.circleCenter = this.position.clone();
+                this.circleRadius = 15 + Math.random() * 20;
+            } else {
+                this.isCircling = false;
+                // Pick a new random direction
+                const angle = Math.random() * Math.PI * 2;
+                this.targetDirection.set(Math.cos(angle), 0, Math.sin(angle)).normalize();
+            }
+        }
+
+        // --- Flight Velocity Update ---
+        if (this.isCircling) {
+            // Circle around the center point
+            this.circleAngle += dt * 0.5; // Angular velocity
+            const targetX = this.circleCenter.x + Math.cos(this.circleAngle) * this.circleRadius;
+            const targetZ = this.circleCenter.z + Math.sin(this.circleAngle) * this.circleRadius;
+
+            const toTarget = new THREE.Vector3(targetX - this.position.x, 0, targetZ - this.position.z);
+            toTarget.normalize().multiplyScalar(this.flightSpeed);
+
+            // Smoothly blend towards target velocity
+            this.flightVelocity.lerp(toTarget, dt * 2);
+        } else {
+            // Move in target direction
+            const targetVelocity = this.targetDirection.clone().multiplyScalar(this.flightSpeed);
+            this.flightVelocity.lerp(targetVelocity, dt * this.turnSpeed);
+        }
+
+        // --- Bounds checking - stay near home ---
+        const distFromHome = new THREE.Vector2(
+            this.position.x - this.homePosition.x,
+            this.position.z - this.homePosition.z
+        ).length();
+
+        if (distFromHome > this.maxRoamDistance) {
+            // Steer back towards home
+            const toHome = new THREE.Vector3(
+                this.homePosition.x - this.position.x,
+                0,
+                this.homePosition.z - this.position.z
+            ).normalize();
+            this.targetDirection.copy(toHome);
+            this.isCircling = false;
+        }
+
+        // --- Height control with swooping ---
+        this.swoopTimer += dt * 0.8;
+        const swoopOffset = Math.sin(this.swoopTimer) * 5; // Swoop ±5 blocks
+
+        const groundY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(this.position.x, this.position.z) : 0;
+        const targetY = groundY + this.flyingHeight + swoopOffset;
+
+        const yDiff = targetY - this.position.y;
+        this.flightVelocity.y = yDiff * 1.5; // Responsive height adjustment
+
+        // Limit vertical speed
+        const maxVertSpeed = this.flightSpeed * 0.4;
+        this.flightVelocity.y = Math.max(-maxVertSpeed, Math.min(maxVertSpeed, this.flightVelocity.y));
+
+        // --- Apply velocity ---
+        this.position.x += this.flightVelocity.x * dt;
+        this.position.y += this.flightVelocity.y * dt;
+        this.position.z += this.flightVelocity.z * dt;
+
+        // Ensure minimum height
+        if (this.position.y < groundY + 3) {
+            this.position.y = groundY + 3;
+            this.flightVelocity.y = Math.abs(this.flightVelocity.y); // Bounce up
+        }
+
+        // --- Orient dragon to face flight direction ---
+        if (this.mesh && this.flightVelocity.lengthSq() > 0.1) {
+            // Calculate heading (Y rotation) from horizontal velocity using atan2
+            const heading = Math.atan2(this.flightVelocity.x, this.flightVelocity.z);
+
+            // Calculate pitch (X rotation) from vertical velocity
+            const horizontalSpeed = Math.sqrt(this.flightVelocity.x * this.flightVelocity.x + this.flightVelocity.z * this.flightVelocity.z);
+            const pitch = Math.atan2(-this.flightVelocity.y, horizontalSpeed) * 0.3; // Subtle pitch, limited
+
+            // Apply rotations manually - no lookAt to avoid upside-down issues
+            this.mesh.rotation.order = 'YXZ'; // Yaw, then pitch, then roll
+            this.mesh.rotation.y = heading - Math.PI / 2; // Dragon faces +X in model space
+            this.mesh.rotation.x = pitch;
+            this.mesh.rotation.z = 0; // Keep level, no banking that could flip
+        }
+
+        // Update mesh position
+        if (this.mesh) {
+            this.mesh.position.copy(this.position);
         }
     }
 }

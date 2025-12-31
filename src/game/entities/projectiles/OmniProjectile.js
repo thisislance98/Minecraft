@@ -41,6 +41,9 @@ export class OmniProjectile {
     }
 
     update(dt) {
+        if (this.game.gameState && this.game.gameState.flags.isTimeStopped) {
+            return true;
+        }
         this.lifeTime += dt;
 
         if (this.hasExploded) {

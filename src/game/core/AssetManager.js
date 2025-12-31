@@ -31,7 +31,7 @@ export class AssetManager {
             'log': { hardness: 1.0 },
             'birch_wood': { hardness: 1.0 },
             'pine_wood': { hardness: 1.0 },
-            'planks': { hardness: 1.0 },
+            'plank': { hardness: 1.0 },
             'leaves': { hardness: 0.1 },
             'birch_leaves': { hardness: 0.1 },
             'pine_leaves': { hardness: 0.1 },
@@ -51,7 +51,7 @@ export class AssetManager {
             'brick': { hardness: 1.5 },
             'glass': { hardness: 0.3 },
             'crafting_table': { hardness: 1.5 },
-            'planks': { hardness: 1.0 },
+            'plank': { hardness: 1.0 },
             'painting': { hardness: 0.1 },
             'bed': { hardness: 0.5 },
             'stone_brick': { hardness: 1.5 },
@@ -76,7 +76,19 @@ export class AssetManager {
             'thatch': { hardness: 0.3 },
             'half_timber': { hardness: 1.0 },
             'mossy_stone': { hardness: 1.3 },
-            'iron_bars': { hardness: 2.0 }
+            'iron_bars': { hardness: 2.0 },
+            'iron_bars': { hardness: 2.0 },
+            'survival_block': { hardness: 2.0 },
+            'maze_block': { hardness: -1 }, // Unbreakable
+            'obsidian': { hardness: 50.0 }, // Very hard
+            'diamond_block': { hardness: 5.0 },
+            'xbox': { hardness: 1.0 },
+            'parkour_block': { hardness: -1 }, // Unbreakable
+            'parkour_platform': { hardness: -1 }, // Unbreakable
+            'playground_block': { hardness: -1 }, // Unbreakable
+            'slide_block': { hardness: -1 }, // Unbreakable
+            'mob_waves_block': { hardness: -1 }, // Unbreakable
+            'slime': { hardness: 0.5 }
         };
     }
 
@@ -113,6 +125,20 @@ export class AssetManager {
 
         const coalOre = this.getOrCreateMat('coal_ore');
         this.registerBlockMaterials('coal_ore', [coalOre, coalOre, coalOre, coalOre, coalOre, coalOre]);
+
+        const obsidian = this.getOrCreateMat('obsidian');
+        this.registerBlockMaterials('obsidian', obsidian);
+
+        const diamondBlock = this.getOrCreateMat('diamond_block'); // Note: generateTexture might fallback to diamond_ore or similar, but let's check. 
+        // Wait, diamond_block wasn't in TextureGenerator palettes as a block. 
+        // Let's check TextureGenerator again for diamond_block.
+        // It's not there. I should add diamond_block texture too or use gold_block pattern.
+        this.registerBlockMaterials('diamond_block', diamondBlock);
+
+        const xboxFront = this.getOrCreateMat('xbox_front');
+        const xboxTop = this.getOrCreateMat('xbox_top');
+        const xboxSide = this.getOrCreateMat('xbox_side');
+        this.registerBlockMaterials('xbox', [xboxSide, xboxSide, xboxTop, xboxSide, xboxFront, xboxSide]);
 
         this.registerBlockMaterials('bedrock', [stone, stone, stone, stone, stone, stone]); // Fallback/reuse
 
@@ -159,8 +185,11 @@ export class AssetManager {
         const glass = this.getOrCreateMat('glass', true);
         this.registerBlockMaterials('glass', glass);
 
-        const planks = this.getOrCreateMat('planks');
-        this.registerBlockMaterials('planks', planks);
+        const slime = this.getOrCreateMat('slime', true);
+        this.registerBlockMaterials('slime', slime);
+
+        const plank = this.getOrCreateMat('planks');
+        this.registerBlockMaterials('plank', plank);
 
         const painting = this.getOrCreateMat('painting');
         this.registerBlockMaterials('painting', painting);
@@ -182,6 +211,15 @@ export class AssetManager {
         this.registerBlockMaterials('long_grass', this.getOrCreateMat('long_grass', true));
         this.registerBlockMaterials('fern', this.getOrCreateMat('fern', true));
         this.registerBlockMaterials('dead_bush', this.getOrCreateMat('dead_bush', true));
+
+        // Torch
+        this.registerBlockMaterials('torch', this.getOrCreateMat('torch', true));
+
+        // Cactus
+        const cactusSide = this.getOrCreateMat('cactus_side');
+        const cactusTop = this.getOrCreateMat('cactus_top');
+        // Side, Side, Top, Bottom, Side, Side
+        this.registerBlockMaterials('cactus', [cactusSide, cactusSide, cactusTop, cactusTop, cactusSide, cactusSide]);
 
         // Castle Blocks
         const stoneBrick = this.getOrCreateMat('stone_brick', false);
@@ -269,6 +307,48 @@ export class AssetManager {
         const ironBars = this.getOrCreateMat('iron_bars', true);
         this.registerBlockMaterials('iron_bars', ironBars);
 
+        // THRUSTER
+        // Default orientation: Exhaust on Back (Face 5)? 
+        // We will permute in Chunk.js
+        const thrusterBody = this.getOrCreateMat('stone'); // Reuse stone
+        const thrusterExhaust = this.getOrCreateMat('fire', true); // Reuse fire
+        // R, L, T, B, F, B
+        this.registerBlockMaterials('thruster', [
+            thrusterBody, thrusterBody, thrusterBody, thrusterBody, thrusterBody, thrusterExhaust
+        ]);
+
+        // Survival Block - Mini-game arena block
+        const survivalBlock = this.getOrCreateMat('survival_block');
+        this.registerBlockMaterials('survival_block', survivalBlock);
+
+        // Maze Block
+        const mazeBlock = this.getOrCreateMat('maze_block');
+        this.registerBlockMaterials('maze_block', mazeBlock);
+
+        // Escape Room Block - Unique texture
+        const escapeRoomBlock = this.getOrCreateMat('escape_room_block');
+        this.registerBlockMaterials('escape_room_block', escapeRoomBlock);
+
+        // Parkour Block
+        const parkourBlock = this.getOrCreateMat('parkour_block');
+        this.registerBlockMaterials('parkour_block', parkourBlock);
+
+        // Parkour Platform
+        const parkourPlatform = this.getOrCreateMat('parkour_platform');
+        this.registerBlockMaterials('parkour_platform', parkourPlatform);
+
+        // Playground Block
+        const playgroundBlock = this.getOrCreateMat('playground_block', false);
+        this.registerBlockMaterials('playground_block', playgroundBlock);
+
+        // Slide Block
+        const slideBlock = this.getOrCreateMat('slide_block');
+        this.registerBlockMaterials('slide_block', slideBlock);
+
+        // Mob Waves Block
+        const mobWavesBlock = this.getOrCreateMat('mob_waves_block');
+        this.registerBlockMaterials('mob_waves_block', mobWavesBlock);
+
         // Break Stages
         this.breakMaterials = [];
         for (let i = 0; i <= 9; i++) {
@@ -323,10 +403,59 @@ export class AssetManager {
             vertexColors: true
         });
 
+        // Visual Improvements: Vertex Wind
+        const windBlocks = ['long_grass', 'flower', 'sapling', 'leaves', 'fern', 'dead_bush'];
+        const isWindy = windBlocks.some(type => name.includes(type));
+
+        if (isWindy) {
+            mat.onBeforeCompile = (shader) => {
+                shader.uniforms.time = { value: 0 };
+
+                // Store reference to update later
+                if (!this.windMaterials) this.windMaterials = [];
+                this.windMaterials.push(shader);
+
+                shader.vertexShader = `
+                    uniform float time;
+                ` + shader.vertexShader;
+
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    // Wind Logic
+                    // Simple logic: move top vertices based on Y > 0.5 (assuming block is 0..1 in local space? No, usually -0.5 to 0.5)
+                    // Or check world position?
+                    // InstancedMesh local coordinates are usually 0..1 or -0.5..0.5 depending on geometry.
+                    // Let's assume standard cube geometry -0.5 to 0.5. Top is > 0.0.
+                    
+                    float isTop = step(0.1, position.y); // 1.0 if y > 0.1
+                    
+                    float windX = sin(time * 2.0 + (transformed.x + transformed.z) * 0.5) * 0.1;
+                    float windZ = cos(time * 1.5 + (transformed.x + transformed.z) * 0.3) * 0.1;
+                    
+                    transformed.x += windX * isTop;
+                    transformed.z += windZ * isTop;
+                    `
+                );
+            };
+            // Ensure we create the list if it doesn't exist (also done above)
+            if (!this.windMaterials) this.windMaterials = [];
+        }
+
         const idx = this.materialArray.length;
         this.materialArray.push(mat);
         this.matMap[name] = idx;
         return idx;
+    }
+
+    // Helper to update wind time
+    updateWind(time) {
+        if (this.windMaterials) {
+            for (const shader of this.windMaterials) {
+                shader.uniforms.time.value = time;
+            }
+        }
     }
 
     registerBlockMaterials(blockType, materials) {

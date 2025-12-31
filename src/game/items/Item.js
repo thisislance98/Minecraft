@@ -4,6 +4,7 @@ export class Item {
         this.id = id;
         this.name = name;
         this.maxStack = 64;
+        this.isTool = false;
     }
 
     /**
@@ -19,6 +20,14 @@ export class Item {
      * @returns {boolean} true if the action was handled, false otherwise
      */
     onUseUp(game, player) {
+        return false;
+    }
+
+    /**
+     * Called when the user presses the 'Primary' button (Left Click)
+     * @returns {boolean} true if the action was handled, false otherwise
+     */
+    onPrimaryDown(game, player) {
         return false;
     }
 }

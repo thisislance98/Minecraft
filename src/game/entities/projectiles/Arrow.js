@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 export class Arrow {
-    constructor(game, position, velocity) {
+    constructor(game, position, velocity, owner = null) {
         this.game = game;
+        this.owner = owner; // The entity that fired this arrow (player or animal)
         this.position = position.clone();
         this.velocity = velocity.clone();
 
@@ -64,56 +65,70 @@ export class Arrow {
             return true;
         }
 
-        // Apply gravity
-        this.velocity.y -= this.game.gravity * 2; // Heavier feel
+        // Apply gravity (scaled by dt for proper physics)
+        const gravity = this.game.gravity * 20; // Realistic arc
+        this.velocity.y -= gravity * dt;
 
-        // Move
-        const nextPos = this.position.clone().add(this.velocity);
+        // Apply air drag for realistic slowdown
+        const drag = 0.99;
+        this.velocity.multiplyScalar(drag);
 
-        // Check collisions (Blocks) - Simple raycast from current to next
-        const dir = this.velocity.clone().normalize();
-        const dist = this.velocity.length(); // speed per frame essentially
+        // Calculate movement for this frame
+        const movement = this.velocity.clone().multiplyScalar(dt * 60); // Scale to ~60fps baseline
+        const nextPos = this.position.clone().add(movement);
 
-        // Raycast for precision
-        this.game.raycaster.set(this.position, dir);
-        this.game.raycaster.far = dist;
+        // --- Entity Collision (Sweep Test for Tunneling Prevention) ---
+        // We do this BEFORE block collision so we can hit mobs standing in front of walls
+        const hitRadius = 1.0; // Generous hit radius
+        const segment = new THREE.Line3(this.position, nextPos);
+        const closestPoint = new THREE.Vector3();
 
-        // Check block collision manually or via raycaster if meshes exist.
-        // Since we have voxel data, direct check is better/faster for blocks.
-        if (this.checkBlockCollision(nextPos)) {
-            this.isStuck = true;
-            return true;
-        }
-
-        // Check Player
+        // Check Player (skip if player fired this arrow)
         const player = this.game.player;
-        const playerPos = player.position.clone();
-        playerPos.y += player.height / 2;
-        if (this.position.distanceTo(playerPos) < (player.width + 0.5)) {
-            console.log('Arrow hit player!');
-            player.takeDamage(1);
-            const dir = this.velocity.clone().normalize();
-            player.knockback(dir, 0.2);
-            this.isStuck = true;
-            return false;
+        if (this.owner !== player) {
+            const playerPos = player.position.clone();
+            playerPos.y += player.height / 2;
+
+            segment.closestPointToPoint(playerPos, true, closestPoint);
+            if (closestPoint.distanceTo(playerPos) < (player.width + 0.5)) {
+                console.log('Arrow hit player!');
+                player.takeDamage(1);
+                // Knockback
+                const dir = this.velocity.clone().normalize();
+                player.knockback(dir, 0.2);
+
+                this.isStuck = true;
+                return false; // Destroy arrow
+            }
         }
 
         // Check Entities (Animals)
         for (const animal of this.game.animals) {
             if (animal.isDead) continue;
+            if (animal === this.owner) continue;
 
-            // Simple AABB or Distance check
-            // Hitbox approx center
             const animalPos = animal.position.clone();
             animalPos.y += animal.height / 2;
 
-            if (this.position.distanceTo(animalPos) < (animal.width + 0.5)) {
-                // Check more precise bounds if needed, but distance is okay for now
-                console.log('Arrow hit animal!');
-                animal.takeDamage(1, this.game.player);
-                this.isStuck = true; // Arrow stops on hit? Or goes through? Let's stick/despawn
-                return false; // Remove arrow on hit for simplicity
+            // Find closest point on the arrow's path this frame to the animal
+            segment.closestPointToPoint(animalPos, true, closestPoint);
+
+            if (closestPoint.distanceTo(animalPos) < (animal.width + 0.5)) {
+                console.log(`Arrow hit ${animal.constructor.name}!`);
+                // Use this.owner as attacker
+                animal.takeDamage(1, this.owner);
+                this.isStuck = true;
+                return false; // Destroy arrow on hit
             }
+        }
+
+        // --- Block Collision ---
+        if (this.checkBlockCollision(nextPos)) {
+            this.isStuck = true;
+            // Keep arrow at collision point (prevents entering block)
+            // Ideally we'd raycast to find exact intersection, but stopping at last valid pos is okay for now
+            this.mesh.position.copy(this.position);
+            return true;
         }
 
         this.position.copy(nextPos);

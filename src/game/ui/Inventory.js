@@ -20,7 +20,8 @@ export class Inventory {
         this.foodValues = {
             apple: 4,
             bread: 5,
-            meat: 8
+            meat: 8,
+            chocolate_bar: 6
         };
 
         this.setupInventoryScreenListeners();
@@ -791,6 +792,69 @@ export class Inventory {
                         <circle cx="32" cy="16" r="10" fill="#00FFFF" filter="url(#glow-shrink-wand)"/>
                         <circle cx="32" cy="16" r="6" fill="#FFFFFF" opacity="0.5"/>
                     </svg>`,
+            chair: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="20" y="32" width="24" height="4" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="20" y="36" width="4" height="20" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="40" y="36" width="4" height="20" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="20" y="12" width="24" height="20" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                    </svg>`,
+            xbox: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="16" y="8" width="32" height="48" rx="2" fill="#101010" stroke="#000" stroke-width="2"/>
+                        <rect x="20" y="8" width="24" height="4" fill="#107C10" opacity="0.8"/>
+                        <circle cx="22" cy="18" r="2" fill="white" opacity="0.9"/>
+                        <rect x="18" y="24" width="2" height="12" rx="1" fill="#333"/>
+                    </svg>`,
+            parkour_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="56" height="56" rx="4" fill="#4B0082" stroke="#800080" stroke-width="3"/>
+                        <path d="M10 10 L54 10 L54 54 L10 54 Z" fill="none" stroke="#00FFFF" stroke-width="2" opacity="0.8"/>
+                        <path d="M20 32 L32 20 L44 32" fill="none" stroke="#FF00FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M32 20 L32 44" fill="none" stroke="#FF00FF" stroke-width="4" stroke-linecap="round"/>
+                        <circle cx="32" cy="32" r="20" fill="none" stroke="#00FFFF" stroke-width="2" stroke-dasharray="4 4"/>
+                    </svg>`,
+            disco_room_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="56" height="56" fill="#222"/>
+                        <rect x="4" y="4" width="28" height="28" fill="#FF0000"/>
+                        <rect x="32" y="4" width="28" height="28" fill="#00FF00"/>
+                        <rect x="4" y="32" width="28" height="28" fill="#0000FF"/>
+                        <rect x="32" y="32" width="28" height="28" fill="#FFFF00"/>
+                        <rect x="4" y="4" width="56" height="56" fill="none" stroke="white" stroke-width="2"/>
+                        <circle cx="32" cy="32" r="8" fill="white" opacity="0.8"/>
+                    </svg>`,
+            mob_waves_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="56" height="56" rx="4" fill="#1a1a1a" stroke="#333" stroke-width="2"/>
+                        <path d="M10 32 Q 21 12 32 32 T 54 32" fill="none" stroke="#FF0000" stroke-width="4" stroke-linecap="round"/>
+                        <circle cx="16" cy="16" r="4" fill="#800000"/>
+                        <circle cx="48" cy="16" r="4" fill="#800000"/>
+                        <circle cx="16" cy="48" r="4" fill="#800000"/>
+                        <circle cx="48" cy="48" r="4" fill="#800000"/>
+                        <path d="M25 45 Q 32 38 39 45" fill="none" stroke="#FF0000" stroke-width="2"/>
+                    </svg>`,
+            playground_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="4" y="4" width="56" height="56" rx="4" fill="white" stroke="#ccc" stroke-width="2"/>
+                        <rect x="10" y="10" width="22" height="22" fill="#FFD700"/>
+                        <rect x="32" y="10" width="22" height="22" fill="#4169E1"/>
+                        <rect x="10" y="32" width="22" height="22" fill="#DC143C"/>
+                        <rect x="32" y="32" width="22" height="22" fill="#FFD700"/>
+                        <path d="M4 32 L60 32 M32 4 L32 60" stroke="#eee" stroke-width="2"/>
+                    </svg>`,
+            slide_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <path d="M10 10 L54 54 L44 54 L10 20 Z" fill="#FF4500" stroke="#CC3700" stroke-width="2"/>
+                        <line x1="10" y1="10" x2="10" y2="54" stroke="#888" stroke-width="3"/>
+                        <line x1="54" y1="30" x2="54" y2="54" stroke="#888" stroke-width="3"/>
+                    </svg>`,
+            table: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="12" y="20" width="40" height="4" fill="#5C4033" stroke="#3e2b1e" stroke-width="2"/>
+                        <rect x="16" y="24" width="4" height="24" fill="#5C4033" stroke="#3e2b1e" stroke-width="2"/>
+                        <rect x="44" y="24" width="4" height="24" fill="#5C4033" stroke="#3e2b1e" stroke-width="2"/>
+                    </svg>`,
+            couch: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="8" y="32" width="48" height="12" fill="#AA3333" stroke="#882222" stroke-width="2"/>
+                        <rect x="8" y="20" width="48" height="12" fill="#AA3333" stroke="#882222" stroke-width="2"/>
+                        <rect x="4" y="28" width="8" height="16" fill="#AA3333" stroke="#882222" stroke-width="2"/>
+                        <rect x="52" y="28" width="8" height="16" fill="#AA3333" stroke="#882222" stroke-width="2"/>
+                        <rect x="10" y="44" width="4" height="4" fill="#5C4033"/>
+                        <rect x="50" y="44" width="4" height="4" fill="#5C4033"/>
+                    </svg>`,
             omni_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <defs>
                              <filter id="glow-omni-wand">
@@ -1131,10 +1195,132 @@ export class Inventory {
                         <path d="M10 20 L54 20 M10 32 L54 32 M10 44 L54 44" stroke="#3CB371" stroke-width="2"/>
                         <path d="M20 10 L20 54 M32 10 L32 54 M44 10 L44 54" stroke="#3CB371" stroke-width="2"/>
                         <circle cx="32" cy="32" r="6" fill="white" opacity="0.3"/>
+                    </svg>`,
+            survival_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <filter id="glow-survival">
+                                <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="0" y="0" width="64" height="64" fill="#2a1a1a"/>
+                        <rect x="0" y="0" width="64" height="4" fill="#ff3333"/>
+                        <rect x="0" y="60" width="64" height="4" fill="#ff3333"/>
+                        <rect x="0" y="0" width="4" height="64" fill="#ff3333"/>
+                        <rect x="60" y="0" width="4" height="64" fill="#ff3333"/>
+                        <circle cx="32" cy="24" r="12" fill="#e8e8e8" filter="url(#glow-survival)"/>
+                        <rect x="28" y="20" width="3" height="5" fill="#000"/>
+                        <rect x="33" y="20" width="3" height="5" fill="#000"/>
+                        <rect x="30" y="27" width="1" height="2" fill="#000"/>
+                        <rect x="33" y="27" width="1" height="2" fill="#000"/>
+                        <rect x="26" y="30" width="12" height="4" fill="#e8e8e8"/>
+                        <rect x="29" y="30" width="2" height="4" fill="#000"/>
+                        <rect x="33" y="30" width="2" height="4" fill="#000"/>
+                        <path d="M24 44 L40 44 L36 52 L28 52 Z" fill="#cc2222"/>
+                        <path d="M28 52 L36 52 L40 44" fill="none" stroke="#ff3333" stroke-width="1"/>
+                        <rect x="30" y="48" width="4" height="2" fill="#ff6666"/>
+                    </svg>`,
+            chocolate_bar: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-choco" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#8b4513" />
+                                <stop offset="50%" style="stop-color:#5c3317" />
+                                <stop offset="100%" style="stop-color:#3e2723" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="12" y="10" width="40" height="44" rx="2" fill="url(#grad-choco)" stroke="#3e2723" stroke-width="2"/>
+                        <rect x="12" y="10" width="40" height="44" rx="2" fill="none" class="shine"/>
+                        <!-- Chocolate Squares -->
+                        <rect x="16" y="14" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        <rect x="34" y="14" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        
+                        <rect x="16" y="28" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        <rect x="34" y="28" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        
+                        <rect x="16" y="42" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        <rect x="34" y="42" width="14" height="10" rx="1" fill="#6d3e1e" opacity="0.8"/>
+                        
+                        <!-- Wrapper at bottom -->
+                        <path d="M12 40 L52 35 L52 54 L12 54 Z" fill="#C0C0C0" stroke="#999"/>
+                        <path d="M12 40 Q 32 45 52 35" fill="none" stroke="#999" stroke-width="1"/>
+                        <text x="32" y="50" font-family="Arial" font-size="8" fill="#333" text-anchor="middle" transform="rotate(-5 32 50)">CHOCO</text>
+                    </svg>`,
+            escape_room_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-escape" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#ff4444" />
+                                <stop offset="100%" style="stop-color:#990000" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="0" y="0" width="64" height="64" fill="#333" stroke="#ff0000" stroke-width="2"/>
+                        <rect x="4" y="4" width="56" height="56" fill="url(#grad-escape)" opacity="0.8"/>
+                        <!-- Clock Face -->
+                        <circle cx="32" cy="32" r="20" fill="#fff" stroke="#000" stroke-width="2"/>
+                        <line x1="32" y1="32" x2="32" y2="18" stroke="#000" stroke-width="2"/>
+                        <line x1="32" y1="32" x2="42" y2="32" stroke="#000" stroke-width="2"/>
+                        <!-- Keyhole -->
+                        <circle cx="32" cy="40" r="3" fill="#000" opacity="0.5"/>
+                    </svg>`,
+            maze_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="64" height="64" fill="#444"/>
+                        <path d="M10 10 L54 10 L54 54 L10 54 Z" fill="none" stroke="#00ff00" stroke-width="4"/>
+                        <path d="M22 22 L22 42 M42 22 L42 42 M22 32 L42 32" stroke="#00ff00" stroke-width="3"/>
+                    </svg>`,
+            thruster: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="16" y="8" width="32" height="40" rx="4" fill="#888" stroke="#444" stroke-width="2"/>
+                        <rect x="20" y="12" width="24" height="8" rx="2" fill="#555"/>
+                        <circle cx="32" cy="30" r="8" fill="#333" stroke="#222" stroke-width="2"/>
+                        <path d="M22 48 L42 48 L48 60 L16 60 Z" fill="#FFA500" stroke="#CC8400" stroke-width="2"/>
+                        <path d="M28 60 L36 60 L32 52 Z" fill="#FFFF00"/>
+                    </svg>`,
+            physics_ball: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <circle cx="32" cy="32" r="28" fill="#FF4500" stroke="#8B0000" stroke-width="2"/>
+                        <circle cx="20" cy="20" r="8" fill="white" opacity="0.4"/>
+                        <path d="M10 32 Q 32 54 54 32" fill="none" stroke="#8B0000" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+                    </svg>`,
+            sign: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="28" y="32" width="8" height="32" fill="#8B4513" stroke="#5c402d" stroke-width="2"/>
+                        <rect x="8" y="8" width="48" height="24" rx="2" fill="#D2B48C" stroke="#8B4513" stroke-width="2"/>
+                        <rect x="12" y="12" width="40" height="2" fill="#8B4513" opacity="0.3"/>
+                        <rect x="12" y="18" width="40" height="2" fill="#8B4513" opacity="0.3"/>
+                        <rect x="12" y="24" width="30" height="2" fill="#8B4513" opacity="0.3"/>
+                    </svg>`,
+            playground_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <rect x="0" y="0" width="32" height="32" fill="#FFD700"/>
+                        <rect x="32" y="0" width="32" height="32" fill="#4169E1"/>
+                        <rect x="0" y="32" width="32" height="32" fill="#DC143C"/>
+                        <rect x="32" y="32" width="32" height="32" fill="#FFD700"/>
+                        <rect x="0" y="0" width="64" height="64" fill="none" stroke="#000" stroke-width="2"/>
+                    </svg>`,
+            slide_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <path d="M8 16 L56 56 L56 64 L8 64 Z" fill="#FF4500" stroke="#cc3700" stroke-width="2"/>
+                        <rect x="4" y="16" width="4" height="48" fill="#888"/>
+                        <rect x="56" y="48" width="4" height="16" fill="#888"/>
+                        <path d="M12 16 L52 48" stroke="#ff7f50" stroke-width="4" stroke-linecap="round"/>
                     </svg>`
 
+
         };
-        return svgs[item] || `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="4" y="4" width="56" height="56" rx="8" fill="#7B5B3C" stroke="#3e2b1e" stroke-width="2"/><rect x="16" y="16" width="32" height="32" rx="4" fill="#A0A0A0" stroke="white" stroke-width="2" opacity="0.5"/></svg>`;
+
+
+        if (svgs[item]) return svgs[item];
+
+        // Dynamic check for Spawn Eggs
+        if (typeof item === 'string' && item.endsWith('_spawn_egg')) {
+            return `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <ellipse cx="32" cy="32" rx="24" ry="30" fill="#F0E6D2" stroke="#C0B090" stroke-width="2"/>
+                        <circle cx="24" cy="24" r="4" fill="#444" opacity="0.6"/>
+                        <circle cx="40" cy="30" r="5" fill="#444" opacity="0.6"/>
+                        <circle cx="28" cy="42" r="3" fill="#444" opacity="0.6"/>
+                        <circle cx="44" cy="44" r="4" fill="#444" opacity="0.6"/>
+                        <circle cx="36" cy="18" r="2" fill="#444" opacity="0.6"/>
+                    </svg>`;
+        }
+
+        return `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="4" y="4" width="56" height="56" rx="8" fill="#7B5B3C" stroke="#3e2b1e" stroke-width="2"/><rect x="16" y="16" width="32" height="32" rx="4" fill="#A0A0A0" stroke="white" stroke-width="2" opacity="0.5"/></svg>`;
     }
 
     // Logic Delegated to Manager now (kept for compatibility if Player calls them directly on UI?)

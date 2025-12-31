@@ -39,6 +39,9 @@ export class MagicProjectile {
     }
 
     update(dt) {
+        if (this.game.gameState && this.game.gameState.flags.isTimeStopped) {
+            return true;
+        }
         this.lifeTime += dt;
 
         // If exploded, just manage trails and wait to die

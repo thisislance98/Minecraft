@@ -102,7 +102,7 @@ export class Chunk {
                     const blockType = this.blocks[this.getIndex(lx, ly, lz)];
                     if (!blockType) continue;
 
-                    const materials = this.game.blockMaterialIndices[blockType];
+                    let materials = this.game.blockMaterialIndices[blockType];
                     if (!materials) {
                         if (!this.loggedMissing) this.loggedMissing = new Set();
                         if (!this.loggedMissing.has(blockType)) {
@@ -115,6 +115,26 @@ export class Chunk {
                     const wx = this.cx * this.size + lx;
                     const wy = this.cy * this.size + ly;
                     const wz = this.cz * this.size + lz;
+
+                    // Handle Thruster Rotation
+                    if (blockType === Blocks.THRUSTER) {
+                        const dir = this.game.getThrusterData(wx, wy, wz);
+                        // Default materials: [Body, Body, Body, Body, Body, Exhaust] (Indicies 0-5)
+                        // Map: 0:R, 1:L, 2:T, 3:B, 4:F, 5:Bk
+
+                        // We want exhaust (which is at index 5 in default array) to be at 'dir'.
+                        // So we should swap index 5 with index 'dir' in a copy of the array.
+                        // Or constructs the array such that 'dir' gets the exhaust material.
+
+                        // Let's assume materials[5] is exhaust, others are body (same).
+                        const body = materials[0];
+                        const exhaust = materials[5];
+
+                        // Create a specific array for this block instance
+                        const rotatedMaterials = [body, body, body, body, body, body];
+                        rotatedMaterials[dir] = exhaust;
+                        materials = rotatedMaterials;
+                    }
 
                     // Check for special render type
                     if (this.plantTypes.has(blockType)) {
@@ -358,7 +378,8 @@ export class Chunk {
 
 
                         // Check if neighbor is transparent or non-full block (so we should draw our face)
-                        const isTransparent = neighbor === Blocks.WATER ||
+                        const isTransparent = neighbor === Blocks.AIR ||
+                            neighbor === Blocks.WATER ||
                             neighbor === Blocks.GLASS ||
                             neighbor === Blocks.LEAVES ||
                             neighbor === Blocks.FENCE ||

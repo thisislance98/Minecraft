@@ -6,6 +6,7 @@ export class LevitationWandItem extends Item {
     constructor() {
         super('levitation_wand', 'Levitation Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -23,5 +24,9 @@ export class LevitationWandItem extends Item {
 
         game.spawnLevitationProjectile(spawnPos, camDir);
         return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

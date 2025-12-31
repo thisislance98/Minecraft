@@ -1,0 +1,29 @@
+# AI Protocol & Workflows
+
+You are working on a Minecraft implementation. You MUST follow the defined workflows for common tasks to ensure consistency and prevent regressions.
+
+## 🚨 MANDATORY: Check Workflows First
+Before starting any of the following tasks, read the corresponding workflow guide in `.agent/workflows/`:
+
+| Task | Workflow Guide | Key Action |
+| :--- | :--- | :--- |
+| **New Creature/Mob** | `.agent/workflows/create-creature.md` | Create `Entity.js` & Register in `AnimalRegistry.js`. |
+| **New Item/Wand** | `.agent/workflows/add-item.md` | Create `Item.js` & Register in `ItemRegistry.js`. |
+| **New Block** | `.agent/workflows/add-block.md` | Update `Blocks.js`, `AssetManager.js`, `TextureGenerator.js`. |
+| **New Recipe** | `.agent/workflows/add-recipe.md` | Add to `InventoryManager.js` recipes array. |
+| **Physics Tweak** | `.agent/workflows/modify-physics.md` | Modify properties in `Animal.js` or `PhysicsManager.js`. |
+
+## Key Architectural Rules
+
+1.  **Registration is Critical**: New classes (Animals, Items) MUST be registered in their respective registries or they will not work.
+2.  **Procedural Textures**: Do not hardcode texture URLs. Use the logic in `src/textures/TextureGenerator.js`.
+3.  **Entity Base**: All mobs must extend `Animal` (or a subclass of it).
+4.  **Spawning**: Creature generation is handled by `SpawnManager.js` based on biomes.
+
+## File Structure Map
+-   `src/game/entities/`: Entity logic.
+-   `src/game/systems/`: Game managers (Physics, Inventory, Spawn).
+-   `src/game/core/`: Constants (`Blocks.js`) and Asset Management.
+-   `src/textures/`: Texture generation logic.
+
+ALWAYS REFER TO THE GUIDES IF UNSURE.

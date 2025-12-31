@@ -37,17 +37,20 @@ export class InventoryManager {
     }
 
     setupInitialItems() {
-        this.addItemToSlot(0, 'pickaxe', 1, 'tool');
+        this.addItemToSlot(0, 'thruster', 64, 'thruster');
+        this.addItemToSlot(37, 'pickaxe', 1, 'tool');
         this.addItemToSlot(1, 'crafting_table', 1, 'block');
-        this.addItemToSlot(2, 'sword', 1, 'tool');
+        this.addItemToSlot(2, 'bow', 1, 'tool');  // Bow in hotbar
         this.addItemToSlot(3, 'wand', 1, 'wand');
         this.addItemToSlot(4, 'shrink_wand', 1, 'wand');
         this.addItemToSlot(5, 'omni_wand', 1, 'wand');
+        this.addItemToSlot(40, 'giant_tree_wand', 1, 'wand');
+        this.addItemToSlot(42, 'time_stop_wand', 1, 'wand');
 
         // Add some materials for testing
-        this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
+        this.addItemToSlot(6, 'time_stop_wand', 1, 'wand');
         this.addItemToSlot(7, 'flying_broom', 1, 'flying_broom');
-        this.addItemToSlot(8, 'sign', 16, 'sign');
+        this.addItemToSlot(8, 'escape_room_block', 10, 'block');
         this.addItemToSlot(9, 'wood', 10, 'block');
         this.addItemToSlot(10, 'log', 10, 'block');
         this.addItemToSlot(11, 'ride_wand', 1, 'ride_wand');
@@ -75,6 +78,16 @@ export class InventoryManager {
         this.addItemToSlot(31, 'iron_bars', 64, 'block');        // Window bars
         this.addItemToSlot(32, 'planks', 64, 'block');           // Regular planks
         this.addItemToSlot(33, 'stone_brick', 64, 'block');      // Stone bricks
+
+        // ===== FURNITURE =====
+        this.addItemToSlot(34, 'chair', 10, 'chair');
+        this.addItemToSlot(35, 'table', 5, 'table');
+        this.addItemToSlot(36, 'couch', 5, 'couch');
+
+        // ===== WEAPONS =====
+        this.addItemToSlot(38, 'sword', 1, 'tool');  // Sword moved to inventory
+        this.addItemToSlot(39, 'mob_waves_block', 10, 'block');
+        this.addItemToSlot(41, 'slime', 64, 'block');
     }
 
     // --- Slot Accessors for Crafting ---

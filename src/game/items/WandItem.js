@@ -6,6 +6,7 @@ export class WandItem extends Item {
     constructor() {
         super('wand', 'Magic Wand');
         this.maxStack = 1;
+        this.isTool = true;
     }
 
     onUseDown(game, player) {
@@ -18,5 +19,9 @@ export class WandItem extends Item {
 
         game.spawnMagicProjectile(spawnPos, velocity);
         return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
     }
 }

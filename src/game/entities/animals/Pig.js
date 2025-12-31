@@ -17,11 +17,11 @@ const PHRASES = [
 export class Pig extends Animal {
     constructor(game, x, y, z) {
         super(game, x, y, z);
-        this.width = 0.7;
-        this.height = 0.7;
-        this.depth = 1.0;
+        this.width = 0.9;
+        this.height = 0.9;
+        this.depth = 1.3;
         this.createBody();
-        this.mesh.scale.set(0.75, 0.75, 0.75);
+        this.mesh.scale.set(1.0, 1.0, 1.0);
 
         // Social State
         this.socialTimer = Math.random() * 10;
@@ -174,7 +174,12 @@ export class Pig extends Animal {
             return pivot;
         };
 
-
+        this.legParts = [
+            makeLeg(-0.25, 0.4),  // Front Left
+            makeLeg(0.25, 0.4),   // Front Right
+            makeLeg(-0.25, -0.4), // Back Left
+            makeLeg(0.25, -0.4)   // Back Right
+        ];
     }
 
     createSpeechBubble() {

@@ -53,6 +53,9 @@ export class Tornado {
     }
 
     update(dt) {
+        if (this.game.gameState && this.game.gameState.flags.isTimeStopped) {
+            return true;
+        }
         this.lifeTime += dt;
         if (this.lifeTime > this.maxLifeTime) {
             this.game.scene.remove(this.particleSystem);

@@ -1,19 +1,4 @@
-import {
-    WandItem,
-    ShrinkWandItem,
-    GrowthWandItem,
-    BowItem,
-    FlyingBroomItem,
-    LevitationWandItem,
-    GiantWandItem,
-    WizardTowerWandItem,
-    OmniWandItem,
-    RideWandItem,
-    CaptureWandItem,
-    SpawnEggItem,
-    WaterBucketItem,
-    SignItem
-} from '../ItemRegistry.js';
+import { ItemClasses } from '../ItemRegistry.js';
 import { AnimalClasses } from '../AnimalRegistry.js';
 
 export class ItemManager {
@@ -21,29 +6,33 @@ export class ItemManager {
         this.game = game;
         this.items = new Map();
 
+        // Wait for modules to load if needed, but ItemRegistry is eager loaded
         this.registerItems();
     }
 
     registerItems() {
-        this.register(new WandItem());
-        this.register(new ShrinkWandItem());
-        this.register(new GrowthWandItem());
-        this.register(new BowItem());
-        this.register(new FlyingBroomItem());
-        this.register(new LevitationWandItem());
-        this.register(new GiantWandItem());
-        this.register(new WizardTowerWandItem());
+        // Auto-register all items from the registry
+        for (const [className, ItemClass] of Object.entries(ItemClasses)) {
+            // Skip base class
+            if (className === 'Item') continue;
 
-        this.register(new OmniWandItem());
-        this.register(new RideWandItem());
-        this.register(new CaptureWandItem());
-        this.register(new WaterBucketItem());
-        this.register(new SignItem());
+            // Skip SpawnEggItem as it needs special handling with arguments
+            if (className === 'SpawnEggItem') continue;
+
+            try {
+                // Instantiate and register
+                this.register(new ItemClass());
+            } catch (error) {
+                console.warn(`Failed to register item ${className}:`, error);
+            }
+        }
 
         // Register Spawn Eggs
-        Object.values(AnimalClasses).forEach(AnimalClass => {
-            this.register(new SpawnEggItem(AnimalClass));
-        });
+        if (ItemClasses.SpawnEggItem) {
+            Object.values(AnimalClasses).forEach(AnimalClass => {
+                this.register(new ItemClasses.SpawnEggItem(AnimalClass));
+            });
+        }
     }
 
     register(item) {
@@ -66,6 +55,15 @@ export class ItemManager {
         const item = this.items.get(itemId);
         if (item) {
             return item.onUseUp(this.game, this.game.player);
+        }
+        return false;
+    }
+
+
+    handleItemPrimary(itemId) {
+        const item = this.items.get(itemId);
+        if (item) {
+            return item.onPrimaryDown(this.game, this.game.player);
         }
         return false;
     }

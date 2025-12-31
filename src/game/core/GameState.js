@@ -11,7 +11,13 @@ export class GameState {
         this.flags = {
             inventoryOpen: false,
             paused: false,
-            isPointerLocked: false
+            isPointerLocked: false,
+            mobileControls: false,
+            isTimeStopped: false
+        };
+
+        this.timers = {
+            timeStop: 0
         };
 
         // Selection State

@@ -51,7 +51,7 @@ export function getTools() {
             }
         }, {
             name: "spawn_creature",
-            description: "Spawn a creature near the player. If the creature doesn't exist yet, it will be CREATED automatically using AI code generation first! Available creatures include: Pig, Horse, Chicken, Bunny, Wolf, Bear, Lion, Tiger, Elephant, Giraffe, Deer, Sheep, Cow, Zombie, Skeleton, Creeper, Enderman, Unicorn, TRex, Owl, Fox, Panda, Dolphin, Penguin, Snowman, SantaClaus, Kangaroo, Robot, Cybertruck - but you can spawn ANY creature and unknown ones will be created!",
+            description: "Spawn a creature near the player. If the creature doesn't exist yet, it will be CREATED automatically using AI code generation first! Available creatures include: Pig, Horse, Chicken, Bunny, Wolf, Bear, Lion, Tiger, Elephant, Giraffe, Deer, Sheep, Cow, Zombie, Skeleton, Creeper, Unicorn, TRex, Owl, Fox, Panda, Dolphin, Penguin, Snowman, SantaClaus, Kangaroo, Robot, Cybertruck - but you can spawn ANY creature and unknown ones will be created!",
             parameters: {
                 type: "object",
                 properties: {

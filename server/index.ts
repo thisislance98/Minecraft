@@ -11,8 +11,12 @@ import express from 'express';
 import cors from 'cors';
 import { stripeRoutes } from './routes/stripe';
 import { authRoutes } from './routes/auth';
+import { feedbackRoutes } from './routes/feedback';
+import { destinationRoutes } from './routes/destinations';
 import './config'; // Initialize config
 import { worldPersistence } from './services/WorldPersistence';
+import { WebSocketServer } from 'ws';
+import { AntigravitySession } from './services/AntigravitySession';
 
 // ============ Types ============
 
@@ -36,6 +40,8 @@ app.use((req, res, next) => {
 
 app.use('/api', stripeRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/destinations', destinationRoutes);
 
 // Request logging
 app.use((req, res, next) => {
@@ -56,10 +62,33 @@ const io = new Server(httpServer, {
     }
 });
 
+// ============ Antigravity AI Agent Setup ============
+const wss = new WebSocketServer({ noServer: true });
+
+httpServer.on('upgrade', (request, socket, head) => {
+    const pathname = request.url || '';
+    if (pathname === '/api/antigravity') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    }
+});
+
+wss.on('connection', (ws) => {
+    console.log('[Antigravity] Client connected to Agent Brain');
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        console.error('[Antigravity] Missing GEMINI_API_KEY');
+        ws.close(1011, 'Server configuration error');
+        return;
+    }
+    new AntigravitySession(ws, apiKey);
+});
+
 // Simple in-memory room storage
 const MAX_PLAYERS_PER_ROOM = 4;
-const DAY_DURATION_SECONDS = 600; // 10 minutes per day
-const TIME_INCREMENT_PER_SEC = 1 / DAY_DURATION_SECONDS;
+const DAY_DURATION_SECONDS = 1800; // 30 minutes per day
+const TIME_INCREMENT_PER_SEC = 0; // Frozen at 0 to keep the game bright per user request
 
 // Global Game Loop (Low frequency for sync)
 // We tick time for all rooms here
@@ -125,7 +154,7 @@ io.on('connection', (socket) => {
 
             // Save room metadata to Firebase for persistence (don't await this critical step)
             worldPersistence.saveRoomMetadata(newRoomId, worldSeed).catch(e => console.error('Failed to save room metadata', e));
-            console.log(`[Socket] Created new room: ${newRoomId} with seed: ${worldSeed}`);
+            console.log(`[Socket] Created new room: ${newRoomId} with seed: ${worldSeed} (initialized to Noon)`);
         }
 
         // 3. Join the room
@@ -133,7 +162,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         roomToJoin.players.push(socket.id);
 
-        console.log(`[Socket] Player ${socket.id} joined room ${roomId} (${roomToJoin.players.length}/${MAX_PLAYERS_PER_ROOM})`);
+        console.log(`[Socket] Player ${socket.id} joined room ${roomId} (${roomToJoin.players.length}/${MAX_PLAYERS_PER_ROOM}) starting at time: ${roomToJoin.time}`);
 
         // 4. Emit success event
         socket.emit('room:joined', {

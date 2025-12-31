@@ -100,20 +100,11 @@ export function generateTexture(type, size = 16) {
 
     switch (type) {
         case 'grass_top':
-            console.log('Generating grass_top texture... (DEBUG VERSION)');
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     const noise = seededRandom(seed++);
                     // Base green
                     let colorIdx = Math.floor(noise * palettes.grass_top.length);
-
-                    // DEBUG: Force red to verify update
-                    if (x < 5 && y < 5) {
-                        ctx.fillStyle = 'red';
-                        ctx.fillRect(x, y, 1, 1);
-                        continue;
-                    }
-
 
                     // Simple "blade" attempt: occasional lighter pixels
                     if (noise > 0.8) {

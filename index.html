@@ -3,7 +3,11 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Voxel World - Minecraft Clone</title>
     <link rel="stylesheet" href="/src/styles/index.css">
     <link rel="icon" href="/favicon.ico" />
@@ -115,6 +119,8 @@
                         <input type="checkbox" id="settings-mobile-toggle">
                         <span>Mobile Controls</span>
                     </label>
+                    <button id="settings-fullscreen-btn" class="spawn-btn full-width hidden" style="margin-top: 10px;">⛶
+                        Go Fullscreen</button>
                 </div>
 
                 <!-- Hotkey Settings -->
@@ -153,7 +159,7 @@
     </div>
 
     <div id="debug">
-        <p>v1.0.982</p>
+        <p>v1.0.986</p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>

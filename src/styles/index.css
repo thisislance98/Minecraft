@@ -10,6 +10,14 @@ body {
     overflow: hidden;
     background: #1a1a2e;
     font-family: 'VT323', monospace;
+    overscroll-behavior: none;
+    height: 100%;
+}
+
+html {
+    overscroll-behavior: none;
+    height: 100%;
+    overflow: hidden;
 }
 
 #game-container {

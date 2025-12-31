@@ -1012,7 +1012,51 @@ export class UIManager {
             });
         }
 
+        // Fullscreen Toggle (Mobile Only)
+        this.fullscreenBtn = document.getElementById('settings-fullscreen-btn');
+        if (this.fullscreenBtn) {
+            // Only show on touch devices
+            if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
+                this.fullscreenBtn.classList.remove('hidden');
+            }
 
+            const updateFullscreenBtnText = () => {
+                const isFullscreen = document.fullscreenElement ||
+                    document.webkitFullscreenElement ||
+                    document.mozFullScreenElement ||
+                    document.msFullscreenElement;
+                this.fullscreenBtn.innerHTML = isFullscreen ? '⛶ Exit Fullscreen' : '⛶ Go Fullscreen';
+            };
+
+            this.fullscreenBtn.addEventListener('click', () => {
+                const doc = window.document;
+                const docEl = doc.documentElement;
+
+                const requestFullScreen = docEl.requestFullscreen ||
+                    docEl.mozRequestFullScreen ||
+                    docEl.webkitRequestFullScreen ||
+                    docEl.msRequestFullscreen;
+
+                const cancelFullScreen = doc.exitFullscreen ||
+                    doc.mozCancelFullScreen ||
+                    doc.webkitExitFullscreen ||
+                    doc.msExitFullscreen;
+
+                if (!document.fullscreenElement && !document.mozFullScreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                    if (requestFullScreen) requestFullScreen.call(docEl);
+                } else {
+                    if (cancelFullScreen) cancelFullScreen.call(doc);
+                }
+            });
+
+            document.addEventListener('fullscreenchange', updateFullscreenBtnText);
+            document.addEventListener('webkitfullscreenchange', updateFullscreenBtnText);
+            document.addEventListener('mozfullscreenchange', updateFullscreenBtnText);
+            document.addEventListener('MSFullscreenChange', updateFullscreenBtnText);
+
+            // Initial check
+            updateFullscreenBtnText();
+        }
 
 
         // Reset World button

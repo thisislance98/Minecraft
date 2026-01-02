@@ -1,0 +1,13 @@
+{
+    "name": "Patch Entity Update Method",
+    "prompt": "First spawn a pig, then patch its update method to make it spin by adding: this.mesh.rotation.y += 0.05",
+    "expectedTool": "patch_entity",
+    "verify": [
+        {
+            "type": "entityExists",
+            "creature": "Pig",
+            "minCount": 1
+        }
+    ],
+    "timeout": 45000
+}

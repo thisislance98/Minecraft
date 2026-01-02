@@ -13,6 +13,7 @@ import {
 
 export class Agent {
     constructor(game) {
+        console.log('[Agent] INIT v2 - set_blocks tool available');
         this.game = game;
         this.position = new THREE.Vector3(35, 20, 35);
         this.time = 0;
@@ -90,23 +91,47 @@ export class Agent {
     // ANTIGRAVITY CLIENT LOGIC (Shims to Window Client)
     // =========================================================================
 
-    sendTextMessage(text) {
-        if (window.antigravityClient) {
-            window.antigravityClient.send({
-                type: 'input',
-                text: text,
-                context: this.agentContext
-            });
-        } else {
-            this.game.uiManager.addChatMessage('error', 'Agent offline.');
+    sendTextMessage(text, context = {}) {
+        if (!window.antigravityClient) {
+            this.game.uiManager.addChatMessage('error', 'Agent not initialized. Try refreshing the page.');
             return;
         }
 
+        if (!window.antigravityClient.isConnected) {
+            this.game.uiManager.addChatMessage('error', 'Agent disconnected. Check your internet connection or server status.');
+            return;
+        }
+
+        window.antigravityClient.send({
+            type: 'input',
+            text: text,
+            context: {
+                ...this.agentContext,
+                ...context,
+                position: this.game.player ? this.game.player.position : null,
+                rotation: (this.game.player && this.game.player.mesh) ? this.game.player.mesh.rotation : null,
+                scene: this.getSceneInfo()
+            }
+        });
+
         this.game.uiManager.addChatMessage('user', text);
+        this.game.uiManager.showThinking();
 
         // UI Updates
         this.currentStreamMsgId = null;
         this.game.uiManager.toggleStopButton(true);
+    }
+
+    requestIdea() {
+        const scene = this.getSceneInfo();
+        const biome = scene.biome || 'unknown';
+
+        // Construct a prompt that guides the AI
+        const prompt = `Based on my current location (biome: ${biome}) and nearby creatures, suggest a fun, creative building idea or activity.`;
+
+        // Use sendTextMessage but maybe with a flag to show differently? 
+        // For now, just sending as a user message is clearest.
+        this.sendTextMessage(prompt, { isIdeaRequest: true });
     }
 
     interruptGeneration() {
@@ -115,6 +140,7 @@ export class Agent {
         }
 
         console.log('[Agent] Interrupting generation...');
+        this.game.uiManager.hideThinking();
         this.game.uiManager.addChatMessage('system', 'Generation stopped by user.');
         this.game.uiManager.toggleStopButton(false);
         this.isStreaming = false;
@@ -183,14 +209,17 @@ export class Agent {
     async handleServerMessage(msg) {
         switch (msg.type) {
             case 'token':
+                this.game.uiManager.hideThinking();
                 this.lastToolMsgId = null; // Reset so next tool batch gets fresh msg
                 this.streamToUI(msg.text);
 
                 break;
             case 'thought':
+                this.game.uiManager.hideThinking();
                 this.streamThoughtToUI(msg.text);
                 break;
             case 'tool_start':
+                this.game.uiManager.hideThinking();
                 // Show tool activity in chat (replace previous tool msg if consecutive)
                 const friendyName = this.getFriendlyToolName(msg.name, msg.args);
                 if (this.lastToolMsgId) {
@@ -206,6 +235,7 @@ export class Agent {
                 await this.handleToolRequest(msg);
                 break;
             case 'error':
+                this.game.uiManager.hideThinking();
                 this.game.uiManager.addChatMessage('error', msg.message);
                 break;
             case 'complete':
@@ -248,6 +278,7 @@ export class Agent {
         try {
             console.log(`[Agent] Executing Client Tool: ${name}`, args);
 
+            // Force refresh 1
             if (name === 'spawn_creature') {
                 result = await this.spawnCreature(args.creature, args.count);
             } else if (name === 'teleport_player') {
@@ -256,6 +287,10 @@ export class Agent {
                 result = this.getSceneInfo();
             } else if (name === 'update_entity') {
                 result = this.updateEntity(args);
+            } else if (name === 'patch_entity') {
+                result = this.patchEntity(args);
+            } else if (name === 'set_blocks') {
+                result = await this.setBlocks(args.blocks);
             } else {
                 throw new Error(`Unknown client tool: ${name}`);
             }
@@ -275,6 +310,31 @@ export class Agent {
     // =========================================================================
     // GAME ACTIONS (Ported from original Agent.js)
     // =========================================================================
+
+    async setBlocks(blocks) {
+        if (!blocks || !Array.isArray(blocks)) {
+            return { error: "Invalid blocks argument. Expected array." };
+        }
+
+        console.log(`[Agent] Setting ${blocks.length} blocks...`);
+        console.log(`[Agent] Full block data:`, JSON.stringify(blocks));
+        let count = 0;
+
+        for (const b of blocks) {
+            // Basic validation
+            if (b.x === undefined || b.y === undefined || b.z === undefined || !b.id) {
+                console.log(`[Agent] Skipping invalid block:`, JSON.stringify(b));
+                continue;
+            }
+
+            console.log(`[Agent] Placing block at (${b.x}, ${b.y}, ${b.z}) with id: ${b.id}`);
+            this.game.setBlock(b.x, b.y, b.z, b.id);
+            count++;
+        }
+
+        console.log(`[Agent] Finished placing ${count} blocks.`);
+        return { success: true, message: `Placed ${count} blocks.` };
+    }
 
     teleportPlayer(location) {
         const player = this.game.player;
@@ -304,24 +364,50 @@ export class Agent {
     async spawnCreature(creatureName, count = 1) {
         // Dynamic import to get the latest classes
         const module = await import('../AnimalRegistry.js');
-        const AnimalClasses = module.AnimalClasses;
+        let AnimalClasses = module.AnimalClasses;
 
         // Check aliases
         const lower = creatureName.toLowerCase();
         let targetName = CREATURE_ALIASES[lower] || creatureName;
 
-        // Find class
-        let CreatureClass = AnimalClasses[targetName];
+        // Find class (with retry for newly created creatures)
+        let CreatureClass = null;
+        const maxWaitMs = 3000;  // 3 seconds max wait for newly created creatures
+        const pollIntervalMs = 100;
+        const startTime = Date.now();
+
+        // Helper to find the class
+        const findClass = () => {
+            // Re-import to get latest changes
+            let found = AnimalClasses[targetName];
+            if (!found) {
+                // Try case-insensitive match
+                const match = Object.keys(AnimalClasses).find(k => k.toLowerCase() === targetName.toLowerCase());
+                if (match) found = AnimalClasses[match];
+            }
+            return found;
+        };
+
+        CreatureClass = findClass();
+
+        // If not found, wait for it (handles race condition when creature was just created)
         if (!CreatureClass) {
-            // Try Case insensitive
-            const match = Object.keys(AnimalClasses).find(k => k.toLowerCase() === targetName.toLowerCase());
-            if (match) CreatureClass = AnimalClasses[match];
+            console.log(`[Agent] Creature '${creatureName}' not in registry yet, waiting for registration...`);
+
+            while (!CreatureClass && (Date.now() - startTime) < maxWaitMs) {
+                await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+                CreatureClass = findClass();
+            }
+
+            if (CreatureClass) {
+                console.log(`[Agent] Creature '${creatureName}' registered after ${Date.now() - startTime}ms`);
+            }
         }
 
         if (!CreatureClass) {
             // In the "Antigravity" model, we expect the SERVER to handle "not found" by creating the file
             // So we return an error here, and the server brain should catch it and trigger a 'write_to_file' task!
-            return { error: `Creature '${creatureName}' class not found in registry.` };
+            return { error: `Creature '${creatureName}' class not found in registry after waiting ${maxWaitMs}ms.` };
         }
 
         const spawnResult = this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, count);
@@ -346,19 +432,67 @@ export class Agent {
 
         console.log(`[Agent] Updating entity ${entityId}:`, updates);
 
+        const className = entity.constructor.name;
+
         if (updates.scale) {
-            if (entity.setScale) entity.setScale(updates.scale);
-            else entity.mesh.scale.setScalar(updates.scale);
+            if (typeof entity.setScale === 'function') {
+                entity.setScale(updates.scale);
+            } else if (entity.mesh && entity.mesh.scale) {
+                // Fallback to direct mesh manipulation if method missing
+                // BUT better to enforce method for persistence? 
+                // Let's rely on standard fallback for scale as it's common
+                entity.mesh.scale.setScalar(updates.scale);
+            } else {
+                return { error: `Entity class '${className}' does not support scaling (no setScale method or mesh).` };
+            }
         }
 
         if (updates.color) {
-            if (entity.setColor) entity.setColor(updates.color);
+            if (typeof entity.setColor === 'function') {
+                entity.setColor(updates.color);
+            } else {
+                // INTROSPECTION ERROR: Trigger for AI Self-Repair
+                // We explicitly tell the AI that the method is missing
+                return {
+                    error: `Entity class '${className}' does not implement 'setColor'. You need to modify the file for ${className} to add this method.`,
+                    details: {
+                        missingMethod: 'setColor',
+                        className: className,
+                        filePath: `src/game/entities/animals/${className}.js` // Hint at path (optional but helpful)
+                    }
+                };
+            }
         }
 
         // Trigger sync for persistence
         if (entity.checkSync) entity.checkSync(true); // Force sync
 
         return { success: true, message: `Updated entity ${entityId}` };
+    }
+
+    patchEntity(args) {
+        const { entityId, method, code } = args;
+        const entity = this.game.spawnManager.entities.get(entityId);
+
+        if (!entity) {
+            return { error: `Entity ${entityId} not found.` };
+        }
+
+        const className = entity.constructor.name;
+        console.log(`[Agent] Patching ${className}.${method} on entity ${entityId}`);
+        console.log(`[Agent] Patch Code:\n${code}`);
+
+        try {
+            // Create function with access to delta param (for update loop)
+            // Using Function constructor for runtime code injection
+            entity[method] = new Function('delta', code);
+            return {
+                success: true,
+                message: `Patched ${method} on ${className} (${entityId})`
+            };
+        } catch (e) {
+            return { error: `Failed to patch ${method}: ${e.message}` };
+        }
     }
 
     getSceneInfo() {
@@ -369,20 +503,41 @@ export class Agent {
         const terrainHeight = worldGen ? worldGen.getTerrainHeight(pos.x, pos.z) : 0;
         const biome = worldGen ? worldGen.getBiome(pos.x, pos.z) : 'unknown';
 
-        // Count nearby creatures
+        // Count nearby creatures & build detailed list
         const nearbyCreatures = {};
+        const nearbyEntities = [];
         const animals = this.game.animals || [];
+
         for (const animal of animals) {
             if (animal.mesh && animal.mesh.position.distanceTo(pos) < CREATURE_DETECTION_RADIUS) {
                 const name = animal.constructor.name;
                 nearbyCreatures[name] = (nearbyCreatures[name] || 0) + 1;
+
+                nearbyEntities.push({
+                    type: name,
+                    id: animal.id, // ID is critical for update_entity
+                    position: {
+                        x: Math.round(animal.position.x * 10) / 10,
+                        y: Math.round(animal.position.y * 10) / 10,
+                        z: Math.round(animal.position.z * 10) / 10
+                    },
+                    color: animal.color || 'default'
+                });
             }
         }
+
+        // Limit entity list size to avoid token limit issues (closest 20)
+        nearbyEntities.sort((a, b) => {
+            const da = (a.position.x - pos.x) ** 2 + (a.position.z - pos.z) ** 2;
+            const db = (b.position.x - pos.x) ** 2 + (b.position.z - pos.z) ** 2;
+            return da - db;
+        });
 
         return {
             position: { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) },
             biome,
-            nearbyCreatures
+            nearbyCreatures, // Keep count for high-level summary
+            nearbyEntities: nearbyEntities.slice(0, 20) // Detailed list for targeting
         };
     }
 }

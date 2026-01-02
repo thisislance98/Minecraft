@@ -17,6 +17,9 @@ export class AntigravityClient {
         // Message queue for when game is not ready
         this.messageQueue = [];
 
+        // Settings
+        this.autoFixErrors = false; // Off by default - user must enable
+
         // Global Error Monitoring
         this.lastSentError = null;
         this.setupErrorListeners();
@@ -85,6 +88,13 @@ export class AntigravityClient {
             }
         }
 
+        // Check if CLI mode is enabled via URL (e.g., ?cli=true from test runner)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('cli') === 'true') {
+            url += (url.includes('?') ? '&' : '?') + 'cli=true';
+            console.log('[AntigravityClient] CLI mode detected, bypassing authentication');
+        }
+
         console.log('[AntigravityClient] Connecting to:', url);
         this.ws = new WebSocket(url);
 
@@ -143,9 +153,10 @@ export class AntigravityClient {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
         } else {
-            console.warn('[AntigravityClient] Cannot send, socket not open.');
+            const readyState = this.ws ? this.ws.readyState : 'no socket';
+            console.warn(`[AntigravityClient] Cannot send, socket not open. State: ${readyState}`);
             // Ideally notify UI of offline state
-            this.notifyListeners({ type: 'error', message: 'Agent offline. Connection lost.' });
+            this.notifyListeners({ type: 'error', message: 'Cannot reach AI server. Reconnecting... Check if the server is running.' });
         }
     }
 
@@ -205,6 +216,12 @@ export class AntigravityClient {
     }
 
     reportError(errorDetails) {
+        // Check if auto-fix errors is enabled
+        if (!this.autoFixErrors) {
+            console.log('[AntigravityClient] Auto-fix disabled, error not reported to AI:', errorDetails.message);
+            return;
+        }
+
         // Check if AI is currently busy with a fix (Streaming)
         // If so, suppress new errors to prevent interruption/spam
         if (this.game && this.game.agent && this.game.agent.isStreaming) {

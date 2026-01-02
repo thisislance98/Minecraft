@@ -189,6 +189,17 @@ export class Animal {
         }
         dt = Math.min(dt, 0.1);
 
+        // Ensure shadows are enabled (one-time setup)
+        if (!this.shadowsInitialized) {
+            this.mesh.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+            this.shadowsInitialized = true;
+        }
+
         if (this.rider) {
             // Update rider position
             this.rider.position.copy(this.position);
@@ -307,7 +318,7 @@ export class Animal {
         this.checkSync(true);
     }
 
-    setColor(color) {
+    applyGenericColor(color) {
         // Try to interpret color
         let hex = 0xFFFFFF;
         if (typeof color === 'string') {
@@ -366,7 +377,7 @@ export class Animal {
         }
 
         if (data.color !== undefined && data.color !== null) {
-            this.setColor(data.color);
+            this.applyGenericColor(data.color);
         }
 
         // Don't override state blindly if we are currently reacting to something, 
@@ -888,7 +899,37 @@ export class Animal {
         const groundY = highestGroundY; // Use the highest found ground
         const distToGround = pos.y - groundY;
 
-        if (distToGround >= -0.1 && distToGround < 1.0) {
+        // Check for water immersion
+        // We check the block at the center of the entity
+        const waterBlock = this.game.getBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+        const isInWater = waterBlock === Blocks.WATER;
+
+        if (isInWater) {
+            // WATER PHYSICS
+            this.onGround = false;
+
+            // Drag
+            this.velocity.x *= 0.8;
+            this.velocity.z *= 0.8;
+            this.velocity.y *= 0.8;
+
+            // Buoyancy - push up slightly
+            // If they are deep, push up more? 
+            // Simple logic: Tend towards surface.
+            this.velocity.y += 10.0 * dt; // Buoyancy force
+            if (this.velocity.y > 2.0) this.velocity.y = 2.0;
+
+            // Apply movement
+            pos.y += this.velocity.y * dt;
+
+            // Prevent shooting out of water too fast
+            // If head is above water, reduce buoyancy?
+            const headBlock = this.game.getBlock(Math.floor(pos.x), Math.floor(pos.y + 0.8), Math.floor(pos.z));
+            if (headBlock !== Blocks.WATER) {
+                if (this.velocity.y > 0) this.velocity.y *= 0.5;
+            }
+
+        } else if (distToGround >= -0.1 && distToGround < 1.0) {
             // SNAP TO GROUND
             pos.y = groundY;
             this.velocity.y = 0;
@@ -947,7 +988,24 @@ export class Animal {
         // Standard velocity-based physics with jumping
 
         // Gravity
-        this.velocity.y -= this.gravity * dt;
+        const waterBlock = this.game.getBlock(Math.floor(this.position.x), Math.floor(this.position.y), Math.floor(this.position.z));
+        const isInWater = waterBlock === Blocks.WATER;
+
+        if (isInWater) {
+            // Water Physics for Hoppers (Swim)
+            this.velocity.y -= this.gravity * 0.1 * dt; // Reduced gravity
+            this.velocity.y += 10.0 * dt; // Buoyancy
+            if (this.velocity.y > 2.0) this.velocity.y = 2.0;
+
+            // Drag
+            this.velocity.x *= 0.8;
+            this.velocity.z *= 0.8;
+            this.velocity.y *= 0.8;
+
+        } else {
+            this.velocity.y -= this.gravity * dt;
+        }
+
         this.velocity.y = Math.max(this.velocity.y, -40);
 
         let dx = 0;
@@ -1047,7 +1105,8 @@ export class Animal {
     }
 
     checkSolid(x, y, z) {
-        return !!this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+        const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
+        return !!block && block !== Blocks.WATER;
     }
 
     checkWater(x, y, z) {
@@ -1085,7 +1144,8 @@ export class Animal {
         for (let bx = startBX; bx <= endBX; bx++) {
             for (let by = startBY; by <= endBY; by++) {
                 for (let bz = startBZ; bz <= endBZ; bz++) {
-                    if (this.game.getBlock(bx, by, bz)) {
+                    const block = this.game.getBlock(bx, by, bz);
+                    if (block && block !== Blocks.WATER) {
                         return true;
                     }
                 }
@@ -1134,7 +1194,8 @@ export class Animal {
                 const by = Math.floor(checkY);
                 const bz = Math.floor(worldZ);
 
-                if (this.game.getBlock(bx, by, bz)) {
+                const block = this.game.getBlock(bx, by, bz);
+                if (block && block !== Blocks.WATER) {
                     // Collision!
                     // Calculate push vector (center of block to point)
                     const blockCenter = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);

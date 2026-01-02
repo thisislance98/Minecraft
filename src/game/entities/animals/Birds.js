@@ -124,6 +124,14 @@ export class BirdManager {
         // Rotate parts so the bird (built along X) faces +Z (forward)
         meshGroup.rotation.y = Math.PI / 2;
 
+        // Enable shadows
+        group.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
         return {
             group,
             leftWing,

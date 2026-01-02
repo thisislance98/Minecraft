@@ -22,7 +22,7 @@ export const Config = {
     PLAYER: {
         SPEED: 0.08,
         SPRINT_MULTIPLIER: 1.5,
-        JUMP_FORCE: 0.2,
+        JUMP_FORCE: 0.15,
         HEIGHT: 1.8,
         WIDTH: 0.6,
         EYE_HEIGHT: 1.6,

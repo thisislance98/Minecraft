@@ -16,11 +16,14 @@ export class InputManager {
             'KeyD': 'RIGHT',
             'Space': 'JUMP',
             'ShiftLeft': 'SPRINT',
-            'KeyF': 'INTERACT', // or Dismount
+            'ControlLeft': 'SNEAK',
+            'KeyQ': 'DROP',
+            'KeyF': 'INTERACT', // Kept for Interact
             'KeyC': 'CAMERA',
             'AltLeft': 'VOICE',
             'AltRight': 'VOICE',
         };
+        this.lastSpaceTime = 0; // For double-jump detection
         this.isLocked = false;
         this.mouseDownInterval = null;
 
@@ -108,8 +111,10 @@ export class InputManager {
             }
 
             // Block game inputs when typing in chat input (check if chat input is focused)
-            const chatInput = document.getElementById('chat-input');
-            if (chatInput && document.activeElement === chatInput) return;
+            const commInput = document.getElementById('comm-input');
+            const aiChatInput = document.getElementById('chat-input');
+            if ((commInput && document.activeElement === commInput) ||
+                (aiChatInput && document.activeElement === aiChatInput)) return;
 
             // Tab toggles chat open/closed
             if (e.code === 'Tab') {
@@ -134,9 +139,18 @@ export class InputManager {
                 this.actions[this.bindings[e.code]] = true;
             }
 
+
+
             // Debug Toggle (P)
             if (e.code === 'KeyP') {
                 this.game.toggleDebugPanel();
+            }
+
+            // Spawn Panel Toggle (R)
+            if (e.code === 'KeyR' && !this.game.agent.isChatOpen) {
+                if (window.spawnUI) {
+                    window.spawnUI.togglePanel();
+                }
             }
 
             // Inventory Toggle (I)
@@ -154,11 +168,7 @@ export class InputManager {
             // 17:             'KeyF': 'INTERACT', // or Dismount
 
             if (e.code === 'KeyF') {
-                if (this.game.player && this.game.player.isFlying) {
-                    if (!e.repeat) {
-                        this.game.player.toggleFlying();
-                    }
-                } else if (this.game.player.mount) {
+                if (this.game.player.mount) {
                     this.game.player.dismount();
                 } else {
                     const animal = this.game.physicsManager.getHitAnimal();
@@ -195,20 +205,24 @@ export class InputManager {
                 }
             }
 
-            // R - Cycle Spells (Omni Wand)
-            if (e.code === 'KeyR' && !this.game.agent.isChatOpen) {
+
+
+            // U - Use Selected Item (for wands/tools that can be activated with a key)
+            if (e.code === 'KeyU' && !e.repeat && !this.game.agent.isChatOpen) {
                 const item = this.game.inventory.getSelectedItem();
-                if (item && item.item === 'omni_wand') {
-                    const wandItem = this.game.itemManager.getItem('omni_wand');
-                    if (wandItem) {
-                        wandItem.cycleSpell();
+                if (item && item.item) {
+                    const itemInstance = this.game.itemManager.getItem(item.item);
+                    if (itemInstance && itemInstance.isTool) {
+                        this.game.itemManager.handleItemPrimary(item.item);
                     }
                 }
             }
 
-            // Q for break
-            if (e.code === 'KeyQ' && this.isLocked) {
-                this.game.physicsManager.breakBlock();
+            // Q for Drop Item (was Break, but Break is Left Click)
+            if (e.code === 'KeyQ' && !this.game.agent.isChatOpen) {
+                if (this.game.inventoryManager) {
+                    this.game.inventoryManager.dropSelected();
+                }
             }
 
             // Number keys for hotbar
@@ -241,17 +255,6 @@ export class InputManager {
                         return;
                     }
 
-                    const item = this.game.inventory.getSelectedItem();
-                    if (item && item.item === 'omni_wand') {
-                        // get actual item instance
-                        // inventory item is { item: 'id', count: 1 }
-                        // we need the item instance from ItemManager
-                        const wandItem = this.game.itemManager.getItem('omni_wand');
-                        if (wandItem) {
-                            this.game.uiManager.openSpellCreator(wandItem);
-                            return; // Handled, don't fall through to secondary action
-                        }
-                    }
                     // For all other items (including flying_broom), fall through to secondary action
                 }
             }
@@ -265,12 +268,7 @@ export class InputManager {
 
             // V for Voice (Handled in Agent.js directly via document listener, ideally move here later)
 
-            // G for Thruster Activate
-            if (e.code === 'KeyG') {
-                if (this.game.physicsManager) {
-                    this.game.physicsManager.activateThruster();
-                }
-            }
+
 
             // Accessibility for Trackpad users:
             // L for Left Click (Primary Action)
@@ -543,20 +541,7 @@ export class InputManager {
                 return;
             }
 
-            // Left click on escape room block starts escape room game
-            if (block && (block.type === 'escape_room_block' || (this.game.Blocks && block.type === this.game.Blocks.ESCAPE_ROOM_BLOCK))) {
-                if (this.game.escapeRoomManager && !this.game.escapeRoomManager.isActive) {
-                    this.game.escapeRoomManager.start(new THREE.Vector3(targetBlock.x, targetBlock.y, targetBlock.z));
-                    if (this.game.soundManager) {
-                        this.game.soundManager.playSound('click');
-                    }
-                }
-                if (this.mouseDownInterval) {
-                    clearInterval(this.mouseDownInterval);
-                    this.mouseDownInterval = null;
-                }
-                return;
-            }
+
 
             // Left click on parkour block starts parkour challenge
             if (block && block.type === 'parkour_block') {

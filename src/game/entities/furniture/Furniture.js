@@ -68,9 +68,11 @@ export class Furniture extends Animal {
         this.mesh.rotation.y = this.rotation;
     }
 
-    // Override interaction if needed
+    // Override interaction
     interact(player) {
-        // Maybe sit? For now, nothing.
+        if (this.game.uiManager) {
+            this.game.uiManager.showXboxUI();
+        }
     }
 
     takeDamage(amount, attacker) {

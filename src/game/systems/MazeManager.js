@@ -20,6 +20,9 @@ export class MazeManager {
         console.log("Generating maze at", centerPos);
         const mazeGrid = this.generator.generate(size, size);
 
+        // Ensure there is at least one exit
+        mazeGrid[0][1] = 0;
+
         const startX = Math.floor(centerPos.x) - Math.floor(size / 2);
         const startY = Math.floor(centerPos.y); // Floor level
         const startZ = Math.floor(centerPos.z) - Math.floor(size / 2);

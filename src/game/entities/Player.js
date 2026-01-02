@@ -88,9 +88,9 @@ export class Player {
         const torsoDepth = 0.25;
 
         const torsoGeom = new THREE.BoxGeometry(torsoWidth, torsoHeight, torsoDepth);
-        const torso = new THREE.Mesh(torsoGeom, shirtMaterial);
-        torso.position.set(0, -0.5, 0);
-        this.body.add(torso);
+        this.torso = new THREE.Mesh(torsoGeom, shirtMaterial);
+        this.torso.position.set(0, -0.5, 0);
+        this.body.add(this.torso);
 
         // Arms dimensions
         const armWidth = 0.25;
@@ -280,7 +280,7 @@ export class Player {
         this.createLevitationWand();
         this.createShrinkWand();
         this.createGrowthWand();
-        this.createOmniWand();
+
         this.createRideWand();
         this.createWizardTowerWand();
         this.createBroom();
@@ -399,30 +399,7 @@ export class Player {
         this.growthWand.visible = false;
     }
 
-    createOmniWand() {
-        const wandGroup = new THREE.Group();
 
-        // Handle (Dark Metal)
-        const handleGeo = new THREE.BoxGeometry(0.05, 0.45, 0.05);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x222222, depthTest: false });
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Rainbow Gem)
-        const tipGeo = new THREE.DodecahedronGeometry(0.09); // Complex shape
-        // Using NormalMaterial for rainbow-ish effect easily, or just white with lights
-        const tipMat = new THREE.MeshNormalMaterial({ depthTest: false });
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.45;
-        wandGroup.add(tip);
-
-        this.toolAttachment.add(wandGroup);
-        this.omniWand = wandGroup;
-        this.omniWand.visible = false;
-    }
 
     createRideWand() {
         const wandGroup = new THREE.Group();
@@ -793,13 +770,25 @@ export class Player {
         if (this.levitationWand) this.levitationWand.visible = itemType === 'levitation_wand';
         if (this.shrinkWand) this.shrinkWand.visible = itemType === 'shrink_wand';
         if (this.growthWand) this.growthWand.visible = itemType === 'growth_wand';
-        if (this.omniWand) this.omniWand.visible = itemType === 'omni_wand';
-        if (this.omniWand) this.omniWand.visible = itemType === 'omni_wand';
+
         if (this.rideWand) this.rideWand.visible = itemType === 'ride_wand';
         if (this.wizardTowerWand) this.wizardTowerWand.visible = itemType === 'wizard_tower_wand';
         if (this.broom) {
-            // Only show held broom if we are NOT flying
+            // Only show held broom if we are NOT flying OR if we are flying but not in rising mode?
+            // Actually:
+            // If flying AND holding broom -> Show RidingBroom (handled in update loop/toggle logic), Hide HeldBroom
+            // If flying AND NOT holding broom -> Show nothing? (Correct, assuming another item is held)
+            // If NOT flying -> Show HeldBroom if selected
+
+            // So hide held broom if flying AND holding it (because we show riding version)
+            // BUT this function is called every frame or on switch.
+
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
+
+            // Also update riding broom visibility here to handle item switching while flying
+            if (this.ridingBroom) {
+                this.ridingBroom.visible = (this.isFlying && itemType === 'flying_broom');
+            }
         }
 
         if (this.chairModel) this.chairModel.visible = itemType === 'chair';
@@ -821,7 +810,7 @@ export class Player {
         const REF_FPS = 60.0;
 
         // Scale speed to blocks/second
-        const speed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? this.sprintMultiplier : 1);
+        const speed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? this.sprintMultiplier : (input.isActionActive('SNEAK') ? 0.3 : 1));
 
         // Calculate movement input
         const moveForward = (input.isActionActive('FORWARD') ? 1 : 0) - (input.isActionActive('BACKWARD') ? 1 : 0);
@@ -874,7 +863,7 @@ export class Player {
                 canDismount = false;
             }
 
-            const shiftJustPressed = input.isActionActive('SPRINT') && !this.wasShiftPressed;
+            const shiftJustPressed = input.isActionActive('SNEAK') && !this.wasShiftPressed;
             if ((input.isActionActive('INTERACT') || shiftJustPressed) && canDismount) {
                 this.dismount();
             } else {
@@ -888,7 +877,7 @@ export class Player {
                 this.position.y += 0.8;
                 this.velocity.set(0, 0, 0);
             }
-            this.wasShiftPressed = input.isActionActive('SPRINT');
+            this.wasShiftPressed = input.isActionActive('SNEAK');
         } else {
             // NORMAL PHYSICS OR FLYING
             if (this.isFlying) {
@@ -930,7 +919,8 @@ export class Player {
 
                 // Vertical controls (Space to go straight up)
                 if (input.isActionActive('JUMP')) this.velocity.y += currentFlightSpeed;
-                // Shift no longer goes down, it boosts speed above.
+                if (input.isActionActive('SNEAK')) this.velocity.y -= currentFlightSpeed;
+
                 // Descent is handled by looking down and moving forward.
 
                 // Move (using collision or just position?)
@@ -996,7 +986,7 @@ export class Player {
                 }
 
                 this.wasSpacePressed = input.isActionActive('JUMP');
-                this.wasShiftPressed = input.isActionActive('SPRINT');
+                this.wasShiftPressed = input.isActionActive('SNEAK');
 
                 // Move with collision detection
                 // Apply delta time integration here
@@ -1070,7 +1060,14 @@ export class Player {
         } else {
             // 1st Person Logic (Default)
             camera.position.copy(this.position);
-            camera.position.y += 1.6;
+
+            // Adjust camera height for Sneak
+            const targetHeight = input.isActionActive('SNEAK') ? 1.4 : 1.6;
+            // Simple interpolation for smoothness (or instant?)
+            if (!this.currentCameraHeight) this.currentCameraHeight = 1.6;
+            this.currentCameraHeight += (targetHeight - this.currentCameraHeight) * 10 * deltaTime;
+
+            camera.position.y += this.currentCameraHeight;
             camera.rotation.order = 'YXZ';
             camera.rotation.y = this.rotation.y;
             camera.rotation.x = this.rotation.x;
@@ -1298,17 +1295,28 @@ export class Player {
             this.velocity.y = 0.5 * REF_FPS; // Hop
             this.game.addMessage && this.game.addMessage("You are now flying!");
 
-            // Switch to Riding Model
-            if (this.ridingBroom) this.ridingBroom.visible = true;
-            if (this.broom) this.broom.visible = false;
+            // Check if holding broom
+            const selectedItem = this.game.inventory ? this.game.inventory.getSelectedItem() : null;
+            const isHoldingBroom = selectedItem && selectedItem.item === 'flying_broom';
 
-            // Sitting Pose
-            // Lift legs up forward (90 degrees / PI/2)
-            if (this.leftLeg) this.leftLeg.rotation.x = Math.PI / 2;
-            if (this.rightLeg) this.rightLeg.rotation.x = Math.PI / 2;
+            // Switch to Riding Model ONLY if holding broom
+            if (this.ridingBroom) this.ridingBroom.visible = isHoldingBroom;
+            if (this.broom) this.broom.visible = false; // Always hide held broom when flying (if we were holding it)
 
-            // Arm position? Maybe holding the handle in front?
-            this.rightArm.rotation.x = Math.PI / 3;
+            // Sitting Pose ONLY if holding broom
+            if (isHoldingBroom) {
+                // Lift legs up forward (90 degrees / PI/2)
+                if (this.leftLeg) this.leftLeg.rotation.x = Math.PI / 2;
+                if (this.rightLeg) this.rightLeg.rotation.x = Math.PI / 2;
+
+                // Arm position? Maybe holding the handle in front?
+                this.rightArm.rotation.x = Math.PI / 3;
+            } else {
+                // Normal flying (superman or just standing? Standing is easiest for now)
+                if (this.leftLeg) this.leftLeg.rotation.x = 0;
+                if (this.rightLeg) this.rightLeg.rotation.x = 0;
+                this.rightArm.rotation.x = 0;
+            }
 
         } else {
             this.game.addMessage && this.game.addMessage("You stopped flying.");
@@ -1576,16 +1584,23 @@ export class Player {
         }
 
         if (this.isFlying) {
-            // Flying Pose - Static arms and legs
-            // Legs sitting forward (Positive rotation for forward if negative was backward)
-            if (this.leftLegPivot) this.leftLegPivot.rotation.x = Math.PI / 2;
-            if (this.rightLegPivot) this.rightLegPivot.rotation.x = Math.PI / 2;
+            const selectedItem = this.game.inventory ? this.game.inventory.getSelectedItem() : null;
+            const isHoldingBroom = selectedItem && selectedItem.item === 'flying_broom';
 
-            // Arms static holding handle
-            if (this.rightArmPivot) this.rightArmPivot.rotation.x = Math.PI / 3;
-            if (this.leftArmPivot) this.leftArmPivot.rotation.x = Math.PI / 3;
+            if (isHoldingBroom) {
+                // Flying Pose - Static arms and legs (Riding Broom)
+                // Legs sitting forward (Positive rotation for forward if negative was backward)
+                if (this.leftLegPivot) this.leftLegPivot.rotation.x = Math.PI / 2;
+                if (this.rightLegPivot) this.rightLegPivot.rotation.x = Math.PI / 2;
 
-            return; // Skip walking animation
+                // Arms static holding handle
+                if (this.rightArmPivot) this.rightArmPivot.rotation.x = Math.PI / 3;
+                if (this.leftArmPivot) this.leftArmPivot.rotation.x = Math.PI / 3;
+
+                return; // Skip walking animation
+            }
+            // If flying but NOT holding broom, fall through to standard walking animation (or add separate flight anim later)
+            // For now, let's treat it like walking in air (creative flight style)
         }
 
         if (isMoving) {
@@ -1832,8 +1847,14 @@ export class Player {
             this.body.visible = true;
             if (this.head) this.head.visible = true;
 
-            // Hide crosshair
-            if (crosshair) crosshair.classList.add('hidden');
+            // Hide crosshair ONLY in selfie mode (Mode 2)
+            if (crosshair) {
+                if (this.cameraMode === 2) {
+                    crosshair.classList.add('hidden');
+                } else {
+                    crosshair.classList.remove('hidden');
+                }
+            }
 
             if (this.cameraMode === 1) {
                 // 3rd Person Back
@@ -1858,17 +1879,26 @@ export class Player {
                 this.orbitRotation.x = 0;
             }
 
+            // Ensure body parts are visible in 3rd person
+            if (this.torso) this.torso.visible = true;
+            if (this.leftLegPivot) this.leftLegPivot.visible = true;
+            if (this.rightLegPivot) this.rightLegPivot.visible = true;
+
         } else {
             // Switch to 1st Person
             // Attach body to camera
             this.game.camera.add(this.body);
 
             // Position relative to camera to see arms
-            this.body.position.set(0, -0.03, -0.4);
+            this.body.position.set(0, -0.3, -0.4);
             this.body.rotation.set(0, 0, 0);
 
-            // Hide head in 1st person to prevent clipping
+            // Hide head and body parts in 1st person to prevent clipping/obstruction
             if (this.head) this.head.visible = false;
+            if (this.torso) this.torso.visible = false;
+            // Hide legs as looking down would see them "attached to chin" if they follow head pitch
+            if (this.leftLegPivot) this.leftLegPivot.visible = false;
+            if (this.rightLegPivot) this.rightLegPivot.visible = false;
 
             // Show crosshair
             if (crosshair) crosshair.classList.remove('hidden');

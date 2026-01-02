@@ -115,9 +115,25 @@ export class TerrainGenerator {
     }
 
     isCave(x, y, z) {
-        // 3D Noise for caves
-        // Tuned for "spaghetti" caves
-        const caveNoise = this.noise.get3D(x, y, z, 0.05, 1); // Frequency 0.05
-        return caveNoise > 0.6; // Threshold
+        // "Worm" caves using domain intersection
+        // We look for areas where two uncorrelated noise fields are both close to zero
+        // This mathematically defines a tube/tunnel structure in 3D space
+
+        const scale = 0.015; // Lower frequency for larger, longer tunnels
+
+        // Use large offsets to simulate independent noise fields
+        const n1 = this.noise.get3D(x, y, z, scale);
+        const n2 = this.noise.get3D(x + 123.4, y + 567.8, z + 901.2, scale);
+
+        // Define the "tunnel" radius (squared)
+        // Values close to 0 in both fields mean we are inside the tunnel
+        const val = (n1 * n1) + (n2 * n2);
+
+        // Threshold defines the radius of the cave
+        // 0.02 is roughly a radius of sqrt(0.02) ~= 0.14 in noise space
+        // With simplex noise roughly -1 to 1, this is a decent size
+        const threshold = 0.04;
+
+        return val < threshold;
     }
 }

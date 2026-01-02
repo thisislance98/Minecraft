@@ -1,17 +1,39 @@
-
-import { Blocks } from '../core/Blocks.js';
 import * as THREE from 'three';
+import { Blocks } from '../core/Blocks.js';
+import { Chair } from '../entities/furniture/Chair.js';
+import { CrewMember } from '../entities/animals/CrewMember.js';
 
+// Header
 export class SpaceShipManager {
     constructor(game) {
         this.game = game;
-        this.controlBlockPositions = []; // Array of Vectors
+        this.controlBlockPositions = [];
+        this.blockQueue = [];
+
+        // Orbital movement state
+        this.orbitAngle = 0;
+        this.orbitRadius = 2000; // Large orbit to encompass the whole world
+        this.orbitHeight = 250;
+        this.orbitSpeed = 0.05; // Radians per second (slow majestic orbit - full orbit in ~2 minutes)
+        this.isOrbiting = false;
+
+        // Ship parent group - move this to orbit all children smoothly
+        this.shipGroup = new THREE.Group();
+        game.scene.add(this.shipGroup);
+
+        // Ship block tracking for orbital movement
+        this.shipBlocks = [];
+        this.currentX = 0;
+        this.currentZ = 0;
+
+        // Engine particle system
+        this.engineParticles = null;
+        this.particlePositions = [];
+        this.particleVelocities = [];
+        this.particleAges = [];
+        this.maxParticles = 500;
     }
 
-    /**
-     * Spawns a Large Starship Enterprise at the given position.
-     * @param {THREE.Vector3} centerPos
-     */
     spawnShip(centerPos) {
         const startX = Math.floor(centerPos.x);
         const startY = Math.floor(centerPos.y + 40); // Higher up due to size
@@ -68,9 +90,9 @@ export class SpaceShipManager {
                             const isHull = innerDist > 1.0;
 
                             if (isHull && !isShuttleBay) {
-                                // Windows
+                                // Windows (using ENTERPRISE_SCREEN for orbital movement)
                                 if (Math.abs(y) <= 1 && (x * x + z * z > (sRad - 2) * (sRad - 2)) && x % 5 !== 0) {
-                                    place(x, localY, localZ, Blocks.GLASS);
+                                    place(x, localY, localZ, Blocks.ENTERPRISE_SCREEN);
                                 } else {
                                     place(x, localY, localZ, Blocks.ENTERPRISE_HULL);
                                 }
@@ -142,8 +164,8 @@ export class SpaceShipManager {
         place(0, bY + 1, consoleZ, Blocks.ENTERPRISE_CONSOLE);
         this.controlBlockPositions.push(new THREE.Vector3(startX, startY + bY + 1, startZ + consoleZ));
 
-        // Red Alert Light
-        place(0, bY + 3, sZ, Blocks.TORCH);
+        // Red Alert Light (use enterprise block so it orbits with ship)
+        place(0, bY + 3, sZ, Blocks.ENTERPRISE_PANEL);
 
         // --- 3. Engineering Hull ---
         const eY = -15;
@@ -220,8 +242,8 @@ export class SpaceShipManager {
         for (let y = shaftBotY; y <= bY + 1; y++) {
             // Shaft Air
             placeAir(0, y, shaftZ);
-            // Ladder
-            place(0, y, shaftZ + 1, Blocks.LADDER);
+            // Access (use enterprise block for orbital movement)
+            place(0, y, shaftZ + 1, Blocks.ENTERPRISE_FLOOR);
         }
 
         // Corridor from Shaft to Bridge (on Deck 1 / Bridge Level)
@@ -236,6 +258,7 @@ export class SpaceShipManager {
         // --- 6. Pylons & Nacelles ---
         const pZStart = 15;
         const pZEnd = 25;
+        console.log("PEEK");
         const pYStart = eY + 5;
         const pYEnd = sY + 5;
         const pXStart = eRad - 2;
@@ -280,6 +303,9 @@ export class SpaceShipManager {
         });
 
         // Initialize Async Processor
+        this.startX = startX;
+        this.startY = startY;
+        this.startZ = startZ;
         this.processQueue(blockQueue);
     }
 
@@ -295,17 +321,14 @@ export class SpaceShipManager {
             // Process as many as possible within the budget
             while (index < queue.length && performance.now() - start < TIME_BUDGET_MS) {
                 const b = queue[index++];
-                this.game.setBlock(b.x, b.y, b.z, b.block, true, true); // Skip mesh/broadcast for speed
+                this.game.setBlock(b.x, b.y, b.z, b.block, true, true);
+
+                // Track non-air blocks for orbital movement
+                if (b.block !== Blocks.AIR) {
+                    this.shipBlocks.push({ x: b.x, y: b.y, z: b.z, type: b.block });
+                }
             }
 
-            // Batch update mesh/network occasionally or at end of frame
-            // For now, let's just let the loop continue. 
-            // We need to yield.
-
-            // Force mesh update for potential chunks we touched every few frames? 
-            // Or just rely on the fact that we yield?
-            // SpaceShipManager typically spans many chunks.
-            // Let's yield to next frame.
             await new Promise(resolve => requestAnimationFrame(resolve));
         }
 
@@ -313,6 +336,82 @@ export class SpaceShipManager {
         this.game.updateChunks();
         console.log('[SpaceShip] Enterprise Refit complete.');
         this.game.soundManager.playSound('levelup');
+
+        // Initialize orbital state
+        this.currentX = this.startX;
+        this.currentZ = this.startZ;
+        this.orbitAngle = Math.atan2(this.startZ, this.startX);
+        this.orbitRadius = Math.sqrt(this.startX * this.startX + this.startZ * this.startZ) || 300;
+        this.isOrbiting = true;
+        console.log(`[SpaceShip] Orbital movement active. ${this.shipBlocks.length} blocks tracked.`);
+
+        // Spawn Crew in Saucer Section (Main Control Room)
+        // Saucer is centered at sY=15, sZ=-25, radius=32
+        // We'll use the forward section of the saucer interior
+        const saucerFloorY = this.startY + 14; // Interior floor level
+        const saucerCenterZ = this.startZ - 25; // Center Z of saucer
+
+        // Control room area: front of saucer, Z around -35 to -40
+        const controlZ = saucerCenterZ - 10; // Forward in saucer
+
+        // 1. Captain (Center)
+        const capChair = new Chair(this.game, this.startX, saucerFloorY, controlZ);
+        this.game.entities.push(capChair);
+        this.shipGroup.add(capChair.mesh);
+
+        const captain = new CrewMember(this.game, this.startX, saucerFloorY, controlZ);
+        captain.uniformColor = 0xFFD700; // Gold
+        captain.createBody();
+        this.game.animals.push(captain);
+        this.shipGroup.add(captain.mesh);
+        captain.sitDown(this.startX, saucerFloorY, controlZ);
+
+        // 2. Helm (Left Front)
+        const helmX = this.startX - 4;
+        const helmZ = controlZ - 3;
+        const helmChair = new Chair(this.game, helmX, saucerFloorY, helmZ);
+        helmChair.mesh.rotation.y = Math.PI / 6;
+        this.game.entities.push(helmChair);
+        this.shipGroup.add(helmChair.mesh);
+
+        const helm = new CrewMember(this.game, helmX, saucerFloorY, helmZ);
+        helm.uniformColor = 0xFF0000; // Red
+        helm.createBody();
+        this.game.animals.push(helm);
+        this.shipGroup.add(helm.mesh);
+        helm.sitDown(helmX, saucerFloorY, helmZ);
+        helm.mesh.rotation.y = Math.PI / 6;
+
+        // 3. Ops (Right Front)
+        const opsX = this.startX + 4;
+        const opsZ = controlZ - 3;
+        const opsChair = new Chair(this.game, opsX, saucerFloorY, opsZ);
+        opsChair.mesh.rotation.y = -Math.PI / 6;
+        this.game.entities.push(opsChair);
+        this.shipGroup.add(opsChair.mesh);
+
+        const ops = new CrewMember(this.game, opsX, saucerFloorY, opsZ);
+        ops.uniformColor = 0xFFD700; // Gold
+        ops.createBody();
+        this.game.animals.push(ops);
+        this.shipGroup.add(ops.mesh);
+        ops.sitDown(opsX, saucerFloorY, opsZ);
+        ops.mesh.rotation.y = -Math.PI / 6;
+
+        // 4. Tactical (Standing Back)
+        const tacZ = controlZ + 5;
+        const tactical = new CrewMember(this.game, this.startX, saucerFloorY + 1, tacZ);
+        tactical.uniformColor = 0xFFD700; // Gold
+        tactical.createBody();
+        this.game.animals.push(tactical);
+        this.shipGroup.add(tactical.mesh);
+
+        // Add a control console in saucer section
+        const consoleWorldX = this.startX;
+        const consoleWorldY = this.startY + 14 + 1;
+        const consoleWorldZ = this.startZ - 25 - 12; // Forward of crew
+        this.game.setBlock(consoleWorldX, consoleWorldY, consoleWorldZ, Blocks.ENTERPRISE_CONSOLE);
+        this.controlBlockPositions.push(new THREE.Vector3(consoleWorldX, consoleWorldY, consoleWorldZ));
     }
 
     handleBlockInteraction(x, y, z) {
@@ -346,6 +445,140 @@ export class SpaceShipManager {
         const z = (Math.random() - 0.5) * r;
         const y = this.game.worldGen.getTerrainHeight(x, z) + 150;
         this.game.player.position.set(x, y, z);
+    }
+
+    createEngineParticles() {
+        // Create particle geometry
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(this.maxParticles * 3);
+        const colors = new Float32Array(this.maxParticles * 3);
+        const sizes = new Float32Array(this.maxParticles);
+
+        for (let i = 0; i < this.maxParticles; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = -1000; // Start off-screen
+            positions[i * 3 + 2] = 0;
+
+            // Blue-white color for warp trail
+            colors[i * 3] = 0.5 + Math.random() * 0.5;     // R
+            colors[i * 3 + 1] = 0.7 + Math.random() * 0.3; // G
+            colors[i * 3 + 2] = 1.0;                        // B
+
+            sizes[i] = 1 + Math.random() * 2;
+
+            this.particlePositions.push(new THREE.Vector3(0, -1000, 0));
+            this.particleVelocities.push(new THREE.Vector3(0, 0, 0));
+            this.particleAges.push(-1); // -1 = inactive
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        const material = new THREE.PointsMaterial({
+            size: 2,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        this.engineParticles = new THREE.Points(geometry, material);
+        this.game.scene.add(this.engineParticles);
+    }
+
+    update(dt) {
+        if (!this.isOrbiting) return;
+
+        // Update orbit angle
+        this.orbitAngle += this.orbitSpeed * dt;
+
+        // Calculate orbital position
+        const x = Math.cos(this.orbitAngle) * this.orbitRadius;
+        const z = Math.sin(this.orbitAngle) * this.orbitRadius;
+
+        // Move the entire ship group smoothly (this moves all children)
+        this.shipGroup.position.x = x;
+        this.shipGroup.position.z = z;
+        this.shipGroup.position.y = this.orbitHeight;
+
+        // Rotate to face direction of travel
+        this.shipGroup.rotation.y = this.orbitAngle + Math.PI / 2;
+
+        // Update tracked position
+        this.currentX = x;
+        this.currentZ = z;
+    }
+
+    updateEngineParticles(dt, shipX, shipZ) {
+        if (!this.engineParticles) {
+            this.createEngineParticles();
+        }
+
+        const positions = this.engineParticles.geometry.attributes.position.array;
+        const sizes = this.engineParticles.geometry.attributes.size.array;
+
+        // Nacelle positions relative to ship center (from spawnShip: pXEnd=25, pYEnd=sY+5=20, nZ=15)
+        const nacelle1X = shipX + 25;
+        const nacelle2X = shipX - 25;
+        const nacelleY = this.orbitHeight + 20;
+        const nacelleZ = shipZ + 45; // Back of nacelles
+
+        // Direction ship is moving (tangent to orbit)
+        const trailDirX = -Math.sin(this.orbitAngle);
+        const trailDirZ = Math.cos(this.orbitAngle);
+
+        // Update existing particles
+        for (let i = 0; i < this.maxParticles; i++) {
+            if (this.particleAges[i] >= 0) {
+                this.particleAges[i] += dt;
+
+                // Fade out and shrink over time
+                if (this.particleAges[i] > 3) {
+                    this.particleAges[i] = -1;
+                    positions[i * 3 + 1] = -1000;
+                } else {
+                    // Move particle along trail
+                    positions[i * 3] += this.particleVelocities[i].x * dt;
+                    positions[i * 3 + 1] += this.particleVelocities[i].y * dt;
+                    positions[i * 3 + 2] += this.particleVelocities[i].z * dt;
+
+                    // Shrink over time
+                    sizes[i] = Math.max(0.5, 2 - this.particleAges[i] * 0.5);
+                }
+            }
+        }
+
+        // Spawn new particles from each nacelle
+        const spawnRate = 10; // particles per frame
+        for (let n = 0; n < spawnRate; n++) {
+            // Find inactive particle
+            for (let i = 0; i < this.maxParticles; i++) {
+                if (this.particleAges[i] < 0) {
+                    // Spawn from random nacelle
+                    const nacelleX = Math.random() < 0.5 ? nacelle1X : nacelle2X;
+
+                    positions[i * 3] = nacelleX + (Math.random() - 0.5) * 3;
+                    positions[i * 3 + 1] = nacelleY + (Math.random() - 0.5) * 3;
+                    positions[i * 3 + 2] = nacelleZ + (Math.random() - 0.5) * 3;
+
+                    // Velocity: trail behind the ship
+                    this.particleVelocities[i].set(
+                        trailDirX * 30 + (Math.random() - 0.5) * 5,
+                        (Math.random() - 0.5) * 2,
+                        trailDirZ * 30 + (Math.random() - 0.5) * 5
+                    );
+
+                    this.particleAges[i] = 0;
+                    sizes[i] = 1.5 + Math.random();
+                    break;
+                }
+            }
+        }
+
+        this.engineParticles.geometry.attributes.position.needsUpdate = true;
+        this.engineParticles.geometry.attributes.size.needsUpdate = true;
     }
 }
 

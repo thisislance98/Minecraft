@@ -8,8 +8,17 @@ export class Sheep extends Animal {
         this.width = 0.9;
         this.height = 1.0;
         this.depth = 1.1; // Slightly longer
+        this.woolMeshes = [];
         this.createBody();
         this.mesh.scale.set(0.9, 0.9, 0.9);
+    }
+
+    setColor(color) {
+        const c = new THREE.Color(color);
+        this.woolMeshes.forEach(mesh => {
+            mesh.material = mesh.material.clone();
+            mesh.material.color.set(c);
+        });
     }
 
     createBody() {
@@ -27,6 +36,7 @@ export class Sheep extends Animal {
         const body = new THREE.Mesh(bodyGeo, woolMat);
         body.position.set(0, 0.8, 0);
         this.mesh.add(body);
+        this.woolMeshes.push(body);
 
         // Head (Skin)
         const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.65);
@@ -39,6 +49,7 @@ export class Sheep extends Animal {
         const headWool = new THREE.Mesh(headWoolGeo, woolMat);
         headWool.position.set(0, 1.5, 0.85);
         this.mesh.add(headWool);
+        this.woolMeshes.push(headWool);
 
         // Eyes
         const eyeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.05);

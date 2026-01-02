@@ -90,6 +90,14 @@ export class PixieManager {
 
         group.position.set(x, y, z);
 
+        // Enable shadows (emit light doesn't cast shadow usually, but mesh itself should)
+        group.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
         return {
             group,
             leftWing,

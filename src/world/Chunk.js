@@ -31,6 +31,7 @@ export class Chunk {
         ]);
         this.doorTypes = new Set([Blocks.DOOR_CLOSED, Blocks.DOOR_OPEN]);
         this.fenceTypes = new Set([Blocks.FENCE]);
+        this.grassMesh = null;
     }
 
     getIndex(lx, ly, lz) {
@@ -59,6 +60,11 @@ export class Chunk {
             this.game.scene.remove(this.mesh);
             this.mesh.geometry.dispose();
             this.mesh = null;
+        }
+        if (this.grassMesh) {
+            this.game.scene.remove(this.grassMesh);
+            this.grassMesh.dispose();
+            this.grassMesh = null;
         }
 
         const dataPerMaterial = new Map();
@@ -182,6 +188,8 @@ export class Chunk {
         ];
 
         const aoTables = [aoRight, aoLeft, aoTop, aoBottom, aoFront, aoBack];
+
+        const grassPositions = [];
 
         let hasGeom = false;
 
@@ -546,8 +554,40 @@ export class Chunk {
                             buffer.uvs.push(...uvs);
                         }
                     }
+
+                    // Check for grass block and if top face is exposed
+                    if (blockType === Blocks.GRASS) {
+                        // Check block above
+                        const upBlock = this.getBlock(lx, ly + 1, lz);
+                        const isUpTransparent = !upBlock ||
+                            upBlock === Blocks.AIR ||
+                            this.plantTypes.has(upBlock) ||
+                            upBlock === Blocks.WATER ||
+                            upBlock === Blocks.GLASS ||
+                            upBlock === Blocks.FENCE; // etc
+
+                        if (isUpTransparent) {
+                            // Patchy Grass Logic using Simplex Noise
+                            // Check available noise generator
+                            let noiseVal = 1.0;
+                            if (this.game.worldGen && this.game.worldGen.noise) {
+                                // Frequency 0.05 gives patches of ~20 blocks wide
+                                noiseVal = this.game.worldGen.noise.get2D(wx, wz, 0.05, 1);
+                            }
+
+                            // Only spawn grass if noise > 0.2 (creating gaps)
+                            if (noiseVal > 0.2) {
+                                grassPositions.push({ x: wx, y: wy, z: wz });
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        // Update Grass Mesh
+        if (this.game.grassSystem) {
+            this.game.grassSystem.updateChunk(this, grassPositions);
         }
 
         if (!hasGeom) {
@@ -628,6 +668,11 @@ export class Chunk {
             this.game.scene.remove(this.mesh);
             if (this.mesh.geometry) this.mesh.geometry.dispose();
             this.mesh = null;
+        }
+        if (this.grassMesh) {
+            this.game.scene.remove(this.grassMesh);
+            this.grassMesh.dispose();
+            this.grassMesh = null;
         }
     }
 }

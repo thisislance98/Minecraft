@@ -38,6 +38,7 @@ export class Pig extends Animal {
         // Pig: Pink
         const skinColor = 0xF0ACBC;
         const mat = new THREE.MeshLambertMaterial({ color: skinColor });
+
         const whiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
         const blackMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
         const hoofMat = new THREE.MeshLambertMaterial({ color: 0x5C3A21 }); // Dark brown for hooves

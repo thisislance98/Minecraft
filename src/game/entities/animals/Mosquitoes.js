@@ -132,6 +132,14 @@ export class MosquitoManager {
         // Actually, let's keep it simple: assume model forward is +Z.
         // My body is long on Z (0.15). Proboscis is at +0.12 Z. So +Z is forward.
 
+        // Enable shadows
+        group.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
         return {
             group,
             leftWing,

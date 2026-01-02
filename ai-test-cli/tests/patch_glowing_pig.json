@@ -1,0 +1,14 @@
+{
+    "name": "Patch Pig to Glow",
+    "prompt": "Spawn a pig, then patch its update method to make it emit light by adding an emissive property to its material",
+    "expectedTool": "patch_entity",
+    "headless": false,
+    "toolWait": 30000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const pig = game.animals.find(a => a.constructor.name === 'Pig'); if (!pig) return { success: false, message: 'No Pig found' }; if (!pig.mesh || !pig.mesh.material) return { success: false, message: 'Pig has no mesh/material' }; const mat = pig.mesh.material; const hasEmissive = mat.emissive && (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0); const emissiveIntensity = mat.emissiveIntensity || 0; return { success: hasEmissive || emissiveIntensity > 0, message: `Pig material: emissive=${hasEmissive ? '#'+mat.emissive.getHexString() : 'none'}, intensity=${emissiveIntensity}` }; }"
+        }
+    ],
+    "timeout": 90000
+}

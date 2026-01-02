@@ -57,7 +57,25 @@ export class [CreatureName] extends Animal {
 }
 ```
 
+```
+
+### 1.1 Special Case: Flying Entities
+If your creature needs to fly (e.g. Birds, Fireflies, Dragons), you **must** override `updatePhysics(dt)` to disable the default gravity logic found in the base `Animal` class.
+
+**Flight Template:**
+```javascript
+    updateAI(dt) {
+         // ... custom movement logic setting this.position ...
+    }
+
+    updatePhysics(dt) {
+        // Override base Animal physics to disable gravity
+        // Leave empty or implement custom collision logic
+    }
+```
+
 ## 2. Register the Creature
+
 You MUST register the new class in `src/game/AnimalRegistry.js` for it to be recognized by the spawning system and HMR.
 
 1.  **Import**: Add `import { [CreatureName] } from './entities/animals/[CreatureName].js';`
@@ -80,3 +98,10 @@ To make the creature spawn naturally in the world, edit `src/game/systems/SpawnM
 1.  Open the game.
 2.  Open the Debug Panel (backtick ` or ~ key).
 3.  Use the "Spawn Entity" dropdown to manually spawn your new creature to test its appearance and physics.
+
+## 5. Advanced Movement & Physics
+For complex locomotion (e.g., snake-like segmented movement, multi-block vehicles), checks the **Knowledge Base** or reference existing complex entities.
+
+*   **Segmented Movement**: See `src/game/entities/monsters/DuneWorm.js` or `src/game/entities/animals/SegmentedWorm.js` for `positionHistory` implementation.
+*   **Knowledge Path**: `knowledge/minecraft_voxel_engine/artifacts/entities/entity_system.md`
+

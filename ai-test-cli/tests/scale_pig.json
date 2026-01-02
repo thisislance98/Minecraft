@@ -1,0 +1,14 @@
+{
+    "name": "Spawn and Scale Pig",
+    "prompt": "Spawn a pig, then make it 3 times larger",
+    "expectedTool": "update_entity",
+    "headless": false,
+    "toolWait": 20000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game || !game.animals) return { success: false, message: 'Game not initialized' }; const pig = game.animals.find(a => a.constructor.name === 'Pig'); if (!pig) return { success: false, message: 'No Pig found in game' }; if (!pig.mesh || !pig.mesh.scale) return { success: false, message: 'Pig has no mesh or scale' }; const scale = Math.round(pig.mesh.scale.x * 10) / 10; const expected = 3.0; if (Math.abs(scale - expected) < 0.2) return { success: true, message: `Pig scale is ${scale} (close to ${expected})` }; return { success: false, message: `Pig scale is ${scale}, expected ~${expected}` }; }"
+        }
+    ],
+    "timeout": 60000
+}

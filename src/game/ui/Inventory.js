@@ -2,7 +2,7 @@
  * Inventory UI class - Handles rendering and input events for the inventory.
  * State is managed by InventoryManager.
  */
-import { RecipeBook } from './RecipeBook.js';
+import { getDynamicItemIcon } from '../DynamicItemRegistry.js';
 
 export class Inventory {
     constructor(game, manager) {
@@ -26,8 +26,8 @@ export class Inventory {
 
         this.setupInventoryScreenListeners();
 
-        // Initialize Recipe Book
-        this.recipeBook = new RecipeBook(game, manager, this);
+        // Initialize Recipe Book (Disabled)
+        this.recipeBook = null;
 
         this.renderHotbar();
     }
@@ -276,13 +276,7 @@ export class Inventory {
     }
 
     openCraftingTable() {
-        this.isInventoryOpen = true;
-        this.isCraftingTableOpen = true;
-        const screen = document.getElementById('inventory-screen');
-        screen.classList.remove('hidden');
-        document.exitPointerLock();
-        this.renderInventoryScreen();
-        // In the future, this might enable a 3x3 grid instead of 2x2
+        this.openInventory(); // Just open normal inventory
     }
 
     toggleInventory() {
@@ -366,47 +360,7 @@ export class Inventory {
         // Crafting Area
         const craftingArea = document.getElementById('crafting-area');
         if (craftingArea) {
-            if (this.isCraftingTableOpen) {
-                craftingArea.classList.remove('hidden');
-
-                // Crafting Grid (3x3) -> Indices 100-108
-                const gridEl = craftingArea.querySelector('.crafting-grid');
-                gridEl.innerHTML = '';
-                for (let i = 100; i < 109; i++) {
-                    gridEl.appendChild(this.createSlotElement(i));
-                }
-
-                // Result Slot -> Index 109
-                const resultEl = craftingArea.querySelector('.crafting-result-container'); // Wrapper needed maybe?
-                // Actually existing CSS has .crafting-result div
-                // Let's replace the content of result slot
-                if (!resultEl) {
-                    // Create if not exists (HTML structure might be static)
-                    // But we should inject the slot element into the correct place.
-                    // The static HTML in game should have containers.
-                }
-
-                // Let's assume the HTML structure has a place for it.
-                // We need to find or clear the result container
-                // We will rely on DOM structure: .crafting-result is likely a container
-                const resultContainer = craftingArea.querySelector('.crafting-result');
-                if (resultContainer) {
-                    resultContainer.innerHTML = '';
-                    resultContainer.appendChild(this.createSlotElement(109));
-                }
-
-                // Add Recipe Book Icon if not present
-                const resultParent = craftingArea.querySelector('.crafting-result-container');
-                if (resultParent && !resultParent.parentNode.querySelector('#recipe-book-icon')) {
-                    // Append before or after? After seems good.
-                    resultParent.parentNode.appendChild(this.recipeBook.bookIcon);
-                }
-
-
-            } else {
-                // 2x2 Crafting not implemented yet, just hide
-                craftingArea.classList.add('hidden');
-            }
+            craftingArea.classList.add('hidden');
         }
     }
 
@@ -855,28 +809,7 @@ export class Inventory {
                         <rect x="10" y="44" width="4" height="4" fill="#5C4033"/>
                         <rect x="50" y="44" width="4" height="4" fill="#5C4033"/>
                     </svg>`,
-            omni_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
-                        <defs>
-                             <filter id="glow-omni-wand">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
-                            </filter>
-                            <linearGradient id="grad-omni" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#ff0000" />
-                                <stop offset="20%" style="stop-color:#ff7f00" />
-                                <stop offset="40%" style="stop-color:#ffff00" />
-                                <stop offset="60%" style="stop-color:#00ff00" />
-                                <stop offset="80%" style="stop-color:#0000ff" />
-                                <stop offset="100%" style="stop-color:#4b0082" />
-                            </linearGradient>
-                        </defs>
-                        <rect x="26" y="16" width="12" height="44" rx="2" fill="#333" stroke="#111" stroke-width="2"/>
-                        <circle cx="32" cy="14" r="12" fill="url(#grad-omni)" filter="url(#glow-omni-wand)"/>
-                        <circle cx="32" cy="14" r="8" fill="#FFFFFF" opacity="0.6"/>
-                    </svg>`,
+
             ride_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <defs>
                              <filter id="glow-ride-wand">
@@ -1248,34 +1181,13 @@ export class Inventory {
                         <path d="M12 40 Q 32 45 52 35" fill="none" stroke="#999" stroke-width="1"/>
                         <text x="32" y="50" font-family="Arial" font-size="8" fill="#333" text-anchor="middle" transform="rotate(-5 32 50)">CHOCO</text>
                     </svg>`,
-            escape_room_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
-                        <defs>
-                            <linearGradient id="grad-escape" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" style="stop-color:#ff4444" />
-                                <stop offset="100%" style="stop-color:#990000" />
-                            </linearGradient>
-                        </defs>
-                        <rect x="0" y="0" width="64" height="64" fill="#333" stroke="#ff0000" stroke-width="2"/>
-                        <rect x="4" y="4" width="56" height="56" fill="url(#grad-escape)" opacity="0.8"/>
-                        <!-- Clock Face -->
-                        <circle cx="32" cy="32" r="20" fill="#fff" stroke="#000" stroke-width="2"/>
-                        <line x1="32" y1="32" x2="32" y2="18" stroke="#000" stroke-width="2"/>
-                        <line x1="32" y1="32" x2="42" y2="32" stroke="#000" stroke-width="2"/>
-                        <!-- Keyhole -->
-                        <circle cx="32" cy="40" r="3" fill="#000" opacity="0.5"/>
-                    </svg>`,
+
             maze_block: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <rect x="0" y="0" width="64" height="64" fill="#444"/>
                         <path d="M10 10 L54 10 L54 54 L10 54 Z" fill="none" stroke="#00ff00" stroke-width="4"/>
                         <path d="M22 22 L22 42 M42 22 L42 42 M22 32 L42 32" stroke="#00ff00" stroke-width="3"/>
                     </svg>`,
-            thruster: `<svg viewBox="0 0 64 64" width="100%" height="100%">
-                        <rect x="16" y="8" width="32" height="40" rx="4" fill="#888" stroke="#444" stroke-width="2"/>
-                        <rect x="20" y="12" width="24" height="8" rx="2" fill="#555"/>
-                        <circle cx="32" cy="30" r="8" fill="#333" stroke="#222" stroke-width="2"/>
-                        <path d="M22 48 L42 48 L48 60 L16 60 Z" fill="#FFA500" stroke="#CC8400" stroke-width="2"/>
-                        <path d="M28 60 L36 60 L32 52 Z" fill="#FFFF00"/>
-                    </svg>`,
+
             physics_ball: `<svg viewBox="0 0 64 64" width="100%" height="100%">
                         <circle cx="32" cy="32" r="28" fill="#FF4500" stroke="#8B0000" stroke-width="2"/>
                         <circle cx="20" cy="20" r="8" fill="white" opacity="0.4"/>
@@ -1300,6 +1212,36 @@ export class Inventory {
                         <rect x="4" y="16" width="4" height="48" fill="#888"/>
                         <rect x="56" y="48" width="4" height="16" fill="#888"/>
                         <path d="M12 16 L52 48" stroke="#ff7f50" stroke-width="4" stroke-linecap="round"/>
+                    </svg>`,
+            binoculars: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                            <linearGradient id="grad-binoc" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#333" />
+                                <stop offset="100%" style="stop-color:#1a1a1a" />
+                            </linearGradient>
+                            <filter id="lens-glare">
+                                <feGaussianBlur stdDeviation="1" result="blur"/>
+                                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                            </filter>
+                        </defs>
+                        <!-- Left Barrel -->
+                        <rect x="8" y="20" width="20" height="32" rx="2" fill="url(#grad-binoc)" stroke="#111" stroke-width="2"/>
+                        <rect x="10" y="16" width="16" height="4" rx="1" fill="#444"/>
+                        <circle cx="18" cy="52" r="8" fill="#222" stroke="#000" stroke-width="1"/>
+                        <circle cx="18" cy="52" r="6" fill="#87CEEB" opacity="0.6" filter="url(#lens-glare)"/>
+                        
+                        <!-- Right Barrel -->
+                        <rect x="36" y="20" width="20" height="32" rx="2" fill="url(#grad-binoc)" stroke="#111" stroke-width="2"/>
+                        <rect x="38" y="16" width="16" height="4" rx="1" fill="#444"/>
+                        <circle cx="46" cy="52" r="8" fill="#222" stroke="#000" stroke-width="1"/>
+                        <circle cx="46" cy="52" r="6" fill="#87CEEB" opacity="0.6" filter="url(#lens-glare)"/>
+                        
+                        <!-- Bridge -->
+                        <rect x="28" y="28" width="8" height="6" fill="#222"/>
+                        <rect x="28" y="30" width="8" height="2" fill="#555"/>
+                        
+                        <!-- Strap Loops -->
+                        <path d="M8 24 L4 20 M56 24 L60 20" stroke="#000" stroke-width="2"/>
                     </svg>`
 
 
@@ -1318,6 +1260,14 @@ export class Inventory {
                         <circle cx="44" cy="44" r="4" fill="#444" opacity="0.6"/>
                         <circle cx="36" cy="18" r="2" fill="#444" opacity="0.6"/>
                     </svg>`;
+        }
+
+        // Check for dynamic item icons
+        if (typeof item === 'string') {
+            const dynamicIcon = getDynamicItemIcon(item);
+            if (dynamicIcon) {
+                return dynamicIcon;
+            }
         }
 
         return `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="4" y="4" width="56" height="56" rx="8" fill="#7B5B3C" stroke="#3e2b1e" stroke-width="2"/><rect x="16" y="16" width="32" height="32" rx="4" fill="#A0A0A0" stroke="white" stroke-width="2" opacity="0.5"/></svg>`;

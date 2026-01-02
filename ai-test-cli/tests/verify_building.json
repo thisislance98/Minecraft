@@ -1,0 +1,14 @@
+{
+    "name": "Verify Building Structure",
+    "prompt": "Build a 5x5 platform of stone blocks at position 50,40,50",
+    "expectedTool": "build_structure",
+    "headless": false,
+    "toolWait": 15000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const targetY = 40; let stoneCount = 0; const chunks = Array.from(game.chunks.values()); for (const chunk of chunks) { if (!chunk.blocks) continue; const size = game.chunkSize; for (let x = 0; x < size; x++) { for (let y = 0; y < size; y++) { for (let z = 0; z < size; z++) { const wx = chunk.x * size + x; const wy = chunk.y * size + y; const wz = chunk.z * size + z; if (wy === targetY && wx >= 48 && wx <= 52 && wz >= 48 && wz <= 52) { const idx = x + y * size + z * size * size; const blockType = chunk.blocks[idx]; if (blockType === 1) stoneCount++; } } } } const expected = 25; return { success: stoneCount >= expected * 0.8, message: `Found ${stoneCount} stone blocks (expected ~${expected})` }; }"
+        }
+    ],
+    "timeout": 60000
+}

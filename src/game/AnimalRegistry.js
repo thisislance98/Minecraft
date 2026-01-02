@@ -27,7 +27,26 @@ for (const path in modules) {
 
 // Manual additions if any (for debugging or special cases)
 import { Slime } from './entities/monsters/Slime.js';
+import { Firefly } from './entities/animals/Firefly.js';
+import { Bee } from './entities/animals/Bee.js'; // Verification entity
+import { Starfish } from './entities/animals/Starfish.js';
+import { Car } from './entities/animals/Car.js';
+import { BouncyBall } from './entities/animals/BouncyBall.js';
 AnimalClasses['Slime'] = Slime;
+AnimalClasses['Firefly'] = Firefly;
+AnimalClasses['Bee'] = Bee;
+AnimalClasses['Starfish'] = Starfish;
+AnimalClasses['Car'] = Car;
+AnimalClasses['BouncyBall'] = BouncyBall;
+console.log('[AnimalRegistry] Manually registered Firefly and Bee.');
+console.log('[AnimalRegistry] Final AnimalClasses keys:', Object.keys(AnimalClasses));
+
+// Expose Animal base class to window for dynamic creature creation
+import { Animal } from './entities/Animal.js';
+window.Animal = Animal;
+
+// Expose AnimalClasses to window for testing and debugging
+window.AnimalClasses = AnimalClasses;
 
 /**
  * Show HMR notification in the UI

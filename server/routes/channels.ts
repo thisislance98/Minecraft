@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../config';
+import { io } from '../index';
 import * as admin from 'firebase-admin';
 
 const router = Router();
@@ -17,6 +18,7 @@ interface Message {
     id?: string;
     channelId: string;
     userId: string;
+    displayName?: string; // Custom display name set by user
     content: string;
     threadId?: string; // If part of a thread
     replyCount?: number; // For top-level messages
@@ -135,7 +137,7 @@ router.get('/:channelId/messages', async (req: Request, res: Response) => {
 router.post('/:channelId/messages', async (req: Request, res: Response) => {
     try {
         const { channelId } = req.params;
-        const { userId, content, threadId } = req.body;
+        const { userId, content, threadId, displayName } = req.body;
 
         if (!db) return res.status(503).json({ error: 'Database service unavailable' });
         if (!content || !userId) return res.status(400).json({ error: 'Missing content or userId' });
@@ -143,6 +145,7 @@ router.post('/:channelId/messages', async (req: Request, res: Response) => {
         const newMessage: Message = {
             channelId,
             userId,
+            displayName: displayName || undefined, // Store display name if provided
             content: content.trim(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             reactions: {}
@@ -161,6 +164,19 @@ router.post('/:channelId/messages', async (req: Request, res: Response) => {
                 replyCount: admin.firestore.FieldValue.increment(1)
             }).catch(e => console.warn('Failed to update reply count', e));
         }
+
+        // Broadcast the full message object so clients can append it directly
+        // We need to construct the full object or refetch it. 
+        // Constructing is faster.
+        const msgToBroadcast: Message = {
+            id: docRef.id,
+            ...newMessage,
+            // @ts-ignore - Timestamp handling (client expects millis usually, or raw object)
+            // Firestore timestamp to millis for client consistency
+            createdAt: Date.now()
+        };
+
+        io.to(`channel:${channelId}`).emit('chat:message', msgToBroadcast);
 
         res.json({ success: true, id: docRef.id });
     } catch (error: any) {

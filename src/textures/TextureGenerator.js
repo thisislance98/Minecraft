@@ -22,6 +22,18 @@ const palettes = {
     pine_side: ['#3e2723', '#4e342e', '#5d4037'], // Darker wood
     pine_top: ['#4e342e', '#5d4037', '#6d4c41'],
     pine_leaves: ['#1b5e20', '#2e7d32', '#388e3c'], // Darker, bluish green
+    // Dark Oak - Very dark, almost charred look
+    dark_oak_side: ['#2a1a0a', '#3a2815', '#251508', '#1f1005'], // Very dark brown bark
+    dark_oak_top: ['#3a2815', '#4a3520', '#2a1a0a'], // Dark brown rings
+    dark_oak_leaves: ['#0f2a0f', '#1a3a1a', '#0a200a', '#152f15'], // Very dark green, almost black-green
+    // Willow - Grayish, droopy appearance
+    willow_side: ['#6b5c54', '#7a6b63', '#8a7b73', '#5a4b43'], // Grayish brown bark
+    willow_top: ['#8a7b73', '#9a8b83', '#7a6b63'], // Light gray-tan rings
+    willow_leaves: ['#7ba05d', '#8ab06d', '#9ac07d', '#6a9050'], // Light yellow-green
+    // Acacia - Orange/terracotta savanna look
+    acacia_side: ['#a04820', '#b05830', '#904018', '#c06838'], // Orange-red/terracotta bark
+    acacia_top: ['#b08050', '#c09060', '#a07040'], // Tan/orange rings
+    acacia_leaves: ['#8ab040', '#9ac050', '#7aa030', '#aad060'], // Yellow-green savanna leaves
     sand: ['#c2b280', '#d4c496', '#e6d6ac', '#d9c89e'],
     water: ['#1a5f7a', '#2980b9', '#3498db', '#5dade2'],
     brick: { brick: ['#8b4513', '#a0522d', '#b5653d'], mortar: ['#a0a0a0', '#b0b0b0'] },
@@ -80,7 +92,7 @@ const palettes = {
     lampost_glass: ['#FFFFE0', '#FFFACD', '#FFFFF0'], // Warm white
     maze_block: ['#2e003e', '#3a004d', '#4b0064', '#1a0024'], // Dark purple mystic look
     obsidian: ['#1a101f', '#20122e', '#24143a', '#15091a'], // Very dark purple/black
-    escape_room_block: { base: ['#3e2723', '#4e342e'], emblem: ['#FFD700', '#FFC107'], glow: ['#00FFFF', '#00CED1'] },
+
     diamond_block: ['#00FFFF', '#00CED1', '#40E0D0', '#E0FFFF'],
     xbox: { base: ['#0e0e0e', '#1a1a1a', '#222222'], logo: ['#107c10', '#107c10', '#107c10'], light: ['#ffffff', '#aaffaa'] },
     parkour_block: { base: ['#ff00ff', '#800080', '#4b0082'], glow: ['#00ffff', '#00ffcc'], trim: ['#ffffff'] },
@@ -100,7 +112,16 @@ const palettes = {
     enterprise_panel: ['#202020', '#FF9900', '#9933FF', '#3366FF'], // Dark grey bg, LCARS colors (Orange/Purple/Blue)
     enterprise_screen: ['#000000', '#FFFFFF', '#00FF00'], // Black, stars
     enterprise_console: ['#404040', '#A0A0A0', '#00FFFF'], // Console grey with cyan interface
-    enterprise_chair: ['#800000', '#303030'] // Dark Red, Black base
+    enterprise_chair: ['#800000', '#303030'], // Dark Red, Black base
+
+    // Ring Space Station Palettes
+    station_hull: ['#4A5568', '#2D3748', '#1A202C', '#718096'], // Dark blue-grey metal
+    station_ring: ['#2B6CB0', '#3182CE', '#4299E1', '#63B3ED'], // Blue glowing ring
+    station_window: ['rgba(0, 191, 255, 0.4)', 'rgba(100, 200, 255, 0.5)'], // Cyan tinted glass
+    station_core: ['#1E40AF', '#3B82F6', '#60A5FA', '#FFFFFF'], // Bright blue energy core
+    station_light: ['#F0FFF4', '#C6F6D5', '#9AE6B4'], // Soft green lights
+    station_floor: ['#374151', '#4B5563', '#6B7280'], // Dark grey floor panels
+    station_console: ['#1E293B', '#00FFFF', '#06B6D4', '#0EA5E9'] // Dark with cyan interface
 };
 
 export function generateTexture(type, size = 16) {
@@ -236,32 +257,7 @@ export function generateTexture(type, size = 16) {
             }
             break;
 
-        case 'escape_room_block': {
-            const { base, emblem, glow } = palettes.escape_room_block;
-            // Base wood
-            for (let y = 0; y < size; y++) {
-                for (let x = 0; x < size; x++) {
-                    ctx.fillStyle = base[Math.floor(seededRandom(seed++) * base.length)];
-                    ctx.fillRect(x, y, 1, 1);
-                }
-            }
-            // Golden Lock/Emblem
-            ctx.fillStyle = emblem[0];
-            ctx.fillRect(4, 4, 8, 8);
-            ctx.fillStyle = emblem[1];
-            ctx.fillRect(5, 5, 6, 6);
-            // Keyhole
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(7, 6, 2, 3);
-            ctx.fillRect(6, 8, 4, 1);
-            // Glowing corners
-            ctx.fillStyle = glow[0];
-            ctx.fillRect(1, 1, 2, 2);
-            ctx.fillRect(13, 1, 2, 2);
-            ctx.fillRect(1, 13, 2, 2);
-            ctx.fillRect(13, 13, 2, 2);
-            break;
-        }
+
 
         case 'parkour_block': {
             const { base, glow, trim } = palettes.parkour_block;
@@ -411,7 +407,10 @@ export function generateTexture(type, size = 16) {
 
         case 'wood_top':
         case 'birch_top':
-        case 'pine_top': {
+        case 'pine_top':
+        case 'dark_oak_top':
+        case 'willow_top':
+        case 'acacia_top': {
             // Wood rings
             const palette = palettes[type];
             const cx = size / 2, cy = size / 2;
@@ -440,12 +439,16 @@ export function generateTexture(type, size = 16) {
             break;
 
         case 'pine_side':
+        case 'dark_oak_side':
+        case 'willow_side':
+        case 'acacia_side':
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     // Vertical wood grain
                     const grainOffset = Math.floor(x / 4);
-                    const colorIdx = (grainOffset + Math.floor(seededRandom(seed++) * 2)) % palettes.pine_side.length;
-                    ctx.fillStyle = palettes.pine_side[colorIdx];
+                    const woodPalette = palettes[type] || palettes.pine_side;
+                    const colorIdx = (grainOffset + Math.floor(seededRandom(seed++) * 2)) % woodPalette.length;
+                    ctx.fillStyle = woodPalette[colorIdx];
                     ctx.fillRect(x, y, 1, 1);
                 }
             }
@@ -453,7 +456,10 @@ export function generateTexture(type, size = 16) {
 
         case 'leaves':
         case 'birch_leaves':
-        case 'pine_leaves': {
+        case 'pine_leaves':
+        case 'dark_oak_leaves':
+        case 'willow_leaves':
+        case 'acacia_leaves': {
             const palette = palettes[type];
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
@@ -978,6 +984,113 @@ export function generateTexture(type, size = 16) {
             ctx.fillRect(0, size - 4, size, 4); // Base shadow
             break;
 
+        // --- Ring Space Station Textures ---
+        case 'station_hull': {
+            const stationHull = palettes.station_hull;
+            ctx.fillStyle = stationHull[0];
+            ctx.fillRect(0, 0, size, size);
+            // Metallic noise
+            for (let i = 0; i < size * size; i++) {
+                if (seededRandom(seed++) > 0.75) {
+                    const x = i % size;
+                    const y = Math.floor(i / size);
+                    ctx.fillStyle = stationHull[Math.floor(seededRandom(seed++) * stationHull.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Panel lines
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+            ctx.beginPath();
+            ctx.moveTo(0, size / 2);
+            ctx.lineTo(size, size / 2);
+            ctx.stroke();
+            break;
+        }
+
+        case 'station_ring': {
+            const ringPalette = palettes.station_ring;
+            // Glowing blue ring sections
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const n = seededRandom(seed++);
+                    ctx.fillStyle = ringPalette[Math.floor(n * ringPalette.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Glow effect
+            ctx.fillStyle = 'rgba(100, 200, 255, 0.3)';
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            break;
+        }
+
+        case 'station_window':
+            ctx.fillStyle = 'rgba(0, 191, 255, 0.3)';
+            ctx.fillRect(0, 0, size, size);
+            // Window frame
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+            ctx.fillRect(0, 0, size, 1);
+            ctx.fillRect(0, size - 1, size, 1);
+            ctx.fillRect(0, 0, 1, size);
+            ctx.fillRect(size - 1, 0, 1, size);
+            // Shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(2, 2, 4, 4);
+            break;
+
+        case 'station_core': {
+            const corePalette = palettes.station_core;
+            // Energy core - pulsing blue
+            ctx.fillStyle = corePalette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Inner glow
+            ctx.fillStyle = corePalette[1];
+            ctx.fillRect(3, 3, size - 6, size - 6);
+            ctx.fillStyle = corePalette[2];
+            ctx.fillRect(5, 5, size - 10, size - 10);
+            // Bright center
+            ctx.fillStyle = corePalette[3];
+            ctx.fillRect(7, 7, 2, 2);
+            break;
+        }
+
+        case 'station_light': {
+            const lightPalette = palettes.station_light;
+            ctx.fillStyle = lightPalette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Soft glow pattern
+            ctx.fillStyle = lightPalette[1];
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            break;
+        }
+
+        case 'station_floor': {
+            const floorPalette = palettes.station_floor;
+            ctx.fillStyle = floorPalette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Grid pattern
+            ctx.strokeStyle = '#1F2937';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0, 0, size, size);
+            ctx.fillStyle = floorPalette[1];
+            ctx.fillRect(2, 2, size - 4, size - 4);
+            break;
+        }
+
+        case 'station_console': {
+            const consolePalette = palettes.station_console;
+            ctx.fillStyle = consolePalette[0];
+            ctx.fillRect(0, 0, size, size);
+            // Cyan interface elements
+            ctx.fillStyle = consolePalette[1];
+            ctx.fillRect(2, 2, 4, 3);
+            ctx.fillRect(8, 2, 6, 3);
+            ctx.fillStyle = consolePalette[2];
+            ctx.fillRect(2, 7, 12, 2);
+            ctx.fillStyle = consolePalette[3];
+            ctx.fillRect(4, 11, 8, 3);
+            break;
+        }
 
 
         case 'levitation_wand':

@@ -1,0 +1,13 @@
+{
+    "name": "Build Gold Pyramid",
+    "prompt": "Build a small pyramid of Gold blocks 5 units in front of me",
+    "headless": false,
+    "toolWait": 35000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const playerPos = game.player.position; const r = 15; const goldBlocks = []; const center = { x: Math.floor(playerPos.x), y: Math.floor(playerPos.y), z: Math.floor(playerPos.z) }; for (let x = center.x - r; x <= center.x + r; x++) { for (let y = center.y - 5; y <= center.y + 10; y++) { for (let z = center.z - r; z <= center.z + r; z++) { const block = game.chunkManager.getBlock(x, y, z); if (block && block.id === 'gold_block') { goldBlocks.push({x, y, z}); } } } } if (goldBlocks.length < 5) return { success: false, message: `Found only ${goldBlocks.length} gold blocks. Needed at least 5.` }; let minX=1e9, maxX=-1e9, minZ=1e9, maxZ=-1e9; goldBlocks.forEach(b => { minX = Math.min(minX, b.x); maxX = Math.max(maxX, b.x); minZ = Math.min(minZ, b.z); maxZ = Math.max(maxZ, b.z); }); const centroid = { x: (minX+maxX)/2, z: (minZ+maxZ)/2 }; const dx = centroid.x - playerPos.x; const dz = centroid.z - playerPos.z; const dist = Math.sqrt(dx*dx + dz*dz); if (dist < 2) return { success: false, message: `Pyramid too close (distance ${dist.toFixed(1)}). Expected it to be spawned '5 units in front'.` }; const blocksByY = {}; goldBlocks.forEach(b => { if (!blocksByY[b.y]) blocksByY[b.y] = 0; blocksByY[b.y]++; }); const layers = Object.keys(blocksByY).map(y => parseInt(y)).sort((a,b) => a-b); if (layers.length < 2) return { success: false, message: `Pyramid has only ${layers.length} layer. Expected at least 2.` }; for (let i = 0; i < layers.length - 1; i++) { if (blocksByY[layers[i]] <= blocksByY[layers[i+1]]) { return { success: false, message: `Shape check failed: Layer ${layers[i]} (count ${blocksByY[layers[i]]}) is not wider than Layer ${layers[i+1]} (count ${blocksByY[layers[i+1]]})` }; } } return { success: true, message: `Found valid pyramid of ${goldBlocks.length} gold blocks. Distance: ${dist.toFixed(1)}, Layers: ${layers.length}` }; }"
+        }
+    ],
+    "timeout": 120000
+}

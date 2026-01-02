@@ -11,7 +11,12 @@ export class AntigravityClient extends EventEmitter {
 
     connect() {
         return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(this.url);
+            this.ws = new WebSocket(this.url, {
+                headers: {
+                    'x-antigravity-client': 'cli',
+                    'x-antigravity-secret': 'asdf123'
+                }
+            });
 
             this.ws.on('open', () => {
                 this.isConnected = true;

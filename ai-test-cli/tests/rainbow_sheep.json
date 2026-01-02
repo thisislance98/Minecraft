@@ -1,0 +1,14 @@
+{
+    "name": "Rainbow Sheep Formation",
+    "prompt": "Spawn 5 sheep in a line, each a different color: red, orange, yellow, green, blue",
+    "expectedTool": "spawn_creature",
+    "headless": false,
+    "toolWait": 25000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const sheep = game.animals.filter(a => a.constructor.name === 'Sheep'); if (sheep.length < 5) return { success: false, message: `Only ${sheep.length} sheep spawned, expected 5` }; const colors = new Set(); for (const s of sheep) { if (s.mesh && s.mesh.material && s.mesh.material.color) { const hexColor = '#' + s.mesh.material.color.getHexString(); colors.add(hexColor); } } const uniqueColors = colors.size; return { success: uniqueColors >= 4, message: `Found ${sheep.length} sheep with ${uniqueColors} unique colors: ${Array.from(colors).join(', ')}` }; }"
+        }
+    ],
+    "timeout": 90000
+}

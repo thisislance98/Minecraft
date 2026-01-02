@@ -83,32 +83,7 @@ export class ChristmasTree extends Animal {
         this.bodyParts = [cone1, cone2, cone3];
     }
 
-    attackPlayer(player) {
-        // Override standard attack to trigger Escape Room
-        if (this.game.escapeRoomManager && !this.game.escapeRoomManager.isActive) {
-            console.log('[ChristmasTree] Presents are grabbing the player!');
 
-            // Visual/Audio effect
-            if (this.game.uiManager) {
-                this.game.uiManager.addChatMessage('system', 'The Presents under the tree GRABBED YOU!');
-                this.game.soundManager.playSound('teleport'); // Assuming teleport sound exists, or similar
-            }
-
-            // Start Escape Room Logic
-            // Pass player position as center
-            this.game.escapeRoomManager.start(player.position);
-
-            // Teleport player slightly to center to ensure they are trapped inside
-            // The Escape Room spawns AROUND the center, so player needs to be AT center.
-            // But we should lift them up slightly so they don't clip into floor if terrain is uneven?
-            // EscapeRoomManager spawns floor at y=0 relative to center (relative to player pos).
-
-            // Despawn self or flee?
-            // Let's despawn to avoid being stuck inside with the player
-            this.health = 0;
-            this.startDeath();
-        }
-    }
 
     updateAnimation(dt) {
         super.updateAnimation(dt);

@@ -1,0 +1,17 @@
+{
+    "name": "Spawn and Verify Pig",
+    "prompt": "Spawn 1 pig near me",
+    "expectedTool": "spawn_creature",
+    "expectedArgs": {
+        "creature": "Pig"
+    },
+    "headless": false,
+    "verify": [
+        {
+            "type": "entityExists",
+            "creature": "Pig",
+            "minCount": 1
+        }
+    ],
+    "timeout": 30000
+}

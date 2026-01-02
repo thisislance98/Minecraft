@@ -1,0 +1,14 @@
+{
+    "name": "Verify Material Visibility",
+    "prompt": "Spawn a pig and make it invisible",
+    "expectedTool": "update_entity",
+    "headless": false,
+    "toolWait": 20000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const pig = game.animals.find(a => a.constructor.name === 'Pig'); if (!pig) return { success: false, message: 'No pig found' }; if (!pig.mesh || !pig.mesh.material) return { success: false, message: 'Pig has no mesh/material' }; const isTransparent = pig.mesh.material.transparent === true; const lowOpacity = pig.mesh.material.opacity < 0.5; const isVisible = pig.mesh.visible; const isInvisible = isTransparent && lowOpacity; return { success: isInvisible || !isVisible, message: `Pig: transparent=${isTransparent}, opacity=${pig.mesh.material.opacity}, visible=${isVisible}` }; }"
+        }
+    ],
+    "timeout": 60000
+}

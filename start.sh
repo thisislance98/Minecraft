@@ -3,6 +3,7 @@
 echo "Aggressively killing zombie processes (vite, server, etc.)..."
 pkill -f "vite" || true
 pkill -f "server/index.ts" || true
+pkill -f "smart-watch.js" || true
 # Avoid killing ourselves (start.sh) but try to catch other instances if possible,
 # though preventing self-kill is tricky with pkill -f start.sh.
 # We rely on port killing for the main bound processes.

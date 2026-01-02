@@ -1,0 +1,14 @@
+{
+    "name": "Multi-Species Zoo",
+    "prompt": "Create a small zoo by spawning 3 different animals: 1 elephant, 1 giraffe, and 1 lion",
+    "expectedTool": "spawn_creature",
+    "headless": false,
+    "toolWait": 25000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const animals = game.animals || []; const counts = {}; for (const a of animals) { const name = a.constructor.name; counts[name] = (counts[name] || 0) + 1; } const hasElephant = (counts['Elephant'] || 0) >= 1; const hasGiraffe = (counts['Giraffe'] || 0) >= 1; const hasLion = (counts['Lion'] || 0) >= 1; const success = hasElephant && hasGiraffe && hasLion; const msg = `Zoo: Elephant=${counts['Elephant']||0}, Giraffe=${counts['Giraffe']||0}, Lion=${counts['Lion']||0}`; return { success, message: msg }; }"
+        }
+    ],
+    "timeout": 90000
+}

@@ -1,0 +1,14 @@
+{
+    "name": "Verify Pyramid Logic (Simulated)",
+    "prompt": "Inspect the pyramid I built",
+    "browser": true,
+    "setup": {
+        "customCode": "() => { console.log('Building Sim Pyramid...'); const game = window.__VOXEL_GAME__; const p = game.player.position; for(let i=0; i<3; i++) { for(let x=-i; x<=i; x++) { for(let z=-i; z<=i; z++) { game.setBlock(p.x+30+x, p.y+i, p.z+30+z, 'gold_block'); } } } return true; }"
+    },
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { return window.VerificationUtils.logBlockPositions(window.__VOXEL_GAME__, 'gold_block', {x: window.__VOXEL_GAME__.player.position.x+30, y: window.__VOXEL_GAME__.player.position.y, z: window.__VOXEL_GAME__.player.position.z+30}, 10); }"
+        }
+    ]
+}

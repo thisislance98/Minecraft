@@ -189,6 +189,14 @@ export class Dragon extends Animal {
         this.isCircling = false;
         this.homePosition = new THREE.Vector3(this.position.x, this.position.y, this.position.z);
         this.maxRoamDistance = 100; // How far from home position
+
+        // Enable shadows
+        this.mesh.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
     }
 
     createWing(boneMat) {

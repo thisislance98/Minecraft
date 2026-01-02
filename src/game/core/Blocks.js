@@ -43,6 +43,12 @@ export const Blocks = {
     PINE_LEAVES: 'pine_leaves',
     BIRCH_WOOD: 'birch_wood',
     BIRCH_LEAVES: 'birch_leaves',
+    DARK_OAK_WOOD: 'dark_oak_wood',
+    DARK_OAK_LEAVES: 'dark_oak_leaves',
+    WILLOW_WOOD: 'willow_wood',
+    WILLOW_LEAVES: 'willow_leaves',
+    ACACIA_WOOD: 'acacia_wood',
+    ACACIA_LEAVES: 'acacia_leaves',
     SNOW: 'snow',
     CACTUS: 'cactus',
     SANDSTONE: 'sandstone',
@@ -58,10 +64,10 @@ export const Blocks = {
     FIRE: 'fire',
     FIRE: 'fire',
     SIGN: 'sign',
-    THRUSTER: 'thruster',
+
     SURVIVAL_BLOCK: 'survival_block',
     MAZE_BLOCK: 'maze_block',
-    ESCAPE_ROOM_BLOCK: 'escape_room_block',
+
     XBOX: 'xbox',
     PARKOUR_BLOCK: 'parkour_block',
     PARKOUR_PLATFORM: 'parkour_platform',
@@ -86,5 +92,28 @@ export const Blocks = {
     ENTERPRISE_PANEL: 'enterprise_panel',
     ENTERPRISE_SCREEN: 'enterprise_screen',
     ENTERPRISE_CONSOLE: 'enterprise_console',
-    ENTERPRISE_CHAIR: 'enterprise_chair'
+    ENTERPRISE_CHAIR: 'enterprise_chair',
+
+    // Ring Space Station Blocks
+    STATION_HULL: 'station_hull',
+    STATION_RING: 'station_ring',
+    STATION_WINDOW: 'station_window',
+    STATION_CORE: 'station_core',
+    STATION_LIGHT: 'station_light',
+    STATION_FLOOR: 'station_floor',
+    STATION_CONSOLE: 'station_console',
+
+    // Missing Blocks from AssetManager
+    GLOWSTONE: 'glowstone',
+    COBBLESTONE: 'cobblestone',
+    MOSSY_STONE: 'mossy_stone',
+    ROOF_TILES: 'roof_tiles',
+    CHIMNEY_BRICK: 'chimney_brick',
+    SHINGLES: 'shingles',
+    POLISHED_STONE: 'polished_stone',
+    DARK_PLANKS: 'dark_planks',
+    WHITE_PLASTER: 'white_plaster',
+    TERRACOTTA: 'terracotta',
+    THATCH: 'thatch',
+    HALF_TIMBER: 'half_timber',
 };

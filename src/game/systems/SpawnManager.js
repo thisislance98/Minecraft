@@ -874,22 +874,23 @@ export class SpawnManager {
 
         // Use SeededRandom for debug spawns so they also get seeds
         const rng = new SeededRandom(Math.random() * 0xFFFFFF);
+        const createdAnimals = [];
+
         for (let i = 0; i < count; i++) {
             const ox = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
             const oz = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
 
             const animal = this.createAnimal(EntityClass, targetPos.x + ox, targetPos.y, targetPos.z + oz, snapToGround, rng.next());
 
-            if (animal && this.game.socketManager) {
-                this.game.socketManager.sendEntitySpawn(animal.serialize());
+            if (animal) {
+                createdAnimals.push(animal);
+                if (this.game.socketManager) {
+                    this.game.socketManager.sendEntitySpawn(animal.serialize());
+                }
             }
         }
         console.log(`Debug spawned ${count} ${EntityClass.name} at ${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}, ${targetPos.z.toFixed(1)}`);
 
-        return {
-            count: count,
-            creature: EntityClass.name,
-            position: targetPos
-        };
+        return createdAnimals;
     }
 }

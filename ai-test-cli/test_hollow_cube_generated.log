@@ -1,0 +1,8 @@
+file:///Users/I850333/projects/experiments/Minecraft/ai-test-cli/bin/cli.js:288
+            const fs = require('fs');
+                       ^
+
+ReferenceError: require is not defined
+    at Command.<anonymous> (file:///Users/I850333/projects/experiments/Minecraft/ai-test-cli/bin/cli.js:288:24)
+
+Node.js v20.19.3

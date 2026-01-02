@@ -1,6 +1,8 @@
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
 import { Peer } from 'peerjs';
+import { registerDynamicCreature, registerMultipleCreatures } from '../DynamicCreatureRegistry.js';
+import { registerDynamicItem, registerMultipleItems } from '../DynamicItemRegistry.js';
 
 export class SocketManager {
     constructor(game) {
@@ -214,6 +216,40 @@ export class SocketManager {
             setTimeout(() => {
                 window.location.reload();
             }, 500);
+        });
+
+        // Handle dynamic creature definitions
+        // Initial batch when joining
+        this.socket.on('creatures_initial', (creatures) => {
+            console.log('[SocketManager] Received initial creature definitions:', creatures?.length || 0);
+            registerMultipleCreatures(creatures);
+        });
+
+        // Real-time broadcast when a new creature is created
+        this.socket.on('creature_definition', (definition) => {
+            console.log('[SocketManager] Received new creature definition:', definition.name);
+            if (registerDynamicCreature(definition)) {
+                if (this.game.uiManager) {
+                    this.game.uiManager.addChatMessage('system', `🆕 New creature available: ${definition.name}`);
+                }
+            }
+        });
+
+        // Handle dynamic item definitions
+        // Initial batch when joining
+        this.socket.on('items_initial', (items) => {
+            console.log('[SocketManager] Received initial item definitions:', items?.length || 0);
+            registerMultipleItems(items);
+        });
+
+        // Real-time broadcast when a new item is created
+        this.socket.on('item_definition', (definition) => {
+            console.log('[SocketManager] Received new item definition:', definition.name);
+            if (registerDynamicItem(definition)) {
+                if (this.game.uiManager) {
+                    this.game.uiManager.addChatMessage('system', `🆕 New item available: ${definition.name}`);
+                }
+            }
         });
 
         // Add an animation loop for remote characters

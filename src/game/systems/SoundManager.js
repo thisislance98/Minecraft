@@ -26,8 +26,8 @@ export class SoundManager {
             'cow_moo': '/sounds/cow_moo.mp3'
         };
 
-        // Load mute preference
-        this.isMuted = localStorage.getItem('isMuted') === 'true';
+        // Load mute preference - default to muted (music off)
+        this.isMuted = localStorage.getItem('isMuted') !== 'false';
         this.listener.setMasterVolume(this.isMuted ? 0 : 1);
     }
 

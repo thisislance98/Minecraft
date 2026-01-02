@@ -121,6 +121,14 @@ export class BatManager {
         // Body length is Z (0.4). Head is at Z=0.25. 
         // So model faces +Z. Correct.
 
+        // Enable shadows
+        group.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
+
         return {
             group,
             leftWing,

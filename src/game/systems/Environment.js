@@ -19,17 +19,20 @@ export class Environment {
 
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.width = 2048;
-        this.sunLight.shadow.mapSize.height = 2048;
+        this.sunLight.shadow.mapSize.width = 4096; // Increased resolution
+        this.sunLight.shadow.mapSize.height = 4096;
         this.sunLight.shadow.camera.near = 0.5;
         this.sunLight.shadow.camera.far = 2500;
 
         // Large shadow area for player
-        const d = 100;
+        const d = 200; // Increased shadow distance
         this.sunLight.shadow.camera.left = -d;
         this.sunLight.shadow.camera.right = d;
         this.sunLight.shadow.camera.top = d;
         this.sunLight.shadow.camera.bottom = -d;
+
+        this.sunLight.shadow.bias = -0.0001;
+        this.sunLight.shadow.normalBias = 0.05;
 
         this.scene.add(this.sunLight);
 
@@ -134,11 +137,8 @@ export class Environment {
                 const moonY = Math.sin(moonAngle) * distance;
                 const moonZ = Math.sin(moonAngle * 0.5) * distance * 0.2;
 
-                this.moonMesh.position.set(
-                    playerPos.x + moonX,
-                    playerPos.y + moonY,
-                    playerPos.z + moonZ
-                );
+                // Fixed Moon Position at Y=1000 (0, 1000, 0)
+                this.moonMesh.position.set(0, 1000, 0);
                 this.moonMesh.lookAt(playerPos);
 
                 // Update Moon Light
@@ -592,16 +592,19 @@ export class Environment {
         // Create Moon Light (Cold/Blueish night light)
         this.moonLight = new THREE.DirectionalLight(0x6666ff, 0.2);
         this.moonLight.castShadow = true;
-        this.moonLight.shadow.mapSize.width = 1024; // Lower res than sun is fine
-        this.moonLight.shadow.mapSize.height = 1024;
+        this.moonLight.shadow.mapSize.width = 2048; // Increased resolution
+        this.moonLight.shadow.mapSize.height = 2048;
         this.moonLight.shadow.camera.near = 0.5;
         this.moonLight.shadow.camera.far = 3500;
 
-        const d = 100;
+        const d = 200; // Increased shadow distance
         this.moonLight.shadow.camera.left = -d;
         this.moonLight.shadow.camera.right = d;
         this.moonLight.shadow.camera.top = d;
         this.moonLight.shadow.camera.bottom = -d;
+
+        this.moonLight.shadow.bias = -0.0001;
+        this.moonLight.shadow.normalBias = 0.05;
 
         this.scene.add(this.moonLight);
         this.scene.add(this.moonLight.target); // Important for direction

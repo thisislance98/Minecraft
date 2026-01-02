@@ -30,4 +30,16 @@ export class Item {
     onPrimaryDown(game, player) {
         return false;
     }
+
+    /**
+     * Returns a 3D mesh representation of this item for the UI preview or dropping.
+     * @returns {THREE.Object3D}
+     */
+    getMesh() {
+        // Default: A simple box representing a generic item
+        // Subclasses should override this
+        const geometry = new window.THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const material = new window.THREE.MeshStandardMaterial({ color: 0x888888 });
+        return new window.THREE.Mesh(geometry, material);
+    }
 }

@@ -1,0 +1,14 @@
+{
+    "name": "Giant Flying Reindeer",
+    "prompt": "Spawn a reindeer, make it 5 times bigger, and make sure it's flying",
+    "expectedTool": "update_entity",
+    "headless": false,
+    "toolWait": 25000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const reindeer = game.animals.find(a => a.constructor.name === 'Reindeer'); if (!reindeer) return { success: false, message: 'No Reindeer found' }; const scale = reindeer.mesh?.scale?.x || 1; const isFlying = reindeer.velocity?.y > 0.1 || reindeer.position?.y > 50; const isBig = scale >= 4.5; return { success: isBig && isFlying, message: `Reindeer: scale=${scale.toFixed(1)}, y=${reindeer.position?.y.toFixed(1)}, velocity.y=${reindeer.velocity?.y.toFixed(2)}, flying=${isFlying}` }; }"
+        }
+    ],
+    "timeout": 90000
+}

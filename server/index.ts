@@ -14,8 +14,10 @@ import { authRoutes } from './routes/auth';
 import { feedbackRoutes } from './routes/feedback';
 import { channelRoutes } from './routes/channels';
 import { destinationRoutes } from './routes/destinations';
-import './config'; // Initialize config
+import { auth } from './config'; // Initialize config
 import { worldPersistence } from './services/WorldPersistence';
+import { loadAllCreatures, sendCreaturesToSocket, deleteCreature } from './services/DynamicCreatureService';
+import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { WebSocketServer } from 'ws';
 import { AntigravitySession } from './services/AntigravitySession';
 
@@ -57,7 +59,7 @@ const httpServer = createServer(app);
 // ============ Socket.IO Setup ============
 import { Server } from 'socket.io';
 
-const io = new Server(httpServer, {
+export const io = new Server(httpServer, {
     cors: {
         origin: "*", // Allow all origins for simplicity
         methods: ["GET", "POST"]
@@ -353,6 +355,12 @@ io.on('connection', (socket) => {
             socket.emit('entities:initial', []);
         }
 
+        // Send dynamic creature definitions to the new player
+        sendCreaturesToSocket(socket);
+
+        // Send dynamic item definitions to the new player
+        sendItemsToSocket(socket);
+
         // Send persisted block changes to the new player
         try {
             // Use race to prevent hanging
@@ -571,6 +579,52 @@ io.on('connection', (socket) => {
                 reactions: data.reactions
             });
         });
+
+        // ============ Admin Events ============
+
+        const ADMIN_EMAIL = 'thisislance98@gmail.com';
+
+        socket.on('admin:delete_creature', async (data: { name: string, token: string }) => {
+            try {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+
+                console.log(`[Admin] User ${decodedToken.email} deleting creature: ${data.name}`);
+                const result = await deleteCreature(data.name);
+
+                if (!result.success) {
+                    socket.emit('admin:error', { message: result.error });
+                }
+            } catch (error: any) {
+                console.error('[Admin] Delete creature failed:', error);
+                socket.emit('admin:error', { message: error.message });
+            }
+        });
+
+        socket.on('admin:delete_item', async (data: { name: string, token: string }) => {
+            try {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+
+                console.log(`[Admin] User ${decodedToken.email} deleting item: ${data.name}`);
+                const result = await deleteItem(data.name);
+
+                if (!result.success) {
+                    socket.emit('admin:error', { message: result.error });
+                }
+            } catch (error: any) {
+                console.error('[Admin] Delete item failed:', error);
+                socket.emit('admin:error', { message: error.message });
+            }
+        });
     });
 
     socket.on('disconnect', () => {
@@ -614,7 +668,21 @@ app.get('/health', (req, res) => {
 // ============ Start Server ============
 
 console.log('[Server] Startup: initializing...');
-httpServer.listen(port, '0.0.0.0', () => {
-    console.log(`[Server] Listening on http://0.0.0.0:${port}`);
-    console.log('[Server] Startup: complete');
+
+// Load dynamic content before starting server
+Promise.all([
+    loadAllCreatures(),
+    loadAllItems()
+]).then(() => {
+    httpServer.listen(port, '0.0.0.0', () => {
+        console.log(`[Server] Listening on http://0.0.0.0:${port}`);
+        console.log('[Server] Startup: complete');
+    });
+}).catch(e => {
+    console.error('[Server] Failed to load dynamic content:', e);
+    // Start anyway
+    httpServer.listen(port, '0.0.0.0', () => {
+        console.log(`[Server] Listening on http://0.0.0.0:${port}`);
+        console.log('[Server] Startup: complete (with content load error)');
+    });
 });

@@ -1,0 +1,14 @@
+{
+    "name": "Debug Pig Scale",
+    "prompt": "Spawn a pig, then make it 3 times larger",
+    "expectedTool": "update_entity",
+    "headless": false,
+    "toolWait": 20000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const pig = game?.animals?.find(a => a.constructor.name === 'Pig'); const scale = pig?.mesh?.scale?.x || 0; console.log('DEBUG: Pig scale is', scale); return { success: scale >= 2.8, message: `Pig scale is ${scale}` }; }"
+        }
+    ],
+    "timeout": 60000
+}

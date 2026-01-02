@@ -1,0 +1,14 @@
+{
+    "name": "Check THREE.js Availability",
+    "prompt": "Just wait",
+    "expectedTool": "look_at",
+    "headless": false,
+    "toolWait": 1000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const hasThree = !!window.THREE; return { success: hasThree, message: `window.THREE is ${typeof window.THREE}` }; }"
+        }
+    ],
+    "timeout": 30000
+}

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { DebugPanel } from '../ui/DebugPanel.js';
-import { IdeasButton } from '../ui/IdeasButton.js';
 import { CommunityUI } from '../ui/CommunityUI.js';
 
 /**
@@ -20,15 +19,14 @@ export class UIManager {
         // Debug panel
         this.debugPanel = new DebugPanel(game);
 
-        // Ideas Button
-        this.ideasButton = new IdeasButton(game);
+        // Ideas Button - REMOVED (Moved to Chat)
+        // this.ideasButton = new IdeasButton(game);
 
         // Community/Feedback UI
         this.communityUI = new CommunityUI(game);
         this.createFeedbackButton();
 
-        // Escape Room UI
-        this.createEscapeRoomUI();
+
 
         // Chat button
         this.setupChatListener();
@@ -55,11 +53,20 @@ export class UIManager {
 
         this.setupChatPanelListeners();
 
+        // New Idea Button
+        const ideaBtn = document.getElementById('idea-btn');
+        if (ideaBtn) {
+            ideaBtn.onclick = () => {
+                this.game.agent.requestIdea();
+            };
+        }
+
 
 
         this.createMuteButton();
         this.createSignInputUI();
         this.setupSettingsMenu();
+        this.setupHelpModal();
 
         // Chat scroll state
         this.userHasScrolledUp = false;
@@ -68,6 +75,19 @@ export class UIManager {
         if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
             this.initTouchControls();
         }
+        if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
+            this.initTouchControls();
+        }
+    }
+
+    closeAllMenus(exclude = null) {
+        if (this.chatPanel) this.chatPanel.classList.add('hidden');
+        if (this.settingsModal) document.getElementById('settings-modal').classList.add('hidden');
+        if (this.helpModal) document.getElementById('help-modal').classList.add('hidden');
+        if (this.xboxModal) this.xboxModal.classList.add('hidden');
+        if (window.spawnUI && window.spawnUI !== exclude) window.spawnUI.closePanel();
+
+        // Also unlock pointer if appropriate, though usually specific menus handle that
     }
 
     showXboxUI() {
@@ -456,11 +476,14 @@ export class UIManager {
             // Draw Platforms
             ctx.fillStyle = '#333';
             for (const plat of self.platformerState.platforms) {
+                // Main platform
+                ctx.fillStyle = '#333';
                 ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-                ctx.shadowBlur = 5;
-                ctx.shadowColor = '#107c10';
+                // "Shadow" border at bottom
+                ctx.fillStyle = '#107c10';
+                ctx.fillRect(plat.x, plat.y + plat.height - 2, plat.width, 2);
             }
-            ctx.shadowBlur = 0;
+            // Shadow blur removed for performance
 
             // Draw Enemies
             ctx.fillStyle = '#ff3333';
@@ -803,9 +826,17 @@ export class UIManager {
             const p = self.joustState.player;
             ctx.fillStyle = p.color;
             if (p.powerups.speed) ctx.fillStyle = '#ffff00';
-            if (p.powerups.flap) ctx.shadowBlur = 10, ctx.shadowColor = '#00ffff';
+
+            // Visual indication for flap powerup without expensive shadow
+            if (p.powerups.flap) {
+                ctx.fillStyle = '#00ffff';
+                // Draw outline/glow effect manually if needed, or just change color
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(p.x - 2, p.y - 2, p.width + 4, p.height + 4);
+            }
+
             ctx.fillRect(p.x, p.y, p.width, p.height);
-            ctx.shadowBlur = 0;
 
             // Eyes
             ctx.fillStyle = '#fff';
@@ -866,10 +897,49 @@ export class UIManager {
         if (this.audioToggle && this.game.soundManager) {
             this.audioToggle.checked = !this.game.soundManager.isMuted;
         }
+    }
 
-        // Refresh Store UI
-        if (this.game.storeUI) {
-            this.game.storeUI.refresh();
+    setupHelpModal() {
+        this.helpModal = document.getElementById('help-modal');
+        const helpBtn = document.getElementById('help-btn'); // Use the new button ID
+        const closeBtn = document.getElementById('help-close');
+        const okBtn = document.getElementById('help-ok-btn');
+
+        // Close logic...
+        const closeHelp = () => {
+            this.helpModal.classList.add('hidden');
+            localStorage.setItem('hasSeenHelp', 'true');
+
+            // If we came from settings, ensure mouse is unlocked if needed or handle focus
+            if (this.game.inputManager && !this.game.inputManager.isLocked) {
+                // If game was locked before? Hard to track.
+                // Usually we want to lock if we are closing all menus.
+                // But if settings is open behind, we don't lock.
+                const settingsOpen = this.settingsModal && !this.settingsModal.classList.contains('hidden');
+                if (!settingsOpen) {
+                    this.game.inputManager.lock();
+                }
+            }
+        };
+
+        if (closeBtn) closeBtn.onclick = closeHelp;
+        if (okBtn) okBtn.onclick = closeHelp;
+
+        // Auto-show on first run
+        if (!localStorage.getItem('hasSeenHelp')) {
+            // Slight delay to ensure game loads
+            setTimeout(() => {
+                this.helpModal.classList.remove('hidden');
+            }, 500);
+        }
+
+        if (helpBtn) {
+            helpBtn.onclick = () => {
+                this.helpModal.classList.remove('hidden');
+                if (this.game.inputManager) {
+                    this.game.inputManager.unlock();
+                }
+            };
         }
     }
 
@@ -883,6 +953,7 @@ export class UIManager {
         this.fpsToggle = document.getElementById('settings-fps-toggle');
         this.positionToggle = document.getElementById('settings-position-toggle');
         this.mobileToggle = document.getElementById('settings-mobile-toggle');
+        this.settingsHelpBtn = document.getElementById('settings-help-btn');
         this.debugElement = document.getElementById('debug');
 
         if (!this.settingsModal || !this.settingsBtn) {
@@ -912,7 +983,11 @@ export class UIManager {
         }
         if (this.fpsToggle) {
             this.fpsToggle.checked = savedFps;
-            if (this.fpsCounter) this.fpsCounter.style.display = savedFps ? 'block' : 'none';
+        }
+
+        // Apply persisted state regardless of toggle existence
+        if (this.fpsCounter) {
+            this.fpsCounter.style.display = savedFps ? 'block' : 'none';
         }
         if (this.positionToggle) {
             this.positionToggle.checked = savedPosition;
@@ -925,10 +1000,20 @@ export class UIManager {
         }
 
         // Settings button click - open modal
-        // Settings button click - open modal
         this.settingsBtn.addEventListener('click', () => {
             this.openSettings();
         });
+
+        // Help button in settings
+        if (this.settingsHelpBtn) {
+            this.settingsHelpBtn.addEventListener('click', () => {
+                if (this.helpModal) {
+                    this.helpModal.classList.remove('hidden');
+                    // Ensure settings stays open behind it or close it? 
+                    // Let's keep settings open (z-index handles visibility)
+                }
+            });
+        }
 
         // Close button
         this.settingsClose.addEventListener('click', () => {
@@ -1024,7 +1109,32 @@ export class UIManager {
             });
         }
 
+        // Jump Height Slider
+        this.jumpSlider = document.getElementById('settings-jump-slider');
+        this.jumpValue = document.getElementById('jump-value');
+        if (this.jumpSlider) {
+            // Load saved jump value or use default
+            const savedJump = localStorage.getItem('settings_jump');
+            const jumpForce = savedJump !== null ? parseFloat(savedJump) : 0.15;
+            this.jumpSlider.value = jumpForce;
+            if (this.jumpValue) this.jumpValue.textContent = jumpForce.toFixed(2);
 
+            // Apply to player if exists
+            if (this.game.player) {
+                this.game.player.jumpForce = jumpForce;
+            }
+
+            this.jumpSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (this.jumpValue) this.jumpValue.textContent = value.toFixed(2);
+                localStorage.setItem('settings_jump', value);
+
+                // Apply immediately to player
+                if (this.game.player) {
+                    this.game.player.jumpForce = value;
+                }
+            });
+        }
 
 
         // Fullscreen Toggle (Mobile Only)
@@ -1267,25 +1377,8 @@ export class UIManager {
     // --- Agent UI ---
 
     createStatusIndicator() {
-        // Small, unobtrusive status indicator in corner
-        if (this.statusDiv) return;
-
-        const div = document.createElement('div');
-        div.id = 'voice-status';
-        div.style.cssText = `
-            position: fixed; bottom: 20px; right: 20px;
-            background: rgba(0,0,0,0.8); border: 2px solid #00ffcc;
-            padding: 10px 15px; border-radius: 20px; z-index: 1000;
-            font-family: 'VT323', monospace; color: #00ffcc; font-size: 14px;
-            display: flex; align-items: center; gap: 10px;
-        `;
-        div.innerHTML = `
-            <div id="ai-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #333; margin-right: 8px;" title="AI Connection"></div>
-        `;
-        document.body.appendChild(div);
-        this.statusDiv = div;
-        this.aiIndicator = div.querySelector('#ai-indicator');
-
+        // Status indicator removed.
+        // We still need to ensure task list UI is created if needed by other systems
         this.createTaskListUI();
     }
 
@@ -1421,12 +1514,7 @@ export class UIManager {
     }
 
     updateAIStatus(status) {
-        if (!this.statusDiv) this.createStatusIndicator();
-        if (this.aiIndicator) {
-            const color = status === 'Connected' ? '#00ffcc' : '#333';
-            this.aiIndicator.style.background = color;
-            this.aiIndicator.title = `AI Status: ${status}`;
-        }
+        // AI Status Indicator removed
     }
 
     updateVoiceStatus(active, text) {
@@ -1633,6 +1721,88 @@ export class UIManager {
         }
     }
 
+    showThinking() {
+        if (!this.chatMessages) {
+            console.log('[UIManager] showThinking() - chatMessages not ready');
+            return; // Chat not ready
+        }
+        if (this.thinkingDiv) {
+            console.log('[UIManager] showThinking() - already showing');
+            return; // Already showing
+        }
+
+        console.log('[UIManager] showThinking() - creating thinking indicator');
+
+        const div = document.createElement('div');
+        div.className = 'chat-message system thinking';
+        div.style.cssText = `
+            font-style: italic; 
+            color: #aaa; 
+            padding: 5px 0; 
+            display: flex; 
+            align-items: center; 
+            gap: 5px;
+        `;
+        div.innerHTML = `
+            <span>Thinking</span>
+            <span class="dot-flashing"></span>
+            <style>
+                .dot-flashing {
+                    position: relative;
+                    width: 4px;
+                    height: 4px;
+                    border-radius: 2px;
+                    background-color: #aaa;
+                    color: #aaa;
+                    animation: dot-flashing 1s infinite linear alternate;
+                    animation-delay: 0.5s;
+                    margin-left: 10px;
+                }
+                .dot-flashing::before, .dot-flashing::after {
+                    content: '';
+                    display: inline-block;
+                    position: absolute;
+                    top: 0;
+                }
+                .dot-flashing::before {
+                    left: -8px;
+                    width: 4px;
+                    height: 4px;
+                    border-radius: 2px;
+                    background-color: #aaa;
+                    color: #aaa;
+                    animation: dot-flashing 1s infinite alternate;
+                    animation-delay: 0s;
+                }
+                .dot-flashing::after {
+                    left: 8px;
+                    width: 4px;
+                    height: 4px;
+                    border-radius: 2px;
+                    background-color: #aaa;
+                    color: #aaa;
+                    animation: dot-flashing 1s infinite alternate;
+                    animation-delay: 1s;
+                }
+                @keyframes dot-flashing {
+                    0% { background-color: #aaa; }
+                    50%, 100% { background-color: rgba(170, 170, 170, 0.2); }
+                }
+            </style>
+        `;
+
+        this.chatMessages.appendChild(div);
+        this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        this.thinkingDiv = div;
+    }
+
+    hideThinking() {
+        if (this.thinkingDiv) {
+            this.thinkingDiv.remove();
+            this.thinkingDiv = null;
+        }
+    }
+
     /**
      * Show a prominent refresh prompt when changes require browser reload
      */
@@ -1818,58 +1988,7 @@ export class UIManager {
         }
     }
 
-    createEscapeRoomUI() {
-        const div = document.createElement('div');
-        div.id = 'escape-room-ui';
-        div.style.cssText = `
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-family: 'VT323', monospace;
-            font-size: 24px;
-            text-align: center;
-            border: 2px solid #ff3333;
-            display: none;
-            z-index: 1000;
-        `;
-        div.innerHTML = `
-            <div style="color: #ff3333; font-size: 16px; margin-bottom: 5px;">ESCAPE ROOM</div>
-            <div id="escape-timer" style="font-size: 32px; color: #ff0000; font-weight: bold;">00:00</div>
-            <div style="font-size: 14px; color: #ccc;">Find the Golden Block!</div>
-        `;
-        document.body.appendChild(div);
-        this.escapeRoomUI = div;
-        this.escapeTimer = div.querySelector('#escape-timer');
-    }
 
-    showEscapeRoomUI(visible) {
-        if (this.escapeRoomUI) {
-            this.escapeRoomUI.style.display = visible ? 'block' : 'none';
-        }
-    }
-
-    updateEscapeRoomUI(timeLeft) {
-        if (this.escapeTimer) {
-            this.escapeTimer.textContent = this.formatTime(timeLeft);
-            if (timeLeft <= 10) {
-                this.escapeTimer.style.color = (timeLeft % 2 === 0) ? '#ff0000' : '#ffff00'; // Flash
-            } else {
-                this.escapeTimer.style.color = '#ff0000';
-            }
-        }
-    }
-
-    formatTime(seconds) {
-        if (seconds < 0) seconds = 0;
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
 
 
     handleSendMessage() {

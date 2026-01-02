@@ -1,0 +1,31 @@
+
+Running Test: CLI Test: Build a gold pyramid in front of me using the set_
+Prompt: "Build a gold pyramid in front of me using the set_blocks tool. Do not use get_scene_info, rely on my context."
+🌐 Launching browser (headless: false)...
+  Navigating to http://localhost:3000...
+  [Browser] [AnimalRegistry] Manually registered Firefly and Bee.
+  [Browser] [AnimalRegistry] Final AnimalClasses keys: JSHandle@array
+  Waiting for game to load...
+  [Browser] [AntigravityClient] Auth state changed. Reconnecting...
+  [Browser] [AntigravityClient] Connecting to: ws://localhost:2567/api/antigravity
+  [Browser] [AntigravityClient] Connected.
+  [Browser] AssetManager: Loading resources...
+  [Browser Warn] TextureGenerator: Unknown texture type 'torch', using fallback
+  [Browser Warn] TextureGenerator: Unknown texture type 'fire', using fallback
+  [Browser] AssetManager: Resources loaded.
+  [Browser Warn] Socket not found for CommunityUI, will retry when UI opens
+  🤖 [Agent] INIT v2 - set_blocks tool available
+  [Browser] [Game] using hardcoded world seed: 1337
+  [Browser] WorldGenerator: Setting seed to 1337
+  [Browser] [Game] Spawning player at global spawn point: 32, 37, 32
+  [Browser] [Game] Singleplayer Mode.
+  [Browser] [SocketManager] Connecting to http://localhost:2567...
+  [Browser] [Scene] Total objects: 568, Animals: 0
+  [Browser] [SpaceShip] Queuing LARGE Enterprise spawn at 32, 290, 32
+  [Browser] PEEK
+  [Browser] [SpaceShip] Processing 56200 blocks with time-slicing...
+  [Browser] [SpaceStation] Queuing Ring Station spawn at -118, 360, 182
+  [Browser] [SpaceStation] Processing 6153 blocks with time-slicing...
+  [Browser] [AntigravityClient] Game instance attached.
+  [Browser] [SpaceStation] Ring Station assembly complete.
+  [Browser] [Furniture] Created body for Chair

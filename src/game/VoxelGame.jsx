@@ -41,7 +41,8 @@ import { WaterSystem } from './systems/WaterSystem.js';
 import { StoreUI } from './ui/StoreUI.js';
 import { SocketManager } from './systems/SocketManager.js';
 import { AnimalClasses } from './AnimalRegistry.js';
-import { EscapeRoomManager } from './systems/EscapeRoomManager.js';
+import { Xbox } from './entities/furniture/Xbox.js';
+
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
 import { ParkourManager } from './systems/ParkourManager.js';
@@ -49,20 +50,28 @@ import { PlaygroundManager } from './systems/PlaygroundManager.js';
 import { DiscoRoomManager } from './systems/DiscoRoomManager.js';
 import { DestinationManager } from './systems/DestinationManager.js';
 import { SpaceShipManager } from './systems/SpaceShipManager.js';
+import { SpaceStationManager } from './systems/SpaceStationManager.js';
 
 // Visual Improvements: Post-Processing
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { GrassSystem } from './systems/GrassSystem.js';
 
+import { VerificationUtils } from './utils/VerificationUtils.js';
 
 // Antigravity was here.
 export class VoxelGame {
     constructor() {
         // Expose game globally for HMR to update existing creatures
         window.__VOXEL_GAME__ = this;
+        // Expose THREE.js globally for patch_entity runtime code injection
+        window.THREE = THREE;
+        // Expose Verification Utils for CLI testing
+        window.VerificationUtils = VerificationUtils;
 
         this.container = document.getElementById('game-container');
+        this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -189,6 +198,7 @@ export class VoxelGame {
         this.entityManager = new EntityManager(this);
         this.weatherSystem = new WeatherSystem(this);
         this.environment = new Environment(this.scene, this);
+        this.grassSystem = new GrassSystem(this.scene);
 
         this.animals = [];
         this.spawnManager = new SpawnManager(this);
@@ -334,32 +344,14 @@ export class VoxelGame {
         this.animate();
 
         // Add the new wand to the inventory for testing
-        this.inventory.addItem(Blocks.PARKOUR_BLOCK, 64, 'block');
-        this.inventory.addItem(Blocks.MAZE_BLOCK, 10, 'block'); // Priority: Slot 1
-        this.inventory.addItem('growth_wand', 1, 'tool');
-        this.inventory.addItem('wizard_tower_wand', 1, 'tool');
-        this.inventory.addItem(Blocks.PLAYGROUND_BLOCK, 10, 'block');
-        this.inventory.addItem(Blocks.DISCO_ROOM_BLOCK, 10, 'block');
-
-        this.inventory.addItem(Blocks.DOOR_CLOSED, 64, 'block');
-        this.inventory.addItem(Blocks.ESCAPE_ROOM_BLOCK, 10, 'block');
-        this.inventory.addItem(Blocks.XBOX, 64, 'block');
-        this.inventory.addItem('physics_ball', 64, 'tool');
-        this.inventory.addItem('spaceship_spawner', 1, 'tool');
-        this.inventory.addItem('binoculars', 1, 'tool');
+        // Test items removed to respect InventoryManager.setupInitialItems layout
 
 
 
         // Chat Button Listener & Debug Panel handled by UIManager/InputManager now
 
-        // Initialize Store UI
+        // Initialize Store UI (handles auth button click to open auth modal)
         this.storeUI = new StoreUI(this);
-
-        // Connect Auth Button
-        const authBtn = document.getElementById('auth-btn');
-        if (authBtn) {
-            authBtn.onclick = () => this.uiManager.openSettings();
-        }
 
         // Initialize persisted blocks storage
         this.persistedBlocks = new Map(); // key: chunkKey, value: Array<{lx, ly, lz, type}>
@@ -368,8 +360,7 @@ export class VoxelGame {
         this.signData = new Map(); // key: "x,y,z", value: text
         this.signMeshes = new Map(); // key: "x,y,z", value: THREE.Mesh (text mesh)
 
-        // Escape Room Manager
-        this.escapeRoomManager = new EscapeRoomManager(this);
+
 
         // Maze Manager
         this.mazeManager = new MazeManager(this);
@@ -386,6 +377,9 @@ export class VoxelGame {
         // Spaceship Manager
         this.spaceShipManager = new SpaceShipManager(this);
 
+        // Space Station Manager (Ring Station)
+        this.spaceStationManager = new SpaceStationManager(this);
+
         // Handle initial warp if present (give it a moment for things to settle?)
         if (this.warpId) {
             // Defer slightly to ensure player/world is ready
@@ -394,13 +388,17 @@ export class VoxelGame {
             }, 1000);
         }
 
-        // Auto-Spawn Enterprise
-        // Spawn 40 blocks ahead of player
+        // Auto-Spawn Enterprise in High Orbit
+        // Position the ship above spawn point, visible when looking up (y=250)
         if (!this.isUIOnly && !this.isBareBones) {
-            const spawnPos = this.player.position.clone();
-            spawnPos.z -= 40; // 40 blocks Forward (assuming -Z is forward)
-            spawnPos.y += 10; // Slightly up
+            const spawnPos = new THREE.Vector3(
+                Config.PLAYER.SPAWN_POINT.x,
+                250, // High enough to orbit, low enough to see
+                Config.PLAYER.SPAWN_POINT.z
+            );
             this.spaceShipManager.spawnShip(spawnPos);
+
+
         }
 
         // Handle Window Resize
@@ -591,6 +589,29 @@ export class VoxelGame {
 
     onRightClickDown() {
         let target = this.physicsManager.getTargetBlock();
+
+        // Special: Xbox Placement/Usage
+        const heldItem = this.inventory.getSelectedItem();
+        if (heldItem && heldItem.item === 'xbox') {
+            if (target) {
+                // Place Xbox Entity
+                const bx = target.x + target.normal.x;
+                const by = target.y + target.normal.y;
+                const bz = target.z + target.normal.z;
+
+                const xbox = new Xbox(this, bx + 0.5, by, bz + 0.5);
+                this.scene.add(xbox.mesh);
+                this.animals.push(xbox);
+
+                this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
+                return;
+            } else {
+                // Open UI
+                this.uiManager.showXboxUI();
+                return;
+            }
+        }
+
         if (target) {
             const blockType = this.getBlockWorld(target.x, target.y, target.z);
             if (blockType === Blocks.XBOX) {
@@ -613,10 +634,11 @@ export class VoxelGame {
                 return true;
             }
 
-            if (this.escapeRoomManager && this.escapeRoomManager.isActive) {
-                const handled = this.escapeRoomManager.handleBlockInteraction(target.x, target.y, target.z);
-                if (handled) return true;
+            if (this.spaceStationManager && this.spaceStationManager.handleBlockInteraction(target.x, target.y, target.z)) {
+                return true;
             }
+
+
 
             const block = this.getBlockWorld(target.x, target.y, target.z);
             if (block === Blocks.DOOR_CLOSED) {
@@ -640,7 +662,7 @@ export class VoxelGame {
                     }, currentText);
                 }
                 return true;
-            } else if (block === Blocks.SURVIVAL_BLOCK) {
+            } else if (block === Blocks.SURVIVAL_BLOCK || block === Blocks.MOB_WAVES_BLOCK) {
                 // Start survival mini-game
                 if (this.survivalGameManager && !this.survivalGameManager.isActive) {
                     this.survivalGameManager.start();
@@ -652,13 +674,7 @@ export class VoxelGame {
                 this.mazeManager.generateMaze(this.player.position);
                 this.soundManager.playSound('click');
                 return true;
-            } else if (block === Blocks.ESCAPE_ROOM_BLOCK) {
-                // Start Escape Room
-                if (this.escapeRoomManager && !this.escapeRoomManager.isActive) {
-                    this.escapeRoomManager.start(new THREE.Vector3(target.x, target.y, target.z));
-                    this.soundManager.playSound('click');
-                }
-                return true;
+
             } else if (block === Blocks.PARKOUR_BLOCK) {
                 // Start Parkour
                 if (this.parkourManager && !this.parkourManager.isActive) {
@@ -1431,6 +1447,49 @@ export class VoxelGame {
         }
     }
 
+    safelyUpdateEntity(entity, deltaTime, list, index) {
+        // Performance Guard
+        const start = performance.now();
+        let success = false;
+
+        try {
+            // Error Handling Guard
+            const alive = entity.update(deltaTime, this.player);
+            // If update returns explicitly false (dead), handle removal (caller usually handles list splicing if we return false here to indicate 'remove')
+            // But the contract varies. 
+            // Most entities return 'false' if they want to be removed (projectiles), 
+            // but Animals set isDead = true.
+            // We need to standardize, or just handle both. 
+            // For this method, let's return TRUE if entity should KEEP running, FALSE if it should be removed.
+
+            success = true; // No crash
+
+            // Check explicit death signals from entity
+            if (alive === false) return false;
+            if (entity.isDead) return false;
+
+        } catch (error) {
+            console.error('[Guard] Entity crashed during update:', entity);
+            console.error(error);
+            // Show toast?
+            if (this.uiManager) {
+                this.uiManager.addChatMessage('system', `[Guard] Removed faulty entity: ${entity.constructor.name}`);
+            }
+            return false; // Remove it
+        }
+
+        const duration = performance.now() - start;
+        if (duration > 10) { // 10ms budget per entity!
+            console.warn(`[Guard] Entity took too long (${duration.toFixed(2)}ms):`, entity);
+            if (this.uiManager) {
+                this.uiManager.addChatMessage('system', `[Guard] Removed laggy entity: ${entity.constructor.name} (${duration.toFixed(0)}ms)`);
+            }
+            return false; // Remove it
+        }
+
+        return true;
+    }
+
     animate() {
         requestAnimationFrame(() => this.animate());
         this.processChunkQueue();
@@ -1472,21 +1531,25 @@ export class VoxelGame {
         if (this.studio) this.studio.update(deltaTime);
 
         // Update animals
-        this.animals.forEach(animal => animal.update(deltaTime));
+        for (let i = this.animals.length - 1; i >= 0; i--) {
+            const animal = this.animals[i];
+            const keep = this.safelyUpdateEntity(animal, deltaTime, this.animals, i);
+            if (!keep) {
+                if (animal.dispose) animal.dispose();
+                this.scene.remove(animal.mesh);
+                this.animals.splice(i, 1);
+            }
+        }
 
         // Update mini-games
         if (this.survivalGameManager) this.survivalGameManager.update(deltaTime);
         if (this.parkourManager) this.parkourManager.update(deltaTime);
         if (this.escapeRoomManager) this.escapeRoomManager.update(deltaTime);
 
-        // Helper to remove dead animals
-        for (let i = this.animals.length - 1; i >= 0; i--) {
-            if (this.animals[i].isDead) {
-                this.animals[i].dispose();
-                this.scene.remove(this.animals[i].mesh);
-                this.animals.splice(i, 1);
-            }
-        }
+        // Update orbiting spaceship
+        if (this.spaceShipManager) this.spaceShipManager.update(deltaTime);
+
+        // (Animals cleanup loop removed as it's now integrated above)
 
         // Periodic cleanup (every ~1s)
         if (this.frameCount % 60 === 0) {
@@ -1495,17 +1558,28 @@ export class VoxelGame {
 
         // Update Dragon
         if (this.dragon) {
-            this.dragon.update(deltaTime, this.player);
+            // Special handling for Dragon as it's single instance, not in list usually?
+            // Wait, this.dragon is just a property.
+            if (!this.safelyUpdateEntity(this.dragon, deltaTime)) {
+                console.warn('[Guard] Dragon crashed/lagged and was removed.');
+                this.scene.remove(this.dragon.mesh);
+                this.dragon = null;
+            }
         }
 
-        this.entityManager.update(deltaTime, this.player);
+        try {
+            this.entityManager.update(deltaTime, this.player);
+        } catch (e) {
+            console.error('[Guard] EntityManager update failed:', e);
+            // This is harder to auto-fix since it's a manager. 
+        }
 
         // Update Projectiles
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const arrow = this.projectiles[i];
-            const alive = arrow.update(deltaTime);
-            if (!alive) {
-                this.scene.remove(arrow.mesh);
+            const proj = this.projectiles[i];
+            const keep = this.safelyUpdateEntity(proj, deltaTime);
+            if (!keep) {
+                this.scene.remove(proj.mesh);
                 this.projectiles.splice(i, 1);
             }
         }
@@ -1513,8 +1587,8 @@ export class VoxelGame {
         // Update Drops
         for (let i = this.drops.length - 1; i >= 0; i--) {
             const drop = this.drops[i];
-            const alive = drop.update(deltaTime);
-            if (!alive) {
+            const keep = this.safelyUpdateEntity(drop, deltaTime);
+            if (!keep) {
                 this.scene.remove(drop.mesh);
                 this.drops.splice(i, 1);
             }
@@ -1523,8 +1597,8 @@ export class VoxelGame {
         if (this.shrunkBlocks) {
             for (let i = this.shrunkBlocks.length - 1; i >= 0; i--) {
                 const sb = this.shrunkBlocks[i];
-                const alive = sb.update(deltaTime);
-                if (!alive) {
+                const keep = this.safelyUpdateEntity(sb, deltaTime);
+                if (!keep) {
                     this.scene.remove(sb.mesh);
                     this.shrunkBlocks.splice(i, 1);
                 }
@@ -1535,8 +1609,8 @@ export class VoxelGame {
         if (this.targetedFloatingBlocks) {
             for (let i = this.targetedFloatingBlocks.length - 1; i >= 0; i--) {
                 const tfb = this.targetedFloatingBlocks[i];
-                const alive = tfb.update(deltaTime);
-                if (!alive) {
+                const keep = this.safelyUpdateEntity(tfb, deltaTime);
+                if (!keep) {
                     // Mesh removal is handled by placeBlock, but if it dies otherwise:
                     if (tfb.mesh && tfb.mesh.parent) {
                         this.scene.remove(tfb.mesh);
@@ -1552,8 +1626,8 @@ export class VoxelGame {
         if (this.floatingBlocks) {
             for (let i = this.floatingBlocks.length - 1; i >= 0; i--) {
                 const fb = this.floatingBlocks[i];
-                const alive = fb.update(deltaTime);
-                if (!alive) {
+                const keep = this.safelyUpdateEntity(fb, deltaTime);
+                if (!keep) {
                     this.scene.remove(fb.mesh);
                     this.floatingBlocks.splice(i, 1);
                 }
@@ -1564,8 +1638,8 @@ export class VoxelGame {
         if (this.tornadoes) {
             for (let i = this.tornadoes.length - 1; i >= 0; i--) {
                 const t = this.tornadoes[i];
-                const alive = t.update(deltaTime);
-                if (!alive) {
+                const keep = this.safelyUpdateEntity(t, deltaTime);
+                if (!keep) {
                     this.tornadoes.splice(i, 1);
                 }
             }
@@ -1575,8 +1649,8 @@ export class VoxelGame {
         if (this.ships) {
             for (let i = this.ships.length - 1; i >= 0; i--) {
                 const ship = this.ships[i];
-                const alive = ship.update(deltaTime);
-                if (!alive) {
+                const keep = this.safelyUpdateEntity(ship, deltaTime);
+                if (!keep) {
                     this.scene.remove(ship.mesh);
                     this.ships.splice(i, 1);
                 }
@@ -1589,6 +1663,7 @@ export class VoxelGame {
         // Day/Night Cycle - use Environment module
         if (!this.gameState.debug || this.gameState.debug.environment) {
             this.environment.updateDayNightCycle(deltaTime, this.player.position);
+            if (this.grassSystem) this.grassSystem.update(deltaTime);
         }
 
         if (this.weatherSystem) {

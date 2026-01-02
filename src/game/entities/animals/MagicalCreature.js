@@ -148,6 +148,14 @@ export class MagicalCreature extends Animal {
         this.wingFlapSpeed = 0.1;
         this.wingAngle = 0;
         this.bobPhase = 0;
+
+        // Enable shadows for all parts
+        this.mesh.traverse(child => {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+            }
+        });
     }
 
     update(dt) {

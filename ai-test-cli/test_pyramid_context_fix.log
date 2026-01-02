@@ -1,0 +1,163 @@
+
+Running Test: CLI Test: Build a gold pyramid in front of me using the set_
+Prompt: "Build a gold pyramid in front of me using the set_blocks tool"
+🌐 Launching browser (headless: false)...
+  Navigating to http://localhost:3000...
+  [Browser] [AnimalRegistry] Manually registered Firefly and Bee.
+  [Browser] [AnimalRegistry] Final AnimalClasses keys: JSHandle@array
+  Waiting for game to load...
+  [Browser] AssetManager: Loading resources...
+  [Browser Warn] TextureGenerator: Unknown texture type 'torch', using fallback
+  [Browser Warn] TextureGenerator: Unknown texture type 'fire', using fallback
+  [Browser] AssetManager: Resources loaded.
+  [Browser Warn] Socket not found for CommunityUI, will retry when UI opens
+  🤖 [Agent] INIT v2 - set_blocks tool available
+  [Browser] [Game] using hardcoded world seed: 1337
+  [Browser] WorldGenerator: Setting seed to 1337
+  [Browser] [Game] Spawning player at global spawn point: 32, 37, 32
+  [Browser] [Game] Singleplayer Mode.
+  [Browser] [SocketManager] Connecting to http://localhost:2567...
+  [Browser] [Scene] Total objects: 571, Animals: 0
+  [Browser] [SpaceShip] Queuing LARGE Enterprise spawn at 32, 290, 32
+  [Browser] PEEK
+  [Browser] [SpaceShip] Processing 56200 blocks with time-slicing...
+  [Browser] [SpaceStation] Queuing Ring Station spawn at -118, 360, 182
+  [Browser] [SpaceStation] Processing 6153 blocks with time-slicing...
+  [Browser] [AntigravityClient] Game instance attached.
+  [Browser] [SpaceStation] Ring Station assembly complete.
+  [Browser] [Furniture] Created body for Chair
+  [Browser] [Game] 3709 chunks generated, spawning animals...
+  [Browser] [SpawnManager] World ready! Processing 225 queued chunk spawns...
+  [Browser] [SpawnManager] World ready, but waiting for initial sync before processing queue.
+  [Browser] [SpawnManager] Deferring kangaroo spawn (waiting for initial sync)
+  [Browser] [SpawnManager] Deferring Pugasus spawn (waiting for initial sync)
+  [Browser] [SpawnManager] Deferring Snowmen spawn (waiting for initial sync)
+  [Browser] [AntigravityClient] Auto-fix disabled, error not reported to AI: Unhandled Rejection: TypeError: Cannot read properties of undefined (reading 'push')
+  [Browser] [SocketManager] Connected! ID: Of0TQEzoxS__zjLyAAAF
+  [Browser] [SocketManager] Requesting to join game...
+  [Browser] [AntigravityClient] Auth state changed. Reconnecting...
+  [Browser] [AntigravityClient] Connecting to: ws://localhost:2567/api/antigravity
+  [Browser] [AntigravityClient] Connected.
+  [Browser] [SpaceShip] Enterprise Refit complete.
+  [Browser] [SpaceShip] Orbital movement active. 24320 blocks tracked.
+  [Browser] [Furniture] Created body for Chair
+  [Browser] [AntigravityClient] Auto-fix disabled, error not reported to AI: Unhandled Rejection: TypeError: Cannot read properties of undefined (reading 'push')
+  [Browser] [SocketManager] Joined room: JSHandle@object
+  [Browser] [SocketManager] Initial Room Time: 0.25
+  [Browser] [SocketManager] Syncing existing players: 1
+  [Browser] [SpawnManager] Received entities:initial with 567 entities
+  [Browser] [SpawnManager] Persistence is OFF. Ignoring server entities and generating fresh creatures.
+  [Browser] [SpawnManager] Initial entity sync complete.
+  [Browser] [SpawnManager] Processing 225 queued chunk spawns...
+  [Browser] [SpawnManager] SPAWN Elephant at 31.74,22.05. Terrain:33 Ground:34. Chunk:1,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Elephant at 31.74441492278129,34,22.048375912941992
+  [Browser] [SpawnManager] Created animal instance: Monkey at 61.5,45,37.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 59.5,49,38.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 57.5,49,38.5
+  [Browser] [SpawnManager] SPAWN Frog at 50.05,55.00. Terrain:35 Ground:32. Chunk:3,2,3 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 50.05124296620488,32,55.00420577917248
+  [Browser] [SpawnManager] SPAWN Frog at 55.33,54.04. Terrain:35 Ground:32. Chunk:3,2,3 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 55.32695397827774,32,54.041023457888514
+  [Browser] [SpawnManager] SPAWN Giraffe at 49.68,60.87. Terrain:36 Ground:32. Chunk:3,2,3 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Giraffe at 49.67614872707054,32,60.86562715796754
+  [Browser Warn] [SpawnManager] SKIP MagicalCreature at 53.46,63.96 (Terrain:35). CheckY:36. Chunk:3,2,3 Loaded:true
+  [Browser] [SpawnManager] SPAWN Deer at 15.67,1.56. Terrain:33 Ground:31. Chunk:0,2,0 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Deer at 15.66902935737744,31,1.5558414957486093
+  [Browser] [SpawnManager] SPAWN Deer at 19.64,3.27. Terrain:32 Ground:33. Chunk:1,2,0 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Deer at 19.638167021330446,33,3.2667907355353236
+  [Browser] [SpawnManager] SPAWN Lorax at 17.64,5.85. Terrain:32 Ground:34. Chunk:1,2,0 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Lorax at 17.63950499240309,34,5.853752287104726
+  [Browser] [SpawnManager] Created animal instance: Monkey at 51.5,50,81.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 46.5,48,80.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 50.5,50,83.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 47.5,48,78.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 57.5,50,77.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 53.5,50,82.5
+  [Browser] [SpawnManager] SPAWN Giraffe at 53.38,79.26. Terrain:37 Ground:32. Chunk:3,2,4 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Giraffe at 53.380682547111064,32,79.25712164817378
+  [Browser] [SpawnManager] SPAWN Giraffe at 53.47,79.17. Terrain:37 Ground:32. Chunk:3,2,4 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Giraffe at 53.474606892094016,32,79.16717947321013
+  [Browser] [SpawnManager] Created animal instance: Fish at 37.91492111654952,28.18809094466269,-13.904975835233927
+  [Browser] [SpawnManager] Created animal instance: Fish at 36.2807863522321,26.02092415979132,-13.978913504164666
+  [Browser] [SpawnManager] Created animal instance: Fish at 45.06920495443046,26.583779625827447,-9.09871156187728
+  [Browser] [SpawnManager] Created animal instance: Fish at 38.19218670390546,28.0223369281739,-18.535747177433223
+  [Browser] [SpawnManager] Created animal instance: Fish at 38.177963310386986,27.704762827139348,-11.150105703622103
+  [Browser] [SpawnManager] SPAWN Frog at 36.04,80.13. Terrain:38 Ground:39. Chunk:2,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 36.04456089017913,39,80.13239834876731
+  [Browser] [SpawnManager] SPAWN Frog at 33.19,81.74. Terrain:38 Ground:39. Chunk:2,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 33.19100225623697,39,81.74398772604764
+  [Browser] [SpawnManager] SPAWN Giraffe at 35.10,84.98. Terrain:38 Ground:39. Chunk:2,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Giraffe at 35.10043959412724,39,84.98456707410514
+  [Browser] [SpawnManager] SPAWN Giraffe at 37.52,86.17. Terrain:38 Ground:39. Chunk:2,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Giraffe at 37.51848212722689,39,86.17083821399137
+  [Browser Warn] [SpawnManager] SKIP Frog at -4.90,54.14 (Terrain:41). CheckY:42. Chunk:-1,2,3 Loaded:true
+  [Browser Warn] [SpawnManager] SKIP Frog at -7.67,51.57 (Terrain:41). CheckY:42. Chunk:-1,2,3 Loaded:true
+  [Browser Warn] [SpawnManager] SKIP Frog at -6.02,51.64 (Terrain:41). CheckY:42. Chunk:-1,2,3 Loaded:true
+  [Browser] [SpawnManager] SPAWN Lion at 20.94,-7.24. Terrain:31 Ground:32. Chunk:1,2,-1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Lion at 20.943949713837355,32,-7.242657662834972
+  [Browser] [SpawnManager] SPAWN Elephant at 26.06,91.64. Terrain:39 Ground:40. Chunk:1,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Elephant at 26.062995113432407,40,91.63603405188769
+  [Browser] [SpawnManager] SPAWN Elephant at 26.38,91.39. Terrain:39 Ground:40. Chunk:1,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Elephant at 26.383462538477033,40,91.39427860919386
+  [Browser] [SpawnManager] Created animal instance: Shark at 57.57625715387985,28.910616715205833,-8.176689561456442
+  [Browser] [SpawnManager] Created animal instance: Monkey at 13.5,51,84.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 11.5,51,82.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at -0.5,52,71.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 7.5,56,71.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 8.5,56,71.5
+  [Browser] [SpawnManager] Created animal instance: Monkey at 7.5,56,71.5
+  [Browser] [SpawnManager] SPAWN Frog at 72.66,86.16. Terrain:36 Ground:32. Chunk:4,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 72.65702084638178,32,86.16461422434077
+  [Browser] [SpawnManager] SPAWN Frog at 74.54,88.49. Terrain:36 Ground:32. Chunk:4,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 74.54320467542857,32,88.4917103885673
+  [Browser] [SpawnManager] SPAWN Frog at 71.33,87.43. Terrain:36 Ground:32. Chunk:4,2,5 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Frog at 71.330292429775,32,87.42565139336511
+  [Browser] [SpawnManager] Created animal instance: Fish at 94.69708750024438,28.386099974624813,-3.7334692114964128
+  [Browser] [SpawnManager] SPAWN Tiger at -23.55,37.74. Terrain:41 Ground:42. Chunk:-2,2,2 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Tiger at -23.550820872653276,42,37.744196181651205
+  [Browser] [SpawnManager] SPAWN Tiger at -24.47,37.98. Terrain:42 Ground:43. Chunk:-2,2,2 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Tiger at -24.468632268719375,43,37.97695236373693
+  [Browser] [SpawnManager] SPAWN Reindeer at 29.89,106.70. Terrain:38 Ground:39. Chunk:1,2,6 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Reindeer at 29.892598341219127,39,106.70174567541108
+  [Browser] [SpawnManager] SPAWN Reindeer at 26.44,103.96. Terrain:38 Ground:40. Chunk:1,2,6 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Reindeer at 26.4426451404579,40,103.9599530636333
+  [Browser] [SpawnManager] SPAWN Reindeer at 23.14,98.19. Terrain:39 Ground:40. Chunk:1,2,6 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Reindeer at 23.139719082508236,40,98.18556182133034
+  [Browser] [SpawnManager] SPAWN Reindeer at 25.15,103.26. Terrain:39 Ground:40. Chunk:1,2,6 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Reindeer at 25.150320750661194,40,103.26405866583809
+  [Browser] Spawning 4 kangaroos near player spawn
+  [Browser] [SpawnManager] SPAWN Kangaroo at 26.75,16.95. Terrain:32 Ground:32. Chunk:1,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Kangaroo at 26.75325885810117,32,16.949478828367546
+  [Browser] [SpawnManager] SPAWN Kangaroo at 25.12,24.40. Terrain:33 Ground:34. Chunk:1,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Kangaroo at 25.118426750541133,34,24.402507730664247
+  [Browser] [SpawnManager] SPAWN Kangaroo at 45.04,42.33. Terrain:34 Ground:35. Chunk:2,2,2 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Kangaroo at 45.03961490566638,35,42.32841982274948
+  [Browser] Spawning 3 Pugasus near player spawn
+  [Browser] [SpawnManager] SPAWN Pugasus at 40.43,28.94. Terrain:33 Ground:34. Chunk:2,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Pugasus at 40.42882749537341,34,28.942841925857444
+  [Browser] [SpawnManager] SPAWN Pugasus at 38.65,18.53. Terrain:32 Ground:33. Chunk:2,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Pugasus at 38.65167465308409,33,18.529818761109443
+  [Browser] [SpawnManager] SPAWN Pugasus at 30.21,16.64. Terrain:33 Ground:34. Chunk:1,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Pugasus at 30.20901026386867,34,16.64330337214735
+  [Browser] Spawning 2 Snowmen near player spawn
+  [Browser] [SpawnManager] SPAWN Snowman at 28.33,18.42. Terrain:33 Ground:34. Chunk:1,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Snowman at 28.32899170360188,34,18.424509748963796
+  [Browser] [SpawnManager] SPAWN Snowman at 36.37,17.91. Terrain:32 Ground:33. Chunk:2,2,1 Loaded:true
+  [Browser] [SpawnManager] Created animal instance: Snowman at 36.365087083210526,33,17.911484897483458
+  [Browser] [Game] Processing 261 persisted blocks...
+  [Browser] [Game] Persisted blocks: 261 applied immediately, 0 queued for generation
+  [Browser Warn] Chunk: Missing materials for block type 'gold_blockPosition: x=0, y=0, z=0
+Player Rotation: {}
+
+CONTEXT INSTRUCTIONS:
+- If the user says "it", "them", "that", refer to 'Last Spawned Entities' IDs.
+- Use 'update_entity' tool with these IDs to modify them.
+</user_context>
+_block'. Skipping.
+  [Browser] Reindeer taking off!
+  [Browser] Reindeer taking off!
+  ✓ Game loaded
+  Sending prompt to browser Agent...
+
+❌ Test Failed: Cannot read properties of undefined (reading 'rotation')
+  ✓ Browser closed

@@ -5,6 +5,10 @@
  * from the ./items directory.
  */
 
+// Import base classes for window exposure
+import { Item } from './items/Item.js';
+import { WandItem } from './items/WandItem.js';
+
 // Auto-discover all item classes
 const modules = import.meta.glob('./items/*.js', { eager: true });
 
@@ -24,6 +28,11 @@ for (const path in modules) {
         }
     }
 }
+
+// Expose base classes to window for dynamic item creation
+window.Item = Item;
+window.WandItem = WandItem;
+window.ItemClasses = ItemClasses;
 
 // Re-export individually for convenience if needed, though mostly ItemClasses should be used.
 // Note: We cannot dynamically create named exports in ES modules.

@@ -36,6 +36,37 @@ function getEntityList(dirPath: string, relativePath: string): string {
     }
 }
 
+function getBlockList(): string {
+    const relativePath = 'src/game/core/Blocks.js';
+    let blocksPath = path.join(process.cwd(), relativePath);
+
+    if (!fs.existsSync(blocksPath)) {
+        blocksPath = path.join(process.cwd(), '../', relativePath);
+    }
+
+    if (!fs.existsSync(blocksPath)) {
+        console.error(`[Antigravity] Could not find Blocks.js at ${blocksPath} or via root`);
+        return '';
+    }
+
+    try {
+        const content = fs.readFileSync(blocksPath, 'utf8');
+        // Simple regex to extract keys and values
+        const lines = content.split('\n');
+        const blocks = [];
+        for (const line of lines) {
+            const match = line.match(/^\s*(\w+):\s*'([^']+)'/);
+            if (match) {
+                blocks.push(`    - ${match[2]}`);
+            }
+        }
+        return blocks.join('\n');
+    } catch (e) {
+        console.error('Error reading Blocks.js:', e);
+        return '';
+    }
+}
+
 export function getAntigravitySystemPrompt(context: any = {}) {
     const { position, rotation, biome } = context;
 
@@ -43,6 +74,7 @@ export function getAntigravitySystemPrompt(context: any = {}) {
     const animalList = getEntityList('src/game/entities/animals', 'src/game/entities/animals');
     const monsterList = getEntityList('src/game/entities/monsters', 'src/game/entities/monsters');
     const itemList = getEntityList('src/game/items', 'src/game/items');
+    const blockList = getBlockList();
 
 
     // Base Identity
@@ -86,6 +118,18 @@ export class TemplateCreature extends Animal {
     - IF tool calls are successful, your only response should be a simple confirmation or nothing at all if the tool output is self-explanatory.
     - ONLY be verbose if explaining a complex topic or if the user specifically asks for an explanation.
     </verbosity_control>
+
+    <dynamic_creation_protocol>
+    CRITICAL INSTRUCTION FOR "MAKE/SPAWN" REQUESTS:
+    If the user asks to 'make', 'create', or 'spawn' something (e.g., "make a dragon", "spawn a toaster"):
+    1. CHECK if the entity ID exists in the provided entity lists (Animal/Monster/Item registries).
+    2. If it EXISTS: Use the 'spawn_creature' tool (or 'give_item').
+    3. If it does NOT EXIST:
+       - You MUST use the 'create_creature' (or 'create_item') tool FIRST to define it.
+       - Use your creativity to design the class code and appearance based on the name.
+       - IMMEDIATELY after creating it, use 'spawn_creature' to bring it into the world.
+       - Do NOT ask for permission to create it. Just do it.
+    </dynamic_creation_protocol>
 
 You have access to the codebase on the server and can modify it directly (your spellbook).
 Do NOT repeat the [Context: ...] JSON object in your responses.
@@ -138,6 +182,10 @@ ${monsterList}
     (The following list is comprehensive. You do NOT need to check ItemRegistry.js if an item is listed here.)
 ${itemList}
 
+- **Blocks (Valid IDs for 'set_blocks')**:
+    (Use these exact IDs. Do NOT guess block names.)
+${blockList}
+
 - **Systems**:
     - Physics/Gravity: '../src/game/systems/PhysicsManager.js'
     - Spawning: '../src/game/systems/SpawnManager.js'
@@ -172,11 +220,13 @@ Usage:
 <user_context>
 The USER is currently playing the game.
 Player Position: x=${position?.x ?? 0}, y=${position?.y ?? 0}, z=${position?.z ?? 0}
-Player Rotation: ${JSON.stringify(rotation ?? {})}${interactionContext}
+Player Rotation: ${JSON.stringify(rotation ?? {})}
+Scene Context: ${JSON.stringify(context?.scene || {})}${interactionContext}
 
 CONTEXT INSTRUCTIONS:
 - If the user says "it", "them", "that", refer to 'Last Spawned Entities' IDs.
 - Use 'update_entity' tool with these IDs to modify them.
+- If the user asks for IDEAS or suggestions, use the 'Scene Context' (biome, nearby entities) to provide relevant, grounded suggestions.
 </user_context>
 `;
 

@@ -1,0 +1,25 @@
+Testing tool: set_blocks
+{
+  "blocks": [
+    {
+      "x": 32,
+      "y": 40,
+      "z": 35,
+      "id": "gold_block"
+    }
+  ]
+}
+
+🛠  Tool Invoked: set_blocks
+{
+  "blocks": [
+    {
+      "z": 35,
+      "x": 32,
+      "id": "gold_block",
+      "y": 40
+    }
+  ]
+}
+
+Timeout waiting for tool result

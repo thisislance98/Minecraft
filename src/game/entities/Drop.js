@@ -55,7 +55,14 @@ export class Drop {
         }
 
         const allMaterials = this.game.assetManager.materialArray;
-        const materials = indices.map(idx => allMaterials[idx]);
+        // Clone materials and disable vertexColors - block materials use vertex colors
+        // for chunk-based lighting, but BoxGeometry doesn't have them, causing black rendering
+        const materials = indices.map(idx => {
+            const original = allMaterials[idx];
+            const cloned = original.clone();
+            cloned.vertexColors = false;
+            return cloned;
+        });
 
         // Use BoxGeometry
         const geometry = new THREE.BoxGeometry(1, 1, 1);

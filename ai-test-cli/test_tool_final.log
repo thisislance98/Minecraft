@@ -1,0 +1,28 @@
+Testing tool: set_blocks
+{
+  "blocks": [
+    {
+      "x": 32,
+      "y": 40,
+      "z": 35,
+      "id": "gold_block"
+    }
+  ]
+}
+
+🛠  Tool Invoked: set_blocks
+{
+  "blocks": [
+    {
+      "id": "gold_block",
+      "x": 32,
+      "y": 40,
+      "z": 35
+    }
+  ]
+}
+
+✅ Tool Result:
+{
+  "error": "Unknown tool set_blocks"
+}

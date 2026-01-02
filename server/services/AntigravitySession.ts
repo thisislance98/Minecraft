@@ -8,9 +8,12 @@ import { getAntigravityTools } from '../ai/antigravity_tools';
 
 import { auth } from '../config';
 import { addTokens, getUserTokens } from './tokenService';
+import { saveCreature } from './DynamicCreatureService';
+import { saveItem } from './DynamicItemService';
 import { IncomingMessage } from 'http';
 
 const PENDING_TOOL_CALLS = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
+const LOCK_FILE = path.join(process.cwd(), '.ai_lock');
 
 export class AntigravitySession {
     private ws: WebSocket;
@@ -18,7 +21,8 @@ export class AntigravitySession {
     private model: any;
     private contents: any[] = [];
     private userId: string | null = null;
-    // private userId: string | null = null; // Removed duplicate
+    private headers: any;
+    private cliMode: boolean = false;
 
     // Pricing Configuration (Gemini 3.0 Flash)
     private PRICE_INPUT_1M = 0.50;      // $0.50 per 1M input tokens
@@ -28,6 +32,7 @@ export class AntigravitySession {
 
     constructor(ws: WebSocket, apiKey: string, req: IncomingMessage) {
         this.ws = ws;
+        this.headers = req.headers;
         this.genAI = new GoogleGenerativeAI(apiKey);
         this.model = this.genAI.getGenerativeModel({
             model: "gemini-3-flash-preview",
@@ -36,13 +41,33 @@ export class AntigravitySession {
         });
 
         // Extract token from URL
+        // Extract token from URL
         const url = new URL(req.url || '', `http://${req.headers.host}`);
         const token = url.searchParams.get('token');
+        const cliParam = url.searchParams.get('cli') === 'true'; // CLI bypass via URL
+        const secretParam = url.searchParams.get('secret');
 
-        this.init(token);
+        this.init(token, cliParam, secretParam);
     }
 
-    private async init(token: string | null) {
+    private async init(token: string | null, cliMode: boolean = false, secretParam: string | null = null) {
+        // Validate CLI Mode - Require Secret Code
+        const headerSecret = this.headers['x-antigravity-secret'];
+        const validSecret = 'asdf123';
+
+        // Only enable CLI mode if the secret is correct (either from header or URL param)
+        if (cliMode || this.headers['x-antigravity-client'] === 'cli') {
+            if (headerSecret === validSecret || secretParam === validSecret) {
+                this.cliMode = true;
+                console.log('[Antigravity] CLI Mode enabled (Valid Secret)');
+            } else {
+                console.warn('[Antigravity] CLI Mode attempt rejected: Invalid or missing secret');
+                this.cliMode = false;
+            }
+        } else {
+            this.cliMode = false;
+        }
+
         // Register Event Handlers IMMEDIATELEY to handle early errors/disconnects without crashing
         this.ws.on('error', (err) => {
             console.error('[Antigravity] WebSocket error:', err);
@@ -120,9 +145,22 @@ export class AntigravitySession {
     }
 
     private async generateAndProcess() {
-        // 1. Check Balance
-        // 1. Check Balance
-        if (this.userId) {
+        // 0. Set Lock File
+        try {
+            await fs.writeFile(LOCK_FILE, String(Date.now()));
+        } catch (e) {
+            console.error('[Antigravity] Failed to set lock file:', e);
+        }
+
+        // 1. Check Auth & Balance
+        const isCli = this.cliMode; // Trusted CLI mode (already verified secret in init)
+
+        if (!this.userId && !isCli) {
+            this.send('error', { message: 'Authentication required. Please sign in to use this feature.' });
+            return;
+        }
+
+        if (this.userId && !isCli) {
             const currentBalance = await getUserTokens(this.userId);
             if (currentBalance < 5) { // Minimum threshold to start a request
                 this.send('error', { message: 'Insufficient tokens. Please purchase more to continue using AI.' });
@@ -135,22 +173,31 @@ export class AntigravitySession {
 
         let result: any;
         let thoughtCharCount = 0;
+        let usageMetadata: any = null; // Lifted to outer scope for finally block access
 
         try {
             // Use streaming with thinking config
+            // Note: SDK uses snake_case for these parameters
             const request: any = {
                 contents: this.contents,
                 generationConfig: {
-                    thinkingConfig: { include_thoughts: true }
+                    thinkingConfig: {
+                        include_thoughts: true,
+                        thinking_level: 'low'  // Use low thinking for Gemini 3 - faster output
+                    }
                 }
             };
 
             result = await this.model.generateContentStream(request);
+            console.log('[Antigravity] Stream started...');
 
             let accumulatedText = '';
             const capturedSignatures: string[] = [];
+            let chunkCount = 0;
 
             for await (const chunk of result.stream) {
+                chunkCount++;
+                console.log(`[Antigravity] Chunk #${chunkCount} received`);
                 if (this.isInterrupted) {
                     console.log('[Antigravity] Generation aborted in stream loop.');
                     this.send('error', { message: 'Generation aborted.' });
@@ -180,9 +227,20 @@ export class AntigravitySession {
                 }
             }
 
+            console.log(`[Antigravity] Stream complete. Total chunks: ${chunkCount}, Total text chars: ${accumulatedText.length}`);
+
             // After stream finishes, get the final aggregated response object to handle function calls reliably
             const response = await result.response;
-            const content = response.candidates[0].content;
+            usageMetadata = response.usageMetadata; // Capture for finally block
+            console.log('[Antigravity] Final response received:', JSON.stringify(usageMetadata));
+
+            const content = response.candidates?.[0]?.content;
+            if (!content) {
+                console.error('[Antigravity] No content in response! Candidates:', JSON.stringify(response.candidates));
+                this.sendError('AI produced no output. Please try again.');
+                return;
+            }
+            console.log('[Antigravity] Content parts count:', content.parts?.length);
 
             // Patch signatures back into function calls
             if (content.parts && capturedSignatures.length > 0) {
@@ -199,13 +257,13 @@ export class AntigravitySession {
             this.contents.push(content);
 
             // Report Token Usage
-            if (response.usageMetadata) {
+            if (usageMetadata) {
                 const thoughtTokens = Math.ceil(thoughtCharCount / 4); // Estimate
                 this.send('token_usage', {
-                    promptTokens: response.usageMetadata.promptTokenCount,
-                    candidatesTokens: response.usageMetadata.candidatesTokenCount,
+                    promptTokens: usageMetadata.promptTokenCount,
+                    candidatesTokens: usageMetadata.candidatesTokenCount,
                     thoughtTokens: thoughtTokens,
-                    totalTokens: response.usageMetadata.totalTokenCount + thoughtTokens
+                    totalTokens: usageMetadata.totalTokenCount + thoughtTokens
                 });
             }
 
@@ -220,14 +278,23 @@ export class AntigravitySession {
             console.error("[Antigravity] Stream Error FULL:", e);
             this.sendError("Stream Error: " + e.message);
         } finally {
+            // RELEASE LOCK
+            try {
+                if (await fs.stat(LOCK_FILE).catch(() => false)) {
+                    await fs.unlink(LOCK_FILE);
+                }
+            } catch (e) {
+                console.error('[Antigravity] Failed to release lock file:', e);
+            }
+
             if (!this.isInterrupted) {
                 this.send('complete', {});
 
-                // Deduct cost if successful (and authenticated)
+                // Deduct cost if successful (and authenticated, and NOT CLI)
                 // Calculate Cost & Deduct Tokens
-                if (this.userId && result.response.usageMetadata) {
+                if (this.userId && !isCli && usageMetadata) {
                     try {
-                        const usage = result.response.usageMetadata;
+                        const usage = usageMetadata;
                         const thoughtTokens = Math.ceil(thoughtCharCount / 4);
 
                         const inputCost = (usage.promptTokenCount / 1000000) * this.PRICE_INPUT_1M;
@@ -303,11 +370,13 @@ export class AntigravitySession {
     }
 
     private isServerTool(name: string) {
-        return ['view_file', 'list_dir', 'write_to_file', 'replace_file_content'].includes(name);
+        return ['view_file', 'list_dir', 'write_to_file', 'replace_file_content', 'create_creature', 'create_item'].includes(name);
     }
 
     private isClientTool(name: string) {
-        return ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity'].includes(name);
+        const clientTools = ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity', 'patch_entity', 'set_blocks'];
+        console.log(`[Antigravity] Checking tool '${name}'. Server: ${this.isServerTool(name)}, Client: ${clientTools.includes(name)}`);
+        return clientTools.includes(name);
     }
 
     // SERVER TOOL EXECUTORS
@@ -355,6 +424,56 @@ export class AntigravitySession {
                 await fs.writeFile(targetPath, newContent);
                 return { success: true };
             }
+            case 'create_creature': {
+                const { name, code, description } = args;
+
+                if (!name || !code) {
+                    return { error: 'Missing required fields: name and code' };
+                }
+
+                const result = await saveCreature({
+                    name,
+                    code,
+                    description: description || '',
+                    createdBy: this.userId || 'anonymous',
+                    createdAt: Date.now()
+                });
+
+                if (result.success) {
+                    return {
+                        success: true,
+                        message: `Created creature '${name}'. It is now available for all players to spawn!`,
+                        creatureName: name
+                    };
+                } else {
+                    return { error: result.error };
+                }
+            }
+
+            case 'create_item': {
+                const { name, code, icon, description } = args;
+                if (!name || !code || !icon) {
+                    return { error: 'Missing required fields: name, code, and icon' };
+                }
+
+                const result = await saveItem({
+                    name,
+                    code,
+                    icon,
+                    description: description || ''
+                });
+
+                if (result.success) {
+                    return {
+                        success: true,
+                        message: `Created item '${name}'. It is now available for all players to use!`,
+                        itemName: name
+                    };
+                } else {
+                    return { error: result.error };
+                }
+            }
+
             default:
                 return { error: `Server tool ${name} not implemented` };
         }

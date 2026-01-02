@@ -94,6 +94,7 @@ export class FallingTree {
 
         // Optional: Raycast directly ahead to check for terrain collision?
         // For now, simple angle check is enough for "Falling Over".
+        return true;
     }
 
     crush() {

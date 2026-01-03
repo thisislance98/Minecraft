@@ -141,6 +141,14 @@ export class GameDriver {
                     }
                 }, script);
 
+            case 'debug_creatures':
+                // Show all dynamic creatures and their status
+                return await GameCommands.getDynamicCreatureInfo(browser);
+
+            case 'creature_errors':
+                // Show any creature registration/runtime errors
+                return await GameCommands.getCreatureErrors(browser);
+
             default:
                 throw new Error(`Unknown tool: ${tool}`);
         }

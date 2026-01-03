@@ -400,7 +400,24 @@ export class AntigravitySession {
                     throw new Error("Access Denied: Can only read within project directory");
                 }
                 const content = await fs.readFile(targetPath, 'utf8');
-                return { content: content.slice(0, 10000) };
+                const lines = content.split('\n');
+
+                // Handle StartLine and EndLine (1-indexed)
+                const startLine = args.StartLine ? Math.max(1, args.StartLine) : 1;
+                const endLine = args.EndLine ? Math.min(lines.length, args.EndLine) : lines.length;
+
+                // Extract the requested line range
+                const selectedLines = lines.slice(startLine - 1, endLine);
+                const result = selectedLines.join('\n');
+
+                // Include metadata about what was returned
+                return {
+                    content: result.slice(0, 15000),  // Increased limit for line-specific requests
+                    totalLines: lines.length,
+                    startLine: startLine,
+                    endLine: Math.min(endLine, startLine + selectedLines.length - 1),
+                    truncated: result.length > 15000
+                };
             }
             case 'write_to_file': {
                 const targetPath = path.resolve(cwd, args.TargetFile);

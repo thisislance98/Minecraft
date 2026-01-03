@@ -303,4 +303,108 @@ export class MultiBrowserRunner {
             throw error;
         }
     }
+    /**
+     * Run group chat synchronization test
+     */
+    async runGroupChatTest() {
+        console.log(chalk.blue('\n═══════════════════════════════════════════════════'));
+        console.log(chalk.blue('  GROUP CHAT SYNC TEST'));
+        console.log(chalk.blue('═══════════════════════════════════════════════════'));
+
+        try {
+            await this.launchAll();
+
+            // Wait for socket sync
+            await new Promise(r => setTimeout(r, 2000));
+
+            // Browser 1 sends message
+            const browser1 = this.browsers[0];
+            const message1 = "Hello from Browser 1 " + Date.now();
+
+            console.log(chalk.yellow('\n💬 STEP 1: Browser 1 sending message...'));
+            await browser1.evaluate((msg) => {
+                const game = window.__VOXEL_GAME__;
+                if (game && game.uiManager) {
+                    game.uiManager.toggleChatPanel(true);
+                    game.uiManager.setChatMode('group');
+                    const chatInput = document.getElementById('chat-input');
+                    if (chatInput) {
+                        chatInput.value = msg;
+                        game.uiManager.handleSendMessage();
+                    }
+                }
+            }, message1);
+
+            // Browser 2 verification
+            const browser2 = this.browsers[1];
+            console.log(chalk.yellow('\n🔍 STEP 2: Verifying reception in Browser 2'));
+
+            let received = false;
+            let attempts = 0;
+            while (!received && attempts < 10) {
+                await new Promise(r => setTimeout(r, 1000));
+                received = await browser2.evaluate((expectedMsg) => {
+                    const groupParams = document.getElementById('chat-messages-group');
+                    return groupParams && groupParams.innerText.includes(expectedMsg);
+                }, message1);
+                attempts++;
+            }
+
+            if (received) {
+                console.log(chalk.green('  ✓ Browser 2 received message'));
+            } else {
+                console.log(chalk.red('  ✗ Browser 2 did NOT receive message'));
+                throw new Error('Chat sync failed');
+            }
+
+            // Browser 2 replies
+            const message2 = "Reply from Browser 2 " + Date.now();
+            console.log(chalk.yellow('\n💬 STEP 3: Browser 2 replying...'));
+            await browser2.evaluate((msg) => {
+                const game = window.__VOXEL_GAME__;
+                game.uiManager.toggleChatPanel(true);
+                game.uiManager.setChatMode('group');
+                const chatInput = document.getElementById('chat-input');
+                if (chatInput) {
+                    chatInput.value = msg;
+                    game.uiManager.handleSendMessage();
+                }
+            }, message2);
+
+            // Browser 1 verification
+            console.log(chalk.yellow('\n🔍 STEP 4: Verifying reply in Browser 1'));
+            let receivedReply = false;
+            attempts = 0;
+
+            while (!receivedReply && attempts < 10) {
+                await new Promise(r => setTimeout(r, 1000));
+                receivedReply = await browser1.evaluate((expectedMsg) => {
+                    const groupParams = document.getElementById('chat-messages-group');
+                    return groupParams && groupParams.innerText.includes(expectedMsg);
+                }, message2);
+                attempts++;
+            }
+
+            if (receivedReply) {
+                console.log(chalk.green('  ✓ Browser 1 received reply'));
+            } else {
+                console.log(chalk.red('  ✗ Browser 1 did NOT receive reply'));
+                throw new Error('Chat sync failed (reply)');
+            }
+
+            console.log(chalk.green('\n═══════════════════════════════════════════════════'));
+            console.log(chalk.green('  ✅ GROUP CHAT TEST PASSED!'));
+            console.log(chalk.green('═══════════════════════════════════════════════════'));
+
+            await this.closeAll();
+            return true;
+
+        } catch (error) {
+            console.log(chalk.red('\n═══════════════════════════════════════════════════'));
+            console.log(chalk.red(`  ❌ TEST FAILED: ${error.message}`));
+            console.log(chalk.red('═══════════════════════════════════════════════════'));
+            await this.closeAll();
+            throw error;
+        }
+    }
 }

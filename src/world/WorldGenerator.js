@@ -16,6 +16,9 @@ export class WorldGenerator {
         this.biomeManager = new BiomeManager();
         this.terrainGenerator = new TerrainGenerator(this.biomeManager);
         this.structureGenerator = new StructureGenerator(game, this);
+
+        // Village near spawn tracking
+        this.spawnVillageGenerated = false;
     }
 
     getTemperature(x, z) {
@@ -137,6 +140,20 @@ export class WorldGenerator {
 
         // Structure Generation (Trees, etc.)
         this.generateFeatures(cx, cy, cz);
+
+        // Generate village near spawn (spawn is at 32, 80, 32 = chunk 2, 5, 2)
+        // Trigger when we generate the spawn chunk
+        if (!this.spawnVillageGenerated && cx === 2 && cz === 2) {
+            this.spawnVillageGenerated = true;
+            // Place village slightly offset from spawn so player spawns near (not inside) village
+            const villageX = Config.PLAYER.SPAWN_POINT.x + 15;
+            const villageZ = Config.PLAYER.SPAWN_POINT.z + 15;
+            const villageY = this.getTerrainHeight(villageX, villageZ);
+            // Defer to ensure terrain is ready
+            setTimeout(() => {
+                this.structureGenerator.generateVillage(villageX, villageY, villageZ);
+            }, 100);
+        }
 
         chunk.isGenerated = true;
         return chunk;

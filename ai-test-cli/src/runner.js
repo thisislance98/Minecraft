@@ -36,10 +36,19 @@ export class TestRunner {
                 await this.browser.waitForGameLoad();
             }
 
-            await this.client.connect();
+            if (testCase.prompt) {
+                await this.client.connect();
+            }
 
-            // Step 1: Execute the main prompt and wait for expected tool
-            await this.executePromptAndWaitForTool(testCase);
+            // Step 1: Execute actions or prompt
+            if (testCase.actions && Array.isArray(testCase.actions)) {
+                console.log(chalk.blue('\n⚡ Executing Direct Actions...'));
+                await this.executeActions(testCase.actions);
+            } else if (testCase.prompt) {
+                await this.executePromptAndWaitForTool(testCase);
+            } else {
+                console.warn(chalk.yellow('No prompt or actions specified in test case'));
+            }
 
             // Step 2: Run verifications if specified
             if (testCase.verify && testCase.verify.length > 0) {
@@ -66,6 +75,28 @@ export class TestRunner {
     async cleanup() {
         if (this.client.isConnected) this.client.disconnect();
         if (this.browser) await this.browser.close();
+    }
+
+    async executeActions(actions) {
+        if (!this.browser) throw new Error('Browser required for actions');
+
+        // Dynamic import of game commands to map string names to functions
+        const GameCommands = await import('./game-commands.js');
+
+        for (const action of actions) {
+            console.log(chalk.dim(`  Running action: ${action.name} ${JSON.stringify(action.args || [])}`));
+
+            if (GameCommands[action.name]) {
+                const result = await GameCommands[action.name](this.browser, ...(action.args || []));
+                if (result && result.error) {
+                    throw new Error(`Action ${action.name} failed: ${result.error}`);
+                }
+            } else if (action.name === 'wait') {
+                await new Promise(r => setTimeout(r, action.args[0]));
+            } else {
+                throw new Error(`Unknown action: ${action.name}`);
+            }
+        }
     }
 
     async executePromptAndWaitForTool(testCase) {

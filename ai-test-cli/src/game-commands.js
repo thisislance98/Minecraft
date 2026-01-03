@@ -70,6 +70,23 @@ export async function selectSlot(browser, slotIndex) {
 }
 
 /**
+ * Find an item in inventory and select its slot
+ */
+export async function equipItem(browser, itemName) {
+    return await executeInBrowser(browser, (name) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.inventoryManager) return { error: 'Game not ready' };
+
+        // Find slot with item
+        const slotIndex = game.inventoryManager.slots.findIndex(s => s && s.item === name);
+        if (slotIndex === -1) return { error: `Item '${name}' not found in inventory` };
+
+        game.inventoryManager.selectSlot(slotIndex);
+        return { success: true, item: name, slot: slotIndex };
+    }, itemName);
+}
+
+/**
  * Use the currently selected item (simulate right-click)
  */
 export async function useSelectedItem(browser) {
@@ -162,6 +179,40 @@ export async function isCreatureRegistered(browser, creatureName) {
             isDynamic: name in (window.DynamicCreatures || {})
         };
     }, creatureName);
+}
+
+/**
+ * Get all creature registration errors (for debugging AI-generated creatures)
+ */
+export async function getCreatureErrors(browser) {
+    return await executeInBrowser(browser, () => {
+        const errors = window.DynamicCreatureErrors || {};
+        return {
+            count: Object.keys(errors).length,
+            errors: errors
+        };
+    });
+}
+
+/**
+ * Get detailed info about dynamic creatures (for debugging)
+ */
+export async function getDynamicCreatureInfo(browser) {
+    return await executeInBrowser(browser, () => {
+        const DynamicCreatures = window.DynamicCreatures || {};
+        const DynamicCreatureErrors = window.DynamicCreatureErrors || {};
+        const AnimalClasses = window.AnimalClasses || {};
+
+        const info = {};
+        for (const name of Object.keys(DynamicCreatures)) {
+            info[name] = {
+                registered: name in AnimalClasses,
+                hasError: name in DynamicCreatureErrors,
+                error: DynamicCreatureErrors[name]?.error || null
+            };
+        }
+        return info;
+    });
 }
 
 /**
@@ -386,9 +437,6 @@ export function printDrops(dropsData) {
     }
 }
 
-/**
- * Set a block at specific coordinates
- */
 export async function setBlock(browser, x, y, z, blockType) {
     return await executeInBrowser(browser, (bx, by, bz, type) => {
         const game = window.__VOXEL_GAME__;
@@ -398,3 +446,102 @@ export async function setBlock(browser, x, y, z, blockType) {
         return { success: true, position: { x: bx, y: by, z: bz }, blockType: type };
     }, x, y, z, blockType);
 }
+
+/**
+ * Show an in-game notification (for testing the notification system)
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} message - Message to display
+ * @param {'error' | 'warning' | 'info' | 'success'} type - Notification type
+ * @param {number} duration - Duration in ms (default: 3000)
+ */
+export async function showNotification(browser, message, type = 'info', duration = 3000) {
+    return await executeInBrowser(browser, (msg, t, dur) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.uiManager) return { error: 'Game not ready' };
+
+        game.uiManager.showGameNotification(msg, t, dur);
+        return { success: true, message: msg, type: t, duration: dur };
+    }, message, type, duration);
+}
+
+/**
+ * Get all currently visible notifications
+ */
+export async function getNotifications(browser) {
+    return await executeInBrowser(browser, () => {
+        const container = document.getElementById('game-notifications');
+        if (!container) return { error: 'Container not found', notifications: [] };
+
+        const notifications = Array.from(container.querySelectorAll('.game-notification')).map(n => ({
+            type: n.classList.contains('error') ? 'error' :
+                n.classList.contains('warning') ? 'warning' :
+                    n.classList.contains('success') ? 'success' : 'info',
+            message: n.querySelector('.notif-message')?.textContent || '',
+            isFading: n.classList.contains('fade-out')
+        }));
+
+        return { count: notifications.length, notifications };
+    });
+}
+
+/**
+ * Spawn creature at specific coordinates
+ */
+export async function spawnCreatureAt(browser, creatureType, x, y, z) {
+    return await executeInBrowser(browser, (type, px, py, pz) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.spawnManager) return { error: 'Game not ready' };
+
+        const AnimalClasses = window.AnimalClasses || {};
+        const CreatureClass = AnimalClasses[type];
+        if (!CreatureClass) {
+            return { error: `Creature '${type}' not found` };
+        }
+
+        // Create directly
+        // createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null)
+        // We want absolute control, so snapToGround = false? 
+        // But createAnimal logic forces snapToGround if not specified.
+        // Actually createAnimal signature: createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null)
+        // Wait, I saw createAnimal code: createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null)
+        // If I pass false, it should respect it.
+        // But wait, the code I read earlier:
+        /*
+        createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null) {
+            // ...
+            if (snapToGround) {
+                // ... finds ground ...
+            }
+            const animal = new AnimalClass(this.game, x, y, z, seed);
+            // ...
+        }
+        */
+        // So passing false should work.
+
+        // However, `spawnManager.createAnimal` might not return the created instance.
+        // It returns nothing usually.
+        // But `spawnEntitiesInFrontOfPlayer` returns the list.
+        // I'll implement a simple wrapper that instantiates or calls createAnimal.
+
+        // Let's use createAnimal but with snapToGround=false to force position.
+
+        game.spawnManager.createAnimal(CreatureClass, px, py, pz, false);
+        return { success: true, type, x: px, y: py, z: pz };
+    }, creatureType, x, y, z);
+}
+
+
+/**
+ * Set player rotation
+ */
+export async function setRotation(browser, x, y, z) {
+    return await executeInBrowser(browser, (rx, ry, rz) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.camera) return { error: 'Game not ready' };
+        game.camera.rotation.set(rx, ry, rz);
+        game.camera.quaternion.setFromEuler(game.camera.rotation);
+        return { success: true, rotation: { x: rx, y: ry, z: rz } };
+    }, x, y, z);
+}
+
+

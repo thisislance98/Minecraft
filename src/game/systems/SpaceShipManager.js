@@ -13,7 +13,7 @@ export class SpaceShipManager {
         // Orbital movement state
         this.orbitAngle = 0;
         this.orbitRadius = 2000; // Large orbit to encompass the whole world
-        this.orbitHeight = 250;
+        this.orbitHeight = 160;
         this.orbitSpeed = 0.05; // Radians per second (slow majestic orbit - full orbit in ~2 minutes)
         this.isOrbiting = false;
 

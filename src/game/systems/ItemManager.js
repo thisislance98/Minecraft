@@ -61,7 +61,8 @@ export class ItemManager {
 
 
     handleItemPrimary(itemId) {
-        const item = this.items.get(itemId);
+        console.log(`[ItemManager] handleItemPrimary called for ${itemId}`);
+        const item = this.getItem(itemId);
         if (item) {
             return item.onPrimaryDown(this.game, this.game.player);
         }

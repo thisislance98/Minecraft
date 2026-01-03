@@ -8,12 +8,13 @@ export class Player {
     constructor(game) {
         this.game = game;
 
-        // Player state
-        this.position = new THREE.Vector3(
-            Config.PLAYER.SPAWN_POINT.x,
-            Config.PLAYER.SPAWN_POINT.y,
-            Config.PLAYER.SPAWN_POINT.z
-        );
+        // Player state - Random spawn position within world bounds
+        const worldRadius = Config.WORLD.WORLD_RADIUS_CHUNKS * Config.WORLD.CHUNK_SIZE;
+        const spawnX = Math.floor(Math.random() * worldRadius * 2) - worldRadius;
+        const spawnZ = Math.floor(Math.random() * worldRadius * 2) - worldRadius;
+        const spawnY = Config.PLAYER.SPAWN_POINT.y; // Start high to land safely
+
+        this.position = new THREE.Vector3(spawnX, spawnY, spawnZ);
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.rotation = { x: 0, y: 0 };
         this.orbitRotation = { x: 0, y: 0 }; // Camera orbit angles
@@ -67,7 +68,106 @@ export class Player {
         this.leftLeg = null;
         this.rightLeg = null;
 
+        // Speech bubble for player chat
+        this.speechBubble = null;
+        this.speechCanvas = null;
+        this.speechContext = null;
+        this.speechTexture = null;
+        this.speechTimer = 0;
+
         this.createBody();
+        this.createSpeechBubble();
+    }
+
+    /**
+     * Create speech bubble sprite for local player chat
+     */
+    createSpeechBubble() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        this.speechCanvas = canvas;
+        this.speechContext = canvas.getContext('2d');
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        this.speechTexture = texture;
+
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthTest: false
+        });
+
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(2.5, 0.625, 1);
+        // Position above the body (which is attached to camera)
+        // Body is at y=-0.3, head is at y=0.2, so bubble should be above that in world space
+        sprite.position.set(0, 0.8, -0.4); // Above head relative to camera
+        sprite.visible = false;
+        this.game.camera.add(sprite);
+        this.speechBubble = sprite;
+    }
+
+    /**
+     * Show speech bubble with text for a duration
+     */
+    showSpeechBubble(text, duration = 5) {
+        if (!this.speechContext) return;
+
+        const ctx = this.speechContext;
+        const canvas = this.speechCanvas;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!text) {
+            this.speechBubble.visible = false;
+            return;
+        }
+
+        // Draw bubble background
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 4;
+
+        const padding = 20;
+        const radius = 20;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2, radius);
+        } else {
+            ctx.rect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw text
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 28px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const maxLength = 40;
+        const displayText = text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;
+        ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
+
+        this.speechTexture.needsUpdate = true;
+        this.speechBubble.visible = true;
+        this.speechTimer = duration;
+    }
+
+    /**
+     * Update speech bubble timer (called from update loop)
+     */
+    updateSpeechBubble(deltaTime) {
+        if (this.speechTimer > 0) {
+            this.speechTimer -= deltaTime;
+            if (this.speechTimer <= 0) {
+                this.speechTimer = 0;
+                this.speechBubble.visible = false;
+            }
+        }
     }
 
     createBody() {
@@ -799,6 +899,72 @@ export class Player {
     swingArm() {
         this.isMining = true;
         this.miningTimer = 0;
+
+        // Attempt to attack entity or player
+        this.attackPlayer();
+    }
+
+    attackPlayer() {
+        if (!this.game.camera) return;
+
+        // Simple raycast from camera center
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
+
+        // Reach distance (3 blocks standard, maybe 4)
+        raycaster.far = 4.0;
+
+        // Get remote player meshes
+        const socketManager = this.game.socketManager;
+        if (!socketManager || !socketManager.playerMeshes) return;
+
+        // Collect all remote player groups
+        const targets = [];
+        const idMap = new Map(); // Object3D uuid -> playerId
+
+        socketManager.playerMeshes.forEach((meshInfo, id) => {
+            if (meshInfo.group) {
+                targets.push(meshInfo.group);
+                // Map the group AND its children to the ID, just in case
+                // Actually usually we intersectObjects(groups, true)
+                // We'll need to walk up from the hit object to find the group
+                meshInfo.group.userData.playerId = id;
+            }
+        });
+
+        if (targets.length === 0) return;
+
+        const intersects = raycaster.intersectObjects(targets, true);
+
+        if (intersects.length > 0) {
+            // Find the root group to get the player ID
+            let hitObject = intersects[0].object;
+            let playerId = null;
+
+            // Traverse up to find userData.playerId
+            while (hitObject) {
+                if (hitObject.userData && hitObject.userData.playerId) {
+                    playerId = hitObject.userData.playerId;
+                    break;
+                }
+                hitObject = hitObject.parent;
+                if (hitObject === this.game.scene) break;
+            }
+
+            if (playerId) {
+                console.log(`Attacked player ${playerId}!`);
+                // Calculate damage based on held item
+                let damage = 1; // Fist
+                const heldItem = this.game.inventory ? this.game.inventory.getSelectedItem() : null;
+                if (heldItem && heldItem.item === 'sword') damage = 4;
+                if (heldItem && heldItem.item === 'pickaxe') damage = 2; // improvised weapon
+
+                socketManager.sendDamage(playerId, damage);
+
+                // Visual feedback (swing already happens)
+                // Maybe sound?
+            }
+        }
     }
 
     update(deltaTime) {
@@ -937,11 +1103,18 @@ export class Player {
                 const blockAtFeet = this.game.getBlock(this.position.x, this.position.y, this.position.z);
                 const inWater = blockAtFeet && blockAtFeet.type === 'water';
 
-                // Track highest Y for fall damage
+                // Track highest Y for fall damage - only track while falling, not climbing
                 if (this.onGround || inWater) {
+                    // Reset highestY when on ground or in water - this prevents accumulating height while climbing
                     this.highestY = this.position.y;
-                } else {
+                } else if (this.velocity.y <= 0) {
+                    // Only track highest point when falling (negative or zero velocity)
+                    // This prevents taking damage from climbing up to high places
                     this.highestY = Math.max(this.highestY, this.position.y);
+                } else {
+                    // While going up (positive velocity), reset highestY to current position
+                    // So we only measure fall distance from the apex
+                    this.highestY = this.position.y;
                 }
 
                 // Void Damage
@@ -1120,6 +1293,9 @@ export class Player {
 
         // Update hunger and health
         this.updateHungerAndHealth(deltaTime, input);
+
+        // Update speech bubble timer
+        this.updateSpeechBubble(deltaTime);
     }
 
 
@@ -1374,6 +1550,10 @@ export class Player {
     onDeath() {
         // Set player as dead (prevents movement/input)
         this.isDead = true;
+
+        if (this.game.analyticsManager) {
+            this.game.analyticsManager.logPlayerDeath('unknown'); // Cause unknown for now unless passed
+        }
 
         // Save death position for respawning
         // Clone so we don't hold a reference to a changing vector
@@ -1651,6 +1831,46 @@ export class Player {
         }
     }
 
+    /**
+     * Check if a position is on top of a cloud
+     */
+    isOnCloud(x, y, z) {
+        if (!this.game.environment || !this.game.environment.clouds) return { isOnCloud: false, cloudTop: 0 };
+
+        const clouds = this.game.environment.clouds;
+        const blockSize = 4; // Cloud block size from Environment.js
+        const cloudThickness = blockSize * 0.5; // Height of cloud blocks
+
+        for (const cloudGroup of clouds.children) {
+            // Get cloud world position
+            const cloudWorldPos = new THREE.Vector3();
+            cloudGroup.getWorldPosition(cloudWorldPos);
+
+            // Check each block in the cloud
+            for (const block of cloudGroup.children) {
+                const blockWorldPos = new THREE.Vector3();
+                block.getWorldPosition(blockWorldPos);
+
+                // Cloud block bounds (centered at blockWorldPos)
+                const minX = blockWorldPos.x - blockSize / 2;
+                const maxX = blockWorldPos.x + blockSize / 2;
+                const minZ = blockWorldPos.z - blockSize / 2;
+                const maxZ = blockWorldPos.z + blockSize / 2;
+                const cloudTop = blockWorldPos.y + cloudThickness / 2;
+                const cloudBottom = blockWorldPos.y - cloudThickness / 2;
+
+                // Check if position is within cloud block horizontally and at the top surface
+                if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
+                    // Check if we're at the top of the cloud (within a small tolerance)
+                    if (y >= cloudBottom && y <= cloudTop + 0.5) {
+                        return { isOnCloud: true, cloudTop: cloudTop };
+                    }
+                }
+            }
+        }
+        return { isOnCloud: false, cloudTop: 0 };
+    }
+
     moveWithCollision(velX, velY, velZ) {
         const pos = this.position;
         const hw = this.width / 2;
@@ -1707,6 +1927,17 @@ export class Player {
 
                         this.velocity.y = 0;
                         this.onGround = true;
+                    } else {
+                        // Check for cloud collision (walkable clouds!)
+                        const cloudCheck = this.isOnCloud(pos.x + dx, newY, pos.z + dz);
+                        if (cloudCheck.isOnCloud) {
+                            canMoveY = false;
+                            this.velocity.y = 0;
+                            this.onGround = true;
+                            // Soft landing on clouds - no fall damage, snap to cloud top
+                            pos.y = cloudCheck.cloudTop;
+                            this.highestY = pos.y; // Reset fall tracking
+                        }
                     }
                 } else {
                     // Jumping - check above head

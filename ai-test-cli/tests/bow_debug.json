@@ -1,0 +1,59 @@
+{
+    "name": "Debug Bow Firing",
+    "headless": true,
+    "actions": [
+        {
+            "name": "giveItem",
+            "args": [
+                "bow",
+                1
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                500
+            ]
+        },
+        {
+            "name": "equipItem",
+            "args": [
+                "bow"
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                500
+            ]
+        },
+        {
+            "name": "leftClick",
+            "args": []
+        },
+        {
+            "name": "wait",
+            "args": [
+                500
+            ]
+        },
+        {
+            "name": "pressKey",
+            "args": [
+                "KeyL"
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                500
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const arrows = game.projectiles.filter(p => p.constructor.name === 'Arrow'); if (arrows.length > 0) return { success: true, message: `Found ${arrows.length} arrows` }; return { success: false, message: 'No arrows found' }; }"
+        }
+    ]
+}

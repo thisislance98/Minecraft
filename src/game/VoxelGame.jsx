@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Chunk } from '../world/Chunk.js';
+import '../styles/profiler.css';
 import { Player } from './entities/Player.js';
 import { Agent } from './entities/Agent.js';
 import { Drop } from './entities/Drop.js';
@@ -51,6 +52,7 @@ import { DiscoRoomManager } from './systems/DiscoRoomManager.js';
 import { DestinationManager } from './systems/DestinationManager.js';
 import { SpaceShipManager } from './systems/SpaceShipManager.js';
 import { SpaceStationManager } from './systems/SpaceStationManager.js';
+import { QuestSystem } from './systems/QuestSystem.js';
 
 // Visual Improvements: Post-Processing
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -58,7 +60,11 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GrassSystem } from './systems/GrassSystem.js';
 
+import { Profiler } from './utils/Profiler.js';
+
 import { VerificationUtils } from './utils/VerificationUtils.js';
+import { AnalyticsManager } from './systems/AnalyticsManager.js';
+import Stats from 'three/addons/libs/stats.module.js';
 
 // Antigravity was here.
 export class VoxelGame {
@@ -79,6 +85,16 @@ export class VoxelGame {
         this.renderer.setClearColor(0x4682B4); // Steel blue
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Performance Stats
+        this.stats = new Stats();
+        this.stats.dom.style.display = 'none'; // Hidden by default
+        document.body.appendChild(this.stats.dom);
+
+
+
+        // In-Depth Profiler
+        this.profiler = new GameProfiler();
 
         // Visual Improvements: Tone Mapping
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -113,6 +129,7 @@ export class VoxelGame {
         const urlParams = new URLSearchParams(window.location.search);
         this.isBareBones = urlParams.get('bare-bones') === 'true';
         this.isOffline = urlParams.get('offline') === 'true';
+        this.isCLI = urlParams.get('cli') === 'true';
 
         if (this.isBareBones) {
             console.log('[Game] Bare Bones Mode: Minimal renderer only.');
@@ -182,6 +199,7 @@ export class VoxelGame {
         this.inputManager = new InputManager(this); // Replaces controls
         this.controls = this.inputManager;
 
+        this.analyticsManager = new AnalyticsManager(this);
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
         this.itemManager = new ItemManager(this);
@@ -210,6 +228,7 @@ export class VoxelGame {
         this.survivalGameManager = new SurvivalGameManager(this);
         this.AnimalClasses = AnimalClasses;
         this.parkourManager = new ParkourManager(this);
+        this.questSystem = new QuestSystem(this);
         this.updateTimeStop = (dt) => {
             if (this.gameState && this.gameState.timers.timeStop > 0) {
                 this.gameState.timers.timeStop -= dt;
@@ -282,8 +301,10 @@ export class VoxelGame {
             console.log('[Game] Singleplayer Mode.');
         }
 
-        // Multiplayer logic
-        this.socketManager = new SocketManager(this);
+        // Multiplayer logic - check for username first
+        this.checkAndPromptUsername().then(() => {
+            this.socketManager = new SocketManager(this);
+        });
 
 
         // Agent debug command handler
@@ -389,11 +410,12 @@ export class VoxelGame {
         }
 
         // Auto-Spawn Enterprise in High Orbit
-        // Position the ship above spawn point, visible when looking up (y=250)
+        // Position the ship above spawn point, visible when looking up
+        // Spawn at y=120 so ship center (~160) stays within render distance of ground players
         if (!this.isUIOnly && !this.isBareBones) {
             const spawnPos = new THREE.Vector3(
                 Config.PLAYER.SPAWN_POINT.x,
-                250, // High enough to orbit, low enough to see
+                120, // Lower height to stay within render distance of ground players
                 Config.PLAYER.SPAWN_POINT.z
             );
             this.spaceShipManager.spawnShip(spawnPos);
@@ -455,6 +477,123 @@ export class VoxelGame {
      * CAUTION: Only for development use!
      */
 
+
+    /**
+     * Check if username is set, prompt if not
+     */
+    async checkAndPromptUsername() {
+        const existingName = localStorage.getItem('communityUsername');
+        if (existingName) {
+            console.log('[Game] Username already set:', existingName);
+            return;
+        }
+
+        // Skip prompt in CLI mode - auto-generate a name
+        if (this.isCLI) {
+            const autoName = `CLI_Player_${Date.now().toString(36).slice(-4)}`;
+            localStorage.setItem('communityUsername', autoName);
+            console.log('[Game] CLI mode - auto-generated username:', autoName);
+            return;
+        }
+
+        console.log('[Game] No username set, showing prompt...');
+        return new Promise((resolve) => {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'username-prompt-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.85);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: linear-gradient(145deg, #1a1b1e, #2d2f36);
+                border-radius: 12px;
+                padding: 32px;
+                max-width: 420px;
+                width: 90%;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                color: white;
+                text-align: center;
+            `;
+
+            modal.innerHTML = `
+                <h2 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600;">👋 Welcome!</h2>
+                <p style="margin: 0 0 24px 0; color: #b9bbbe; font-size: 14px;">
+                    Enter your name for multiplayer. This will appear above your head and in chat.
+                </p>
+                <input type="text" id="username-prompt-input" 
+                    placeholder="Enter your name..."
+                    maxlength="20"
+                    style="
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 14px 16px;
+                        border: 2px solid #5865f2;
+                        border-radius: 8px;
+                        background: rgba(0,0,0,0.3);
+                        color: white;
+                        font-size: 16px;
+                        outline: none;
+                        margin-bottom: 20px;
+                    "
+                />
+                <button id="username-prompt-submit" style="
+                    width: 100%;
+                    padding: 14px;
+                    background: linear-gradient(135deg, #5865f2, #7289da);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: transform 0.1s, box-shadow 0.2s;
+                ">
+                    Start Playing
+                </button>
+            `;
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            const input = modal.querySelector('#username-prompt-input');
+            const submitBtn = modal.querySelector('#username-prompt-submit');
+
+            // Focus input after brief delay for transition
+            setTimeout(() => input.focus(), 100);
+
+            const submit = () => {
+                const name = input.value.trim() || `Player_${Date.now().toString(36).slice(-4)}`;
+                localStorage.setItem('communityUsername', name);
+                console.log('[Game] Username set to:', name);
+                overlay.remove();
+                resolve();
+            };
+
+            submitBtn.onclick = submit;
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') submit();
+            };
+
+            // Button hover effects
+            submitBtn.onmouseover = () => {
+                submitBtn.style.transform = 'scale(1.02)';
+                submitBtn.style.boxShadow = '0 4px 16px rgba(88, 101, 242, 0.4)';
+            };
+            submitBtn.onmouseout = () => {
+                submitBtn.style.transform = 'scale(1)';
+                submitBtn.style.boxShadow = 'none';
+            };
+        });
+    }
 
 
     spawnPlayer() {
@@ -713,6 +852,7 @@ export class VoxelGame {
             const bz = target.z + target.normal.z;
             // Check for player collision before placing
             this.setBlock(bx, by, bz, selectedItem.item);
+            this.analyticsManager.logBlockPlace(selectedItem.item, bx, by, bz);
             this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
 
             // Handle Destination Block Placement
@@ -1379,6 +1519,7 @@ export class VoxelGame {
     breakBlock(x, y, z) {
         const block = this.getBlock(x, y, z);
         if (block) {
+            this.analyticsManager.logBlockBreak(block.type, x, y, z);
             this.setBlock(x, y, z, null);
             this.player.collectBlock(block.type);
         }
@@ -1410,8 +1551,8 @@ export class VoxelGame {
             console.log(`[Scene] Total objects: ${count}, Animals: ${this.animals.length}`);
         }
 
-        // Multiplayer: Send position update every 100ms, only if moved or stopping
-        if (!this._lastPosUpdate || now - this._lastPosUpdate > 100) {
+        // Multiplayer: Send position update every 50ms (20Hz), only if moved or stopping
+        if (!this._lastPosUpdate || now - this._lastPosUpdate > 50) {
             this._lastPosUpdate = now;
 
             if (this.socketManager && this.socketManager.isConnected()) {
@@ -1430,14 +1571,16 @@ export class VoxelGame {
 
 
                 if (shouldSend) {
-                    this.socketManager.sendPosition(currentPos, currentRotY);
+                    const isCrouching = this.inputManager.isActionActive('SNEAK');
+                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching);
                     this._lastSentPos.copy(currentPos);
                     this._lastSentRotY = currentRotY;
                     this._isCurrentlyMoving = isMoving;
                     this._isCurrentlyRotating = isRotating;
                 } else if (this._isCurrentlyMoving || this._isCurrentlyRotating) {
                     // Send one last "stop" packet to ensure final position/rotation sync
-                    this.socketManager.sendPosition(currentPos, currentRotY);
+                    const isCrouching = this.inputManager.isActionActive('SNEAK');
+                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching);
                     this._lastSentPos.copy(currentPos);
                     this._lastSentRotY = currentRotY;
                     this._isCurrentlyMoving = false;
@@ -1481,9 +1624,7 @@ export class VoxelGame {
         const duration = performance.now() - start;
         if (duration > 10) { // 10ms budget per entity!
             console.warn(`[Guard] Entity took too long (${duration.toFixed(2)}ms):`, entity);
-            if (this.uiManager) {
-                this.uiManager.addChatMessage('system', `[Guard] Removed laggy entity: ${entity.constructor.name} (${duration.toFixed(0)}ms)`);
-            }
+
             return false; // Remove it
         }
 
@@ -1491,15 +1632,23 @@ export class VoxelGame {
     }
 
     animate() {
+        this.stats.begin();
+        this.profiler.tick(); // Update averages from previous frame
+
         requestAnimationFrame(() => this.animate());
+
+        this.profiler.start('WorldGen');
         this.processChunkQueue();
+        this.profiler.end('WorldGen');
 
         const now = performance.now();
         const deltaTime = (now - this.lastTime) / 1000;
         this.lastTime = now;
 
         // UI Update (Speech bubbles)
+        this.profiler.start('UI');
         this.uiManager.update(deltaTime);
+        this.profiler.end('UI');
 
         // UI-Only Mode: Skip all world/entity updates
         if (this.isUIOnly) {
@@ -1511,8 +1660,13 @@ export class VoxelGame {
         // Update physics and player only when locked (active play) OR mobile controls are enabled
         if (this.controls.isLocked || this.gameState.flags.mobileControls) {
             this.updateTimeStop(deltaTime);
+            this.profiler.start('Player');
             this.player.update(deltaTime);
+            this.profiler.end('Player');
+
+            this.profiler.start('Physics');
             this.physicsManager.update();
+            this.profiler.end('Physics');
         }
 
 
@@ -1523,7 +1677,9 @@ export class VoxelGame {
         }
 
         // Update dirty chunks every frame (throttled internally)
+        this.profiler.start('ChunkMeshing');
         this.updateChunks();
+        this.profiler.end('ChunkMeshing');
 
         this.frameCount = (this.frameCount || 0) + 1;
 
@@ -1531,6 +1687,7 @@ export class VoxelGame {
         if (this.studio) this.studio.update(deltaTime);
 
         // Update animals
+        this.profiler.start('Entities');
         for (let i = this.animals.length - 1; i >= 0; i--) {
             const animal = this.animals[i];
             const keep = this.safelyUpdateEntity(animal, deltaTime, this.animals, i);
@@ -1657,13 +1814,17 @@ export class VoxelGame {
             }
         }
 
+        this.profiler.end('Entities');
+
         // Frustum culling for performance
         this.updateFrustumCulling();
 
         // Day/Night Cycle - use Environment module
         if (!this.gameState.debug || this.gameState.debug.environment) {
+            this.profiler.start('Environment');
             this.environment.updateDayNightCycle(deltaTime, this.player.position);
             if (this.grassSystem) this.grassSystem.update(deltaTime);
+            this.profiler.end('Environment');
         }
 
         if (this.weatherSystem) {
@@ -1704,12 +1865,16 @@ export class VoxelGame {
         this.updateDebug();
 
         // Visual Improvements: Use EffectComposer for post-processing (Bloom)
+        this.profiler.start('Render');
         if (this.composer) {
             this.composer.render();
         } else {
             this.renderer.render(this.scene, this.camera);
         }
+        this.profiler.end('Render');
+        this.stats.end();
     }
+
     killAllAnimals() {
         for (const animal of this.animals) {
             if (animal.dispose) animal.dispose();
@@ -1832,6 +1997,15 @@ export class VoxelGame {
             if (!enabled) this.weatherSystem.clear();
         }
         console.log(`[Game] Weather: ${enabled}`);
+    }
+
+    toggleStats(visible) {
+        if (this.stats) {
+            this.stats.dom.style.display = visible ? 'block' : 'none';
+        }
+        if (this.profiler) {
+            this.profiler.enable(visible);
+        }
     }
 
     animateBareBones() {

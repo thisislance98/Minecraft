@@ -47,20 +47,20 @@ export class MythicalVillager extends Animal {
         const eyeMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
         const pupilMat = new THREE.MeshLambertMaterial({ color: 0x330000 }); // Reddish tint pupil
         const eyeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.05);
-        const pupilGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+        const pupilGeo = new THREE.BoxGeometry(0.06, 0.06, 0.02);
 
         const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
         leftEye.position.set(-0.15, 0.25, 0.26);
         headGroup.add(leftEye);
         const leftPupil = new THREE.Mesh(pupilGeo, pupilMat);
-        leftPupil.position.set(-0.15, 0.25, 0.28);
+        leftPupil.position.set(-0.15, 0.25, 0.32);
         headGroup.add(leftPupil);
 
         const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
         rightEye.position.set(0.15, 0.25, 0.26);
         headGroup.add(rightEye);
         const rightPupil = new THREE.Mesh(pupilGeo, pupilMat);
-        rightPupil.position.set(0.15, 0.25, 0.28);
+        rightPupil.position.set(0.15, 0.25, 0.32);
         headGroup.add(rightPupil);
 
         // -- Mane (Lion) --

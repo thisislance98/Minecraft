@@ -21,6 +21,8 @@ export class InventoryManager {
 
         // Initial Layout
         this.setupInitialItems();
+
+        this.lastSentItemType = null;
     }
 
     setupInitialItems() {
@@ -40,8 +42,8 @@ export class InventoryManager {
         this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
         // 8. Parkour Block
         this.addItemToSlot(7, 'parkour_block', 64, 'block');
-        // 9. Empty
-        this.slots[8] = { item: null, count: 0, type: null }; // Explicitly clear
+        // 9. Antigravity Guide
+        this.addItemToSlot(8, 'antigravity_guide', 1, 'item');
 
 
         // Add some materials for testing
@@ -141,6 +143,8 @@ export class InventoryManager {
                 }
             }
 
+            this.notifyHeldItemChange();
+
             return true;
         }
         return false;
@@ -165,6 +169,7 @@ export class InventoryManager {
             if (this.game.player) {
                 this.game.player.updateHeldItemVisibility();
             }
+            this.notifyHeldItemChange();
         };
 
         // Priority 1: Stack in Hotbar (Slots 0-8)
@@ -250,6 +255,7 @@ export class InventoryManager {
         if (this.game.player) {
             this.game.player.updateHeldItemVisibility();
         }
+        this.notifyHeldItemChange();
     }
 
     useSelected() {
@@ -283,6 +289,7 @@ export class InventoryManager {
             if (this.game.player) {
                 this.game.player.updateHeldItemVisibility();
             }
+            this.notifyHeldItemChange();
 
             return true;
         }
@@ -346,6 +353,11 @@ export class InventoryManager {
             this.setSlot(toIndex, { ...fromSlot });
             this.setSlot(fromIndex, temp);
         }
+
+        // If we touched the selected slot, notify
+        if (fromIndex === this.selectedSlot || toIndex === this.selectedSlot) {
+            this.notifyHeldItemChange();
+        }
     }
 
     // --- Crafting Logic ---
@@ -371,5 +383,18 @@ export class InventoryManager {
             }
         }
         this.craftingResult = { item: null, count: 0, type: null };
+    }
+
+    notifyHeldItemChange() {
+        if (!this.game.socketManager) return;
+
+        const slot = this.getSelectedItem();
+        const currentItem = slot ? slot.item : null;
+
+        if (currentItem !== this.lastSentItemType) {
+            // console.log(`[InventoryManager] Held item changed: ${this.lastSentItemType} -> ${currentItem}`);
+            this.lastSentItemType = currentItem;
+            this.game.socketManager.sendHeldItem(currentItem);
+        }
     }
 }

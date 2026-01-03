@@ -90,6 +90,10 @@ export class Animal {
         // Levitation
         this.levitationTimer = 0;
 
+        // Multiplayer Sync: For remote-controlled entities, use interpolation
+        this.targetPosition = null;     // Target position to lerp towards (for remote updates)
+        this.isRemoteControlled = false; // True if this entity is controlled by another client
+
         // Visual Improvements: Blob Shadow
         this.createBlobShadow();
     }
@@ -198,6 +202,21 @@ export class Animal {
                 }
             });
             this.shadowsInitialized = true;
+        }
+
+        // Handle remote-controlled entities: smooth interpolation towards target position
+        if (this.isRemoteControlled && this.targetPosition) {
+            // Lerp towards target position for smooth movement (same as player meshes)
+            const lerpFactor = 0.15; // Slightly slower than players for natural feel
+            this.position.lerp(this.targetPosition, lerpFactor);
+            this.mesh.position.copy(this.position);
+
+            // Update animation based on movement
+            const distToTarget = this.position.distanceTo(this.targetPosition);
+            this.isMoving = distToTarget > 0.05;
+
+            this.updateAnimation(dt);
+            return; // Skip local AI/physics for remote entities
         }
 
         if (this.rider) {
@@ -366,8 +385,19 @@ export class Animal {
 
     deserialize(data) {
         if (data.x !== undefined) {
-            this.position.set(data.x, data.y, data.z);
-            this.mesh.position.copy(this.position);
+            // Use interpolation for smooth movement instead of instant teleport
+            if (!this.targetPosition) {
+                this.targetPosition = new THREE.Vector3();
+            }
+            this.targetPosition.set(data.x, data.y, data.z);
+            this.isRemoteControlled = true;
+
+            // If this is the first position (very far away), snap to it
+            const dist = this.position.distanceTo(this.targetPosition);
+            if (dist > 20) {
+                this.position.copy(this.targetPosition);
+                this.mesh.position.copy(this.position);
+            }
         }
         if (data.health !== undefined) this.health = data.health;
 
@@ -654,6 +684,10 @@ export class Animal {
             { x: hw, z: 0 }   // Right side
         ];
 
+        // Step size for raycasting (0.8 ensures we don't skip blocks)
+        const stepSize = 0.8;
+        const steps = Math.ceil(distance / stepSize);
+
         for (const offset of offsets) {
             // Rotate offset
             const rx = offset.x * cos - offset.z * sin;
@@ -661,43 +695,58 @@ export class Animal {
 
             const startX = this.position.x + rx;
             const startZ = this.position.z + rz;
-            const checkX = startX + direction.x * distance;
-            const checkZ = startZ + direction.z * distance;
             const baseY = Math.floor(this.position.y);
 
-            // Water avoidance for land animals
-            if (this.avoidsWater && this.checkWater(checkX, baseY, checkZ)) {
-                return true; // Water detected, avoid
-            }
-            // Also check if there's water at feet level (where they would step)
-            if (this.avoidsWater && this.checkWater(checkX, baseY - 1, checkZ)) {
-                return true; // Water ahead at ground level
-            }
+            // Raycast loop
+            for (let i = 1; i <= steps; i++) {
+                const effectiveDist = Math.min(i * stepSize, distance);
 
-            // Check if there's a solid block at feet level or body level
-            // that we can't step over (more than 1 block high)
-            const hasFeetBlock = this.checkSolid(checkX, baseY, checkZ);
-            const hasBodyBlock = this.checkSolid(checkX, baseY + 1, checkZ);
+                const checkX = startX + direction.x * effectiveDist;
+                const checkZ = startZ + direction.z * effectiveDist;
 
-            if (hasFeetBlock && hasBodyBlock) {
-                return true; // Wall detected
-            }
-
-            if (hasFeetBlock && !hasBodyBlock) {
-                // Step-up scenario - check if there's headroom
-                const hasHeadBlock = this.checkSolid(checkX, baseY + 2, checkZ);
-                if (hasHeadBlock) {
-                    return true; // No headroom to step up
+                // Water avoidance for land animals
+                if (this.avoidsWater && this.checkWater(checkX, baseY, checkZ)) {
+                    return true; // Water detected, avoid
                 }
-            } else {
-                // Check for cliffs (no ground ahead)
-                const hasGroundAhead = this.checkSolid(checkX, baseY - 1, checkZ) ||
-                    this.checkSolid(checkX, baseY, checkZ);
-                if (!hasGroundAhead) {
-                    // Check deeper - is it a 2+ block drop?
-                    const hasDeepGround = this.checkSolid(checkX, baseY - 2, checkZ);
-                    if (!hasDeepGround) {
-                        return true; // Cliff detected, avoid
+                // Also check if there's water at feet level (where they would step)
+                if (this.avoidsWater && this.checkWater(checkX, baseY - 1, checkZ)) {
+                    // Only avoid if it's deep water? For now, strict avoidance.
+                    return true;
+                }
+
+                // Check if there's a solid block at feet level or body level
+                const hasFeetBlock = this.checkSolid(checkX, baseY, checkZ);
+                const hasBodyBlock = this.checkSolid(checkX, baseY + 1, checkZ);
+
+                if (hasFeetBlock && hasBodyBlock) {
+                    return true; // Wall detected (2 blocks high)
+                }
+
+                if (hasFeetBlock && !hasBodyBlock) {
+                    // Step-up scenario - check if there's headroom
+                    const hasHeadBlock = this.checkSolid(checkX, baseY + 2, checkZ);
+                    if (hasHeadBlock) {
+                        return true; // No headroom to step up
+                    }
+                    // If headroom is clear, this is climbable! So it's NOT an obstacle.
+                    // Continue checking further? 
+                    // Actually, if we can climb it, we proceed.
+                    // But if there is ANOTHER block right after?
+                } else if (!hasFeetBlock) {
+                    // Check for cliffs (no ground ahead)
+                    // If we are checking the immediate next block, it's relevant.
+                    // If checking far ahead, maybe less so?
+                    // Let's keep strict cliff avoidance.
+
+                    const hasGroundAhead = this.checkSolid(checkX, baseY - 1, checkZ) ||
+                        this.checkSolid(checkX, baseY, checkZ);
+
+                    if (!hasGroundAhead) {
+                        // Check deeper - is it a 2+ block drop?
+                        const hasDeepGround = this.checkSolid(checkX, baseY - 2, checkZ);
+                        if (!hasDeepGround) {
+                            return true; // Cliff detected, avoid
+                        }
                     }
                 }
             }
@@ -819,7 +868,7 @@ export class Animal {
         let dx = 0;
         let dz = 0;
 
-        if (!this.isDying && (this.rider || this.state === 'walk' || this.state === 'chase' || this.state === 'flee')) {
+        if (!this.isDying && this.isMoving && (this.rider || this.state === 'walk' || this.state === 'chase' || this.state === 'flee' || this.state === 'approaching')) {
             dx = this.moveDirection.x * this.speed * dt;
             dz = this.moveDirection.z * this.speed * dt;
         }
@@ -954,31 +1003,63 @@ export class Animal {
     }
 
     attemptClimb(targetX, targetZ) {
-        // Can we step up?
-        // Target block must be solid (wall)
-        // Target + 1 must be empty (space to stand)
-        // Target + 2 must be empty (headroom)
-
         const pos = this.position;
-        const currentY = Math.floor(pos.y);
+        const currentY = Math.floor(pos.y + 0.2);
 
-        // Wall is at currentY
-        if (this.checkSolid(targetX, currentY, targetZ)) {
-            // Check space above wall
-            if (!this.checkSolid(targetX, currentY + 1, targetZ) &&
-                !this.checkSolid(targetX, currentY + 2, targetZ)) {
+        // Calculate direction
+        const dx = targetX - pos.x;
+        const dz = targetZ - pos.z;
+        const len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 0.0001) return;
 
-                // Initiate Curve
-                this.isOnCurvePath = true;
-                this.curveStart.copy(pos);
+        const dirX = dx / len;
+        const dirZ = dz / len;
 
-                // Target center
-                const gx = Math.floor(targetX) + 0.5;
-                const gz = Math.floor(targetZ) + 0.5;
-                const gy = currentY + 1;
+        // "Shoulder" offsets to check width
+        const hw = this.width / 2 * 0.9;
+        const cos = Math.cos(this.rotation);
+        const sin = Math.sin(this.rotation);
 
-                this.curveEnd.set(gx, gy, gz);
-                this.curveProgress = 0;
+        const offsets = [
+            { x: 0, z: 0 },
+            { x: -hw, z: 0 },
+            { x: hw, z: 0 }
+        ];
+
+        const lookAhead = (this.width / 2) + 0.2;
+
+        for (const offset of offsets) {
+            // Rotate offset
+            const rx = offset.x * cos - offset.z * sin;
+            const rz = offset.x * sin + offset.z * cos;
+
+            // Start point for this ray
+            const startX = pos.x + rx;
+            const startZ = pos.z + rz;
+
+            // Check point ahead
+            const checkX = startX + dirX * lookAhead;
+            const checkZ = startZ + dirZ * lookAhead;
+
+            // Check for wall
+            if (this.checkSolid(checkX, currentY, checkZ)) {
+                // Check for climbability (headroom)
+                if (!this.checkSolid(checkX, currentY + 1, checkZ) &&
+                    !this.checkSolid(checkX, currentY + 2, checkZ)) {
+
+                    // Valid Step Up found!
+                    this.isOnCurvePath = true;
+                    this.curveStart.copy(pos);
+
+                    // Target block center
+                    const gx = Math.floor(checkX) + 0.5;
+                    const gz = Math.floor(checkZ) + 0.5;
+                    const gy = currentY + 1;
+
+                    this.curveEnd.set(gx, gy, gz);
+                    this.curveProgress = 0;
+                    return; // Found a path, stop checking
+                }
             }
         }
     }
@@ -1111,7 +1192,7 @@ export class Animal {
 
     checkWater(x, y, z) {
         const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
-        return block && block.type === Blocks.WATER;
+        return block === Blocks.WATER;
     }
 
     checkBodyCollision(x, y, z) {

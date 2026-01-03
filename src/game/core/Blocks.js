@@ -116,4 +116,5 @@ export const Blocks = {
     TERRACOTTA: 'terracotta',
     THATCH: 'thatch',
     HALF_TIMBER: 'half_timber',
+    STONE_BRICK: 'stone_brick',
 };

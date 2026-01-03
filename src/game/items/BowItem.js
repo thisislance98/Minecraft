@@ -20,6 +20,7 @@ export class BowItem extends Item {
      * Fires an arrow in the direction the player is looking.
      */
     onPrimaryDown(game, player) {
+        console.log('[BowItem] onPrimaryDown called');
         // Cooldown check to prevent spamming
         const now = performance.now();
         if (now - this.lastFireTime < this.fireCooldown) {

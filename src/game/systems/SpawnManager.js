@@ -147,7 +147,11 @@ export class SpawnManager {
             { type: 'Chimera', weight: 0.03, packSize: [1, 1], biomes: ['PLAINS', 'JUNGLE', 'FOREST'] },
             { type: 'WienerDog', weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'DESERT'] },
             { type: 'GoldenRetriever', weight: 0.05, packSize: [1, 2], biomes: ['PLAINS', 'FOREST'] },
-            { type: 'DuneWorm', weight: 0.05, packSize: [1, 1], biomes: ['DESERT'] }
+            { type: 'DuneWorm', weight: 0.05, packSize: [1, 1], biomes: ['DESERT'] },
+            // Interactive Plants (Avatar-like)
+            { type: 'HelicopterPlant', weight: 0.15, packSize: [3, 6], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] },
+            { type: 'ShyPlant', weight: 0.15, packSize: [4, 8], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] },
+            { type: 'CrystalPlant', weight: 0.1, packSize: [2, 5], biomes: ['MOUNTAIN', 'SNOW', 'DESERT'] }
         ];
 
         // Hostile mobs (spawn always now for testing)
@@ -220,9 +224,9 @@ export class SpawnManager {
                 this._deferredSnowmenSpawn = false;
                 this.spawnSnowmenNearPlayer();
             }
-            if (this._deferredChristmasTreeSpawn) {
-                this._deferredChristmasTreeSpawn = false;
-                this.spawnChristmasTreeNearPlayer();
+            if (this._deferredAvatarPlantsSpawn) {
+                this._deferredAvatarPlantsSpawn = false;
+                this.spawnAvatarPlantsNearPlayer();
             }
         }
     }
@@ -789,49 +793,51 @@ export class SpawnManager {
         }
     }
 
+
+
     /**
-     * Spawn a Christmas Tree that chases you!
+     * Spawn a cluster of Avatar-like plants near the player.
      */
-    spawnChristmasTreeNearPlayer() {
-        // Skip if we're waiting for initial sync OR if persisted entities were loaded
+    spawnAvatarPlantsNearPlayer() {
         if (this.waitingForInitialSync) {
-            console.log('[SpawnManager] Deferring ChristmasTree spawn (waiting for initial sync)');
-            this._deferredChristmasTreeSpawn = true;
+            this._deferredAvatarPlantsSpawn = true;
             return;
         }
+        // Even if persistence exists, we might want to force these once? 
+        // Or respect persistence. Let's respect persistence to avoid spam on re-load.
         if (this.hasLoadedPersistedEntities) {
-            console.log('[SpawnManager] Skipping ChristmasTree spawn (persisted entities exist)');
             return;
         }
 
         const player = this.game.player;
         const worldGen = this.game.worldGen;
+        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 2025);
 
-        // Create deterministic RNG for initial spawns
-        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1004); // New seed
-        const count = 1; // Just one boss tree
+        console.log('[SpawnManager] Spawning Avatar-like plants near player...');
 
-        console.log(`Spawning ${count} Christmas Tree near player spawn`);
+        const plantTypes = ['HelicopterPlant', 'ShyPlant', 'CrystalPlant'];
 
-        for (let i = 0; i < count; i++) {
-            // Random position 15 blocks away (give player a chance to see it coming)
-            const angle = rng.next() * Math.PI * 2;
-            const distance = 15;
-            const x = player.position.x + Math.cos(angle) * distance;
-            const z = player.position.z + Math.sin(angle) * distance;
-            const terrainY = worldGen.getTerrainHeight(x, z);
-            const y = terrainY + 1;
+        for (const type of plantTypes) {
+            const count = 3 + Math.floor(rng.next() * 3);
+            const AngleOffset = rng.next() * Math.PI * 2;
 
-            // Only spawn on valid land (above sea level)
-            if (y > worldGen.seaLevel + 1) {
-                if (AnimalClasses.ChristmasTree) {
-                    this.createAnimal(AnimalClasses.ChristmasTree, x, y, z, true, rng.next());
-                } else {
-                    console.error('[SpawnManager] ChristmasTree class not found in AnimalRegistry!');
+            for (let i = 0; i < count; i++) {
+                // Spawn in a ring 5-15m away
+                const angle = AngleOffset + (i / count) * 0.5;
+                const dist = 5 + rng.next() * 10;
+
+                const x = player.position.x + Math.cos(angle) * dist;
+                const z = player.position.z + Math.sin(angle) * dist;
+                const terrainY = worldGen.getTerrainHeight(x, z);
+
+                const AnimalClass = AnimalClasses[type];
+                if (AnimalClass) {
+                    this.createAnimal(AnimalClass, x, terrainY + 1, z, true, rng.next());
                 }
             }
         }
     }
+
 
     /**
      * Spawn entities in front of the player (Debug function)

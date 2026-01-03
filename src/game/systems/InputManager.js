@@ -125,10 +125,18 @@ export class InputManager {
                 return;
             }
 
-            // T for Chat - also opens chat (legacy)
+            // Debug Toggle (P) - REMOVED
+            // if (e.code === 'KeyP') {
+            //    this.game.toggleDebugPanel();
+            // }
+
+            // T for Chat - opens chat and switches to player tab
             if (e.code === 'KeyT') {
                 if (this.game.agent && !this.game.agent.isChatOpen) {
                     e.preventDefault();
+                    if (this.game.uiManager) {
+                        this.game.uiManager.setChatMode('player');
+                    }
                     this.game.agent.toggleChat();
                 }
                 return;
@@ -137,13 +145,6 @@ export class InputManager {
             this.keys[e.code] = true;
             if (this.bindings[e.code]) {
                 this.actions[this.bindings[e.code]] = true;
-            }
-
-
-
-            // Debug Toggle (P)
-            if (e.code === 'KeyP') {
-                this.game.toggleDebugPanel();
             }
 
             // Spawn Panel Toggle (R)
@@ -201,7 +202,12 @@ export class InputManager {
                     // If inventory is open, E closes it
                     if (this.game.gameState.flags.inventoryOpen) {
                         this.game.toggleInventory();
+                        return;
                     }
+
+                    // Otherwise, E triggers secondary action (place block / use item)
+                    this.handleSecondaryAction();
+                    return;
                 }
             }
 
@@ -307,6 +313,7 @@ export class InputManager {
         document.addEventListener('mousedown', (e) => {
             if (document.pointerLockElement === this.game.container) {
                 if (e.button === 0) { // Left Click
+                    console.log('[InputManager] mousedown Left Click detected');
                     this.handlePrimaryAction();
 
                     // Auto-repeat
@@ -448,8 +455,15 @@ export class InputManager {
     }
 
     handlePrimaryAction() {
+        console.log('[InputManager] handlePrimaryAction called');
         if (!this.game.physicsManager) return;
         const item = this.game.inventory.getSelectedItem();
+        console.log('[InputManager] Selected item:', item ? JSON.stringify(item) : 'null');
+
+        if (item) {
+            const instance = this.game.itemManager.getItem(item.item);
+            console.log('[InputManager] Item instance:', instance ? `Found (isTool: ${instance.isTool})` : 'Not Found');
+        }
 
         // 0. Food (Eat) - Check first as eating shouldn't be interrupted
         if (item && item.type === 'food') {

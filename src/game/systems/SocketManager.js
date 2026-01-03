@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Peer } from 'peerjs';
 import { registerDynamicCreature, registerMultipleCreatures } from '../DynamicCreatureRegistry.js';
 import { registerDynamicItem, registerMultipleItems } from '../DynamicItemRegistry.js';
+import { ItemFactory } from '../entities/ItemFactory.js';
 
 export class SocketManager {
     constructor(game) {
@@ -97,7 +98,21 @@ export class SocketManager {
         });
 
         this.socket.on('player:joined', (data) => {
-            console.log('[SocketManager] Another player joined:', data.id);
+            console.log('[SocketManager] Another player joined:', data.id, 'name:', data.name);
+            // Store the name for when we create their mesh
+            if (data.name) {
+                this.playerNames = this.playerNames || new Map();
+                this.playerNames.set(data.id, data.name);
+            }
+
+            // Broadcast our held item to the new player
+            if (this.game.inventory) {
+                const item = this.game.inventory.getSelectedItem();
+                if (item && item.item) {
+                    this.sendHeldItem(item.item);
+                }
+            }
+
             // With PeerJS, we wait for 'peerjs:id' event to know they are ready and have their ID
             // So we don't call callPeer() here.
         });
@@ -133,10 +148,10 @@ export class SocketManager {
         });
 
         this.socket.on('player:move', (data) => {
-            // data: { id, pos, rotY }
+            // data: { id, pos, rotY, name, isCrouching }
             if (data && data.pos) {
-                this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY);
-                this.updatePlayerMesh(data.id, data.pos, data.rotY);
+                this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY, data.name);
+                this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching);
             }
         });
 
@@ -252,6 +267,60 @@ export class SocketManager {
             }
         });
 
+        // Handle player chat messages (speech bubbles)
+        this.socket.on('player:chat', (data) => {
+            // data: { id, message, name }
+            console.log(`[SocketManager] Player ${data.id} says: "${data.message}"`);
+            this.showPlayerChatBubble(data.id, data.message);
+            // Also add to player chat panel
+            if (this.game.uiManager) {
+                const playerName = data.name || `Player_${data.id.substring(0, 4)}`;
+                this.game.uiManager.addPlayerChatMessage(playerName, data.message, false);
+            }
+        });
+
+        // Handle group chat messages (visible to all)
+        this.socket.on('group:chat', (data) => {
+            // data: { id, message, name }
+            console.log(`[SocketManager] Group chat from ${data.id}: "${data.message}"`);
+            if (this.game.uiManager) {
+                const playerName = data.name || `Player_${data.id.substring(0, 4)}`;
+                this.game.uiManager.addGroupChatMessage(playerName, data.message, false);
+            }
+        });
+
+        // Handle player held item updates
+        this.socket.on('player:hold', (data) => {
+            // data: { id, itemType }
+            console.log(`[SocketManager] Player ${data.id} holding: ${data.itemType}`);
+            this.updateRemoteHeldItem(data.id, data.itemType);
+        });
+
+        // Handle player damage
+        this.socket.on('player:damage', (data) => {
+            // data: { targetId, amount, sourceId }
+            if (data.targetId === this.socketId) {
+                console.log(`[SocketManager] I took ${data.amount} damage from ${data.sourceId}`);
+                if (this.game.player && this.game.player.takeDamage) {
+                    this.game.player.takeDamage(data.amount);
+
+                    // Knockback?
+                    if (data.sourceId) {
+                        // Find source position if possible
+                        const sourceMesh = this.playerMeshes.get(data.sourceId);
+                        if (sourceMesh) {
+                            const dir = new THREE.Vector3().subVectors(this.game.player.position, sourceMesh.group.position).normalize();
+                            dir.y = 0.5; // Slight popup
+                            this.game.player.knockback(dir, 1.0);
+                        }
+                    }
+                }
+            } else {
+                // Someone else took damage, show effect
+                this.showDamageIndicator(data.targetId, data.amount);
+            }
+        });
+
         // Add an animation loop for remote characters
         this.lastUpdateTime = performance.now();
         this.animateRemotePlayers();
@@ -283,16 +352,37 @@ export class SocketManager {
 
         this.playerMeshes.forEach((meshInfo, id) => {
             // 1. Interpolate Position
-            meshInfo.group.position.lerp(meshInfo.targetPosition, 0.2);
+            // If we have a buffer, use it. Otherwise fall back to simple lerp (for now, or fully replace)
+            if (meshInfo.buffer) {
+                this.updateInterpolatedState(meshInfo, now);
+            } else {
+                // Fallback / legacy (though we init buffer now)
+                meshInfo.group.position.lerp(meshInfo.targetPosition, 0.2);
+            }
 
-            // 2. Interpolate Rotation (Smooth turning)
-            let diff = meshInfo.targetRotationY - meshInfo.group.rotation.y;
-            // Normalize angle diff to [-PI, PI]
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            meshInfo.group.rotation.y += diff * 0.15;
+            // 2. Interpolate Rotation (Smooth turning) - handled in updateInterpolatedState if buffered
+            if (!meshInfo.buffer) {
+                let diff = meshInfo.targetRotationY - meshInfo.group.rotation.y;
+                // Normalize angle diff to [-PI, PI]
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                meshInfo.group.rotation.y += diff * 0.15;
+            }
 
-            // 3. Handle Walking Animation
+            // 3. Handle Crouch Animation
+            const targetCrouch = (meshInfo.buffer ? meshInfo.targetCrouch : meshInfo.isCrouching) ? 1 : 0;
+            meshInfo.crouchAmount = THREE.MathUtils.lerp(meshInfo.crouchAmount, targetCrouch, 0.2);
+
+            // Apply crouch visual - lower the body by adjusting scale.y and position.y offset
+            // When crouching, shrink height to ~70% and lower position
+            const crouchScale = 1 - (meshInfo.crouchAmount * 0.3); // 1.0 to 0.7
+            meshInfo.group.scale.y = crouchScale;
+
+            // Adjust position.y to keep feet on ground when scaling
+            // Original model has feet at y=0, so we need to compensate for scale center
+            // Scale origin is at center, so lowering the body happens automatically
+
+            // 4. Handle Walking Animation
             const distToTarget = meshInfo.group.position.distanceTo(meshInfo.targetPosition);
             const isMoving = distToTarget > 0.05;
 
@@ -314,13 +404,75 @@ export class SocketManager {
                 if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x *= 0.9;
                 if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x *= 0.9;
             }
+
+            // 5. Update speech bubble timer
+            if (meshInfo.speechTimer > 0) {
+                meshInfo.speechTimer -= deltaTime;
+                if (meshInfo.speechTimer <= 0) {
+                    meshInfo.speechTimer = 0;
+                    this.updateSpeechBubbleText(meshInfo, null);
+                }
+            }
         });
+    }
+
+    updateInterpolatedState(meshInfo, now) {
+        // Interpolation Delay (100ms) - allows us to be "in the past" where we have start/end frames
+        const renderTime = now - 100;
+
+        // Prune old states (keep 1-2 older than renderTime for safety)
+        while (meshInfo.buffer.length > 2 && meshInfo.buffer[1].time < renderTime) {
+            meshInfo.buffer.shift();
+        }
+
+        if (meshInfo.buffer.length === 0) return;
+
+        // Ideally we find a frame "before" and "after" renderTime
+        // Buffer is sorted by time.
+        // Index 0 is likely before, Index 1 is likely after (due to pruning above)
+
+        const startState = meshInfo.buffer[0];
+        const endState = meshInfo.buffer.length > 1 ? meshInfo.buffer[1] : null;
+
+        if (!endState || renderTime > endState.time) {
+            // We are ahead of our latest data (lag/packet loss) -> extrapolate or clamp
+            // For now, simple clamp to latest
+            const latest = meshInfo.buffer[meshInfo.buffer.length - 1];
+            meshInfo.group.position.copy(latest.pos);
+
+            // Rotation smoothing even when clamped
+            let diff = latest.rotY - meshInfo.group.rotation.y;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            meshInfo.group.rotation.y += diff * 0.2;
+
+            meshInfo.targetCrouch = latest.isCrouching;
+        } else {
+            // Interpolate between startState and endState
+            const totalDuration = endState.time - startState.time;
+            const elapsed = renderTime - startState.time;
+            const t = Math.max(0, Math.min(1, elapsed / totalDuration));
+
+            meshInfo.group.position.lerpVectors(startState.pos, endState.pos, t);
+
+            // Rotation interpolation (shortest path)
+            let rotDiff = endState.rotY - startState.rotY;
+            while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+            while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+
+            // Smoothly interpolate rotation
+            meshInfo.group.rotation.y = startState.rotY + rotDiff * t;
+
+            // Crouch state
+            meshInfo.targetCrouch = endState.isCrouching;
+        }
     }
 
     joinGame() {
         if (this.socket && this.socket.connected) {
-            console.log('[SocketManager] Requesting to join game...');
-            this.socket.emit('join_game');
+            const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
+            console.log('[SocketManager] Requesting to join game as:', playerName);
+            this.socket.emit('join_game', { name: playerName });
         }
     }
 
@@ -335,14 +487,15 @@ export class SocketManager {
      * Send position update
      * @param {Object} pos - {x, y, z}
      * @param {number} rotY - Rotation around Y axis
+     * @param {boolean} isCrouching - Whether the player is crouching
      */
-    sendPosition(pos, rotY) {
+    sendPosition(pos, rotY, isCrouching = false) {
         if (!this.isConnected()) return;
 
         // Convert THREE.Vector3 to plain object for socket transmission
         const posData = { x: pos.x, y: pos.y, z: pos.z };
 
-        this.socket.emit('player:move', { pos: posData, rotY });
+        this.socket.emit('player:move', { pos: posData, rotY, isCrouching });
     }
 
     /**
@@ -385,6 +538,110 @@ export class SocketManager {
     sendEntitySpawn(data) {
         if (!this.isConnected()) return;
         this.socket.emit('entity:spawn', data);
+    }
+
+    /**
+     * Send held item update to server
+     * @param {string} itemType - The type/name of the item
+     */
+    sendHeldItem(itemType) {
+        if (!this.isConnected()) return;
+        this.socket.emit('player:hold', { itemType });
+    }
+
+    /**
+     * Send damage event to server
+     * @param {string} targetId - ID of the player being hit
+     * @param {number} amount - Amount of damage
+     */
+    sendDamage(targetId, amount) {
+        if (!this.isConnected()) return;
+        this.socket.emit('player:damage', { targetId, amount });
+    }
+
+    /**
+     * Show damage indicator above a player
+     */
+    showDamageIndicator(playerId, amount) {
+        const meshInfo = this.playerMeshes.get(playerId);
+        if (!meshInfo) return;
+
+        // Visual flash red
+        if (meshInfo.group) {
+            // Simple material flash (if we can access materials easily)
+            // Traversing to find meshes is heavy but okay for infrequent event
+            meshInfo.group.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const oldColor = child.material.color.getHex();
+                    child.material.color.setHex(0xFF0000);
+                    setTimeout(() => {
+                        if (child && child.material) child.material.color.setHex(oldColor);
+                    }, 200);
+                }
+            });
+        }
+
+        // Show floating text
+        const text = `-${amount}`;
+        this.showPlayerChatBubble(playerId, text, 1.5); // Reuse bubble for now, shorter duration
+    }
+
+    /**
+     * Update the held item visual for a remote player
+     */
+    updateRemoteHeldItem(id, itemType) {
+        const meshInfo = this.playerMeshes.get(id);
+        if (!meshInfo || !meshInfo.toolAttachment) return;
+
+        // Clear existing children
+        while (meshInfo.toolAttachment.children.length > 0) {
+            meshInfo.toolAttachment.remove(meshInfo.toolAttachment.children[0]);
+        }
+
+        if (!itemType) return;
+
+        let itemMesh = null;
+
+        // Use ItemFactory to create the mesh
+        switch (itemType) {
+            case 'pickaxe': itemMesh = ItemFactory.createPickaxe(); break;
+            case 'sword': itemMesh = ItemFactory.createSword(); break;
+            case 'bow': itemMesh = ItemFactory.createBow(); break;
+            case 'wand': itemMesh = ItemFactory.createWand(0xFF00FF); break;
+            case 'levitation_wand': itemMesh = ItemFactory.createWand(0xFFFF00); break;
+            case 'shrink_wand': itemMesh = ItemFactory.createWand(0x00FFFF); break;
+            case 'growth_wand': itemMesh = ItemFactory.createWand(0x00FF00); break;
+            case 'ride_wand': itemMesh = ItemFactory.createWand(0x8B4513); break;
+            case 'wizard_tower_wand': itemMesh = ItemFactory.createWand(0x8A2BE2); break;
+            // Add capture_wand?
+            case 'capture_wand': itemMesh = ItemFactory.createWand(0xFFA500); break; // Orange
+
+            case 'apple': itemMesh = ItemFactory.createFood('apple'); break;
+            case 'bread': itemMesh = ItemFactory.createFood('bread'); break;
+            case 'chocolate_bar': itemMesh = ItemFactory.createFood('chocolate_bar'); break;
+
+            case 'chair': itemMesh = ItemFactory.createFurniture('chair'); break;
+            case 'table': itemMesh = ItemFactory.createFurniture('table'); break;
+            case 'couch': itemMesh = ItemFactory.createFurniture('couch'); break;
+            case 'binoculars': itemMesh = ItemFactory.createBinoculars(); break;
+
+            case 'flying_broom':
+                // For now just show standard broom handle, no riding logic yet for remote
+                // Or we could duplicate the broom creation if needed, but ItemFactory doesn't have it yet.
+                // Let's make a simple stick for now if factory misses it, or add to factory.
+                // I'll skip if not in factory to avoid errors, or add fallback.
+                // Actually I should add broom to factory? 
+                // For safety catch block:
+                break;
+            default:
+                // Check if it's a block? simple cube?
+                // For now, ignore unknown
+                break;
+        }
+
+        if (itemMesh) {
+            meshInfo.toolAttachment.add(itemMesh);
+        }
     }
 
     /**
@@ -633,19 +890,33 @@ export class SocketManager {
         console.log(`[SocketManager] Spatial audio setup for ${id}`);
     }
 
-    updatePlayerMesh(id, pos, rotY) {
+    updatePlayerMesh(id, pos, rotY, name, isCrouching = false) {
         let meshInfo = this.playerMeshes.get(id);
 
         if (!meshInfo || meshInfo instanceof THREE.Object3D) {
             if (meshInfo instanceof THREE.Object3D) {
                 this.game.scene.remove(meshInfo);
             }
-            meshInfo = this.createCharacterModel(id);
+            // Get stored name from player:joined event if not provided
+            const playerName = name || (this.playerNames?.get(id)) || `Player_${id.substring(0, 4)}`;
+            meshInfo = this.createCharacterModel(id, playerName);
+
+            // Init Buffer
+            meshInfo.buffer = [];
+
             this.playerMeshes.set(id, meshInfo);
 
             // Initial position
             meshInfo.group.position.copy(pos);
             meshInfo.targetPosition.copy(pos);
+
+            // Initial state pushed to buffer
+            meshInfo.buffer.push({
+                time: performance.now(),
+                pos: new THREE.Vector3(pos.x, pos.y, pos.z),
+                rotY: rotY !== undefined ? rotY : 0,
+                isCrouching: isCrouching
+            });
 
             // Check if we have a pending stream for this mesh
             const pendingStream = this.pendingStreams.get(id);
@@ -657,26 +928,44 @@ export class SocketManager {
             return;
         }
 
-        // Set target position for interpolation
-        const targetPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+        // --- Buffer Update ---
+        // Push new state with current timestamp
+        const state = {
+            time: performance.now(),
+            pos: new THREE.Vector3(pos.x, pos.y, pos.z),
+            rotY: rotY !== undefined ? rotY : meshInfo.group.rotation.y, // Fallback if undefined
+            isCrouching: isCrouching
+        };
 
-        // Update target rotation
-        if (rotY !== undefined) {
-            meshInfo.targetRotationY = rotY;
-        } else {
-            // Fallback: face movement if no explicit rotation provided
-            const dx = targetPos.x - meshInfo.targetPosition.x;
-            const dz = targetPos.z - meshInfo.targetPosition.z;
+        // If undefined rotation, try to infer header? Or usually it's sent.
+        if (rotY === undefined) {
+            const dx = pos.x - meshInfo.targetPosition.x;
+            const dz = pos.z - meshInfo.targetPosition.z;
             if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
-                meshInfo.targetRotationY = Math.atan2(dx, dz) + Math.PI;
+                state.rotY = Math.atan2(dx, dz) + Math.PI;
             }
         }
 
-        meshInfo.targetPosition.copy(targetPos);
+        meshInfo.buffer.push(state);
+
+        // Keep buffer sanity
+        if (meshInfo.buffer.length > 20) {
+            meshInfo.buffer.shift();
+        }
+
+        // Legacy targets (mostly unused if buffering works)
+        meshInfo.targetPosition.copy(pos);
+        if (rotY !== undefined) meshInfo.targetRotationY = rotY;
+        meshInfo.isCrouching = isCrouching;
     }
 
-    createCharacterModel(id) {
+    createCharacterModel(id, playerName = 'Player') {
         const group = new THREE.Group();
+
+        // Create name label above head
+        const nameLabel = this.createNameLabelSprite(playerName);
+        nameLabel.position.set(0, 2.6, 0); // Above head, above speech bubble
+        group.add(nameLabel);
 
         // Colors matching Player.js (Steve skin)
         const skinMat = new THREE.MeshLambertMaterial({ color: 0xB58D6E });
@@ -739,8 +1028,30 @@ export class SocketManager {
         const leftLeg = createLimb(0.7, -0.125, pantsMat);
         const rightLeg = createLimb(0.7, 0.125, pantsMat);
 
+        // Create Tool Attachment Point
+        const toolAttachment = new THREE.Group();
+        // Position it at the bottom of the arm (hand)
+        // Arm is 0.75 high, centered at 0. Pivot is at top (-0.375 local y is center)
+        // Wait, pivot logic:
+        // createLimb: pivot at (xOffset, y, 0). Mesh child at y=-0.375.
+        // So mesh center is -0.375 relative to pivot. Mesh bottom is -0.75 relative to pivot.
+        // We want tool at bottom.
+        toolAttachment.position.set(0, -0.75, 0);
+        // Rotate to match player holding mechanic (90 deg X, 90 deg Y usually?)
+        // Player.js: .rotation.set(Math.PI / 2, Math.PI / 2, 0);
+        toolAttachment.rotation.set(Math.PI / 2, Math.PI / 2, 0);
+
+        // Add to the right arm pivot (which rotates)
+        rightArm.add(toolAttachment);
+
         group.add(leftArm, rightArm, leftLeg, rightLeg);
         this.game.scene.add(group);
+
+        // Create speech bubble for chat
+        const speechBubble = this.createSpeechBubbleSprite();
+        speechBubble.position.set(0, 2.3, 0); // Above head
+        speechBubble.visible = false;
+        group.add(speechBubble);
 
         console.log(`[SocketManager] Created detailed character for ${id}`);
 
@@ -753,7 +1064,197 @@ export class SocketManager {
             targetPosition: new THREE.Vector3(),
             targetRotationY: 0,
             walkAmplitude: 0,
-            animationTime: 0
+            animationTime: 0,
+            // Speech bubble properties
+            speechBubble,
+            speechCanvas: speechBubble.userData.canvas,
+            speechContext: speechBubble.userData.context,
+            speechTexture: speechBubble.userData.texture,
+            speechTimer: 0,
+            // Crouch state
+            isCrouching: false,
+            crouchAmount: 0,  // For smooth interpolation
+            toolAttachment: toolAttachment // Exposed for updates
         };
+    }
+
+    /**
+     * Create a speech bubble sprite with canvas texture
+     */
+    createSpeechBubbleSprite() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const context = canvas.getContext('2d');
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthTest: false
+        });
+
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(2.5, 0.625, 1);
+
+        // Store references for later updates
+        sprite.userData = { canvas, context, texture };
+
+        return sprite;
+    }
+
+    /**
+     * Create a name label sprite to show player name above head
+     */
+    createNameLabelSprite(name) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+
+        // Clear and draw background
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Semi-transparent black background pill
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.beginPath();
+        const padding = 10;
+        const radius = 12;
+        if (ctx.roundRect) {
+            ctx.roundRect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2, radius);
+        } else {
+            ctx.rect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2);
+        }
+        ctx.fill();
+
+        // Draw name text
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 24px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Truncate long names
+        const displayName = name.length > 16 ? name.slice(0, 14) + '...' : name;
+        ctx.fillText(displayName, canvas.width / 2, canvas.height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthTest: false
+        });
+
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(1.5, 0.375, 1);
+        sprite.userData = { canvas, ctx, texture, name };
+
+        return sprite;
+    }
+
+    /**
+     * Update a speech bubble's text
+     */
+    updateSpeechBubbleText(meshInfo, text) {
+        if (!meshInfo || !meshInfo.speechContext) return;
+
+        const ctx = meshInfo.speechContext;
+        const canvas = meshInfo.speechCanvas;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!text) {
+            meshInfo.speechBubble.visible = false;
+            return;
+        }
+
+        // Draw bubble background
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 4;
+
+        // Rounded rectangle
+        const padding = 20;
+        const radius = 20;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2, radius);
+        } else {
+            ctx.rect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw text
+        ctx.fillStyle = '#333';
+        ctx.font = 'bold 28px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Truncate long messages
+        const maxLength = 40;
+        const displayText = text.length > maxLength ? text.slice(0, maxLength - 3) + '...' : text;
+        ctx.fillText(displayText, canvas.width / 2, canvas.height / 2);
+
+        meshInfo.speechTexture.needsUpdate = true;
+        meshInfo.speechBubble.visible = true;
+    }
+
+    /**
+     * Show a chat bubble above a remote player
+     */
+    showPlayerChatBubble(playerId, message, duration = 5) {
+        const meshInfo = this.playerMeshes.get(playerId);
+        if (!meshInfo) {
+            console.warn(`[SocketManager] Cannot show chat bubble: player ${playerId} not found`);
+            return;
+        }
+
+        this.updateSpeechBubbleText(meshInfo, message);
+        meshInfo.speechTimer = duration;
+
+        // Also add to chat panel as a player message
+        if (this.game.uiManager) {
+            this.game.uiManager.addChatMessage('player', `Player: ${message}`);
+        }
+    }
+
+    /**
+     * Send a chat message to other players (called from UI)
+     */
+    sendChatMessage(message) {
+        if (!message || !message.trim()) return;
+        if (!this.isConnected()) {
+            console.warn('[SocketManager] Cannot send chat: not connected');
+            return;
+        }
+
+        const trimmedMessage = message.trim();
+        console.log(`[SocketManager] Sending chat: "${trimmedMessage}"`);
+        this.socket.emit('player:chat', { message: trimmedMessage });
+
+        // Show speech bubble on local player
+        if (this.game.player) {
+            this.game.player.showSpeechBubble(trimmedMessage, 5);
+        }
+    }
+
+    /**
+     * Send a group chat message to all players (no speech bubble)
+     */
+    sendGroupChatMessage(message) {
+        if (!message || !message.trim()) return;
+        if (!this.isConnected()) {
+            console.warn('[SocketManager] Cannot send group chat: not connected');
+            return;
+        }
+
+        const trimmedMessage = message.trim();
+        console.log(`[SocketManager] Sending group chat: "${trimmedMessage}"`);
+        this.socket.emit('group:chat', { message: trimmedMessage });
     }
 }

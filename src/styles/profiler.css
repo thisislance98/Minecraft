@@ -1,0 +1,41 @@
+/* Performance Profiler */
+.perf-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.perf-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.perf-label {
+    width: 80px;
+    text-align: right;
+    color: #ccc;
+    font-size: 11px;
+}
+
+.perf-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.perf-bar {
+    height: 100%;
+    transition: width 0.1s linear, background 0.3s;
+}
+
+.perf-val {
+    width: 50px;
+    text-align: right;
+    color: #fff;
+}

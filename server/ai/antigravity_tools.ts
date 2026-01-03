@@ -163,7 +163,7 @@ export function getAntigravityTools() {
                         name: { type: SchemaType.STRING, description: "PascalCase class name (e.g., 'BouncingSlime', 'FireDragon')" },
                         code: {
                             type: SchemaType.STRING,
-                            description: "Full JavaScript class code. MUST: 1) Use 'class Name extends Animal', 2) Call super(game, x, y, z) in constructor, 3) Call this.createBody() in constructor, 4) Use window.THREE for Three.js (e.g., new window.THREE.BoxGeometry()), 5) Add meshes via this.mesh.add(). Example structure: class Slime extends Animal { constructor(game, x, y, z) { super(game, x, y, z); this.width = 0.6; this.height = 0.6; this.createBody(); } createBody() { const mat = new window.THREE.MeshLambertMaterial({ color: 0x00ff00 }); const geom = new window.THREE.SphereGeometry(0.3); this.mesh.add(new window.THREE.Mesh(geom, mat)); } }"
+                            description: "Full JavaScript class code. MUST: 1) Use 'class Name extends Animal', 2) Call super(game, x, y, z) in constructor, 3) Call this.createBody() at end of constructor. CRITICAL: For spinning animation in updateAI(dt), you MUST update 'this.rotation += dt' for Y-axis spin (because Animal.js overwrites mesh.y). For X/Z tumbling, update 'this.mesh.rotation.x += dt'. Example: class Spinner extends Animal { constructor(game,x,y,z) { super(game,x,y,z); this.createBody(); } updateAI(dt) { this.rotation += dt; super.updateAI(dt); } }"
                         },
                         description: { type: SchemaType.STRING, description: "What this creature looks like and how it behaves" }
                     },

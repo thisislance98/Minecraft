@@ -235,12 +235,26 @@ export class SpawnUI {
                 delBtn.textContent = '❌';
                 delBtn.className = 'spawn-delete-btn';
                 delBtn.title = 'Delete (Admin)';
-                delBtn.onclick = (e) => {
-                    e.stopPropagation(); // Prevent spawn
+                delBtn.type = 'button'; // Prevent form submission behavior
+
+                // Use addEventListener for more reliable event handling
+                delBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('[SpawnUI] Delete button clicked for:', item.name, 'type:', this.activeTab);
                     this.deleteItem(item.name, this.activeTab);
-                };
+                    return false;
+                }, true); // Use capture phase
+
+                // Also prevent mousedown from bubbling (in case parent uses mousedown)
+                delBtn.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                }, true);
+
                 btn.appendChild(delBtn);
             }
+
 
             this.grid.appendChild(btn);
         });
@@ -252,21 +266,41 @@ export class SpawnUI {
     }
 
     async deleteItem(name, type) {
-        if (!confirm(`Are you sure you want to PERMANENTLY delete ${name}? This cannot be undone.`)) return;
+        console.log('[SpawnUI] deleteItem called:', { name, type });
+
+        if (!confirm(`Are you sure you want to PERMANENTLY delete ${name}? This cannot be undone.`)) {
+            console.log('[SpawnUI] User cancelled deletion');
+            return;
+        }
 
         const user = auth.currentUser;
-        if (!user) return;
+        console.log('[SpawnUI] Current user:', user ? user.email : 'null');
+
+        if (!user) {
+            console.error('[SpawnUI] No user logged in, cannot delete');
+            alert('You must be logged in as admin to delete items');
+            return;
+        }
 
         try {
+            console.log('[SpawnUI] Getting ID token...');
             const token = await user.getIdToken();
+            console.log('[SpawnUI] Got token, length:', token.length);
+
             const event = type === 'creature' ? 'admin:delete_creature' : 'admin:delete_item';
+            console.log('[SpawnUI] Will emit event:', event, 'with name:', name);
 
             if (this.game.socket) {
+                console.log('[SpawnUI] Socket exists, emitting...');
                 this.game.socket.emit(event, { name, token });
+                console.log('[SpawnUI] Event emitted successfully');
+            } else {
+                console.error('[SpawnUI] No socket connection!');
+                alert('No server connection');
             }
         } catch (e) {
-            console.error('Failed to delete:', e);
-            alert('Failed to authorize deletion');
+            console.error('[SpawnUI] Failed to delete:', e);
+            alert('Failed to authorize deletion: ' + e.message);
         }
     }
 
@@ -330,6 +364,13 @@ export class SpawnUI {
 
     spawn(className) {
         console.log(`Spawning ${this.activeTab}: ${className} `);
+
+        if (this.game.analyticsManager) {
+            this.game.analyticsManager.logEvent('spawn_from_ui', {
+                category: this.activeTab,
+                item: className
+            });
+        }
 
         if (this.activeTab === 'creature') {
             const AnimalClass = AnimalClasses[className];

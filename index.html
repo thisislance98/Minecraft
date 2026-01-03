@@ -27,6 +27,9 @@
     <!-- HMR Update Notifications -->
     <div id="hmr-notifications"></div>
 
+    <!-- In-Game Notifications (errors, warnings, etc) -->
+    <div id="game-notifications"></div>
+
     <!-- Mobile Orientation Warning -->
     <div id="landscape-warning" class="hidden">
         <div class="warning-content">
@@ -102,6 +105,7 @@
 
     <div id="top-right-controls">
         <button id="spawn-btn" title="Spawn Menu">⚡</button>
+        <button id="voice-btn" title="Toggle Voice Chat">🎤</button>
         <button id="help-btn">❓</button>
         <button id="settings-btn">⚙️</button>
     </div>
@@ -201,19 +205,32 @@
                         <div class="control-item"><span class="key">W</span><span class="key">A</span><span
                                 class="key">S</span><span class="key">D</span> <span>Move</span></div>
                         <div class="control-item"><span class="key">Space</span> <span>Jump</span></div>
-                        <div class="control-item"><span class="key">Shift</span> <span>Sneak / Fly Down</span></div>
-                        <div class="control-item"><span class="key">Ctrl</span> <span>Sprint</span></div>
+                        <div class="control-item"><span class="key">Shift</span> <span>Sprint</span></div>
+                        <div class="control-item"><span class="key">Ctrl</span> <span>Sneak / Fly Down</span></div>
                         <div class="control-item"><span class="key">Q</span> <span>Drop Item</span></div>
 
                         <div class="control-item"><span class="key">E</span> <span>Inventory / Interact</span></div>
                         <div class="control-item"><span class="key mouse">L-Click</span> <span>Mine / Attack</span>
                         </div>
-                        <div class="control-item"><span class="key mouse">R-Click</span> <span>Place / Use</span></div>
+                        <div class="control-item"><span class="key mouse">R-Click</span> / <span class="key">E</span>
+                            <span>Place / Use</span>
+                        </div>
                         <div class="control-item"><span class="key">1</span>-<span class="key">9</span> <span>Select
                                 Item</span></div>
                         <div class="control-item"><span class="key">R</span> <span>Spawn Menu</span></div>
                         <div class="control-item"><span class="key">P</span> <span>Debug Panel</span></div>
                     </div>
+                </div>
+
+                <div class="help-section">
+                    <h4>🎤 Voice Chat</h4>
+                    <p>Talk to other players with spatial voice chat!</p>
+                    <div class="control-grid">
+                        <div class="control-item"><span class="key">V</span> <span>Push-to-Talk</span></div>
+                        <div class="control-item"><span class="key">🎤</span> <span>Toggle Voice On/Off</span></div>
+                    </div>
+                    <p style="margin-top: 8px; font-size: 0.9em; opacity: 0.8;">Click the 🎤 button or use Settings to
+                        enable voice. Hold V to transmit.</p>
                 </div>
 
                 <div class="help-section">
@@ -234,7 +251,8 @@
     </div>
 
     <div id="debug">
-        <p><span id="version-text">v1.0.1026</span><span id="version-badge" class="hidden">NEW</span></p>
+        <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
+        <p><span id="version-text">v1.0.1069</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -269,17 +287,28 @@
 
     <div id="chat-panel" class="hidden">
         <div class="chat-header">
-            <div class="chat-title">AI ASSISTANT</div>
+            <div class="chat-title">CHAT</div>
             <button id="copy-chat" title="Copy Conversation"
                 style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">📋</button>
             <button id="close-chat">×</button>
         </div>
-        <div id="chat-messages">
-            <!-- Messages will be added here -->
+        <div class="chat-tabs">
+            <button class="chat-tab active" data-mode="ai"><span class="tab-icon">🤖</span>AI</button>
+            <button class="chat-tab" data-mode="group"><span class="tab-icon">👥</span>Group</button>
+            <button class="chat-tab" data-mode="player"><span class="tab-icon">💬</span>Player</button>
+        </div>
+        <div id="chat-messages-ai" class="chat-messages-container active">
+            <!-- AI Messages -->
             <div class="message ai">
                 <div class="message-content">Greetings, traveler. I am the Wizard of Code. How may I assist you in
                     shaping this world?</div>
             </div>
+        </div>
+        <div id="chat-messages-group" class="chat-messages-container">
+            <!-- Group Messages -->
+        </div>
+        <div id="chat-messages-player" class="chat-messages-container">
+            <!-- Player Chat Messages -->
         </div>
         <div class="chat-input-container">
             <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">

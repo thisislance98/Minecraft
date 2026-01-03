@@ -14,8 +14,12 @@ import * as THREE from 'three';
 // Store dynamic creature definitions for reference
 export const DynamicCreatures = {};
 
+// Track errors for debugging (exposed to window for CLI access)
+export const DynamicCreatureErrors = {};
+
 // Expose to window for testing and debugging
 window.DynamicCreatures = DynamicCreatures;
+window.DynamicCreatureErrors = DynamicCreatureErrors;
 
 /**
  * Register a dynamic creature class from a definition
@@ -70,7 +74,10 @@ export function registerDynamicCreature(definition) {
         console.log(`[DynamicCreatureRegistry] ✅ Registered creature: ${name}`);
         return true;
     } catch (e) {
-        console.error(`[DynamicCreatureRegistry] Failed to create ${name}:`, e);
+        console.error(`[DynamicCreatureRegistry] Failed to create ${name}:`, e.message);
+        console.error(`[DynamicCreatureRegistry] Error stack:`, e.stack);
+        console.error(`[DynamicCreatureRegistry] Code was:`, code.substring(0, 500));
+        DynamicCreatureErrors[name] = { error: e.message, stack: e.stack, code: code, timestamp: Date.now() };
         return false;
     }
 }

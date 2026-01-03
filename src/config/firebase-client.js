@@ -15,4 +15,13 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-export { auth, googleProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword };
+// Initialize Analytics
+import { getAnalytics, logEvent } from 'firebase/analytics';
+let analytics = null;
+try {
+    analytics = getAnalytics(app);
+} catch (e) {
+    console.warn("Firebase Analytics failed to initialize (possibly missing measurementId):", e);
+}
+
+export { auth, analytics, logEvent, googleProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword };

@@ -625,4 +625,34 @@ export class AssetManager {
         this.entityMaterials[name] = mat;
         return mat;
     }
+
+    validateMaterials() {
+        const missing = [];
+
+        // 1. Check Block Materials (registered in blockProperties)
+        for (const blockType of Object.keys(this.blockProperties)) {
+            // hardness -1 are often special blocks that might not have standard block materials (like air, or barriers)
+            // but in this game, even unbreakable blocks usually have textures.
+            if (!this.blockMaterialIndices[blockType]) {
+                missing.push({ type: 'block', name: blockType, issue: 'No material indices registered' });
+            }
+        }
+
+        // 2. Check Loaded Textures vs Material Array integrity
+        // (Optional: ensure all materialArray entries are valid materials)
+        this.materialArray.forEach((mat, idx) => {
+            if (!mat) {
+                missing.push({ type: 'material_array', index: idx, issue: 'Null material in array' });
+            }
+        });
+
+        // Log results
+        if (missing.length > 0) {
+            console.warn('[AssetManager] Found missing materials:', missing);
+        } else {
+            console.log('[AssetManager] Material validation passed for all ' + Object.keys(this.blockProperties).length + ' block types.');
+        }
+
+        return missing;
+    }
 }

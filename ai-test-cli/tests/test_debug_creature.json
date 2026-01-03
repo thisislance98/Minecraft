@@ -1,0 +1,7 @@
+{
+    "name": "Test Creature Creation Debug",
+    "prompt": "Create a creature called BouncingOrb that bobs up and down. Make it a simple red sphere that floats in the air.",
+    "expectedTool": "create_creature",
+    "timeout": 45000,
+    "postCheck": "debug_creatures"
+}

@@ -48,6 +48,7 @@ export class DebugPanel {
                 <button class="debug-tab active" data-tab="general">General</button>
                 <button class="debug-tab" data-tab="animals">Animals</button>
                 <button class="debug-tab" data-tab="spawning">Spawning</button>
+                <button class="debug-tab" data-tab="perf">Performance</button>
             </div>
             
             <div class="debug-content active" id="tab-general">
@@ -64,6 +65,7 @@ export class DebugPanel {
                 </div>
                 <div class="control-group">
                     <h4>Stats</h4>
+                    <label><input type="checkbox" id="dbg-fps"> Show FPS</label>
                     <p>Entities: <span id="dbg-entity-count">0</span></p>
                     <p>Chunks: <span id="dbg-chunk-count">0</span></p>
                 </div>
@@ -91,6 +93,19 @@ export class DebugPanel {
                         <button class="spawn-btn" data-count="10">Spawn 10</button>
                     </div>
                     <button class="spawn-btn full-width" data-count="pack">Spawn Pack (Random)</button>
+                </div>
+                </div>
+            </div>
+
+            <div class="debug-content" id="tab-perf">
+                <div class="control-group">
+                    <h4>Frame Budget (16ms)</h4>
+                    <div id="dbg-perf-bars" class="perf-bars">
+                        <!-- Bars injected here -->
+                    </div>
+                    <div style="margin-top: 10px; font-size: 11px; color: #888;">
+                        *Values are smoothed averages
+                    </div>
                 </div>
             </div>
         `;
@@ -154,6 +169,12 @@ export class DebugPanel {
 
                 btn.classList.add('active');
                 document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+                if (btn.dataset.tab === 'perf') {
+                    this.startPerfMonitor();
+                } else {
+                    this.stopPerfMonitor();
+                }
             });
         });
 
@@ -193,8 +214,11 @@ export class DebugPanel {
             if (this.game.toggleWater) this.game.toggleWater(val);
         });
         this.bindCheckbox('dbg-weather', (val) => {
-            this.settings.world.weather = val;
             if (this.game.toggleWeather) this.game.toggleWeather(val);
+        });
+
+        this.bindCheckbox('dbg-fps', (val) => {
+            this.game.toggleStats(val);
         });
 
         // Animal Toggles
@@ -271,7 +295,41 @@ export class DebugPanel {
             this.updateStats(); // Update stats on open
         } else {
             this.container.classList.add('hidden');
+            this.stopPerfMonitor();
         }
+    }
+
+    startPerfMonitor() {
+        if (this.perfInterval) return;
+        this.perfInterval = setInterval(() => this.updatePerf(), 100);
+    }
+
+    stopPerfMonitor() {
+        if (this.perfInterval) {
+            clearInterval(this.perfInterval);
+            this.perfInterval = null;
+        }
+    }
+
+    updatePerf() {
+        if (!this.game.profiler) return;
+        const report = this.game.profiler.getReport();
+        const container = document.getElementById('dbg-perf-bars');
+        if (!container) return;
+
+        container.innerHTML = report.map(item => {
+            const width = Math.min(100, (item.time / 16.66) * 100);
+            const color = item.time > 10 ? '#ff5555' : (item.time > 5 ? '#ffaa00' : '#55ff55');
+            return `
+                <div class="perf-row">
+                    <span class="perf-label">${item.label}</span>
+                    <div class="perf-track">
+                        <div class="perf-bar" style="width: ${width}%; background: ${color}"></div>
+                    </div>
+                    <span class="perf-val">${item.time.toFixed(2)}ms</span>
+                </div>
+            `;
+        }).join('');
     }
 
     handleSpawn(type, countStr) {

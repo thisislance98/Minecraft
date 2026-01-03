@@ -13,7 +13,7 @@ export const Config = {
         SEA_LEVEL: 30,
         BEDROCK_LEVEL: 0,
         MAX_HEIGHT: 256,
-        WORLD_RADIUS_CHUNKS: 8, // Finite world radius (chunks)
+        WORLD_RADIUS_CHUNKS: 24, // Finite world radius (chunks)
         MOON_CHUNK_Y_START: 40, // Height (in chunks) where moon generation starts
         MOON_CHUNK_HEIGHT: 8   // Vertical thickness of Moon chunks range
     },

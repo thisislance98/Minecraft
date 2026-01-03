@@ -1,4 +1,5 @@
 import { Villager } from '../game/entities/animals/Villager.js';
+import { StaticLampost } from '../game/entities/animals/StaticLampost.js';
 import { Blocks } from '../game/core/Blocks.js';
 import { SeededRandom } from '../utils/SeededRandom.js';
 import * as THREE from 'three';
@@ -513,6 +514,494 @@ export class StructureGenerator {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Generate a redesigned village with distinct house types, plaza, and more villagers
+     */
+    generateVillage(centerX, centerY, centerZ) {
+        console.log(`[StructureGenerator] Generating redesigned village at ${centerX}, ${centerY}, ${centerZ}`);
+
+        const villageRng = this.getPositionRng(centerX, centerZ, 999);
+
+        // Generate central plaza with fountain
+        this.generatePlaza(centerX, centerY, centerZ);
+
+        // Generate 4 lamp posts around plaza
+        this.generateLampPost(centerX - 6, centerY, centerZ - 6);
+        this.generateLampPost(centerX + 6, centerY, centerZ - 6);
+        this.generateLampPost(centerX - 6, centerY, centerZ + 6);
+        this.generateLampPost(centerX + 6, centerY, centerZ + 6);
+
+        // Generate market stalls
+        this.generateMarketStall(centerX - 8, centerY, centerZ);
+        this.generateMarketStall(centerX + 8, centerY, centerZ);
+
+        // House types to use
+        const houseTypes = ['cottage', 'farmhouse', 'tudor', 'library'];
+
+        // Generate 6-8 houses in a circle
+        const houseCount = 6 + Math.floor(villageRng.next() * 3);
+        const radius = 28;
+
+        for (let i = 0; i < houseCount; i++) {
+            const angle = (i / houseCount) * Math.PI * 2 + villageRng.next() * 0.2;
+            const dist = radius + villageRng.next() * 8 - 4;
+            const hx = Math.floor(centerX + Math.cos(angle) * dist);
+            const hz = Math.floor(centerZ + Math.sin(angle) * dist);
+            const hy = this.worldGenerator.getTerrainHeight(hx, hz);
+
+            if (Math.abs(hy - centerY) < 6) {
+                const houseType = houseTypes[i % houseTypes.length];
+
+                switch (houseType) {
+                    case 'cottage':
+                        this.generateCottage(hx, hy + 1, hz);
+                        break;
+                    case 'farmhouse':
+                        this.generateFarmhouse(hx, hy + 1, hz);
+                        break;
+                    case 'tudor':
+                        this.generateTudorHouse(hx, hy + 1, hz);
+                        break;
+                    case 'library':
+                        this.generateLibrary(hx, hy + 1, hz);
+                        break;
+                }
+
+                // Path to center
+                this.generatePath(centerX, centerY, centerZ, hx, hy, hz);
+            }
+        }
+
+        // Add extra villagers wandering in plaza
+        console.log(`[Village] Scheduling 6 plaza villagers at ${centerX}, ${centerY}, ${centerZ}`);
+        setTimeout(() => {
+            console.log(`[Village] Spawning 6 plaza villagers now...`);
+            for (let i = 0; i < 6; i++) {
+                try {
+                    const v = new Villager(this.game);
+                    const angle = (i / 6) * Math.PI * 2;
+                    const dist = 3 + Math.random() * 8;
+                    const vx = centerX + Math.cos(angle) * dist;
+                    const vz = centerZ + Math.sin(angle) * dist;
+                    v.position.set(vx, centerY + 1, vz);
+                    this.game.animals.push(v);
+                    this.game.scene.add(v.mesh);
+                    console.log(`[Village] Spawned plaza villager ${i + 1} at (${vx.toFixed(1)}, ${centerY + 1}, ${vz.toFixed(1)})`);
+                } catch (e) {
+                    console.error(`[Village] ERROR spawning plaza villager ${i}:`, e);
+                }
+            }
+            console.log(`[Village] Total animals in game: ${this.game.animals.length}`);
+        }, 1500);
+    }
+
+    /**
+     * Central plaza with fountain
+     */
+    generatePlaza(x, y, z) {
+        // Large stone plaza (11x11)
+        for (let dx = -5; dx <= 5; dx++) {
+            for (let dz = -5; dz <= 5; dz++) {
+                this.game.setBlock(x + dx, y, z + dz, Blocks.POLISHED_STONE, true, true);
+            }
+        }
+
+        // Central fountain (5x5)
+        // Outer rim
+        for (let dx = -2; dx <= 2; dx++) {
+            for (let dz = -2; dz <= 2; dz++) {
+                if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
+                    this.game.setBlock(x + dx, y + 1, z + dz, Blocks.STONE_BRICK, true, true);
+                }
+            }
+        }
+
+        // Water pool
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                this.game.setBlock(x + dx, y, z + dz, Blocks.WATER, true, true);
+            }
+        }
+
+        // Central pillar with water spray effect
+        this.game.setBlock(x, y + 1, z, Blocks.STONE_BRICK, true, true);
+        this.game.setBlock(x, y + 2, z, Blocks.STONE_BRICK, true, true);
+        this.game.setBlock(x, y + 3, z, Blocks.WATER, true, true);
+
+        // Flower gardens in corners
+        const flowerTypes = [Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.FLOWER_BLUE];
+        const corners = [[-4, -4], [4, -4], [-4, 4], [4, 4]];
+        corners.forEach(([cx, cz], i) => {
+            this.game.setBlock(x + cx, y, z + cz, Blocks.GRASS, true, true);
+            this.game.setBlock(x + cx, y + 1, z + cz, flowerTypes[i % 3], true, true);
+        });
+    }
+
+    /**
+     * Lamp post with glowstone
+     */
+    /**
+     * Lamp post with glowstone - REPLACED with Static Entity
+     */
+    generateLampPost(x, y, z) {
+        // Find valid ground for the entity
+        // We spawned blocks at x, y+dy, z.
+        // Entity origin is at feet.
+        // x,y,z passed here is usually ground level?
+        // Let's check call sites: generateVillage calls it at centerY.
+        // generateVillage passes centerY which is often ground level.
+
+        setTimeout(() => {
+            const lamp = new StaticLampost(this.game, x, y + 1, z);
+            this.game.animals.push(lamp);
+            this.game.scene.add(lamp.mesh);
+        }, 1000); // Delay slightly to ensure world is ready?
+    }
+
+    /**
+     * Market stall
+     */
+    generateMarketStall(x, y, z) {
+        // Counter (3x2)
+        for (let dx = 0; dx < 3; dx++) {
+            this.game.setBlock(x + dx, y + 1, z, Blocks.PLANK, true, true);
+            this.game.setBlock(x + dx, y + 1, z + 1, Blocks.PLANK, true, true);
+        }
+
+        // Awning posts
+        this.game.setBlock(x, y + 2, z, Blocks.FENCE, true, true);
+        this.game.setBlock(x + 2, y + 2, z, Blocks.FENCE, true, true);
+        this.game.setBlock(x, y + 3, z, Blocks.FENCE, true, true);
+        this.game.setBlock(x + 2, y + 3, z, Blocks.FENCE, true, true);
+
+        // Awning (colored roof)
+        for (let dx = -1; dx <= 3; dx++) {
+            this.game.setBlock(x + dx, y + 4, z - 1, Blocks.TERRACOTTA, true, true);
+            this.game.setBlock(x + dx, y + 4, z, Blocks.TERRACOTTA, true, true);
+        }
+    }
+
+    /**
+     * Cottage - Small cozy house with peaked roof
+     */
+    generateCottage(x, y, z) {
+        const w = 5, d = 5, h = 4;
+
+        // Foundation
+        for (let dx = -1; dx < w + 1; dx++) {
+            for (let dz = -1; dz < d + 1; dz++) {
+                this.game.setBlock(x + dx, y - 1, z + dz, Blocks.COBBLESTONE, true, true);
+            }
+        }
+
+        // Floor
+        for (let dx = 0; dx < w; dx++) {
+            for (let dz = 0; dz < d; dz++) {
+                this.game.setBlock(x + dx, y, z + dz, Blocks.PLANK, true, true);
+            }
+        }
+
+        // Walls (white plaster with log corners)
+        for (let dy = 1; dy < h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+                for (let dz = 0; dz < d; dz++) {
+                    const isCorner = (dx === 0 || dx === w - 1) && (dz === 0 || dz === d - 1);
+                    const isWall = dx === 0 || dx === w - 1 || dz === 0 || dz === d - 1;
+                    const isDoor = dx === Math.floor(w / 2) && dz === 0 && dy < 3;
+                    const isWindow = dy === 2 && !isCorner && isWall;
+
+                    if (isDoor) continue;
+
+                    if (isCorner) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.LOG, true, true);
+                    } else if (isWindow) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.GLASS, true, true);
+                    } else if (isWall) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.WHITE_PLASTER, true, true);
+                    }
+                }
+            }
+        }
+
+        // Peaked roof with tiles
+        for (let layer = 0; layer <= 2; layer++) {
+            for (let dx = -1 + layer; dx < w + 1 - layer; dx++) {
+                this.game.setBlock(x + dx, y + h + layer, z - 1, Blocks.ROOF_TILES, true, true);
+                this.game.setBlock(x + dx, y + h + layer, z + d, Blocks.ROOF_TILES, true, true);
+            }
+            for (let dz = 0; dz < d; dz++) {
+                this.game.setBlock(x - 1 + layer, y + h + layer, z + dz, Blocks.ROOF_TILES, true, true);
+                this.game.setBlock(x + w - layer, y + h + layer, z + dz, Blocks.ROOF_TILES, true, true);
+            }
+        }
+        // Roof cap
+        for (let dz = 0; dz < d; dz++) {
+            this.game.setBlock(x + Math.floor(w / 2), y + h + 3, z + dz, Blocks.ROOF_TILES, true, true);
+        }
+
+        // Chimney
+        for (let dy = h; dy < h + 5; dy++) {
+            this.game.setBlock(x + w - 1, y + dy, z + d - 1, Blocks.CHIMNEY_BRICK, true, true);
+        }
+
+        // 2 Villagers
+        setTimeout(() => {
+            for (let i = 0; i < 2; i++) {
+                const v = new Villager(this.game);
+                v.position.set(x + w / 2 + i - 0.5, y + 1, z + d / 2);
+                this.game.animals.push(v);
+                this.game.scene.add(v.mesh);
+            }
+        }, 600);
+    }
+
+    /**
+     * Farmhouse - Large rustic house with porch
+     */
+    generateFarmhouse(x, y, z) {
+        const w = 8, d = 6, h = 4;
+
+        // Foundation
+        for (let dx = -1; dx < w + 1; dx++) {
+            for (let dz = -2; dz < d + 1; dz++) {
+                this.game.setBlock(x + dx, y - 1, z + dz, Blocks.COBBLESTONE, true, true);
+            }
+        }
+
+        // Floor
+        for (let dx = 0; dx < w; dx++) {
+            for (let dz = 0; dz < d; dz++) {
+                this.game.setBlock(x + dx, y, z + dz, Blocks.PLANK, true, true);
+            }
+        }
+
+        // Porch floor
+        for (let dx = 0; dx < w; dx++) {
+            this.game.setBlock(x + dx, y, z - 1, Blocks.PLANK, true, true);
+        }
+
+        // Walls (log and plank)
+        for (let dy = 1; dy < h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+                for (let dz = 0; dz < d; dz++) {
+                    const isCorner = (dx === 0 || dx === w - 1) && (dz === 0 || dz === d - 1);
+                    const isWall = dx === 0 || dx === w - 1 || dz === 0 || dz === d - 1;
+                    const isDoor = dx >= 3 && dx <= 4 && dz === 0 && dy < 3;
+                    const isWindow = dy === 2 && !isCorner && isWall;
+
+                    if (isDoor) continue;
+
+                    if (isCorner) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.LOG, true, true);
+                    } else if (isWindow) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.GLASS, true, true);
+                    } else if (isWall) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.PLANK, true, true);
+                    }
+                }
+            }
+        }
+
+        // Porch posts and roof
+        this.game.setBlock(x, y + 1, z - 1, Blocks.FENCE, true, true);
+        this.game.setBlock(x, y + 2, z - 1, Blocks.FENCE, true, true);
+        this.game.setBlock(x + w - 1, y + 1, z - 1, Blocks.FENCE, true, true);
+        this.game.setBlock(x + w - 1, y + 2, z - 1, Blocks.FENCE, true, true);
+        for (let dx = 0; dx < w; dx++) {
+            this.game.setBlock(x + dx, y + 3, z - 1, Blocks.PLANK, true, true);
+        }
+
+        // Thatch roof
+        for (let layer = 0; layer <= 3; layer++) {
+            for (let dx = -1; dx < w + 1; dx++) {
+                this.game.setBlock(x + dx, y + h + layer, z - 1 + layer, Blocks.THATCH, true, true);
+                this.game.setBlock(x + dx, y + h + layer, z + d - layer, Blocks.THATCH, true, true);
+            }
+        }
+
+        // Fence around property
+        for (let dx = -2; dx < w + 2; dx++) {
+            this.game.setBlock(x + dx, y, z + d + 2, Blocks.FENCE, true, true);
+        }
+        for (let dz = -1; dz < d + 3; dz++) {
+            this.game.setBlock(x - 2, y, z + dz, Blocks.FENCE, true, true);
+            this.game.setBlock(x + w + 1, y, z + dz, Blocks.FENCE, true, true);
+        }
+
+        // 3 Villagers (farmers)
+        setTimeout(() => {
+            for (let i = 0; i < 3; i++) {
+                const v = new Villager(this.game, x + 2 + i * 2, y + 1, z + d / 2, null, 'FARMER');
+                this.game.animals.push(v);
+                this.game.scene.add(v.mesh);
+            }
+        }, 600);
+    }
+
+    /**
+     * Tudor House - Medieval half-timber style
+     */
+    generateTudorHouse(x, y, z) {
+        const w = 6, d = 6, h = 5;
+
+        // Foundation
+        for (let dx = -1; dx < w + 1; dx++) {
+            for (let dz = -1; dz < d + 1; dz++) {
+                this.game.setBlock(x + dx, y - 1, z + dz, Blocks.COBBLESTONE, true, true);
+            }
+        }
+
+        // Two floors
+        for (let floor = 0; floor < 2; floor++) {
+            const floorY = y + floor * 3;
+
+            // Floor
+            for (let dx = 0; dx < w; dx++) {
+                for (let dz = 0; dz < d; dz++) {
+                    this.game.setBlock(x + dx, floorY, z + dz, Blocks.DARK_PLANKS, true, true);
+                }
+            }
+
+            // Walls with half-timber pattern
+            for (let dy = 1; dy <= 3; dy++) {
+                for (let dx = 0; dx < w; dx++) {
+                    for (let dz = 0; dz < d; dz++) {
+                        const isCorner = (dx === 0 || dx === w - 1) && (dz === 0 || dz === d - 1);
+                        const isWall = dx === 0 || dx === w - 1 || dz === 0 || dz === d - 1;
+                        const isDoor = floor === 0 && dx === Math.floor(w / 2) && dz === 0 && dy < 3;
+                        const isWindow = dy === 2 && !isCorner && isWall;
+
+                        if (isDoor) continue;
+                        if (!isWall) continue;
+
+                        if (isCorner || dy === 1 || dy === 3) {
+                            this.game.setBlock(x + dx, floorY + dy, z + dz, Blocks.DARK_OAK_WOOD, true, true);
+                        } else if (isWindow) {
+                            this.game.setBlock(x + dx, floorY + dy, z + dz, Blocks.GLASS, true, true);
+                        } else {
+                            this.game.setBlock(x + dx, floorY + dy, z + dz, Blocks.WHITE_PLASTER, true, true);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Shingle roof
+        for (let layer = 0; layer <= 3; layer++) {
+            for (let dx = -1 + layer; dx < w + 1 - layer; dx++) {
+                for (let dz = -1; dz < d + 1; dz++) {
+                    if (layer < 3 || (dx >= 2 && dx < w - 2)) {
+                        this.game.setBlock(x + dx, y + h + 1 + layer, z + dz, Blocks.SHINGLES, true, true);
+                    }
+                }
+            }
+        }
+
+        // 2 Villagers
+        setTimeout(() => {
+            for (let i = 0; i < 2; i++) {
+                const v = new Villager(this.game);
+                v.position.set(x + w / 2 + i - 0.5, y + 1, z + d / 2);
+                this.game.animals.push(v);
+                this.game.scene.add(v.mesh);
+            }
+        }, 600);
+    }
+
+    /**
+     * Library - Tall stone building with large windows
+     */
+    generateLibrary(x, y, z) {
+        const w = 7, d = 8, h = 6;
+
+        // Foundation
+        for (let dx = -1; dx < w + 1; dx++) {
+            for (let dz = -1; dz < d + 1; dz++) {
+                this.game.setBlock(x + dx, y - 1, z + dz, Blocks.STONE_BRICK, true, true);
+            }
+        }
+
+        // Polished stone floor
+        for (let dx = 0; dx < w; dx++) {
+            for (let dz = 0; dz < d; dz++) {
+                this.game.setBlock(x + dx, y, z + dz, Blocks.POLISHED_STONE, true, true);
+            }
+        }
+
+        // Stone brick walls with large windows
+        for (let dy = 1; dy <= h; dy++) {
+            for (let dx = 0; dx < w; dx++) {
+                for (let dz = 0; dz < d; dz++) {
+                    const isWall = dx === 0 || dx === w - 1 || dz === 0 || dz === d - 1;
+                    const isDoor = dx >= 2 && dx <= 4 && dz === 0 && dy < 4;
+                    const isWindow = dy >= 2 && dy <= 4 && !isDoor && isWall;
+
+                    if (isDoor) continue;
+                    if (!isWall) continue;
+
+                    if (isWindow && (dx % 2 === 1 || dz % 2 === 1)) {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.GLASS, true, true);
+                    } else {
+                        this.game.setBlock(x + dx, y + dy, z + dz, Blocks.STONE_BRICK, true, true);
+                    }
+                }
+            }
+        }
+
+        // Bookshelves inside
+        for (let dz = 1; dz < d - 1; dz++) {
+            this.game.setBlock(x + 1, y + 1, z + dz, Blocks.BOOKSHELF, true, true);
+            this.game.setBlock(x + 1, y + 2, z + dz, Blocks.BOOKSHELF, true, true);
+            this.game.setBlock(x + w - 2, y + 1, z + dz, Blocks.BOOKSHELF, true, true);
+            this.game.setBlock(x + w - 2, y + 2, z + dz, Blocks.BOOKSHELF, true, true);
+        }
+
+        // Flat roof with parapet
+        for (let dx = 0; dx < w; dx++) {
+            for (let dz = 0; dz < d; dz++) {
+                this.game.setBlock(x + dx, y + h + 1, z + dz, Blocks.STONE_BRICK, true, true);
+            }
+        }
+        for (let dx = 0; dx < w; dx++) {
+            this.game.setBlock(x + dx, y + h + 2, z, Blocks.STONE_BRICK, true, true);
+            this.game.setBlock(x + dx, y + h + 2, z + d - 1, Blocks.STONE_BRICK, true, true);
+        }
+        for (let dz = 0; dz < d; dz++) {
+            this.game.setBlock(x, y + h + 2, z + dz, Blocks.STONE_BRICK, true, true);
+            this.game.setBlock(x + w - 1, y + h + 2, z + dz, Blocks.STONE_BRICK, true, true);
+        }
+
+        // 2 Librarian villagers
+        setTimeout(() => {
+            for (let i = 0; i < 2; i++) {
+                const v = new Villager(this.game, x + w / 2 + i, y + 1, z + d / 2, null, 'LIBRARIAN');
+                this.game.animals.push(v);
+                this.game.scene.add(v.mesh);
+            }
+        }, 600);
+    }
+
+    /**
+     * Generate a cobblestone path between two points
+     */
+    generatePath(x1, y1, z1, x2, y2, z2) {
+        const dx = x2 - x1;
+        const dz = z2 - z1;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        const steps = Math.ceil(dist);
+
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const px = Math.floor(x1 + dx * t);
+            const pz = Math.floor(z1 + dz * t);
+            const py = this.worldGenerator.getTerrainHeight(px, pz);
+
+            // Main path (2 blocks wide)
+            this.game.setBlock(px, py, pz, Blocks.COBBLESTONE, true, true);
+            this.game.setBlock(px + 1, py, pz, Blocks.COBBLESTONE, true, true);
         }
     }
 }

@@ -436,6 +436,26 @@ program
         }
     });
 
+program
+    .command('test-chat-sync')
+    .description('Verify group chat synchronization across multiple browsers')
+    .option('--headless', 'Run browsers in headless mode', false)
+    .action(async (options) => {
+        const { MultiBrowserRunner } = await import('../src/multi-browser.js');
+
+        const runner = new MultiBrowserRunner({
+            browserCount: 2,
+            headless: options.headless
+        });
+
+        try {
+            await runner.runGroupChatTest();
+            process.exit(0);
+        } catch (error) {
+            process.exit(1);
+        }
+    });
+
 // ============================================================
 // GAME DRIVER (MCP Server)
 // ============================================================
@@ -711,6 +731,87 @@ program
         gc.printGameState(state);
 
         await browser.close();
+    });
+
+program
+    .command('audit')
+    .description('Audit game materials and entities')
+    .option('--headless', 'Run browser in headless mode', true)
+    .action(async (options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const chalk = (await import('chalk')).default;
+
+        console.log(chalk.blue('\n🔍 Starting Material Audit...'));
+
+        const browser = new GameBrowser({ headless: options.headless, quiet: true });
+        await browser.launch();
+        await browser.waitForGameLoad();
+
+        // 1. Trigger AssetManager Validation
+        console.log(chalk.cyan('\n1. Checking Block Materials (AssetManager)...'));
+        const assetResult = await browser.evaluate(() => {
+            const game = window.__VOXEL_GAME__;
+            if (!game || !game.assetManager) return { error: 'Game or AssetManager not found' };
+            const missing = game.assetManager.validateMaterials();
+            return { missing };
+        });
+
+        if (assetResult.error) {
+            console.error(chalk.red(`Error: ${assetResult.error}`));
+        } else if (assetResult.missing && assetResult.missing.length > 0) {
+            console.log(chalk.red(`❌ Found ${assetResult.missing.length} missing block materials:`));
+            assetResult.missing.forEach(m => {
+                console.log(chalk.yellow(`   - [${m.type}] ${m.name}: ${m.issue}`));
+            });
+        } else {
+            console.log(chalk.green('✅ All registered blocks have materials.'));
+        }
+
+        // 2. Scan All Active Entities
+        console.log(chalk.cyan('\n2. Scanning Active Entities...'));
+        const entityResult = await browser.evaluate(() => {
+            const game = window.__VOXEL_GAME__;
+            const entities = [
+                ...(game.animals || []),
+                ...(game.monsters || [])
+            ];
+
+            const issues = [];
+            let checkedCount = 0;
+
+            entities.forEach(entity => {
+                checkedCount++;
+                const name = entity.constructor.name;
+
+                // Traverse full object to check all meshes
+                const root = entity.mesh || (entity.isObject3D ? entity : null);
+
+                if (root) {
+                    root.traverse((obj) => {
+                        if (obj.isMesh) {
+                            if (!obj.material) {
+                                issues.push({ entity: name, id: entity.uuid, issue: 'Mesh has no material', meshName: obj.name });
+                            }
+                        }
+                    });
+                }
+            });
+            return { count: checkedCount, issues };
+        });
+
+        console.log(chalk.dim(`Scanned ${entityResult.count} entities.`));
+
+        if (entityResult.issues.length > 0) {
+            console.log(chalk.red(`❌ Found ${entityResult.issues.length} entity material issues:`));
+            entityResult.issues.forEach(i => {
+                console.log(chalk.yellow(`   - [${i.entity}] ${i.meshName || 'Mesh'}: ${i.issue}`));
+            });
+        } else {
+            console.log(chalk.green('✅ No missing materials found on active entities.'));
+        }
+
+        await browser.close();
+        process.exit(assetResult.missing?.length || entityResult.issues.length ? 1 : 0);
     });
 
 program.parse();

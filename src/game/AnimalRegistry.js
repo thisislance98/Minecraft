@@ -10,7 +10,8 @@
 const modules = import.meta.glob([
     './entities/animals/*.js',
     './entities/monsters/*.js',
-    './entities/furniture/*.js'
+    './entities/furniture/*.js',
+    './entities/plants/*.js'
 ], { eager: true });
 
 export const AnimalClasses = {};
@@ -31,14 +32,14 @@ import { Firefly } from './entities/animals/Firefly.js';
 import { Bee } from './entities/animals/Bee.js'; // Verification entity
 import { Starfish } from './entities/animals/Starfish.js';
 import { Car } from './entities/animals/Car.js';
-import { BouncyBall } from './entities/animals/BouncyBall.js';
+import { Hedgehog } from './entities/animals/Hedgehog.js';
 AnimalClasses['Slime'] = Slime;
 AnimalClasses['Firefly'] = Firefly;
 AnimalClasses['Bee'] = Bee;
 AnimalClasses['Starfish'] = Starfish;
 AnimalClasses['Car'] = Car;
-AnimalClasses['BouncyBall'] = BouncyBall;
-console.log('[AnimalRegistry] Manually registered Firefly and Bee.');
+AnimalClasses['Hedgehog'] = Hedgehog;
+console.log('[AnimalRegistry] Manually registered Firefly, Bee, and Hedgehog.');
 console.log('[AnimalRegistry] Final AnimalClasses keys:', Object.keys(AnimalClasses));
 
 // Expose Animal base class to window for dynamic creature creation

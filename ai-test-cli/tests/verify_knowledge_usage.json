@@ -1,0 +1,16 @@
+{
+    "name": "Verify AI Knowledge Usage",
+    "prompt": "Create a simple floating pink orb creature called PinkOrb that bobs up and down",
+    "expectedTool": "create_creature",
+    "timeout": 60000,
+    "toolWait": 20000,
+    "headless": false,
+    "verify": [
+        {
+            "type": "entityExists",
+            "creature": "PinkOrb",
+            "minCount": 1
+        }
+    ],
+    "notes": "This test verifies the AI uses its embedded knowledge from the prompt (base class API) instead of making excessive view_file calls to read Animal.js or other example files"
+}

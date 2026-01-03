@@ -1,0 +1,67 @@
+{
+    "name": "Reproduce Villager Water Walk",
+    "headless": true,
+    "actions": [
+        {
+            "name": "teleportPlayer",
+            "args": [
+                0,
+                100,
+                0
+            ]
+        },
+        {
+            "name": "setRotation",
+            "args": [
+                0,
+                0,
+                0
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                1000
+            ]
+        },
+        {
+            "name": "setBlock",
+            "args": [
+                0,
+                95,
+                -5,
+                "stone"
+            ]
+        },
+        {
+            "name": "setBlock",
+            "args": [
+                0,
+                100,
+                -5,
+                "water"
+            ]
+        },
+        {
+            "name": "spawnCreatureAt",
+            "args": [
+                "Villager",
+                0,
+                102,
+                -5
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                3000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const villagers = game.animals.filter(a => a.constructor.name === 'Villager'); if(villagers.length === 0) return {success:false, message:'No villager found'}; /* Find the one at 0,Z,-5 */ const v = villagers.find(a => Math.abs(a.position.z + 5) < 2 && Math.abs(a.position.x) < 2); if(!v) { console.log('Villagers found:', villagers.map(v => v.position)); return {success:true, message:'Villager wandered off or spawned elsewhere, test inconclusive'}; } const pos = v.position; console.log('Villager pos:', pos); const waterY = 100; if(pos.y >= 100.8) return {success:false, message: `Villager hovering on top of water at ${pos.y}`}; if(pos.y < 95.0) return {success:false, message: `Villager sank too deep (below stone)? ${pos.y}`}; return {success:true, message:`Villager floating/sinking correctly at ${pos.y}`}; }"
+        }
+    ]
+}

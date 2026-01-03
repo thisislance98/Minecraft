@@ -16,7 +16,7 @@ import { channelRoutes } from './routes/channels';
 import { destinationRoutes } from './routes/destinations';
 import { auth } from './config'; // Initialize config
 import { worldPersistence } from './services/WorldPersistence';
-import { loadAllCreatures, sendCreaturesToSocket, deleteCreature } from './services/DynamicCreatureService';
+import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature } from './services/DynamicCreatureService';
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { WebSocketServer } from 'ws';
 import { AntigravitySession } from './services/AntigravitySession';
@@ -112,6 +112,7 @@ setInterval(() => {
 interface PlayerState {
     pos: { x: number; y: number; z: number };
     rotY: number;
+    name: string;
 }
 
 interface Room {
@@ -125,10 +126,77 @@ interface Room {
 
 const rooms = new Map<string, Room>();
 
+// Store conversation history: key = "socketId:villagerId", value = Array of message objects
+const conversationHistory = new Map<string, Array<{ role: string, parts: { text: string }[] }>>();
+
 io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
-    socket.on('join_game', async () => {
+    // Cleanup history on disconnect
+    socket.on('disconnect', () => {
+        for (const key of conversationHistory.keys()) {
+            if (key.startsWith(socket.id + ':')) {
+                conversationHistory.delete(key);
+            }
+        }
+    });
+
+    // ============ Admin Events (registered immediately on connection) ============
+
+    const ADMIN_EMAIL = 'thisislance98@gmail.com';
+
+    socket.on('admin:delete_creature', async (data: { name: string, token: string }) => {
+        console.log(`[Admin] Received admin:delete_creature event from ${socket.id}:`, { name: data.name, tokenLength: data.token?.length });
+        try {
+            if (!auth) throw new Error('Auth service unavailable');
+            console.log('[Admin] Verifying token...');
+            const decodedToken = await auth.verifyIdToken(data.token);
+            console.log('[Admin] Token verified for:', decodedToken.email);
+
+            if (decodedToken.email !== ADMIN_EMAIL) {
+                throw new Error('Unauthorized: Admin access required');
+            }
+
+            console.log(`[Admin] User ${decodedToken.email} deleting creature: ${data.name}`);
+            const result = await deleteCreature(data.name);
+            console.log('[Admin] Delete creature result:', result);
+
+            if (!result.success) {
+                socket.emit('admin:error', { message: result.error });
+            }
+        } catch (error: any) {
+            console.error('[Admin] Delete creature failed:', error);
+            socket.emit('admin:error', { message: error.message });
+        }
+    });
+
+    socket.on('admin:delete_item', async (data: { name: string, token: string }) => {
+        console.log(`[Admin] Received admin:delete_item event from ${socket.id}:`, { name: data.name, tokenLength: data.token?.length });
+        try {
+            if (!auth) throw new Error('Auth service unavailable');
+            console.log('[Admin] Verifying token...');
+            const decodedToken = await auth.verifyIdToken(data.token);
+            console.log('[Admin] Token verified for:', decodedToken.email);
+
+            if (decodedToken.email !== ADMIN_EMAIL) {
+                throw new Error('Unauthorized: Admin access required');
+            }
+
+            console.log(`[Admin] User ${decodedToken.email} deleting item: ${data.name}`);
+            const result = await deleteItem(data.name);
+            console.log('[Admin] Delete item result:', result);
+
+            if (!result.success) {
+                socket.emit('admin:error', { message: result.error });
+            }
+        } catch (error: any) {
+            console.error('[Admin] Delete item failed:', error);
+            socket.emit('admin:error', { message: error.message });
+        }
+    });
+
+
+    socket.on('join_game', async (payload?: { name?: string }) => {
         let roomToJoin: Room | undefined;
 
         // 1. Try to find an existing room with space
@@ -175,7 +243,8 @@ io.on('connection', (socket) => {
         roomToJoin.players.push(socket.id);
 
         // Initialize player state to avoid null checks, though position is unknown until first move
-        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0 };
+        const playerName = payload?.name || `Player_${socket.id.substring(0, 4)}`;
+        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0, name: playerName };
 
         // ATTACH HANDLERS IMMEDIATELY to prevent race conditions with async DB calls
 
@@ -189,8 +258,9 @@ io.on('connection', (socket) => {
                     room.playerStates[socket.id].rotY = data.rotY;
                 }
 
-                // Relay to others in the room
-                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY });
+                // Relay to others in the room (include name and crouch state so clients can display it)
+                const playerState = room?.playerStates[socket.id];
+                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching });
             }
         });
 
@@ -300,27 +370,23 @@ io.on('connection', (socket) => {
             console.log(`[Socket] World reset requested by ${socket.id} in room ${roomId}`);
 
             try {
-                // Clear all persisted data
+                // Clear all persisted data (blocks, entities, signs)
                 await worldPersistence.resetWorld();
 
-                // Generate a new world seed
-                const newSeed = Math.floor(Math.random() * 1000000);
+                // Keep the same world seed - only clear added content
                 const room = rooms.get(roomId);
+                const currentSeed = room?.worldSeed;
                 if (room) {
-                    room.worldSeed = newSeed;
-                    room.time = 0.25; // Reset to noon
+                    room.time = 0.25; // Reset time to noon
                 }
-
-                // Save new metadata
-                await worldPersistence.saveRoomMetadata(roomId, newSeed);
 
                 // Broadcast reset to ALL clients in the room (including sender)
                 io.to(roomId).emit('world:reset', {
-                    worldSeed: newSeed,
+                    worldSeed: currentSeed,
                     time: 0.25
                 });
 
-                console.log(`[Socket] World reset complete - new seed: ${newSeed}`);
+                console.log(`[Socket] World reset complete - keeping seed: ${currentSeed}`);
             } catch (error) {
                 console.error('[Socket] Failed to reset world:', error);
                 socket.emit('world:reset:error', { message: 'Failed to reset world' });
@@ -404,7 +470,9 @@ io.on('connection', (socket) => {
         }
 
         // Notify others
-        socket.to(roomId).emit('player:joined', { id: socket.id });
+        // Include player name in the joined broadcast
+        const joiningPlayerState = roomToJoin.playerStates[socket.id];
+        socket.to(roomId).emit('player:joined', { id: socket.id, name: joiningPlayerState?.name });
 
         // Handle player movement
         socket.on('player:move', (data) => {
@@ -416,8 +484,9 @@ io.on('connection', (socket) => {
                     room.playerStates[socket.id].rotY = data.rotY;
                 }
 
-                // Relay to others in the room
-                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY });
+                // Relay to others in the room (include name and crouch state so clients can display it)
+                const playerState = room?.playerStates[socket.id];
+                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching });
             }
         });
 
@@ -510,6 +579,213 @@ io.on('connection', (socket) => {
             }
         });
 
+        // Handle player chat messages (speech bubbles)
+        socket.on('player:chat', (data: { message: string }) => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            const playerState = room?.playerStates[socket.id];
+            console.log(`[Socket] Player ${socket.id} chat: "${data.message}"`);
+            // Broadcast to all other players in the room
+            socket.to(roomId).emit('player:chat', {
+                id: socket.id,
+                message: data.message,
+                name: playerState?.name
+            });
+        });
+
+        // Handle group chat messages (visible to all, no speech bubble)
+        socket.on('group:chat', (data: { message: string }) => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            const playerState = room?.playerStates[socket.id];
+            console.log(`[Socket] Group chat from ${socket.id}: "${data.message}"`);
+            // Broadcast to all other players in the room
+            socket.to(roomId).emit('group:chat', {
+                id: socket.id,
+                message: data.message,
+                name: playerState?.name
+            });
+        });
+
+        // Handle villager chat requests (LLM-powered dialogue)
+        socket.on('villager:chat', async (data: {
+            villagerId: string,
+            profession: string,
+            professionName: string,
+            name?: string,
+            job?: string,
+            backstory?: string,
+            playerMessage: string | null,
+            isGreeting: boolean,
+            quest?: {
+                id: string,
+                title: string,
+                description: string,
+                dialogueIntro: string,
+                isAccepted: boolean,
+                isCompleted: boolean,
+                canComplete: boolean
+            } | null
+        }) => {
+            console.log(`[Villager Chat] Request from ${socket.id}:`, { ...data, quest: data.quest ? data.quest.title : 'None' });
+
+            try {
+                const apiKey = process.env.GEMINI_API_KEY;
+                if (!apiKey) {
+                    throw new Error('No Gemini API key');
+                }
+
+                // Dynamic import of GoogleGenerativeAI
+                const { GoogleGenerativeAI } = await import('@google/generative-ai');
+                const genAI = new GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+                // Conversation Key
+                const historyKey = `${socket.id}:${data.villagerId}`;
+
+                // Reset history if it's a new greeting
+                if (data.isGreeting) {
+                    conversationHistory.delete(historyKey);
+                }
+
+                // Initialize history if needed
+                if (!conversationHistory.has(historyKey)) {
+                    conversationHistory.set(historyKey, []);
+                }
+
+                const history = conversationHistory.get(historyKey)!;
+
+                // Build prompt based on profession and context
+                const professionPersona: Record<string, string> = {
+                    'FARMER': 'You are a friendly village farmer who loves talking about crops, weather, and animals. You wear overalls and a straw hat.',
+                    'BLACKSMITH': 'You are a gruff but kind blacksmith who takes pride in your metalwork. You speak in short, practical sentences.',
+                    'GUARD': 'You are a vigilant village guard who keeps the peace. You are stern but protective of villagers.',
+                    'LIBRARIAN': 'You are a wise and bookish librarian who loves sharing knowledge. You speak in an educated, thoughtful manner.'
+                };
+
+                const persona = professionPersona[data.profession] || 'You are a friendly villager.';
+
+                // Build detailed system instruction
+                let systemInstruction = `You are ${data.name || 'a Villager'}, a ${data.job || data.professionName}. `;
+                if (data.backstory) {
+                    systemInstruction += `Your backstory: ${data.backstory} `;
+                }
+                systemInstruction += `\n${persona}`;
+
+                // Quest Context
+                if (data.quest && !data.quest.isCompleted) {
+                    if (!data.quest.isAccepted) {
+                        systemInstruction += `\nIMPORTANT: You have a quest for the player: "${data.quest.title}" - ${data.quest.description}.
+                        Mention this naturally using your own words or something like: "${data.quest.dialogueIntro}".
+                        If the player says "yes", "I accept", "sure", or "okay" to the quest, start your response with the tag [QUEST_ACCEPTED].
+                        Do NOT use the tag unless they explicitly agree to help.`;
+                    } else if (data.quest.canComplete) {
+                        systemInstruction += `\nIMPORTANT: The player has completed your quest "${data.quest.title}"! 
+                        Thank them warmly and tell them you are giving them a reward.
+                        Start your response with the tag [QUEST_COMPLETED].`;
+                    } else {
+                        systemInstruction += `\nThe player has accepted your quest "${data.quest.title}" but hasn't finished it yet.
+                         Encourage them to finish it. Do NOT offer it again.`;
+                    }
+                }
+
+                // Construct System Instruction as the first part of the conversation or as a separate system instruction if supported
+                // For simplicity with this model, we'll prepend persona to the first message or treat as context.
+                // We will build the full content array for Gemini.
+
+                const contents = [...history]; // Copy existing history
+
+                let nextUserMessage = '';
+                if (data.isGreeting) {
+                    nextUserMessage = `${systemInstruction}\n\nThe player just approached you. Give a short, friendly greeting (1-2 sentences max). Be in character.`;
+                } else {
+                    // For subsequent turns, we assume the persona is already established in context, 
+                    // but reinforcing it lightly or relying on history is fine. 
+                    // To be safe, if history is empty (shouldn't be, but edge case), we include persona.
+                    if (contents.length === 0) {
+                        nextUserMessage = `${systemInstruction}\n\nThe player said: "${data.playerMessage}". Give a short, friendly response (1-2 sentences max). Stay in character.`;
+                    } else {
+                        nextUserMessage = `The player said: "${data.playerMessage}". (Remember to stay in character as ${data.name})`;
+                    }
+                }
+
+                const userContentObj = { role: 'user', parts: [{ text: nextUserMessage }] };
+                contents.push(userContentObj);
+
+                const result = await model.generateContent({
+                    contents: contents,
+                    generationConfig: {
+                        maxOutputTokens: 150, // Increased for quest descriptions
+                        temperature: 0.9
+                    }
+                });
+
+                let response = result.response.text().trim();
+                console.log(`[Villager Chat] ${data.professionName} raw response: "${response}"`);
+
+                // Parse Tags
+                let questAccepted = false;
+                let questCompleted = false;
+
+                if (response.includes('[QUEST_ACCEPTED]')) {
+                    questAccepted = true;
+                    response = response.replace('[QUEST_ACCEPTED]', '').trim();
+                }
+
+                if (response.includes('[QUEST_COMPLETED]')) {
+                    questCompleted = true;
+                    response = response.replace('[QUEST_COMPLETED]', '').trim();
+                }
+
+                console.log(`[Villager Chat] Processed response: "${response}" (Accepted: ${questAccepted}, Completed: ${questCompleted})`);
+
+                // Update History
+                // Add the user message we effectively sent (simplifying the prompt part for history key if needed, but Gemini handles it)
+                // Actually, for history consistency, we should store what we sent.
+                history.push(userContentObj);
+
+                // Add the model response (clean version + tags maybe? keeping clean for history is better)
+                history.push({ role: 'model', parts: [{ text: response }] });
+
+                // Keep history size manageable (last 10 turns = 20 messages)
+                if (history.length > 20) {
+                    history.splice(0, history.length - 20);
+                }
+
+                // Determine if conversation should end
+                const lowerMsg = data.playerMessage?.toLowerCase() || '';
+                const isGoodbye = lowerMsg.includes('bye') || lowerMsg.includes('goodbye') || lowerMsg.includes('see ya');
+
+                socket.emit('villager:chat:response', {
+                    villagerId: data.villagerId,
+                    message: response,
+                    endConversation: isGoodbye, // Keep open unless player says bye
+                    questAccepted: questAccepted,
+                    questCompleted: questCompleted
+                });
+
+            } catch (error: any) {
+                console.error('[Villager Chat] Error:', error.message);
+
+                // Fallback to static phrases
+                const fallbackPhrases: Record<string, string[]> = {
+                    'FARMER': ['Nice weather for farming!', 'The crops look good this season.'],
+                    'BLACKSMITH': ['Need something forged?', 'Hot work, but honest.'],
+                    'GUARD': ['Stay safe, traveler.', 'All quiet here.'],
+                    'LIBRARIAN': ['Knowledge awaits.', 'Have you read any good books?']
+                };
+
+                const phrases = fallbackPhrases[data.profession] || ['Hello there!'];
+                const fallback = phrases[Math.floor(Math.random() * phrases.length)];
+
+                socket.emit('villager:chat:response', {
+                    villagerId: data.villagerId,
+                    message: fallback,
+                    endConversation: true
+                });
+            }
+        });
+
         // WebRTC Signaling relay
         socket.on('signal', (data) => {
             if (data.to) {
@@ -527,27 +803,23 @@ io.on('connection', (socket) => {
             console.log(`[Socket] World reset requested by ${socket.id} in room ${roomId}`);
 
             try {
-                // Clear all persisted data
+                // Clear all persisted data (blocks, entities, signs)
                 await worldPersistence.resetWorld();
 
-                // Generate a new world seed
-                const newSeed = Math.floor(Math.random() * 1000000);
+                // Keep the same world seed - only clear added content
                 const room = rooms.get(roomId);
+                const currentSeed = room?.worldSeed;
                 if (room) {
-                    room.worldSeed = newSeed;
-                    room.time = 0.25; // Reset to noon
+                    room.time = 0.25; // Reset time to noon
                 }
-
-                // Save new metadata
-                await worldPersistence.saveRoomMetadata(roomId, newSeed);
 
                 // Broadcast reset to ALL clients in the room (including sender)
                 io.to(roomId).emit('world:reset', {
-                    worldSeed: newSeed,
+                    worldSeed: currentSeed,
                     time: 0.25
                 });
 
-                console.log(`[Socket] World reset complete - new seed: ${newSeed}`);
+                console.log(`[Socket] World reset complete - keeping seed: ${currentSeed}`);
             } catch (error) {
                 console.error('[Socket] Failed to reset world:', error);
                 socket.emit('world:reset:error', { message: 'Failed to reset world' });
@@ -576,56 +848,11 @@ io.on('connection', (socket) => {
         socket.on('chat:reaction', (data: { channelId: string, messageId: string, reactions: any }) => {
             socket.to(`channel:${data.channelId}`).emit('chat:reaction', {
                 messageId: data.messageId,
-                reactions: data.reactions
             });
         });
-
-        // ============ Admin Events ============
-
-        const ADMIN_EMAIL = 'thisislance98@gmail.com';
-
-        socket.on('admin:delete_creature', async (data: { name: string, token: string }) => {
-            try {
-                if (!auth) throw new Error('Auth service unavailable');
-                const decodedToken = await auth.verifyIdToken(data.token);
-
-                if (decodedToken.email !== ADMIN_EMAIL) {
-                    throw new Error('Unauthorized: Admin access required');
-                }
-
-                console.log(`[Admin] User ${decodedToken.email} deleting creature: ${data.name}`);
-                const result = await deleteCreature(data.name);
-
-                if (!result.success) {
-                    socket.emit('admin:error', { message: result.error });
-                }
-            } catch (error: any) {
-                console.error('[Admin] Delete creature failed:', error);
-                socket.emit('admin:error', { message: error.message });
-            }
-        });
-
-        socket.on('admin:delete_item', async (data: { name: string, token: string }) => {
-            try {
-                if (!auth) throw new Error('Auth service unavailable');
-                const decodedToken = await auth.verifyIdToken(data.token);
-
-                if (decodedToken.email !== ADMIN_EMAIL) {
-                    throw new Error('Unauthorized: Admin access required');
-                }
-
-                console.log(`[Admin] User ${decodedToken.email} deleting item: ${data.name}`);
-                const result = await deleteItem(data.name);
-
-                if (!result.success) {
-                    socket.emit('admin:error', { message: result.error });
-                }
-            } catch (error: any) {
-                console.error('[Admin] Delete item failed:', error);
-                socket.emit('admin:error', { message: error.message });
-            }
-        });
     });
+
+
 
     socket.on('disconnect', () => {
         console.log(`[Socket] Client disconnected: ${socket.id}`);
@@ -654,6 +881,40 @@ io.on('connection', (socket) => {
 });
 
 // ============ REST API ============
+
+// Debug: List all dynamic creatures
+app.get('/api/creatures', (req, res) => {
+    const creatures = getAllCreatures();
+    res.json({
+        count: creatures.length,
+        creatures: creatures.map(c => ({
+            name: c.name,
+            description: c.description,
+            codePreview: c.code.slice(0, 200) + '...',
+            createdBy: c.createdBy,
+            createdAt: c.createdAt
+        }))
+    });
+});
+
+// Debug: Get full creature code
+app.get('/api/creatures/:name', (req, res) => {
+    const creature = getCreature(req.params.name);
+    if (!creature) {
+        return res.status(404).json({ error: 'Creature not found' });
+    }
+    res.json(creature);
+});
+
+// Debug: Delete a creature (no auth for dev convenience)
+app.delete('/api/creatures/:name', async (req, res) => {
+    const result = await deleteCreature(req.params.name);
+    if (result.success) {
+        res.json({ success: true, message: `Deleted creature: ${req.params.name}` });
+    } else {
+        res.status(400).json({ error: result.error });
+    }
+});
 
 // Health check
 app.get('/health', (req, res) => {

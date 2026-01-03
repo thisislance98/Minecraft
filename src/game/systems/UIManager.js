@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { DebugPanel } from '../ui/DebugPanel.js';
 import { CommunityUI } from '../ui/CommunityUI.js';
+import { Minimap } from '../ui/Minimap.js';
+import { auth } from '../../config/firebase-client.js';
 
 /**
  * UIManager centralizes all HUD/UI updates.
@@ -24,6 +26,10 @@ export class UIManager {
 
         // Community/Feedback UI
         this.communityUI = new CommunityUI(game);
+
+        // Minimap
+        this.minimap = new Minimap(game);
+
         this.createFeedbackButton();
 
 
@@ -44,12 +50,18 @@ export class UIManager {
 
         // Chat Panel elements
         this.chatPanel = document.getElementById('chat-panel');
-        this.chatMessages = document.getElementById('chat-messages');
+        this.chatMessages = document.getElementById('chat-messages-ai'); // Default to AI
+        this.chatMessagesAI = document.getElementById('chat-messages-ai');
+        this.chatMessagesGroup = document.getElementById('chat-messages-group');
+        this.chatMessagesPlayer = document.getElementById('chat-messages-player');
         this.chatInput = document.getElementById('chat-input');
         this.sendBtn = document.getElementById('send-chat');
         this.closeBtn = document.getElementById('close-chat');
         this.copyChatBtn = document.getElementById('copy-chat');
 
+        // Chat mode state: 'ai', 'group', 'player'
+        this.chatMode = 'ai';
+        this.setupChatTabListeners();
 
         this.setupChatPanelListeners();
 
@@ -67,6 +79,7 @@ export class UIManager {
         this.createSignInputUI();
         this.setupSettingsMenu();
         this.setupHelpModal();
+        this.setupVoiceButton();
 
         // Chat scroll state
         this.userHasScrolledUp = false;
@@ -225,6 +238,108 @@ export class UIManager {
 
         this.startXboxBootSequence();
         if (this.game.inputManager) this.game.inputManager.unlock();
+    }
+
+    setupTutorialModal() {
+        // Create the modal container
+        const modal = document.createElement('div');
+        modal.id = 'tutorial-modal';
+        modal.className = 'ui-modal';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: none; align-items: center;
+            justify-content: center; z-index: 4000; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: #1e1e1e; border: 2px solid #4169e1; padding: 40px;
+            border-radius: 12px; text-align: left; color: #e0e0e0; width: 600px;
+            box-shadow: 0 0 30px rgba(65, 105, 225, 0.3); max-height: 80vh; overflow-y: auto;
+        `;
+
+        content.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid #333; padding-bottom: 15px;">
+                <h2 style="margin: 0; color: #4169e1; font-size: 28px;">Antigravity User Guide</h2>
+                <button id="tutorial-close" style="background: transparent; border: none; color: #888; font-size: 24px; cursor: pointer;">&times;</button>
+            </div>
+            
+            <div style="margin-bottom: 30px;">
+                <h3 style="color: #fff; margin-bottom: 10px;">👋 Welcome to Antigravity!</h3>
+                <p style="line-height: 1.6; color: #aaa;">
+                    Antigravity allows you to create, edit, and control your world using natural language. 
+                    You have an AI assistant ready to help you build anything you can imagine.
+                </p>
+            </div>
+
+            <div style="background: #252526; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+                <h4 style="margin-top: 0; color: #81a1c1;">How to use the AI:</h4>
+                <ol style="padding-left: 20px; line-height: 1.8; color: #ccc;">
+                    <li>Press <b style="color: #fff; background: #333; padding: 2px 6px; border-radius: 4px;">T</b> to open the Chat Panel.</li>
+                    <li>Ensure the <b style="color: #4169e1;">AI Agent</b> tab is selected.</li>
+                    <li>Type your request in plain English and press Enter!</li>
+                </ol>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h4 style="color: #81a1c1; margin-bottom: 15px;">Try these commands:</h4>
+                <div style="display: grid; gap: 10px;">
+                    <div style="background: #2d2d30; padding: 12px; border-radius: 6px; border-left: 3px solid #4caf50;">
+                        <div style="font-weight: bold; color: #fff; margin-bottom: 4px;">Create Structures</div>
+                        <div style="color: #aaa; font-style: italic;">"Build a modern house with a pool"</div>
+                    </div>
+                    <div style="background: #2d2d30; padding: 12px; border-radius: 6px; border-left: 3px solid #ff9800;">
+                        <div style="font-weight: bold; color: #fff; margin-bottom: 4px;">Spawn Entities</div>
+                        <div style="color: #aaa; font-style: italic;">"Spawn a herd of cows nearby"</div>
+                    </div>
+                    <div style="background: #2d2d30; padding: 12px; border-radius: 6px; border-left: 3px solid #f44336;">
+                        <div style="font-weight: bold; color: #fff; margin-bottom: 4px;">Change Environment</div>
+                        <div style="color: #aaa; font-style: italic;">"Make it night time and rainy"</div>
+                    </div>
+                    <div style="background: #2d2d30; padding: 12px; border-radius: 6px; border-left: 3px solid #ce9178;">
+                        <div style="font-weight: bold; color: #fff; margin-bottom: 4px;">Modify Code</div>
+                        <div style="color: #aaa; font-style: italic;">"Make the gravity low"</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="tutorial-ok" style="background: #4169e1; color: white; border: none; padding: 12px 30px; font-size: 16px; cursor: pointer; border-radius: 6px; font-weight: bold; transition: background 0.2s;">Got it!</button>
+            </div>
+        `;
+
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        this.tutorialModal = modal;
+
+        // Event Listeners
+        const closeAction = () => {
+            this.hideTutorialModal();
+        };
+
+        document.getElementById('tutorial-close').onclick = closeAction;
+        document.getElementById('tutorial-ok').onclick = closeAction;
+    }
+
+    showTutorialModal() {
+        if (!this.tutorialModal) {
+            this.setupTutorialModal();
+        }
+        this.closeAllMenus(this.tutorialModal); // Close other menus
+        this.tutorialModal.style.display = 'flex';
+
+        // Unlock pointer so user can click
+        if (this.game.inputManager) {
+            this.game.inputManager.unlock();
+        }
+    }
+
+    hideTutorialModal() {
+        if (this.tutorialModal) {
+            this.tutorialModal.style.display = 'none';
+        }
+        // Lock pointer back if game is active? 
+        // Usually we let the user click back into the game to lock.
     }
 
     startXboxBootSequence() {
@@ -513,8 +628,6 @@ export class UIManager {
             ctx.fillStyle = '#888';
             ctx.font = '12px Arial';
             ctx.fillText(`Level ${self.platformerState.levelIndex + 1}`, 10, 20);
-
-            requestAnimationFrame(loop);
         }
 
         function loop(timestamp) {
@@ -856,8 +969,6 @@ export class UIManager {
                 ctx.fillRect(10, 35 + puCount * 10, (p.powerups[type] / 8000) * 100, 4);
                 puCount++;
             }
-
-            requestAnimationFrame(loop);
         }
 
         function loop(timestamp) {
@@ -926,7 +1037,7 @@ export class UIManager {
         if (okBtn) okBtn.onclick = closeHelp;
 
         // Auto-show on first run
-        if (!localStorage.getItem('hasSeenHelp')) {
+        if (!localStorage.getItem('hasSeenHelp') && !this.game.isCLI) {
             // Slight delay to ensure game loads
             setTimeout(() => {
                 this.helpModal.classList.remove('hidden');
@@ -940,6 +1051,50 @@ export class UIManager {
                     this.game.inputManager.unlock();
                 }
             };
+        }
+    }
+
+    setupVoiceButton() {
+        this.voiceBtn = document.getElementById('voice-btn');
+        if (!this.voiceBtn) return;
+
+        // Get saved state
+        const savedVoice = localStorage.getItem('settings_voice') === 'true';
+        this.updateVoiceButtonState(savedVoice);
+
+        this.voiceBtn.addEventListener('click', () => {
+            const currentState = localStorage.getItem('settings_voice') === 'true';
+            const newState = !currentState;
+
+            // Update storage and state
+            localStorage.setItem('settings_voice', newState);
+            this.updateVoiceButtonState(newState);
+
+            // Sync with voice toggle in settings if it exists
+            if (this.voiceToggle) {
+                this.voiceToggle.checked = newState;
+            }
+
+            // Enable/disable voice chat
+            if (this.game.socketManager) {
+                this.game.socketManager.setVoiceChatEnabled(newState);
+            }
+
+            // Show feedback message
+            this.addChatMessage('system', newState ? '🎤 Voice chat enabled. Hold V to talk.' : '🎤 Voice chat disabled.');
+        });
+    }
+
+    updateVoiceButtonState(enabled) {
+        if (!this.voiceBtn) return;
+        if (enabled) {
+            this.voiceBtn.style.background = 'rgba(0, 200, 100, 0.5)';
+            this.voiceBtn.style.color = '#fff';
+            this.voiceBtn.title = 'Voice Chat: ON (Hold V to talk)';
+        } else {
+            this.voiceBtn.style.background = '';
+            this.voiceBtn.style.color = '';
+            this.voiceBtn.title = 'Toggle Voice Chat';
         }
     }
 
@@ -1059,6 +1214,8 @@ export class UIManager {
                 if (this.game.socketManager) {
                     this.game.socketManager.setVoiceChatEnabled(enabled);
                 }
+                // Sync the voice button in top-right controls
+                this.updateVoiceButtonState(enabled);
             });
         }
 
@@ -1304,14 +1461,17 @@ export class UIManager {
         // Network status removed - no-op (only remote player positions shown)
     }
 
-    updateRemotePlayerStatus(id, pos, rotY) {
+    updateRemotePlayerStatus(id, pos, rotY, name) {
         if (!this.remotePlayersHUD) this.createRemotePlayersHUD();
         if (!this.remotePlayers) this.remotePlayers = new Map();
 
         if (pos === null) {
             this.remotePlayers.delete(id);
         } else if (pos && typeof pos.x === 'number') {
-            this.remotePlayers.set(id, { pos, rotY: rotY ?? 0 });
+            // Store the name if provided, otherwise keep existing name
+            const existingData = this.remotePlayers.get(id);
+            const playerName = name || existingData?.name || `Player_${String(id).substring(0, 4)}`;
+            this.remotePlayers.set(id, { pos, rotY: rotY ?? 0, name: playerName });
         } else {
             return;
         }
@@ -1320,9 +1480,9 @@ export class UIManager {
         let html = '';
         this.remotePlayers.forEach((data, pid) => {
             if (data && data.pos && typeof data.pos.x === 'number') {
-                const sid = String(pid).substring(0, 4);
+                const displayName = data.name || `Player_${String(pid).substring(0, 4)}`;
                 const p = data.pos;
-                html += `<p style="margin: 4px 0;">👤 ${sid}: ${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}</p>`;
+                html += `<p style="margin: 4px 0;">👤 ${displayName}: ${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}</p>`;
             }
         });
 
@@ -1343,23 +1503,10 @@ export class UIManager {
     createMuteButton() {
         const btn = document.createElement('button');
         btn.id = 'mute-btn';
+        btn.title = 'Toggle Sound';
         // Initial state
         const isMuted = this.game.soundManager ? this.game.soundManager.isMuted : false;
         btn.textContent = isMuted ? '🔇' : '🔊';
-
-        btn.style.cssText = `
-            position: fixed; top: 10px; right: 80px;
-            background: rgba(0,0,0,0.6); color: #fff;
-            border: 1px solid rgba(255,255,255,0.2);
-            padding: 8px 12px; border-radius: 4px;
-            cursor: pointer; font-size: 20px; z-index: 2000;
-        `;
-
-        // If network status exists, move this left of it or below it.
-        // For simplicity, let's put it at top-right, but adjust if network status is there.
-        // Network status is at top: 10px; right: 10px; (in showNetworkStatus)
-        // Let's create a container or just offset heavily.
-        // Actually, let's put it top-right, but update showNetworkStatus to be lower.
 
         btn.onclick = () => {
             if (this.game.soundManager) {
@@ -1370,7 +1517,14 @@ export class UIManager {
             }
         };
 
-        document.body.appendChild(btn);
+        // Insert into top-right-controls container to match other button styling
+        const controls = document.getElementById('top-right-controls');
+        if (controls) {
+            // Insert at the beginning (left side of the controls)
+            controls.insertBefore(btn, controls.firstChild);
+        } else {
+            document.body.appendChild(btn);
+        }
         this.muteBtn = btn;
     }
 
@@ -1804,6 +1958,54 @@ export class UIManager {
     }
 
     /**
+     * Show an in-game notification (toast) message
+     * @param {string} message - The message to display
+     * @param {'error' | 'warning' | 'info' | 'success'} type - Notification type
+     * @param {number} duration - Duration in ms before auto-dismiss (default: 3000)
+     */
+    showGameNotification(message, type = 'info', duration = 3000) {
+        // Log for CLI testing
+        console.log('[GAME_NOTIFICATION]', type, message);
+
+        const container = document.getElementById('game-notifications');
+        if (!container) {
+            console.warn('game-notifications container not found');
+            return;
+        }
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `game-notification ${type}`;
+
+        // Icon based on type
+        const icons = {
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️',
+            success: '✅'
+        };
+        const icon = icons[type] || icons.info;
+
+        notification.innerHTML = `
+            <span class="notif-icon">${icon}</span>
+            <span class="notif-message">${message}</span>
+        `;
+
+        container.appendChild(notification);
+
+        // Auto-dismiss after duration
+        setTimeout(() => {
+            notification.classList.add('fade-out');
+            // Remove after fade animation completes
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, duration);
+
+        return notification;
+    }
+
+    /**
      * Show a prominent refresh prompt when changes require browser reload
      */
     showRefreshPrompt() {
@@ -1900,6 +2102,211 @@ export class UIManager {
                 }
             });
         }
+
+        // Player-to-player chat (T key)
+        // this.playerChatInput = null; // Legacy overlay removed in favor of unified chat panel
+        // this.createPlayerChatInput();
+
+        document.addEventListener('keydown', (e) => {
+            // Only trigger if not already in an input and game is active
+            if (e.code === 'KeyT' && !this.isPlayerChatOpen && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                this.toggleChatPanel(true);
+                this.setChatMode('player');
+                setTimeout(() => this.chatInput?.focus(), 100);
+            } else if (e.code === 'Escape' && !this.chatPanel.classList.contains('hidden')) {
+                e.preventDefault();
+                this.toggleChatPanel(false);
+            }
+        });
+    }
+
+    /**
+     * Create the player-to-player chat input overlay
+     */
+    createPlayerChatInput() {
+        const overlay = document.createElement('div');
+        overlay.id = 'player-chat-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            display: none;
+        `;
+
+        const container = document.createElement('div');
+        container.style.cssText = `
+            background: rgba(0, 0, 0, 0.85);
+            padding: 12px 16px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        `;
+
+        const label = document.createElement('span');
+        label.textContent = '💬';
+        label.style.cssText = 'font-size: 18px;';
+        container.appendChild(label);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Say something...';
+        input.maxLength = 100;
+        input.style.cssText = `
+            width: 300px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            font-size: 14px;
+            outline: none;
+        `;
+        input.addEventListener('keydown', (e) => {
+            e.stopPropagation(); // Prevent game input while typing
+            if (e.code === 'Enter') {
+                e.preventDefault();
+                this.sendPlayerChat();
+            }
+        });
+        container.appendChild(input);
+        this.playerChatInputField = input;
+
+        const sendBtn = document.createElement('button');
+        sendBtn.textContent = 'Send';
+        sendBtn.style.cssText = `
+            padding: 8px 16px;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        `;
+        sendBtn.addEventListener('click', () => this.sendPlayerChat());
+        container.appendChild(sendBtn);
+
+        overlay.appendChild(container);
+        document.body.appendChild(overlay);
+        this.playerChatOverlay = overlay;
+        this.isPlayerChatOpen = false;
+    }
+
+    /**
+     * Show the player chat input
+     */
+    showPlayerChatInput() {
+        if (!this.playerChatOverlay) return;
+        this.playerChatOverlay.style.display = 'block';
+        this.playerChatInputField.value = '';
+        this.playerChatInputField.focus();
+        this.isPlayerChatOpen = true;
+
+        // Unlock pointer so user can type
+        if (this.game.inputManager) {
+            this.game.inputManager.unlock();
+        }
+    }
+
+    /**
+     * Hide the player chat input
+     */
+    hidePlayerChatInput() {
+        if (!this.playerChatOverlay) return;
+        this.playerChatOverlay.style.display = 'none';
+        this.isPlayerChatOpen = false;
+
+        // Re-lock pointer
+        if (this.game.inputManager) {
+            this.game.inputManager.lock();
+        }
+    }
+
+    /**
+     * Send the player chat message
+     */
+    sendPlayerChat() {
+        const message = this.playerChatInputField?.value?.trim();
+        if (!message) {
+            this.hidePlayerChatInput();
+            return;
+        }
+
+        // Send via SocketManager
+        if (this.game.socketManager) {
+            this.game.socketManager.sendChatMessage(message);
+        }
+
+        // Hide input after sending
+        this.hidePlayerChatInput();
+    }
+
+    /**
+     * Setup listeners for chat mode tabs (AI, Group, Player)
+     */
+    setupChatTabListeners() {
+        const tabs = document.querySelectorAll('.chat-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.mode;
+                this.setChatMode(mode);
+            });
+        });
+    }
+
+    /**
+     * Switch between chat modes
+     * @param {'ai' | 'group' | 'player'} mode - The chat mode to switch to
+     */
+    setChatMode(mode) {
+        this.chatMode = mode;
+
+        // Update tab active states
+        const tabs = document.querySelectorAll('.chat-tab');
+        tabs.forEach(tab => {
+            if (tab.dataset.mode === mode) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+
+        // Show/hide message containers
+        if (this.chatMessagesAI) {
+            this.chatMessagesAI.classList.toggle('active', mode === 'ai');
+        }
+        if (this.chatMessagesGroup) {
+            this.chatMessagesGroup.classList.toggle('active', mode === 'group');
+        }
+        if (this.chatMessagesPlayer) {
+            this.chatMessagesPlayer.classList.toggle('active', mode === 'player');
+        }
+
+        // Update chatMessages reference for current mode
+        if (mode === 'ai') {
+            this.chatMessages = this.chatMessagesAI;
+        } else if (mode === 'group') {
+            this.chatMessages = this.chatMessagesGroup;
+        } else if (mode === 'player') {
+            this.chatMessages = this.chatMessagesPlayer;
+        }
+
+        // Update placeholder text
+        if (this.chatInput) {
+            const placeholders = {
+                'ai': 'Ask the AI wizard...',
+                'group': 'Message everyone...',
+                'player': 'Say something (speech bubble)...'
+            };
+            this.chatInput.placeholder = placeholders[mode] || 'Type a message...';
+        }
+
+        console.log(`[UIManager] Chat mode switched to: ${mode}`);
     }
 
     setupChatPanelListeners() {
@@ -1995,7 +2402,12 @@ export class UIManager {
         const text = this.chatInput.value.trim();
         if (!text) return;
 
-        // Command Handling
+        // Analytics
+        if (this.game.analyticsManager) {
+            this.game.analyticsManager.logChatMessage(this.chatMode, text.length);
+        }
+
+        // Command Handling (works in all modes)
         if (text.toLowerCase() === '/spaceship') {
             if (this.game.spaceShipManager && this.game.player) {
                 const pos = this.game.player.position.clone();
@@ -2010,22 +2422,101 @@ export class UIManager {
                 this.addChatMessage('error', 'Spaceship Manager not ready.');
             }
             this.chatInput.value = '';
-            this.toggleChatPanel(false); // Close chat
             return;
         }
 
-        if (this.game.agent) {
-            this.game.agent.sendTextMessage(text);
-            this.chatInput.value = '';
-            // Clear suggestions on sending a message? Maybe desirable.
-            this.clearSuggestions();
+        // Route based on current chat mode
+        if (this.chatMode === 'ai') {
+            // AI Chat Mode - send to AI agent
+            if (this.game.agent) {
+                this.game.agent.sendTextMessage(text);
+                this.chatInput.value = '';
+                this.clearSuggestions();
 
-            // Force scroll to bottom when user sends a message
-            if (this.chatMessages) {
-                this.userHasScrolledUp = false;
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                // Force scroll to bottom
+                if (this.chatMessages) {
+                    this.userHasScrolledUp = false;
+                    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                }
             }
+        } else if (this.chatMode === 'group') {
+            // Group Chat Mode - send to all players via socket
+            if (this.game.socketManager) {
+                this.game.socketManager.sendGroupChatMessage(text);
+                // Add own message to UI
+                const playerName = localStorage.getItem('communityUsername') || 'You';
+                this.addGroupChatMessage(playerName, text, true);
+            }
+            this.chatInput.value = '';
+        } else if (this.chatMode === 'player') {
+            // Player Chat Mode - speech bubbles above heads
+            if (this.game.socketManager) {
+                this.game.socketManager.sendChatMessage(text);
+                // Add own message to player chat panel
+                const playerName = localStorage.getItem('communityUsername') || 'You';
+                this.addPlayerChatMessage(playerName, text, true);
+
+                // Send to villager if conversing
+                if (this.activeVillagerConversation) {
+                    this.activeVillagerConversation.handlePlayerResponse(text);
+                } else {
+                    // Check for nearby villagers to initiate conversation
+                    if (this.game && this.game.entities && this.game.player) {
+                        const pPos = this.game.player.position;
+                        let bestVillager = null;
+                        let minDist = 5.0; // Conversation initiation radius
+
+                        for (const entity of this.game.entities) {
+                            if (entity.isDead) continue;
+
+                            // Check for startConversation method (Duck typing for Villager)
+                            if (typeof entity.startConversation === 'function' && !entity.isHostile && !entity.isConversing) {
+                                const dist = entity.position.distanceTo(pPos);
+                                if (dist < minDist) {
+                                    minDist = dist;
+                                    bestVillager = entity;
+                                }
+                            }
+                        }
+
+                        if (bestVillager) {
+                            bestVillager.startConversation(text);
+                        }
+                    }
+                }
+            }
+            this.chatInput.value = '';
         }
+    }
+
+    /**
+     * Add a message to the group chat container
+     */
+    addGroupChatMessage(playerName, text, isSelf = false) {
+        if (!this.chatMessagesGroup) return;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message group-chat${isSelf ? ' self' : ''}`;
+        msgDiv.innerHTML = `<div class="message-content"><span class="player-name">${this.escapeHTML(playerName)}:</span> ${this.escapeHTML(text)}</div>`;
+        this.chatMessagesGroup.appendChild(msgDiv);
+
+        // Auto-scroll
+        this.chatMessagesGroup.scrollTop = this.chatMessagesGroup.scrollHeight;
+    }
+
+    /**
+     * Add a message to the player chat container
+     */
+    addPlayerChatMessage(playerName, text, isSelf = false) {
+        if (!this.chatMessagesPlayer) return;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message player-chat${isSelf ? ' self' : ''}`;
+        msgDiv.innerHTML = `<div class="message-content"><span class="player-name">${this.escapeHTML(playerName)}:</span> ${this.escapeHTML(text)}</div>`;
+        this.chatMessagesPlayer.appendChild(msgDiv);
+
+        // Auto-scroll
+        this.chatMessagesPlayer.scrollTop = this.chatMessagesPlayer.scrollHeight;
     }
 
     showSuggestions(suggestions) {
@@ -2132,6 +2623,14 @@ export class UIManager {
         if (!this.chatPanel) return;
 
         if (show) {
+            // Check if user is authenticated before allowing AI chat
+            if (!auth.currentUser) {
+                // Not signed in - open auth modal instead
+                if (this.game.storeUI) {
+                    this.game.storeUI.openAuthModal();
+                }
+                return;
+            }
             this.chatPanel.classList.remove('hidden');
         } else {
             this.chatPanel.classList.add('hidden');
@@ -3948,6 +4447,8 @@ export class UIManager {
         });
     }
     updateMobileControlsVisibility(visible) {
+        console.log(`[UIManager] updateMobileControlsVisibility(${visible})`);
+
         if (visible && !this.joystickContainer) {
             this.initTouchControls();
         }
@@ -3967,14 +4468,17 @@ export class UIManager {
         if (this.dropBtn) this.dropBtn.style.display = display;
         if (this.mobileTopBar) this.mobileTopBar.style.display = display;
 
-        // Toggle Desktop UI elements
+        // Toggle Desktop UI elements - ensure proper display values
         const desktopSettingsBtn = document.getElementById('settings-btn');
         const desktopChatBtn = document.getElementById('chat-button');
         const desktopFeedbackBtn = document.getElementById('feedback-btn');
 
-        if (desktopSettingsBtn) desktopSettingsBtn.style.display = visible ? 'none' : 'block';
-        if (desktopChatBtn) desktopChatBtn.style.display = visible ? 'none' : 'block';
-        if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = visible ? 'none' : 'block';
+        const desktopDisplay = visible ? 'none' : 'block';
+        console.log(`[UIManager] Desktop buttons display: ${desktopDisplay}, feedbackBtn exists: ${!!desktopFeedbackBtn}`);
+
+        if (desktopSettingsBtn) desktopSettingsBtn.style.display = desktopDisplay;
+        if (desktopChatBtn) desktopChatBtn.style.display = desktopDisplay;
+        if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = desktopDisplay;
 
     }
 
@@ -3984,7 +4488,7 @@ export class UIManager {
         btn.innerHTML = '💬 Community';
         btn.style.cssText = `
             position: fixed;
-            top: 70px;
+            top: 20px;
             left: 20px;
             background: rgba(0, 0, 0, 0.6);
             color: #ffcc00;
@@ -4113,4 +4617,214 @@ export class UIManager {
 
         if (this.game.inputManager) this.game.inputManager.unlock();
     }
+
+    /**
+     * Show a speech bubble above a villager with their dialogue
+     * @param {Object} villager - The villager entity
+     * @param {string} text - The dialogue text to display
+     */
+    showVillagerSpeech(villager, text) {
+        // Create or update the villager speech bubble
+        if (!this.villagerSpeechBubble) {
+            this.villagerSpeechBubble = document.createElement('div');
+            this.villagerSpeechBubble.id = 'villager-speech-bubble';
+            this.villagerSpeechBubble.style.cssText = `
+                position: fixed;
+                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+                color: #333;
+                padding: 12px 18px;
+                border-radius: 20px;
+                font-family: 'Georgia', serif;
+                font-size: 16px;
+                max-width: 300px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                z-index: 3000;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+                pointer-events: none;
+                text-align: center;
+                border: 2px solid #e8a87c;
+            `;
+            // Add speech triangle
+            const triangle = document.createElement('div');
+            triangle.style.cssText = `
+                position: absolute;
+                bottom: -10px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0;
+                height: 0;
+                border-left: 10px solid transparent;
+                border-right: 10px solid transparent;
+                border-top: 10px solid #fcb69f;
+            `;
+            this.villagerSpeechBubble.appendChild(triangle);
+            document.body.appendChild(this.villagerSpeechBubble);
+        }
+
+        // Set the text
+        this.villagerSpeechBubble.childNodes[0]?.remove?.(); // Remove old text if any
+        const textNode = document.createTextNode(text);
+        this.villagerSpeechBubble.insertBefore(textNode, this.villagerSpeechBubble.firstChild);
+
+        // Show the bubble
+        this.villagerSpeechBubble.style.opacity = '1';
+
+        // Position the bubble - update each frame to follow villager
+        const updatePosition = () => {
+            if (!villager || !villager.mesh || !this.villagerSpeechBubble) return;
+
+            // Project villager position to screen coordinates
+            const pos = villager.mesh.position.clone();
+            pos.y += 2.5; // Above head
+
+            const camera = this.game.cameraRig?.getCamera?.() || this.game.camera;
+            if (!camera) return;
+
+            const vector = pos.project(camera);
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+
+            // Check if in front of camera
+            if (vector.z > 1) {
+                this.villagerSpeechBubble.style.opacity = '0';
+            } else {
+                this.villagerSpeechBubble.style.left = `${x - 150}px`;
+                this.villagerSpeechBubble.style.top = `${y - 80}px`;
+            }
+        };
+
+        // Start position updates
+        if (this.villagerSpeechInterval) {
+            clearInterval(this.villagerSpeechInterval);
+        }
+        this.villagerSpeechInterval = setInterval(updatePosition, 50);
+        updatePosition();
+
+        // Show prompt for player to respond
+        this.showVillagerChatPrompt(villager);
+
+        // Auto-hide after 20 seconds
+        if (this.villagerSpeechTimeout) {
+            clearTimeout(this.villagerSpeechTimeout);
+        }
+        this.villagerSpeechTimeout = setTimeout(() => {
+            this.hideVillagerSpeech();
+        }, 20000);
+
+        // Add to player chat history
+        this.addPlayerChatMessage(villager.profession.name, text, false);
+    }
+
+    /**
+     * Show prompt for player to respond to villager
+     */
+    showVillagerChatPrompt(villager) {
+        if (!this.villagerChatPrompt) {
+            this.villagerChatPrompt = document.createElement('div');
+            this.villagerChatPrompt.id = 'villager-chat-prompt';
+            this.villagerChatPrompt.style.cssText = `
+                position: fixed;
+                bottom: 100px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 0, 0, 0.85);
+                color: #ffcc00;
+                padding: 15px 25px;
+                border-radius: 10px;
+                font-family: 'VT323', monospace;
+                font-size: 20px;
+                z-index: 3001;
+                border: 2px solid #ffcc00;
+                cursor: pointer;
+                transition: all 0.2s;
+            `;
+            this.villagerChatPrompt.innerHTML = '💬 Press T to respond...';
+            this.villagerChatPrompt.onclick = () => {
+                this.toggleChatPanel(true);
+                this.setChatMode('player');
+                setTimeout(() => this.chatInput?.focus(), 100);
+            };
+            document.body.appendChild(this.villagerChatPrompt);
+        }
+        this.villagerChatPrompt.style.display = 'block';
+        this.currentTalkingVillager = villager;
+    }
+
+    /**
+     * Open chat input for responding to villager
+     */
+    openVillagerChatInput(villager) {
+        this.hideVillagerChatPrompt();
+
+        // Use the existing player chat input
+        if (this.game.chatPanel) {
+            this.game.chatPanel.openPlayerChat?.();
+        } else {
+            // Create inline input
+            const input = document.createElement('input');
+            input.id = 'villager-chat-input';
+            input.type = 'text';
+            input.placeholder = 'Type your response...';
+            input.style.cssText = `
+                position: fixed;
+                bottom: 100px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 400px;
+                padding: 12px 20px;
+                font-size: 18px;
+                border: 2px solid #ffcc00;
+                border-radius: 25px;
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                z-index: 3002;
+                outline: none;
+            `;
+
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter' && input.value.trim()) {
+                    const message = input.value.trim();
+                    input.remove();
+
+                    // Send response to villager
+                    if (villager && villager.handlePlayerResponse) {
+                        villager.handlePlayerResponse(message);
+                    }
+                } else if (e.key === 'Escape') {
+                    input.remove();
+                }
+                e.stopPropagation();
+            };
+
+            document.body.appendChild(input);
+            input.focus();
+        }
+    }
+
+    /**
+     * Hide villager chat prompt
+     */
+    hideVillagerChatPrompt() {
+        if (this.villagerChatPrompt) {
+            this.villagerChatPrompt.style.display = 'none';
+        }
+    }
+
+    /**
+     * Hide villager speech bubble
+     */
+    hideVillagerSpeech() {
+        if (this.villagerSpeechBubble) {
+            this.villagerSpeechBubble.style.opacity = '0';
+        }
+        this.hideVillagerChatPrompt();
+        if (this.villagerSpeechInterval) {
+            clearInterval(this.villagerSpeechInterval);
+            this.villagerSpeechInterval = null;
+        }
+        // Do NOT clear activeVillagerConversation here.
+        // It is cleared by Villager.js endConversation() or distance check.
+    }
 }
+

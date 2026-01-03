@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer';
+import { ensureServerRunning } from './server-check.js';
 
 /**
  * Browser automation for running game client during CLI tests
@@ -18,6 +19,12 @@ export class GameBrowser {
      * Launch browser and navigate to game
      */
     async launch() {
+        // Ensure server is running before launching browser
+        const serverReady = await ensureServerRunning();
+        if (!serverReady) {
+            throw new Error('Server not available. Please start the server manually.');
+        }
+
         console.log(`🌐 Launching browser (headless: ${this.headless})...`);
 
         this.browser = await puppeteer.launch({

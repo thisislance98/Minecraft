@@ -3,6 +3,7 @@ import { stripe, stripeWebhookSecret, config, db } from '../config';
 import { addTokens } from '../services/tokenService';
 import { FieldValue } from 'firebase-admin/firestore';
 import express from 'express';
+import { logError } from '../utils/logger';
 
 const router = Router();
 
@@ -90,6 +91,7 @@ router.post('/checkout', async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Checkout error:', error);
+        logError('Stripe:Checkout', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -124,6 +126,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req: R
         res.json({ received: true });
     } catch (error) {
         console.error('Webhook handler error:', error);
+        logError('Stripe:Webhook', error);
         res.status(500).send('Webhook handler error');
     }
 });

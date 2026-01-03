@@ -21,7 +21,15 @@ export class DebugPanel {
                 particles: true,
                 shadows: true,
                 water: true,
-                weather: true
+                weather: true,
+                grass: true,
+                plants: true,
+                buildings: true
+            },
+            entities: {
+                creatures: true,
+                villagers: true,
+                spaceships: true
             }
         };
 
@@ -62,12 +70,27 @@ export class DebugPanel {
                     <label><input type="checkbox" id="dbg-shadows" checked> Terrain Shadows</label>
                     <label><input type="checkbox" id="dbg-water" checked> Water</label>
                     <label><input type="checkbox" id="dbg-weather" checked> Weather</label>
+                    <label><input type="checkbox" id="dbg-grass" checked> Grass</label>
+                    <label><input type="checkbox" id="dbg-plants" checked> Plants & Trees</label>
+                    <label><input type="checkbox" id="dbg-buildings" checked> Buildings</label>
+                </div>
+                <div class="control-group">
+                    <h4>Entities</h4>
+                    <label><input type="checkbox" id="dbg-creatures" checked> Creatures</label>
+                    <label><input type="checkbox" id="dbg-villagers" checked> Villagers</label>
+                    <label><input type="checkbox" id="dbg-spaceships" checked> Spaceships</label>
                 </div>
                 <div class="control-group">
                     <h4>Stats</h4>
                     <label><input type="checkbox" id="dbg-fps"> Show FPS</label>
                     <p>Entities: <span id="dbg-entity-count">0</span></p>
                     <p>Chunks: <span id="dbg-chunk-count">0</span></p>
+                    <button id="dbg-profiler-test" class="spawn-btn full-width" style="margin-top: 12px;">
+                        🔬 Start Profiler Test Scene
+                    </button>
+                    <p id="dbg-profiler-hint" style="display: none; font-size: 0.85em; color: #0f0; margin-top: 8px;">
+                        Use ← → arrow keys to change stages
+                    </p>
                 </div>
             </div>
 
@@ -99,13 +122,11 @@ export class DebugPanel {
 
             <div class="debug-content" id="tab-perf">
                 <div class="control-group">
-                    <h4>Frame Budget (16ms)</h4>
-                    <div id="dbg-perf-bars" class="perf-bars">
-                        <!-- Bars injected here -->
-                    </div>
-                    <div style="margin-top: 10px; font-size: 11px; color: #888;">
-                        *Values are smoothed averages
-                    </div>
+                    <h4>Three-Perf Monitor</h4>
+                    <p style="font-size: 0.9em; color: #aaa;">
+                        Using <b>three-perf</b> library. 
+                        Performance overlay is shown while this tab is active.
+                    </p>
                 </div>
             </div>
         `;
@@ -175,6 +196,11 @@ export class DebugPanel {
                 } else {
                     this.stopPerfMonitor();
                 }
+
+                // Update community button visibility based on tab
+                if (this.game.uiManager && this.game.uiManager.updateFeedbackButtonState) {
+                    this.game.uiManager.updateFeedbackButtonState();
+                }
             });
         });
 
@@ -216,9 +242,39 @@ export class DebugPanel {
         this.bindCheckbox('dbg-weather', (val) => {
             if (this.game.toggleWeather) this.game.toggleWeather(val);
         });
+        this.bindCheckbox('dbg-grass', (val) => {
+            this.settings.world.grass = val;
+            if (this.game.toggleGrass) this.game.toggleGrass(val);
+        });
+        this.bindCheckbox('dbg-plants', (val) => {
+            this.settings.world.plants = val;
+            if (this.game.togglePlants) this.game.togglePlants(val);
+        });
+        this.bindCheckbox('dbg-buildings', (val) => {
+            this.settings.world.buildings = val;
+            if (this.game.toggleBuildings) this.game.toggleBuildings(val);
+        });
+
+        // Entity Toggles
+        this.bindCheckbox('dbg-creatures', (val) => {
+            this.settings.entities.creatures = val;
+            if (this.game.toggleCreatures) this.game.toggleCreatures(val);
+        });
+        this.bindCheckbox('dbg-villagers', (val) => {
+            this.settings.entities.villagers = val;
+            if (this.game.toggleVillagers) this.game.toggleVillagers(val);
+        });
+        this.bindCheckbox('dbg-spaceships', (val) => {
+            this.settings.entities.spaceships = val;
+            if (this.game.toggleSpaceships) this.game.toggleSpaceships(val);
+        });
 
         this.bindCheckbox('dbg-fps', (val) => {
-            this.game.toggleStats(val);
+            // Toggle FPS counter visibility
+            if (this.game.stats) {
+                this.game.stats.dom.style.display = val ? 'block' : 'none';
+            }
+            this.updateProfilerState();
         });
 
         // Animal Toggles
@@ -252,6 +308,10 @@ export class DebugPanel {
                 if (this.game.spawnManager) {
                     this.game.spawnManager.allowedAnimals = this.settings.animals.allowed;
                 }
+
+                if (this.game.toggleAnimalVisibility) {
+                    this.game.toggleAnimalVisibility(name, e.target.checked);
+                }
             }
         });
 
@@ -263,6 +323,19 @@ export class DebugPanel {
                 this.handleSpawn(type, countType);
             });
         });
+
+        // Profiler Test Scene Button
+        const profilerTestBtn = document.getElementById('dbg-profiler-test');
+        if (profilerTestBtn) {
+            profilerTestBtn.addEventListener('click', () => {
+                if (this.game.profilerTestScene) {
+                    this.game.profilerTestScene.toggle();
+                    const isActive = this.game.profilerTestScene.isActive;
+                    profilerTestBtn.textContent = isActive ? '⏹ Stop Profiler Test' : '🔬 Start Profiler Test Scene';
+                    document.getElementById('dbg-profiler-hint').style.display = isActive ? 'block' : 'none';
+                }
+            });
+        }
     }
 
     bindCheckbox(id, callback) {
@@ -279,6 +352,10 @@ export class DebugPanel {
             const name = cb.value;
             if (state) this.settings.animals.allowed.add(name);
             else this.settings.animals.allowed.delete(name);
+
+            if (this.game.toggleAnimalVisibility) {
+                this.game.toggleAnimalVisibility(name, state);
+            }
         });
 
         if (this.game.spawnManager) {
@@ -293,14 +370,29 @@ export class DebugPanel {
         if (this.isVisible) {
             this.container.classList.remove('hidden');
             this.updateStats(); // Update stats on open
+            this.startStatsMonitor(); // Start polling
         } else {
             this.container.classList.add('hidden');
             this.stopPerfMonitor();
+            this.stopStatsMonitor(); // Stop stats polling
+        }
+    }
+
+    startStatsMonitor() {
+        if (this.statsInterval) return;
+        this.statsInterval = setInterval(() => this.updateStats(), 500); // 2Hz update for counts
+    }
+
+    stopStatsMonitor() {
+        if (this.statsInterval) {
+            clearInterval(this.statsInterval);
+            this.statsInterval = null;
         }
     }
 
     startPerfMonitor() {
         if (this.perfInterval) return;
+        this.updateProfilerState();
         this.perfInterval = setInterval(() => this.updatePerf(), 100);
     }
 
@@ -311,25 +403,21 @@ export class DebugPanel {
         }
     }
 
-    updatePerf() {
-        if (!this.game.profiler) return;
-        const report = this.game.profiler.getReport();
-        const container = document.getElementById('dbg-perf-bars');
-        if (!container) return;
+    updateProfilerState() {
+        if (!this.game.perf) return;
+        const perfTabActive = this.container.querySelector('.debug-tab[data-tab="perf"]').classList.contains('active');
 
-        container.innerHTML = report.map(item => {
-            const width = Math.min(100, (item.time / 16.66) * 100);
-            const color = item.time > 10 ? '#ff5555' : (item.time > 5 ? '#ffaa00' : '#55ff55');
-            return `
-                <div class="perf-row">
-                    <span class="perf-label">${item.label}</span>
-                    <div class="perf-track">
-                        <div class="perf-bar" style="width: ${width}%; background: ${color}"></div>
-                    </div>
-                    <span class="perf-val">${item.time.toFixed(2)}ms</span>
-                </div>
-            `;
-        }).join('');
+        // Show if tab is active
+        this.game.perf.visible = perfTabActive;
+
+        // Update UI button visibility
+        if (this.game.uiManager && this.game.uiManager.updateFeedbackButtonState) {
+            this.game.uiManager.updateFeedbackButtonState();
+        }
+    }
+
+    updatePerf() {
+        // three-perf handles its own rendering
     }
 
     handleSpawn(type, countStr) {
@@ -354,6 +442,11 @@ export class DebugPanel {
         const elChunks = document.getElementById('dbg-chunk-count');
 
         if (elEntities) elEntities.textContent = this.game.animals.length;
-        if (elChunks) elChunks.textContent = this.game.chunks.size;
+        if (elChunks) {
+            const total = this.game.chunks.size;
+            const visible = this.game.visibleChunkCount || 0;
+            elChunks.textContent = `${visible} / ${total}`;
+        }
     }
 }
+

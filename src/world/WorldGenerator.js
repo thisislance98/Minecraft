@@ -34,6 +34,11 @@ export class WorldGenerator {
         return this.biomeManager.getBiome(x, z, height);
     }
 
+    // Optimized version when height is already computed - avoids redundant noise calculations
+    getBiomeWithHeight(x, z, height) {
+        return this.biomeManager.getBiome(x, z, height);
+    }
+
     getTerrainHeight(x, z) {
         return this.terrainGenerator.getTerrainHeight(x, z);
     }
@@ -70,7 +75,8 @@ export class WorldGenerator {
 
                 // 2D Terrain Height
                 const groundHeight = this.getTerrainHeight(wx, wz);
-                const biome = this.getBiome(wx, wz);
+                // Use optimized biome lookup - reuse the height we just computed
+                const biome = this.getBiomeWithHeight(wx, wz, groundHeight);
 
                 for (let y = 0; y < this.game.chunkSize; y++) {
                     const wy = startY + y;

@@ -814,5 +814,284 @@ program
         process.exit(assetResult.missing?.length || entityResult.issues.length ? 1 : 0);
     });
 
+// ============================================================
+// PERFORMANCE PROFILING
+// ============================================================
+
+program
+    .command('profile')
+    .description('Run performance profiling and identify inefficiencies')
+    .option('--duration <seconds>', 'Duration to profile in seconds', '15')
+    .option('--samples <count>', 'Number of samples to collect', '60')
+    .option('--headless', 'Run browser in headless mode (not recommended for accurate profiling)', false)
+    .option('-q, --quiet', 'Suppress browser console output', true)
+    .action(async (options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const chalk = (await import('chalk')).default;
+
+        const duration = parseInt(options.duration) * 1000;
+        const sampleCount = parseInt(options.samples);
+        const sampleInterval = Math.floor(duration / sampleCount);
+
+        console.log(chalk.blue('\n⚡ Performance Profiler'));
+        console.log(chalk.dim(`Duration: ${options.duration}s, Samples: ${sampleCount}`));
+        console.log(chalk.dim('Launching game in headed mode for accurate profiling...\n'));
+
+        const browser = new GameBrowser({ headless: options.headless, quiet: options.quiet });
+        await browser.launch();
+        await browser.waitForGameLoad();
+
+        // Wait a moment for world to generate
+        console.log(chalk.dim('Waiting for world generation...'));
+        await new Promise(r => setTimeout(r, 3000));
+
+        console.log(chalk.cyan('\n📊 Collecting performance samples...'));
+
+        const samples = [];
+        let peakMemory = 0;
+        let peakTriangles = 0;
+        let peakDrawCalls = 0;
+        let peakFrameTime = 0;
+
+        for (let i = 0; i < sampleCount; i++) {
+            const sample = await browser.evaluate(() => {
+                const game = window.__VOXEL_GAME__;
+                if (!game) return null;
+
+                const renderer = game.renderer;
+                const info = renderer.info;
+
+                // Memory info
+                const memory = info.memory || {};
+                const programs = info.programs || [];
+
+                // Render info
+                const render = info.render || {};
+
+                // Get entity counts
+                const animals = game.animals?.length || 0;
+                const chunks = game.chunks?.size || 0;
+                const projectiles = game.projectiles?.length || 0;
+                const drops = game.drops?.length || 0;
+
+                // Get grass system info
+                const grassInstances = game.grassSystem?.totalInstances || 0;
+                const grassVisible = game.grassSystem?.visible !== false;
+
+                // FIXED: Use Stats.js FPS reading if available, otherwise estimate from frame timing
+                let fps = 60;
+                if (game.stats?.dom?.children?.[0]) {
+                    // Stats.js shows FPS in first panel
+                    const fpsText = game.stats.dom.children[0].innerText;
+                    fps = parseInt(fpsText) || 60;
+                } else if (game._lastFrameTime) {
+                    // Fallback: Calculate from game's internal timing
+                    fps = Math.round(1000 / (performance.now() - game._lastFrameTime));
+                }
+                // Store for next sample
+                game._lastFrameTime = performance.now();
+
+                // PERFORMANCE: Only count meshes/lights occasionally (expensive!)
+                let meshCount = game._cachedMeshCount || 0;
+                let lightCount = game._cachedLightCount || 0;
+                if (!game._lastMeshCount || performance.now() - game._lastMeshCount > 5000) {
+                    game._lastMeshCount = performance.now();
+                    meshCount = 0;
+                    lightCount = 0;
+                    game.scene?.traverse((obj) => {
+                        if (obj.isMesh) meshCount++;
+                        if (obj.isLight) lightCount++;
+                    });
+                    game._cachedMeshCount = meshCount;
+                    game._cachedLightCount = lightCount;
+                }
+
+                return {
+                    timestamp: performance.now(),
+                    triangles: render.triangles || 0,
+                    drawCalls: render.calls || 0,
+                    geometries: memory.geometries || 0,
+                    textures: memory.textures || 0,
+                    programs: programs.length,
+                    animals,
+                    chunks,
+                    projectiles,
+                    drops,
+                    meshCount,
+                    lightCount,
+                    grassInstances,
+                    grassVisible,
+                    fps: Math.round(fps)
+                };
+            });
+
+            if (sample) {
+                samples.push(sample);
+                if (sample.triangles > peakTriangles) peakTriangles = sample.triangles;
+                if (sample.drawCalls > peakDrawCalls) peakDrawCalls = sample.drawCalls;
+                if (sample.geometries > peakMemory) peakMemory = sample.geometries;
+
+                // Progress indicator
+                process.stdout.write(`\r  Sample ${i + 1}/${sampleCount} | Tris: ${(sample.triangles / 1000).toFixed(0)}k | Draws: ${sample.drawCalls} | FPS: ${sample.fps}`);
+            }
+
+            await new Promise(r => setTimeout(r, sampleInterval));
+        }
+
+        console.log('\n');
+
+        // Analyze results
+        const avgTriangles = Math.round(samples.reduce((a, s) => a + s.triangles, 0) / samples.length);
+        const avgDrawCalls = Math.round(samples.reduce((a, s) => a + s.drawCalls, 0) / samples.length);
+        const avgFPS = Math.round(samples.reduce((a, s) => a + s.fps, 0) / samples.length);
+        const minFPS = Math.min(...samples.map(s => s.fps));
+        const lastSample = samples[samples.length - 1];
+
+        console.log(chalk.blue('═══════════════════════════════════════'));
+        console.log(chalk.blue('        PERFORMANCE REPORT'));
+        console.log(chalk.blue('═══════════════════════════════════════\n'));
+
+        // Render Stats
+        console.log(chalk.cyan('📐 Render Stats:'));
+        console.log(`   Avg Triangles:    ${(avgTriangles / 1000).toFixed(1)}k`);
+        console.log(`   Peak Triangles:   ${(peakTriangles / 1000).toFixed(1)}k`);
+        console.log(`   Avg Draw Calls:   ${avgDrawCalls}`);
+        console.log(`   Peak Draw Calls:  ${peakDrawCalls}`);
+        console.log(`   Avg FPS:          ${avgFPS}`);
+        console.log(`   Min FPS:          ${minFPS}`);
+        console.log('');
+
+        // Memory Stats
+        console.log(chalk.cyan('💾 Memory Stats:'));
+        console.log(`   Geometries:       ${lastSample?.geometries || 0}`);
+        console.log(`   Textures:         ${lastSample?.textures || 0}`);
+        console.log(`   Shader Programs:  ${lastSample?.programs || 0}`);
+        console.log('');
+
+        // Scene Stats
+        console.log(chalk.cyan('🎮 Scene Stats:'));
+        console.log(`   Active Chunks:    ${lastSample?.chunks || 0}`);
+        console.log(`   Animals:          ${lastSample?.animals || 0}`);
+        console.log(`   Projectiles:      ${lastSample?.projectiles || 0}`);
+        console.log(`   Drops:            ${lastSample?.drops || 0}`);
+        console.log(`   Total Meshes:     ${lastSample?.meshCount || 0}`);
+        console.log(`   Lights:           ${lastSample?.lightCount || 0}`);
+        console.log(`   Grass Instances:  ${lastSample?.grassInstances || 0}`);
+        console.log('');
+
+        // Inefficiency Analysis
+        const issues = [];
+
+        if (avgTriangles > 500000) {
+            issues.push({
+                severity: 'HIGH',
+                area: 'Triangles',
+                message: `High triangle count (${(avgTriangles / 1000).toFixed(0)}k avg)`,
+                suggestion: 'Consider LOD system, frustum culling, or reducing mesh complexity'
+            });
+        } else if (avgTriangles > 200000) {
+            issues.push({
+                severity: 'MEDIUM',
+                area: 'Triangles',
+                message: `Moderate triangle count (${(avgTriangles / 1000).toFixed(0)}k avg)`,
+                suggestion: 'Monitor for performance impact on lower-end devices'
+            });
+        }
+
+        if (avgDrawCalls > 1000) {
+            issues.push({
+                severity: 'HIGH',
+                area: 'Draw Calls',
+                message: `Very high draw call count (${avgDrawCalls} avg)`,
+                suggestion: 'Use instancing, merge geometries, or reduce unique materials'
+            });
+        } else if (avgDrawCalls > 500) {
+            issues.push({
+                severity: 'MEDIUM',
+                area: 'Draw Calls',
+                message: `High draw call count (${avgDrawCalls} avg)`,
+                suggestion: 'Consider batching similar objects or using instanced rendering'
+            });
+        }
+
+        if (minFPS < 30) {
+            issues.push({
+                severity: 'HIGH',
+                area: 'Frame Rate',
+                message: `FPS drops below 30 (min: ${minFPS})`,
+                suggestion: 'Profile specific systems (grass, chunks, entities) to find bottleneck'
+            });
+        } else if (minFPS < 50) {
+            issues.push({
+                severity: 'MEDIUM',
+                area: 'Frame Rate',
+                message: `FPS drops below 50 (min: ${minFPS})`,
+                suggestion: 'May impact smoothness on regular monitors'
+            });
+        }
+
+        if ((lastSample?.lightCount || 0) > 5) {
+            issues.push({
+                severity: 'MEDIUM',
+                area: 'Lights',
+                message: `${lastSample?.lightCount} lights in scene`,
+                suggestion: 'Consider baking lighting or reducing dynamic light count'
+            });
+        }
+
+        if ((lastSample?.grassInstances || 0) > 50000 && lastSample?.grassVisible) {
+            issues.push({
+                severity: 'LOW',
+                area: 'Grass System',
+                message: `${lastSample?.grassInstances} grass instances active`,
+                suggestion: 'Grass system may impact lower-end devices'
+            });
+        }
+
+        const meshPerChunk = lastSample?.chunks > 0
+            ? Math.round(lastSample.meshCount / lastSample.chunks)
+            : 0;
+        if (meshPerChunk > 100) {
+            issues.push({
+                severity: 'MEDIUM',
+                area: 'Chunk Complexity',
+                message: `${meshPerChunk} meshes per chunk on average`,
+                suggestion: 'Consider merging block geometries within chunks'
+            });
+        }
+
+        // Print Issues
+        if (issues.length > 0) {
+            console.log(chalk.yellow('⚠️  INEFFICIENCIES DETECTED:\n'));
+            issues.forEach((issue, i) => {
+                const color = issue.severity === 'HIGH' ? chalk.red
+                    : issue.severity === 'MEDIUM' ? chalk.yellow
+                        : chalk.dim;
+                console.log(color(`   ${i + 1}. [${issue.severity}] ${issue.area}`));
+                console.log(chalk.white(`      ${issue.message}`));
+                console.log(chalk.dim(`      → ${issue.suggestion}\n`));
+            });
+        } else {
+            console.log(chalk.green('✅ No significant inefficiencies detected!\n'));
+        }
+
+        // Performance Score
+        let score = 100;
+        issues.forEach(issue => {
+            if (issue.severity === 'HIGH') score -= 25;
+            else if (issue.severity === 'MEDIUM') score -= 10;
+            else score -= 5;
+        });
+        score = Math.max(0, score);
+
+        const scoreColor = score >= 80 ? chalk.green : score >= 50 ? chalk.yellow : chalk.red;
+        console.log(chalk.blue('═══════════════════════════════════════'));
+        console.log(`   Performance Score: ${scoreColor(score + '/100')}`);
+        console.log(chalk.blue('═══════════════════════════════════════\n'));
+
+        await browser.close();
+        process.exit(issues.filter(i => i.severity === 'HIGH').length > 0 ? 1 : 0);
+    });
+
 program.parse();
 

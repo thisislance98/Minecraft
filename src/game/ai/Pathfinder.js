@@ -1,22 +1,57 @@
 import * as THREE from 'three';
 import { Blocks } from '../core/Blocks.js';
 
+// OPTIMIZED: Binary heap priority queue - O(log n) vs O(n log n)
 class PriorityQueue {
     constructor() {
-        this.elements = [];
+        this.heap = [];
     }
 
     enqueue(element, priority) {
-        this.elements.push({ element, priority });
-        this.elements.sort((a, b) => a.priority - b.priority);
+        this.heap.push({ element, priority });
+        this._bubbleUp(this.heap.length - 1);
     }
 
     dequeue() {
-        return this.elements.shift().element;
+        if (this.heap.length === 0) return null;
+        const result = this.heap[0].element;
+        const last = this.heap.pop();
+        if (this.heap.length > 0) {
+            this.heap[0] = last;
+            this._bubbleDown(0);
+        }
+        return result;
     }
 
     isEmpty() {
-        return this.elements.length === 0;
+        return this.heap.length === 0;
+    }
+
+    _bubbleUp(index) {
+        while (index > 0) {
+            const parentIndex = Math.floor((index - 1) / 2);
+            if (this.heap[parentIndex].priority <= this.heap[index].priority) break;
+            [this.heap[parentIndex], this.heap[index]] = [this.heap[index], this.heap[parentIndex]];
+            index = parentIndex;
+        }
+    }
+
+    _bubbleDown(index) {
+        const length = this.heap.length;
+        while (true) {
+            const left = 2 * index + 1;
+            const right = 2 * index + 2;
+            let smallest = index;
+            if (left < length && this.heap[left].priority < this.heap[smallest].priority) {
+                smallest = left;
+            }
+            if (right < length && this.heap[right].priority < this.heap[smallest].priority) {
+                smallest = right;
+            }
+            if (smallest === index) break;
+            [this.heap[smallest], this.heap[index]] = [this.heap[index], this.heap[smallest]];
+            index = smallest;
+        }
     }
 }
 

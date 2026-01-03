@@ -59,8 +59,9 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GrassSystem } from './systems/GrassSystem.js';
+import { ProfilerTestScene } from './systems/ProfilerTestScene.js';
 
-import { Profiler } from './utils/Profiler.js';
+import { ThreePerf } from 'three-perf';
 
 import { VerificationUtils } from './utils/VerificationUtils.js';
 import { AnalyticsManager } from './systems/AnalyticsManager.js';
@@ -81,10 +82,13 @@ export class VoxelGame {
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.renderer = new THREE.WebGLRenderer({ antialias: false });
+        // PERFORMANCE: Limit pixel ratio to 1.5 max (prevents 4x rendering on retina)
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setClearColor(0x4682B4); // Steel blue
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // PERFORMANCE: Use PCFShadowMap (middle ground between quality and performance)
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
         // Performance Stats
         this.stats = new Stats();
@@ -93,8 +97,17 @@ export class VoxelGame {
 
 
 
-        // In-Depth Profiler
-        this.profiler = new GameProfiler();
+
+        // In-Depth Profiler (three-perf)
+        this.perf = new ThreePerf({
+            anchorX: 'left',
+            anchorY: 'top',
+            domElement: document.body, // attach to body to be on top of UI
+            renderer: this.renderer,
+            scale: 1, // Scaling factor
+        });
+        // Default to hidden, toggled by DebugPanel
+        this.perf.visible = false;
 
         // Visual Improvements: Tone Mapping
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -216,7 +229,17 @@ export class VoxelGame {
         this.entityManager = new EntityManager(this);
         this.weatherSystem = new WeatherSystem(this);
         this.environment = new Environment(this.scene, this);
-        this.grassSystem = new GrassSystem(this.scene);
+        this.grassSystem = new GrassSystem(this);
+
+        this.creaturesVisible = true;
+        this.villagersVisible = true;
+        this.spaceshipsVisible = true;
+        this.waterVisible = true;
+        this.plantsVisible = true;
+        this.buildingsVisible = true;
+
+        // Granular visibility control
+        this.allowedAnimalTypes = new Set(Object.keys(AnimalClasses));
 
         this.animals = [];
         this.spawnManager = new SpawnManager(this);
@@ -229,6 +252,7 @@ export class VoxelGame {
         this.AnimalClasses = AnimalClasses;
         this.parkourManager = new ParkourManager(this);
         this.questSystem = new QuestSystem(this);
+        this.profilerTestScene = new ProfilerTestScene(this);
         this.updateTimeStop = (dt) => {
             if (this.gameState && this.gameState.timers.timeStop > 0) {
                 this.gameState.timers.timeStop -= dt;
@@ -362,6 +386,8 @@ export class VoxelGame {
         // Start game loop
         this.lastTime = performance.now();
         this.processChunkQueue();
+
+        // Wrap animate to include perf
         this.animate();
 
         // Add the new wand to the inventory for testing
@@ -444,6 +470,79 @@ export class VoxelGame {
             this.inputManager.unlock();
         } else {
             this.inputManager.lock();
+        }
+    }
+
+    toggleGrass(visible) {
+        if (this.grassSystem) {
+            this.grassSystem.setVisible(visible);
+        }
+    }
+
+    toggleCreatures(visible) {
+        this.creaturesVisible = visible;
+        this.updateEntityVisibility();
+    }
+
+    toggleVillagers(visible) {
+        this.villagersVisible = visible;
+        this.updateEntityVisibility();
+    }
+
+    toggleSpaceships(visible) {
+        this.spaceshipsVisible = visible;
+        this.updateEntityVisibility();
+    }
+
+    toggleAnimalVisibility(type, visible) {
+        if (visible) {
+            this.allowedAnimalTypes.add(type);
+        } else {
+            this.allowedAnimalTypes.delete(type);
+        }
+        this.updateEntityVisibility();
+    }
+
+    updateEntityVisibility() {
+        if (!this.animals) return;
+
+        for (const animal of this.animals) {
+            const type = animal.constructor.name;
+
+            // 1. Check global category switch
+            let categoryVisible = true;
+            if (type === 'Villager') categoryVisible = this.villagersVisible;
+            else if (type === 'Spaceship') categoryVisible = this.spaceshipsVisible;
+            else categoryVisible = this.creaturesVisible; // default category
+
+            // 2. Check granular switch
+            const specificVisible = this.allowedAnimalTypes.has(type);
+
+            const visible = categoryVisible && specificVisible;
+
+            // Handle both mesh and group (some entities like Butterflies, Pixies use group)
+            if (animal.mesh) {
+                animal.mesh.visible = visible;
+            }
+            if (animal.group) {
+                animal.group.visible = visible;
+            }
+        }
+
+        // Handle special entities not in animals array
+        // Dragon is stored separately
+        if (this.dragon && this.dragon.mesh) {
+            this.dragon.mesh.visible = this.creaturesVisible;
+        }
+
+        // BirdManager and MosquitoManager are in entityManager
+        if (this.entityManager) {
+            if (this.entityManager.birdManager && this.entityManager.birdManager.birdGroup) {
+                this.entityManager.birdManager.birdGroup.visible = this.creaturesVisible;
+            }
+            if (this.entityManager.mosquitoManager && this.entityManager.mosquitoManager.mosquitoGroup) {
+                this.entityManager.mosquitoManager.mosquitoGroup.visible = this.creaturesVisible;
+            }
         }
     }
 
@@ -1289,20 +1388,27 @@ export class VoxelGame {
 
         // 1. Unload far chunks
         const unloadDist = this.renderDistance + 2;
+        const yUnloadDist = 3; // Smaller Y unload distance
         for (const [key, chunk] of this.chunks) {
-            if (Math.abs(chunk.cx - cx) > unloadDist || Math.abs(chunk.cz - cz) > unloadDist) {
+            const xzFar = Math.abs(chunk.cx - cx) > unloadDist || Math.abs(chunk.cz - cz) > unloadDist;
+            const yFar = Math.abs(chunk.cy - cy) > yUnloadDist;
+            if (xzFar || yFar) {
                 this.unloadChunk(key);
-                // Also remove from queue if it's pending?
-                // Ideally yes, to avoid generating things we immediately unload.
-                // Brute force filter the queue:
+                // Also remove from queue if it's pending
                 this.chunkGenQueue = this.chunkGenQueue.filter(req =>
-                    Math.abs(req.cx - cx) <= unloadDist && Math.abs(req.cz - cz) <= unloadDist
+                    Math.abs(req.cx - cx) <= unloadDist &&
+                    Math.abs(req.cz - cz) <= unloadDist &&
+                    Math.abs(req.cy - cy) <= yUnloadDist
                 );
             }
         }
 
         // 2. Queue missing chunks
         // Generate chunks around the player
+        // PERFORMANCE FIX: Use limited Y-range instead of full cubic renderDistance
+        // This reduces chunks from ~4900 (17^3) to ~1400 (17*17*5)
+        const yRenderDistance = 2; // Only 2 chunks above/below player (5 total Y-levels)
+
         for (let x = cx - this.renderDistance; x <= cx + this.renderDistance; x++) {
             for (let z = cz - this.renderDistance; z <= cz + this.renderDistance; z++) {
 
@@ -1312,18 +1418,18 @@ export class VoxelGame {
                     continue;
                 }
 
-                // Determine vertical range dynamically around player (supports Moon travel)
-                // cy is derived from playerChunk above
-                for (let y = cy - this.renderDistance; y <= cy + this.renderDistance; y++) {
+                // PERFORMANCE FIX: Limited vertical range (2 above, 2 below player)
+                // This still supports moon travel since cy moves with the player
+                const minY = Math.max(0, cy - yRenderDistance); // Don't go below Y=0
+                const maxY = cy + yRenderDistance;
+
+                for (let y = minY; y <= maxY; y++) {
                     const chunkKey = `${x},${y},${z}`;
 
                     // Skip if already loaded
                     if (this.chunks.has(chunkKey)) continue;
 
                     // Skip if already in queue
-                    // Optimization: Check existing keys in queue. 
-                    // Since queue can be large, maybe a Set for pending keys?
-                    // For now, simple find is okay if render distance isn't huge.
                     const alreadyQueued = this.chunkGenQueue.some(req => req.key === chunkKey);
                     if (alreadyQueued) continue;
 
@@ -1490,6 +1596,9 @@ export class VoxelGame {
         const playerCX = Math.floor(this.player.position.x / this.chunkSize);
         const playerCZ = Math.floor(this.player.position.z / this.chunkSize);
 
+        let visibleCount = 0;
+        const grassEnabled = this.grassSystem ? this.grassSystem.visible : false;
+
         for (const chunk of this.chunks.values()) {
             if (chunk.mesh) {
                 // Calculate horizontal distance from player
@@ -1503,12 +1612,22 @@ export class VoxelGame {
                 if (isGroundChunk && withinRenderDistance) {
                     // Always show ground chunks within render distance
                     // BUT only if terrain toggle is on!
-                    chunk.mesh.visible = this.terrainVisible;
+                    // chunk.mesh.visible = this.terrainVisible;
+
+                    // FIXED: Apply normal culling to ground chunks too
+                    const isVisible = this.terrainVisible && chunk.isInFrustum(this.frustum);
+                    chunk.mesh.visible = isVisible;
+                    if (chunk.grassMesh) chunk.grassMesh.visible = isVisible && grassEnabled;
+
                 } else {
                     // Apply normal frustum culling for above-ground chunks
-                    chunk.mesh.visible = this.terrainVisible && chunk.isInFrustum(this.frustum);
+                    const isVisible = this.terrainVisible && chunk.isInFrustum(this.frustum);
+                    chunk.mesh.visible = isVisible;
+                    if (chunk.grassMesh) chunk.grassMesh.visible = isVisible && grassEnabled;
+                    if (isVisible) visibleCount++;
                 }
             }
+            this.visibleChunkCount = visibleCount;
         }
     }
 
@@ -1542,9 +1661,9 @@ export class VoxelGame {
         this.uiManager.updatePosition(this.player.position);
         this.uiManager.updateFPS();
 
-        // Track scene object count every 5 seconds
+        // PERFORMANCE: Track scene object count every 30 seconds (was 5s)
         const now = performance.now();
-        if (!this._lastSceneCount || now - this._lastSceneCount > 5000) {
+        if (!this._lastSceneCount || now - this._lastSceneCount > 30000) {
             this._lastSceneCount = now;
             let count = 0;
             this.scene.traverse(() => count++);
@@ -1591,8 +1710,9 @@ export class VoxelGame {
     }
 
     safelyUpdateEntity(entity, deltaTime, list, index) {
-        // Performance Guard
-        const start = performance.now();
+        // PERFORMANCE: Only profile every 60 frames to reduce overhead
+        const shouldProfile = (this.frameCount % 60 === 0);
+        const start = shouldProfile ? performance.now() : 0;
         let success = false;
 
         try {
@@ -1621,34 +1741,36 @@ export class VoxelGame {
             return false; // Remove it
         }
 
-        const duration = performance.now() - start;
-        if (duration > 10) { // 10ms budget per entity!
-            console.warn(`[Guard] Entity took too long (${duration.toFixed(2)}ms):`, entity);
-
-            return false; // Remove it
+        // PERFORMANCE: Only warn, don't remove entities for taking too long
+        if (shouldProfile) {
+            const duration = performance.now() - start;
+            if (duration > 25) { // 25ms budget - warn only, don't remove
+                console.warn(`[Guard] Entity slow (${duration.toFixed(2)}ms):`, entity.constructor?.name);
+            }
         }
 
         return true;
     }
 
     animate() {
+        if (this.perf) this.perf.begin();
         this.stats.begin();
-        this.profiler.tick(); // Update averages from previous frame
+        // this.profiler.tick(); // DEPRECATED
 
         requestAnimationFrame(() => this.animate());
 
-        this.profiler.start('WorldGen');
+        // this.profiler.start('WorldGen');
         this.processChunkQueue();
-        this.profiler.end('WorldGen');
+        // this.profiler.end('WorldGen');
 
         const now = performance.now();
         const deltaTime = (now - this.lastTime) / 1000;
         this.lastTime = now;
 
         // UI Update (Speech bubbles)
-        this.profiler.start('UI');
+        // this.profiler.start('UI');
         this.uiManager.update(deltaTime);
-        this.profiler.end('UI');
+        // this.profiler.end('UI');
 
         // UI-Only Mode: Skip all world/entity updates
         if (this.isUIOnly) {
@@ -1657,29 +1779,40 @@ export class VoxelGame {
             return;
         }
 
+        // Profiler Test Mode: Skip ALL game systems for clean isolated testing
+        if (this.profilerTestScene && this.profilerTestScene.isActive) {
+            this.renderer.render(this.scene, this.camera);
+            if (this.perf) this.perf.end();
+            this.stats.end();
+            return;
+        }
+
         // Update physics and player only when locked (active play) OR mobile controls are enabled
         if (this.controls.isLocked || this.gameState.flags.mobileControls) {
             this.updateTimeStop(deltaTime);
-            this.profiler.start('Player');
+            // this.profiler.start('Player');
             this.player.update(deltaTime);
-            this.profiler.end('Player');
+            // this.profiler.end('Player');
 
-            this.profiler.start('Physics');
+            // this.profiler.start('Physics');
             this.physicsManager.update();
-            this.profiler.end('Physics');
+            // this.profiler.end('Physics');
         }
 
 
         // Always update chunks and check for new ones, so the world generates around you even before starting
-        // Throttle chunk checking (expensive)
-        if (this.frameCount % 15 === 0) {
-            this.checkChunks();
-        }
+        // SKIP when in profiler test mode for clean isolated testing
+        if (!this.profilerTestScene || !this.profilerTestScene.isActive) {
+            // Throttle chunk checking (expensive)
+            if (this.frameCount % 15 === 0) {
+                this.checkChunks();
+            }
 
-        // Update dirty chunks every frame (throttled internally)
-        this.profiler.start('ChunkMeshing');
-        this.updateChunks();
-        this.profiler.end('ChunkMeshing');
+            // Update dirty chunks every frame (throttled internally)
+            // this.profiler.start('ChunkMeshing');
+            this.updateChunks();
+            // this.profiler.end('ChunkMeshing');
+        }
 
         this.frameCount = (this.frameCount || 0) + 1;
 
@@ -1687,7 +1820,7 @@ export class VoxelGame {
         if (this.studio) this.studio.update(deltaTime);
 
         // Update animals
-        this.profiler.start('Entities');
+        // this.profiler.start('Entities');
         for (let i = this.animals.length - 1; i >= 0; i--) {
             const animal = this.animals[i];
             const keep = this.safelyUpdateEntity(animal, deltaTime, this.animals, i);
@@ -1814,17 +1947,17 @@ export class VoxelGame {
             }
         }
 
-        this.profiler.end('Entities');
+        // this.profiler.end('Entities');
 
         // Frustum culling for performance
         this.updateFrustumCulling();
 
         // Day/Night Cycle - use Environment module
         if (!this.gameState.debug || this.gameState.debug.environment) {
-            this.profiler.start('Environment');
+            // this.profiler.start('Environment');
             this.environment.updateDayNightCycle(deltaTime, this.player.position);
             if (this.grassSystem) this.grassSystem.update(deltaTime);
-            this.profiler.end('Environment');
+            // this.profiler.end('Environment');
         }
 
         if (this.weatherSystem) {
@@ -1865,13 +1998,16 @@ export class VoxelGame {
         this.updateDebug();
 
         // Visual Improvements: Use EffectComposer for post-processing (Bloom)
-        this.profiler.start('Render');
-        if (this.composer) {
+        // Render Scene
+        // Skip composer when in profiler test mode for clean isolated rendering
+        if (this.profilerTestScene && this.profilerTestScene.isActive) {
+            this.renderer.render(this.scene, this.camera);
+        } else if (this.composer) {
             this.composer.render();
         } else {
             this.renderer.render(this.scene, this.camera);
         }
-        this.profiler.end('Render');
+        if (this.perf) this.perf.end();
         this.stats.end();
     }
 
@@ -1947,6 +2083,9 @@ export class VoxelGame {
 
     toggleTerrainShadows(enabled) {
         this.terrainShadowsEnabled = enabled; // Store state for new chunks
+        if (this.environment) {
+            this.environment.toggleShadows(enabled);
+        }
         console.log(`[Game] Toggling terrain shadows: ${enabled}`);
 
         // Update existing chunks
@@ -1963,6 +2102,9 @@ export class VoxelGame {
         for (const chunk of this.chunks.values()) {
             if (chunk.mesh) {
                 chunk.mesh.visible = visible;
+            }
+            if (chunk.grassMesh) {
+                chunk.grassMesh.visible = visible;
             }
         }
     }
@@ -1985,10 +2127,49 @@ export class VoxelGame {
     }
 
     toggleWater(enabled) {
+        this.waterVisible = enabled;
         if (this.waterSystem) {
             this.waterSystem.enabled = enabled;
         }
-        console.log(`[Game] Water Logic: ${enabled}`);
+        // Update water blocks visibility in all chunks
+        this.updateWaterVisibility();
+        console.log(`[Game] Water: ${enabled}`);
+    }
+
+    updateWaterVisibility() {
+        // Rebuild chunks to show/hide water blocks
+        // Mark all chunks as dirty so they rebuild without water if disabled
+        for (const chunk of this.chunks.values()) {
+            chunk.dirty = true;
+        }
+    }
+
+    togglePlants(enabled) {
+        this.plantsVisible = enabled;
+        // Update plant entity visibility
+        if (this.animals) {
+            for (const animal of this.animals) {
+                const type = animal.constructor.name;
+                if (type.includes('Plant') || type === 'FallingTree') {
+                    if (animal.mesh) animal.mesh.visible = enabled;
+                    if (animal.group) animal.group.visible = enabled;
+                }
+            }
+        }
+        // Mark chunks dirty to rebuild without plant blocks
+        for (const chunk of this.chunks.values()) {
+            chunk.dirty = true;
+        }
+        console.log(`[Game] Plants: ${enabled}`);
+    }
+
+    toggleBuildings(enabled) {
+        this.buildingsVisible = enabled;
+        // Mark chunks dirty to rebuild - buildings are part of terrain
+        for (const chunk of this.chunks.values()) {
+            chunk.dirty = true;
+        }
+        console.log(`[Game] Buildings: ${enabled}`);
     }
 
     toggleWeather(enabled) {
@@ -2004,7 +2185,7 @@ export class VoxelGame {
             this.stats.dom.style.display = visible ? 'block' : 'none';
         }
         if (this.profiler) {
-            this.profiler.enable(visible);
+            // this.profiler.enable(visible);
         }
     }
 

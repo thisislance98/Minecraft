@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../config';
 import * as admin from 'firebase-admin';
+import { logError } from '../utils/logger';
 
 const router = Router();
 
@@ -36,6 +37,7 @@ router.get('/', async (req: Request, res: Response) => {
         res.json({ items });
     } catch (error: any) {
         console.error('[Feedback] Get feedback error:', error);
+        logError('Feedback:Get', error);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });
@@ -77,6 +79,7 @@ router.post('/', async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error('[Feedback] Submit feedback error:', error);
+        logError('Feedback:Submit', error);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });
@@ -122,6 +125,7 @@ router.post('/:id/vote', async (req: Request, res: Response) => {
         }
     } catch (error: any) {
         console.error('[Feedback] Vote error:', error);
+        logError('Feedback:Vote', error);
         res.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 });

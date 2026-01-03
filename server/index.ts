@@ -20,6 +20,9 @@ import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreature
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { WebSocketServer } from 'ws';
 import { AntigravitySession } from './services/AntigravitySession';
+import { logError } from './utils/logger';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ============ Types ============
 
@@ -41,16 +44,31 @@ app.use((req, res, next) => {
     }
 });
 
+// Request logging
+app.use((req, res, next) => {
+    console.log(`[Express] ${req.method} ${req.url}`);
+    console.error('!!! DEBUG ACCESS LOG HIT !!! ' + req.url);
+    try {
+        const logPath = '/tmp/debug_access.log';
+        const entry = `[${new Date().toISOString()}] ${req.method} ${req.url}\n`;
+        fs.appendFileSync(logPath, entry);
+    } catch (e) { console.error('Failed to write access log', e); }
+    next();
+});
+
 app.use('/api', stripeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/feedback', feedbackRoutes); // Deprecated but kept for compatibility during migration
 app.use('/api/channels', channelRoutes);
 app.use('/api/destinations', destinationRoutes);
 
-// Request logging
-app.use((req, res, next) => {
-    console.log(`[Express] ${req.method} ${req.url}`);
-    next();
+// Global Error Handler
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('[Express] Uncaught Global Error:', err);
+    logError('GlobalExpress', err);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal Server Error', details: err.message });
+    }
 });
 
 // Create HTTP server

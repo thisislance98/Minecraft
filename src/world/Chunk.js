@@ -29,6 +29,11 @@ export class Chunk {
             Blocks.FLOWER_RED, Blocks.FLOWER_YELLOW, Blocks.MUSHROOM_RED, Blocks.MUSHROOM_BROWN,
             Blocks.LONG_GRASS, Blocks.FERN, Blocks.FLOWER_BLUE, Blocks.DEAD_BUSH
         ]);
+        // Tree-related blocks (leaves and logs) - also part of plant life toggle
+        this.treeTypes = new Set([
+            Blocks.LEAVES, Blocks.PINE_LEAVES, Blocks.BIRCH_LEAVES, Blocks.DARK_OAK_LEAVES,
+            Blocks.WILLOW_LEAVES, Blocks.ACACIA_LEAVES, Blocks.LOG, Blocks.CACTUS
+        ]);
         this.doorTypes = new Set([Blocks.DOOR_CLOSED, Blocks.DOOR_OPEN]);
         this.fenceTypes = new Set([Blocks.FENCE]);
         this.grassMesh = null;
@@ -193,11 +198,28 @@ export class Chunk {
 
         let hasGeom = false;
 
+        // Cache terrain heights per column to avoid redundant getTerrainHeight calls
+        // This is a significant optimization since getTerrainHeight involves expensive noise calculations
+        const terrainHeightCache = new Map();
+        const getTerrainHeightCached = (wx, wz) => {
+            const key = `${wx},${wz}`;
+            if (!terrainHeightCache.has(key)) {
+                terrainHeightCache.set(key, this.game.worldGen.getTerrainHeight(wx, wz));
+            }
+            return terrainHeightCache.get(key);
+        };
+
         for (let lz = 0; lz < this.size; lz++) {
             for (let ly = 0; ly < this.size; ly++) {
                 for (let lx = 0; lx < this.size; lx++) {
                     const blockType = this.blocks[this.getIndex(lx, ly, lz)];
                     if (!blockType || blockType === Blocks.AIR) continue;
+
+                    // Skip water blocks if water is disabled
+                    if (blockType === Blocks.WATER && this.game.waterVisible === false) continue;
+
+                    // Skip plant and tree blocks if plants are disabled
+                    if ((this.plantTypes.has(blockType) || this.treeTypes.has(blockType)) && this.game.plantsVisible === false) continue;
 
                     let materials = this.game.blockMaterialIndices[blockType];
                     if (!materials) {
@@ -498,8 +520,8 @@ export class Chunk {
                             const matIndex = materials[face.idx];
                             const buffer = getBuffer(matIndex);
 
-                            // Add face vertices
-                            const terrainH = this.game.worldGen.getTerrainHeight(wx, wz);
+                            // Add face vertices - use cached terrain height
+                            const terrainH = getTerrainHeightCached(wx, wz);
 
                             for (let i = 0; i < face.corners.length; i++) {
                                 const corner = face.corners[i];

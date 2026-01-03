@@ -1008,6 +1008,9 @@ export class UIManager {
         if (this.audioToggle && this.game.soundManager) {
             this.audioToggle.checked = !this.game.soundManager.isMuted;
         }
+        if (this.minimapToggle) {
+            this.minimapToggle.checked = this.minimap ? this.minimap.visible : false;
+        }
     }
 
     setupHelpModal() {
@@ -1107,6 +1110,7 @@ export class UIManager {
         this.audioToggle = document.getElementById('settings-audio-toggle');
         this.fpsToggle = document.getElementById('settings-fps-toggle');
         this.positionToggle = document.getElementById('settings-position-toggle');
+        this.minimapToggle = document.getElementById('settings-minimap-toggle');
         this.mobileToggle = document.getElementById('settings-mobile-toggle');
         this.settingsHelpBtn = document.getElementById('settings-help-btn');
         this.debugElement = document.getElementById('debug');
@@ -1120,6 +1124,7 @@ export class UIManager {
         const savedAudio = localStorage.getItem('settings_audio') !== 'false';
         const savedFps = localStorage.getItem('settings_fps') !== 'false';
         const savedPosition = localStorage.getItem('settings_position') !== 'false';
+        const savedMinimap = localStorage.getItem('settings_minimap') !== 'false';
 
         // Mobile Controls: default to auto-detected state if not previously set
         let savedMobile = localStorage.getItem('settings_mobile');
@@ -1147,6 +1152,10 @@ export class UIManager {
         if (this.positionToggle) {
             this.positionToggle.checked = savedPosition;
             if (this.debugElement) this.debugElement.style.display = savedPosition ? 'block' : 'none';
+        }
+        if (this.minimapToggle) {
+            this.minimapToggle.checked = savedMinimap;
+            if (this.minimap) this.minimap.setVisible(savedMinimap);
         }
         if (this.mobileToggle) {
             this.mobileToggle.checked = savedMobile;
@@ -1237,6 +1246,17 @@ export class UIManager {
                 localStorage.setItem('settings_position', enabled);
                 if (this.debugElement) {
                     this.debugElement.style.display = enabled ? 'block' : 'none';
+                }
+            });
+        }
+
+        // Minimap toggle
+        if (this.minimapToggle) {
+            this.minimapToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_minimap', enabled);
+                if (this.minimap) {
+                    this.minimap.setVisible(enabled);
                 }
             });
         }
@@ -4478,8 +4498,27 @@ export class UIManager {
 
         if (desktopSettingsBtn) desktopSettingsBtn.style.display = desktopDisplay;
         if (desktopChatBtn) desktopChatBtn.style.display = desktopDisplay;
-        if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = desktopDisplay;
+        // Managed by updateFeedbackButtonState now
+        // if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = desktopDisplay;
 
+
+        // Call the centralized button state updater
+        this.updateFeedbackButtonState();
+    }
+
+    updateFeedbackButtonState() {
+        if (!this.feedbackBtn) return;
+
+        const isMobile = this.game.gameState.flags.mobileControls;
+        const isProfilerVisible = this.game.perf && this.game.perf.visible;
+
+        // Also check if performance tab is active in debug panel
+        const isPerfTabActive = this.debugPanel?.container?.querySelector('.debug-tab[data-tab="perf"]')?.classList.contains('active') || false;
+
+        // Hide if mobile controls are active OR profiler is visible OR perf tab is active
+        const shouldHide = isMobile || isProfilerVisible || isPerfTabActive;
+
+        this.feedbackBtn.style.display = shouldHide ? 'none' : 'block';
     }
 
     createFeedbackButton() {
@@ -4749,6 +4788,14 @@ export class UIManager {
         }
         this.villagerChatPrompt.style.display = 'block';
         this.currentTalkingVillager = villager;
+
+        // Auto-hide prompt after 4 seconds
+        if (this.villagerPromptTimeout) {
+            clearTimeout(this.villagerPromptTimeout);
+        }
+        this.villagerPromptTimeout = setTimeout(() => {
+            this.hideVillagerChatPrompt();
+        }, 4000);
     }
 
     /**
@@ -4808,6 +4855,10 @@ export class UIManager {
     hideVillagerChatPrompt() {
         if (this.villagerChatPrompt) {
             this.villagerChatPrompt.style.display = 'none';
+        }
+        if (this.villagerPromptTimeout) {
+            clearTimeout(this.villagerPromptTimeout);
+            this.villagerPromptTimeout = null;
         }
     }
 

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 
 export class GrassSystem {
-    constructor(scene) {
-        this.scene = scene;
+    constructor(game) {
+        this.game = game;
+        this.scene = game.scene;
 
         // Configuration
         this.bladesPerBlock = 8; // Reduced density
@@ -15,6 +16,8 @@ export class GrassSystem {
         // widthSegments=1, heightSegments=3 allows for bending
         this.geometry = new THREE.PlaneGeometry(this.bladeWidth, this.bladeHeight, 1, 3);
         this.geometry.translate(0, this.bladeHeight / 2, 0); // Origin at bottom
+
+        this.visible = true;
 
         // Shared Material (Shader)
         this.material = new THREE.MeshLambertMaterial({
@@ -71,6 +74,16 @@ export class GrassSystem {
         };
     }
 
+    setVisible(visible) {
+        this.visible = visible;
+        // Update all chunks
+        for (const chunk of this.game.chunks.values()) {
+            if (chunk.grassMesh) {
+                chunk.grassMesh.visible = visible;
+            }
+        }
+    }
+
     update(dt) {
         if (this.material.userData.shader) {
             this.material.userData.shader.uniforms.time.value += dt;
@@ -120,8 +133,9 @@ export class GrassSystem {
 
         mesh.instanceMatrix.needsUpdate = true;
 
-        // Prevent frustum culling issues with animated vertex shader (optional, but good for safety)
-        mesh.frustumCulled = false;
+        // PERFORMANCE: Enable frustum culling (was disabled, causing ALL grass to render)
+        mesh.frustumCulled = true;
+        mesh.visible = this.visible;
 
         chunk.grassMesh = mesh;
         this.scene.add(mesh);

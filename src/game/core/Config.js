@@ -8,7 +8,7 @@ export const Config = {
     // World
     WORLD: {
         CHUNK_SIZE: 16,
-        RENDER_DISTANCE: 8,
+        RENDER_DISTANCE: 6, // PERFORMANCE: Reduced from 8 for better FPS
         GRAVITY: 0.0032,
         SEA_LEVEL: 30,
         BEDROCK_LEVEL: 0,

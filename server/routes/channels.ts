@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config';
 import { io } from '../index';
 import * as admin from 'firebase-admin';
+import { logError } from '../utils/logger';
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router.get('/', async (req: Request, res: Response) => {
         res.json({ channels: DEFAULT_CHANNELS });
     } catch (error: any) {
         console.error('[Channels] Get channels error:', error);
+        logError('Channels:GetChannels', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -128,6 +130,7 @@ router.get('/:channelId/messages', async (req: Request, res: Response) => {
         res.json({ messages: messages.reverse() }); // Return oldest first for chat flow? Usually UI wants newest at bottom.
     } catch (error: any) {
         console.error('[Channels] Get messages error:', error);
+        logError('Channels:GetMessages', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -181,6 +184,7 @@ router.post('/:channelId/messages', async (req: Request, res: Response) => {
         res.json({ success: true, id: docRef.id });
     } catch (error: any) {
         console.error('[Channels] Post message error:', error);
+        logError('Channels:PostMessage', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });

@@ -31,8 +31,8 @@ export class MagicProjectile {
         const sphere = new THREE.Mesh(geometry, material);
         group.add(sphere);
 
-        // Glow
-        const light = new THREE.PointLight(0xFF00FF, 1, 5);
+        // Glow - PERFORMANCE: Reduced intensity and range
+        const light = new THREE.PointLight(0xFF00FF, 0.5, 3);
         group.add(light);
 
         return group;

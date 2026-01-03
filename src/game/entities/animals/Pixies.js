@@ -78,10 +78,11 @@ export class PixieManager {
         rightWing.rotation.y = Math.PI;
         group.add(rightWing);
 
-        // Point light for magical glow
-        const light = new THREE.PointLight(color, 0.5, 3);
-        light.position.set(0, 0, 0);
-        group.add(light);
+        // PERFORMANCE FIX: Removed PointLight, emissive materials already provide glow effect
+        // Point lights are expensive and accumulate when many Pixies exist
+        // const light = new THREE.PointLight(color, 0.5, 3);
+        // light.position.set(0, 0, 0);
+        // group.add(light);
 
         // Random starting position
         const x = (Math.random() - 0.5) * 30;
@@ -102,7 +103,7 @@ export class PixieManager {
             group,
             leftWing,
             rightWing,
-            light,
+            // light, // PERFORMANCE FIX: Removed
             velocity: new THREE.Vector3(
                 (Math.random() - 0.5) * this.speedLimit,
                 (Math.random() - 0.5) * this.speedLimit,
@@ -160,8 +161,8 @@ export class PixieManager {
         pixie.leftWing.rotation.z = wingAngle;
         pixie.rightWing.rotation.z = -wingAngle;
 
-        // Flickering glow
-        pixie.light.intensity = 0.4 + Math.sin(this.time * 10 + pixie.wingPhase) * 0.2;
+        // Flickering glow - PERFORMANCE FIX: Light removed, emissive materials handle glow
+        // if (pixie.light) pixie.light.intensity = 0.4 + Math.sin(this.time * 10 + pixie.wingPhase) * 0.2;
     }
 
     updateFlying(pixie, dt, playerX, playerY, playerZ, animals) {

@@ -1,0 +1,55 @@
+
+> minecraft-socketio-server@1.0.0 start
+> ts-node --transpile-only index.ts
+
+[dotenv@17.2.3] injecting env (7) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+[dotenv@17.2.3] injecting env (1) from ../.env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+[Config] Tried loading .env from: /Users/I850333/projects/experiments/Minecraft/server/.env and /Users/I850333/projects/experiments/Minecraft/.env
+[Config] Using provided service account key
+[Config] Firebase Admin initialized
+[Server] Startup: initializing...
+[DynamicCreatureService] Loaded 6 creature definitions from database
+[DynamicItemService] Loaded 4 item definitions from database
+[Server] Listening on http://0.0.0.0:2567
+[Server] Startup: complete
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Auth] Login request received
+[Antigravity] Authenticated user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Auth] User verified: TMgrnY2qNdPaGGoYhjMzTwuj4xl2 (thisislance98@gmail.com)
+[Socket] Client connected: 1Zy73S0Pyw90ttBJAAAB
+[Socket] Created new room: rk4rsdm with seed: 597671 (initialized to Noon)
+[Socket] Player 1Zy73S0Pyw90ttBJAAAB joined room rk4rsdm (1/4) starting at time: 0.25
+[Socket] Sent 1666 persisted entities to 1Zy73S0Pyw90ttBJAAAB
+[DynamicCreatureService] Sent 6 creature definitions to new client
+[DynamicItemService] Sent 4 item(s) to client 1Zy73S0Pyw90ttBJAAAB
+[Socket] Sent 386 persisted blocks to 1Zy73S0Pyw90ttBJAAAB
+[Villager Chat] Request from 1Zy73S0Pyw90ttBJAAAB: {
+  villagerId: 'Villager_840202838_0_0',
+  profession: 'LIBRARIAN',
+  professionName: 'Librarian',
+  name: 'Orin',
+  job: 'Bookbinder',
+  backstory: 'My grandfather built this village with his bare hands.',
+  playerMessage: null,
+  isGreeting: true,
+  quest: 'None'
+}
+[Villager Chat] Librarian raw response: "Ah, welcome, traveler, to my humble bookbindery. Come in, come in, and let us see what wonders we might discover today."
+[Villager Chat] Processed response: "Ah, welcome, traveler, to my humble bookbindery. Come in, come in, and let us see what wonders we might discover today." (Accepted: false, Completed: false)
+[Villager Chat] Request from 1Zy73S0Pyw90ttBJAAAB: {
+  villagerId: 'Villager_3469979899_0_0',
+  profession: 'BLACKSMITH',
+  professionName: 'Blacksmith',
+  name: 'Ruby',
+  job: 'Horseshoer',
+  backstory: "I haven't slept in days because of the zombies.",
+  playerMessage: null,
+  isGreeting: true,
+  quest: 'None'
+}
+[Villager Chat] Blacksmith raw response: "Ho there. Need somethin' done with metal? Been a while since I seen new faces."
+[Villager Chat] Processed response: "Ho there. Need somethin' done with metal? Been a while since I seen new faces." (Accepted: false, Completed: false)

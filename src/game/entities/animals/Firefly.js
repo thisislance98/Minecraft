@@ -22,8 +22,10 @@ export class Firefly extends Animal {
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), glowMat);
         this.mesh.add(body);
 
-        this.light = new THREE.PointLight(0xffff00, 1.5, 10);
-        this.mesh.add(this.light);
+        // PERFORMANCE FIX: Removed PointLight - emissive material already provides glow
+        // PointLights are expensive and accumulate across many Fireflies
+        // this.light = new THREE.PointLight(0xffff00, 1.5, 10);
+        // this.mesh.add(this.light);
     }
 
     update(dt) {
@@ -85,10 +87,10 @@ export class Firefly extends Animal {
         this.velocity.y = (this.targetDir.y * this.speed) + Math.sin(this.floatPhase) * 0.5;
         this.velocity.z = this.targetDir.z * this.speed;
 
-        // Pulse the light
-        if (this.light) {
-            this.light.intensity = 1.0 + Math.sin(this.floatPhase * 2) * 0.5;
-        }
+        // PERFORMANCE FIX: Light removed, using emissive material for glow
+        // if (this.light) {
+        //     this.light.intensity = 1.0 + Math.sin(this.floatPhase * 2) * 0.5;
+        // }
 
         this.position.x += this.velocity.x * dt;
         this.position.y += this.velocity.y * dt;

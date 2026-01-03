@@ -20,7 +20,12 @@ export class StaticLampost extends Animal {
 
     createBody() {
         // Materials
-        const metalMat = this.game.assetManager.getEntityMaterial('lampost_metal');
+        // Materials - Black Metal
+        const metalMat = new THREE.MeshStandardMaterial({
+            color: 0x111111, // Almost black
+            roughness: 0.7,
+            metalness: 0.2
+        });
 
         // Ensure glass texture is generated
         this.game.assetManager.getEntityMaterial('lampost_glass');
@@ -39,14 +44,14 @@ export class StaticLampost extends Animal {
         this.mesh.add(base);
 
         // 2. The Pole (Tall and thin)
-        const poleGeo = new THREE.BoxGeometry(0.15, 2.0, 0.15);
+        const poleGeo = new THREE.BoxGeometry(0.15, 5.0, 0.15); // Much taller (was 2.0)
         const pole = new THREE.Mesh(poleGeo, metalMat);
-        pole.position.set(0, 1.4, 0); // 0.4 base + 1.0 half pole
+        pole.position.set(0, 2.9, 0); // 0.4 base + 2.5 half pole
         this.mesh.add(pole);
 
         // 3. The Lantern Head
         const headGroup = new THREE.Group();
-        headGroup.position.set(0, 2.5, 0); // Top of pole roughly
+        headGroup.position.set(0, 5.5, 0); // Top of pole roughly (0.4 + 5.0 + 0.1)
         this.mesh.add(headGroup);
 
         // Lantern Frame (Top and Bottom plates)
@@ -64,8 +69,8 @@ export class StaticLampost extends Animal {
         const glass = new THREE.Mesh(glassGeo, lightMat);
         headGroup.add(glass);
 
-        // Point Light
-        const light = new THREE.PointLight(0xFFDD00, 1.0, 10);
+        // Point Light - PERFORMANCE: Reduced intensity and range
+        const light = new THREE.PointLight(0xFFDD00, 0.6, 6);
         light.position.set(0, 0, 0);
         headGroup.add(light);
 

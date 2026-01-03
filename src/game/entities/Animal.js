@@ -951,7 +951,8 @@ export class Animal {
         // Check for water immersion
         // We check the block at the center of the entity
         const waterBlock = this.game.getBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
-        const isInWater = waterBlock === Blocks.WATER;
+        const waterType = (waterBlock && waterBlock.type) ? waterBlock.type : waterBlock;
+        const isInWater = waterType === Blocks.WATER;
 
         if (isInWater) {
             // WATER PHYSICS
@@ -1187,12 +1188,16 @@ export class Animal {
 
     checkSolid(x, y, z) {
         const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
-        return !!block && block !== Blocks.WATER;
+        const type = (block && block.type) ? block.type : block;
+
+        // Ensure we don't treat Air as solid even if it's a string 'air'
+        return !!type && type !== Blocks.WATER && type !== Blocks.AIR;
     }
 
     checkWater(x, y, z) {
         const block = this.game.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
-        return block === Blocks.WATER;
+        const type = (block && block.type) ? block.type : block;
+        return type === Blocks.WATER;
     }
 
     checkBodyCollision(x, y, z) {
@@ -1226,7 +1231,9 @@ export class Animal {
             for (let by = startBY; by <= endBY; by++) {
                 for (let bz = startBZ; bz <= endBZ; bz++) {
                     const block = this.game.getBlock(bx, by, bz);
-                    if (block && block !== Blocks.WATER) {
+                    const type = (block && block.type) ? block.type : block;
+
+                    if (type && type !== Blocks.WATER && type !== Blocks.AIR) {
                         return true;
                     }
                 }
@@ -1276,7 +1283,9 @@ export class Animal {
                 const bz = Math.floor(worldZ);
 
                 const block = this.game.getBlock(bx, by, bz);
-                if (block && block !== Blocks.WATER) {
+                const type = (block && block.type) ? block.type : block;
+
+                if (type && type !== Blocks.WATER && type !== Blocks.AIR) {
                     // Collision!
                     // Calculate push vector (center of block to point)
                     const blockCenter = new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5);

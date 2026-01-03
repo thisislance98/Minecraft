@@ -30,8 +30,8 @@ export class ShrinkProjectile {
         const sphere = new THREE.Mesh(geometry, material);
         group.add(sphere);
 
-        // Glow
-        const light = new THREE.PointLight(0x00FFFF, 1, 5);
+        // Glow - PERFORMANCE: Reduced intensity and range
+        const light = new THREE.PointLight(0x00FFFF, 0.5, 3);
         group.add(light);
 
         return group;

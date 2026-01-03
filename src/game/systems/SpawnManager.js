@@ -579,6 +579,17 @@ export class SpawnManager {
             return;
         }
 
+        // Set initial visibility based on game flags
+        const isVillager = AnimalClass.name === 'Villager';
+        const isSpaceship = AnimalClass.name === 'Spaceship';
+        if (isVillager) {
+            animal.mesh.visible = this.game.villagersVisible !== undefined ? this.game.villagersVisible : true;
+        } else if (isSpaceship) {
+            animal.mesh.visible = this.game.spaceshipsVisible !== undefined ? this.game.spaceshipsVisible : true;
+        } else {
+            animal.mesh.visible = this.game.creaturesVisible !== undefined ? this.game.creaturesVisible : true;
+        }
+
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
         this.entities.set(animal.id, animal);

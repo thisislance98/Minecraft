@@ -1,0 +1,450 @@
+
+> minecraft-socketio-server@1.0.0 start
+> ts-node --transpile-only index.ts
+
+[dotenv@17.2.3] injecting env (7) from .env -- tip: 👥 sync secrets across teammates & machines: https://dotenvx.com/ops
+[dotenv@17.2.3] injecting env (1) from ../.env -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+[Config] Tried loading .env from: /Users/I850333/projects/experiments/Minecraft/server/.env and /Users/I850333/projects/experiments/Minecraft/.env
+[Config] Using provided service account key
+[Config] Firebase Admin initialized
+[Server] Startup: initializing...
+[DynamicCreatureService] Loaded 6 creature definitions from database
+[DynamicItemService] Loaded 4 item definitions from database
+[Server] Listening on http://0.0.0.0:2567
+[Server] Startup: complete
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Express] POST /api/auth/login
+!!! DEBUG ACCESS LOG HIT !!! /api/auth/login
+[Auth] Login request received
+[Auth] User verified: TMgrnY2qNdPaGGoYhjMzTwuj4xl2 (thisislance98@gmail.com)
+[Antigravity] Authenticated user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Socket] Client connected: ASMbh-L1T971Md8YAAAB
+[Socket] Created new room: 4zxuqus with seed: 965923 (initialized to Noon)
+[Socket] Player ASMbh-L1T971Md8YAAAB joined room 4zxuqus (1/4) starting at time: 0.25
+[Socket] Sent 1692 persisted entities to ASMbh-L1T971Md8YAAAB
+[DynamicCreatureService] Sent 6 creature definitions to new client
+[DynamicItemService] Sent 4 item(s) to client ASMbh-L1T971Md8YAAAB
+[Socket] Sent 386 persisted blocks to ASMbh-L1T971Md8YAAAB
+[Express] GET /api/channels
+!!! DEBUG ACCESS LOG HIT !!! /api/channels
+[Villager Chat] Request from ASMbh-L1T971Md8YAAAB: {
+  villagerId: 'Villager_2074633612_30_28',
+  profession: 'FARMER',
+  professionName: 'Farmer',
+  name: 'Willow',
+  job: 'Seed Sower',
+  backstory: 'I brew the best potions in the tri-state area... legally.',
+  playerMessage: null,
+  isGreeting: true,
+  quest: 'None'
+}
+[Villager Chat] Farmer raw response: "Well howdy there, friend! Welcome to my little patch of paradise. What can I do for ya?"
+[Villager Chat] Processed response: "Well howdy there, friend! Welcome to my little patch of paradise. What can I do for ya?" (Accepted: false, Completed: false)
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Antigravity] CLI Mode enabled (Valid Secret)
+[Antigravity] No auth token provided. Running as guest (limited?).
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Stream complete. Total chunks: 4, Total text chars: 0
+[Antigravity] Final response received: {"promptTokenCount":8316,"candidatesTokenCount":22,"totalTokenCount":8461,"promptTokensDetails":[{"modality":"TEXT","tokenCount":8316}],"thoughtsTokenCount":123}
+[Antigravity] Content parts count: 4
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Stream complete. Total chunks: 4, Total text chars: 0
+[Antigravity] Final response received: {"promptTokenCount":8617,"candidatesTokenCount":17,"totalTokenCount":8727,"promptTokensDetails":[{"modality":"TEXT","tokenCount":8617}],"thoughtsTokenCount":93}
+[Antigravity] Content parts count: 4
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Stream complete. Total chunks: 6, Total text chars: 359
+[Antigravity] Final response received: {"promptTokenCount":9422,"candidatesTokenCount":115,"totalTokenCount":9562,"promptTokensDetails":[{"modality":"TEXT","tokenCount":9422}],"thoughtsTokenCount":25}
+[Antigravity] Content parts count: 6
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Stream complete. Total chunks: 7, Total text chars: 480
+[Antigravity] Final response received: {"promptTokenCount":9666,"candidatesTokenCount":138,"totalTokenCount":9826,"promptTokensDetails":[{"modality":"TEXT","tokenCount":9666}],"thoughtsTokenCount":22}
+[Antigravity] Content parts count: 7
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Stream complete. Total chunks: 11, Total text chars: 749
+[Antigravity] Final response received: {"promptTokenCount":9902,"candidatesTokenCount":214,"totalTokenCount":10214,"promptTokensDetails":[{"modality":"TEXT","tokenCount":9902}],"thoughtsTokenCount":98}
+[Antigravity] Content parts count: 11
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Chunk #12 received
+[Antigravity] Chunk #13 received
+[Antigravity] Chunk #14 received
+[Antigravity] Chunk #15 received
+[Antigravity] Stream complete. Total chunks: 15, Total text chars: 1138
+[Antigravity] Final response received: {"promptTokenCount":10833,"candidatesTokenCount":317,"totalTokenCount":11294,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10833}],"thoughtsTokenCount":144}
+[Antigravity] Content parts count: 15
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Stream complete. Total chunks: 9, Total text chars: 745
+[Antigravity] Final response received: {"promptTokenCount":12488,"candidatesTokenCount":208,"totalTokenCount":12718,"promptTokensDetails":[{"modality":"TEXT","tokenCount":12488}],"thoughtsTokenCount":22}
+[Antigravity] Content parts count: 9
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Stream complete. Total chunks: 11, Total text chars: 806
+[Antigravity] Final response received: {"promptTokenCount":12994,"candidatesTokenCount":212,"totalTokenCount":13240,"promptTokensDetails":[{"modality":"TEXT","tokenCount":12994}],"thoughtsTokenCount":34}
+[Antigravity] Content parts count: 11
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Stream complete. Total chunks: 9, Total text chars: 588
+[Antigravity] Final response received: {"promptTokenCount":13499,"candidatesTokenCount":167,"totalTokenCount":13675,"promptTokensDetails":[{"modality":"TEXT","tokenCount":13499}],"thoughtsTokenCount":9}
+[Antigravity] Content parts count: 9
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Stream complete. Total chunks: 11, Total text chars: 788
+[Antigravity] Final response received: {"promptTokenCount":13900,"candidatesTokenCount":217,"totalTokenCount":14129,"promptTokensDetails":[{"modality":"TEXT","tokenCount":13900}],"thoughtsTokenCount":12}
+[Antigravity] Content parts count: 11
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Session closed for user: guest
+[Antigravity] Chunk #12 received
+[Antigravity] Generation aborted in stream loop.
+[Villager Chat] Request from ASMbh-L1T971Md8YAAAB: {
+  villagerId: 'Villager_2074633612_30_28',
+  profession: 'FARMER',
+  professionName: 'Farmer',
+  name: 'Willow',
+  job: 'Seed Sower',
+  backstory: 'I brew the best potions in the tri-state area... legally.',
+  playerMessage: null,
+  isGreeting: true,
+  quest: 'None'
+}
+[Villager Chat] Farmer raw response: ""Well howdy there, friend! Welcome to my little patch of paradise. What brings you by today?""
+[Villager Chat] Processed response: ""Well howdy there, friend! Welcome to my little patch of paradise. What brings you by today?"" (Accepted: false, Completed: false)
+[Socket] Client disconnected: ASMbh-L1T971Md8YAAAB
+[Socket] Room 4zxuqus deleted (empty)
+[Antigravity] Session closed for user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Antigravity] Authenticated user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Socket] Client connected: QTChbpYBP9E21i2eAAAD
+[Express] POST /api/auth/login
+!!! DEBUG ACCESS LOG HIT !!! /api/auth/login
+[Auth] Login request received
+[Auth] User verified: TMgrnY2qNdPaGGoYhjMzTwuj4xl2 (thisislance98@gmail.com)
+[Socket] Created new room: pm7gue3 with seed: 803832 (initialized to Noon)
+[Socket] Player QTChbpYBP9E21i2eAAAD joined room pm7gue3 (1/4) starting at time: 0.25
+[Socket] Sent 1718 persisted entities to QTChbpYBP9E21i2eAAAD
+[DynamicCreatureService] Sent 6 creature definitions to new client
+[DynamicItemService] Sent 4 item(s) to client QTChbpYBP9E21i2eAAAD
+[Socket] Sent 386 persisted blocks to QTChbpYBP9E21i2eAAAD
+[Villager Chat] Request from QTChbpYBP9E21i2eAAAD: {
+  villagerId: 'Villager_3166875901_0_0',
+  profession: 'BLACKSMITH',
+  professionName: 'Blacksmith',
+  name: 'Willow',
+  job: 'Anvil Polisher',
+  backstory: "I haven't slept in days because of the zombies.",
+  playerMessage: null,
+  isGreeting: true,
+  quest: 'None'
+}
+[Villager Chat] Blacksmith raw response: ""Hmph. You need somethin'?" I squint at you, hammer still in hand. "Got metal to polish, or are you here to gawk?""
+[Villager Chat] Processed response: ""Hmph. You need somethin'?" I squint at you, hammer still in hand. "Got metal to polish, or are you here to gawk?"" (Accepted: false, Completed: false)
+[DEBUG] Received block:change from QTChbpYBP9E21i2eAAAD: { x: 41, y: 35, z: 44, type: null }
+[DEBUG] Broadcasted block:change to room pm7gue3
+[DEBUG] Calling worldPersistence.saveBlockChange for room pm7gue3
+[DEBUG] Received block:change from QTChbpYBP9E21i2eAAAD: { x: 41, y: 35, z: 44, type: null }
+[DEBUG] Broadcasted block:change to room pm7gue3
+[DEBUG] Calling worldPersistence.saveBlockChange for room pm7gue3
+[DEBUG] Completed worldPersistence.saveBlockChange call
+[DEBUG] Completed worldPersistence.saveBlockChange call
+[DEBUG] Received block:change from QTChbpYBP9E21i2eAAAD: { x: 42, y: 35, z: 44, type: null }
+[DEBUG] Broadcasted block:change to room pm7gue3
+[DEBUG] Calling worldPersistence.saveBlockChange for room pm7gue3
+[DEBUG] Received block:change from QTChbpYBP9E21i2eAAAD: { x: 42, y: 35, z: 44, type: null }
+[DEBUG] Broadcasted block:change to room pm7gue3
+[DEBUG] Calling worldPersistence.saveBlockChange for room pm7gue3
+[DEBUG] Completed worldPersistence.saveBlockChange call
+[DEBUG] Completed worldPersistence.saveBlockChange call
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Antigravity] CLI Mode enabled (Valid Secret)
+[Antigravity] No auth token provided. Running as guest (limited?).
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Stream complete. Total chunks: 4, Total text chars: 0
+[Antigravity] Final response received: {"promptTokenCount":8319,"candidatesTokenCount":25,"totalTokenCount":8481,"promptTokensDetails":[{"modality":"TEXT","tokenCount":8319}],"thoughtsTokenCount":137}
+[Antigravity] Content parts count: 4
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Stream complete. Total chunks: 4, Total text chars: 0
+[Antigravity] Final response received: {"promptTokenCount":8698,"candidatesTokenCount":17,"totalTokenCount":8863,"promptTokensDetails":[{"modality":"TEXT","tokenCount":8698}],"thoughtsTokenCount":148}
+[Antigravity] Content parts count: 4
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Stream complete. Total chunks: 5, Total text chars: 206
+[Antigravity] Final response received: {"promptTokenCount":9605,"candidatesTokenCount":78,"totalTokenCount":9710,"promptTokensDetails":[{"modality":"TEXT","tokenCount":9605}],"thoughtsTokenCount":27}
+[Antigravity] Content parts count: 5
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Stream complete. Total chunks: 8, Total text chars: 546
+[Antigravity] Final response received: {"promptTokenCount":9835,"candidatesTokenCount":144,"totalTokenCount":10003,"promptTokensDetails":[{"modality":"TEXT","tokenCount":9835}],"thoughtsTokenCount":24}
+[Antigravity] Content parts count: 8
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Chunk #12 received
+[Antigravity] Chunk #13 received
+[Antigravity] Chunk #14 received
+[Antigravity] Chunk #15 received
+[Antigravity] Chunk #16 received
+[Antigravity] Stream complete. Total chunks: 16, Total text chars: 1229
+[Antigravity] Final response received: {"promptTokenCount":10084,"candidatesTokenCount":343,"totalTokenCount":10701,"promptTokensDetails":[{"modality":"TEXT","tokenCount":10084}],"thoughtsTokenCount":274}
+[Antigravity] Content parts count: 16
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Chunk #12 received
+[Antigravity] Chunk #13 received
+[Antigravity] Chunk #14 received
+[Antigravity] Chunk #15 received
+[Antigravity] Chunk #16 received
+[Antigravity] Chunk #17 received
+[Antigravity] Chunk #18 received
+[Antigravity] Chunk #19 received
+[Antigravity] Chunk #20 received
+[Antigravity] Chunk #21 received
+[Antigravity] Chunk #22 received
+[Antigravity] Stream complete. Total chunks: 22, Total text chars: 1851
+[Antigravity] Final response received: {"promptTokenCount":11313,"candidatesTokenCount":480,"totalTokenCount":11853,"promptTokensDetails":[{"modality":"TEXT","tokenCount":11313}],"thoughtsTokenCount":60}
+[Antigravity] Content parts count: 22
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Chunk #12 received
+[Antigravity] Chunk #13 received
+[Antigravity] Chunk #14 received
+[Antigravity] Chunk #15 received
+[Antigravity] Chunk #16 received
+[Antigravity] Chunk #17 received
+[Antigravity] Chunk #18 received
+[Antigravity] Chunk #19 received
+[Antigravity] Chunk #20 received
+[Antigravity] Chunk #21 received
+[Antigravity] Chunk #22 received
+[Antigravity] Chunk #23 received
+[Antigravity] Chunk #24 received
+[Antigravity] Stream complete. Total chunks: 24, Total text chars: 1949
+[Antigravity] Final response received: {"promptTokenCount":12247,"candidatesTokenCount":524,"totalTokenCount":12877,"promptTokensDetails":[{"modality":"TEXT","tokenCount":12247}],"thoughtsTokenCount":106}
+[Antigravity] Content parts count: 24
+[Antigravity] Starting generation with thinking config...
+[Express] POST /api/auth/login
+!!! DEBUG ACCESS LOG HIT !!! /api/auth/login
+[Auth] Login request received
+[Auth] Token verification failed: FirebaseAuthError: Decoding Firebase ID token failed. Make sure you passed the entire string JWT which represents an ID token. See https://firebase.google.com/docs/auth/admin/verify-id-tokens for details on how to retrieve an ID token.
+    at /Users/I850333/projects/experiments/Minecraft/server/node_modules/firebase-admin/lib/auth/token-verifier.js:177:23
+    at processTicksAndRejections (node:internal/process/task_queues:95:5) {
+  errorInfo: {
+    code: 'auth/argument-error',
+    message: 'Decoding Firebase ID token failed. Make sure you passed the entire string JWT which represents an ID token. See https://firebase.google.com/docs/auth/admin/verify-id-tokens for details on how to retrieve an ID token.'
+  },
+  codePrefix: 'auth'
+}
+[Express] POST /api/destinations
+!!! DEBUG ACCESS LOG HIT !!! /api/destinations
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Chunk #2 received
+[Antigravity] Chunk #3 received
+[Antigravity] Chunk #4 received
+[Antigravity] Chunk #5 received
+[Antigravity] Chunk #6 received
+[Antigravity] Chunk #7 received
+[Antigravity] Chunk #8 received
+[Antigravity] Chunk #9 received
+[Antigravity] Chunk #10 received
+[Antigravity] Chunk #11 received
+[Antigravity] Chunk #12 received
+[Antigravity] Chunk #13 received
+[Antigravity] Chunk #14 received
+[Antigravity] Chunk #15 received
+[Antigravity] Chunk #16 received
+[Antigravity] Chunk #17 received
+[Antigravity] Chunk #18 received
+[Antigravity] Chunk #19 received
+[Antigravity] Chunk #20 received
+[Antigravity] Chunk #21 received
+[Antigravity] Chunk #22 received
+[Antigravity] Chunk #23 received
+[Antigravity] Chunk #24 received
+[Antigravity] Chunk #25 received
+[Antigravity] Chunk #26 received
+[Antigravity] Chunk #27 received
+[Antigravity] Chunk #28 received
+[Antigravity] Chunk #29 received
+[Antigravity] Chunk #30 received
+[Antigravity] Chunk #31 received
+[Antigravity] Chunk #32 received
+[Antigravity] Chunk #33 received
+[Antigravity] Stream complete. Total chunks: 33, Total text chars: 2720
+[Antigravity] Final response received: {"promptTokenCount":13390,"candidatesTokenCount":743,"totalTokenCount":14222,"promptTokensDetails":[{"modality":"TEXT","tokenCount":13390}],"thoughtsTokenCount":89}
+[Antigravity] Content parts count: 33
+[Antigravity] Starting generation with thinking config...
+[Antigravity] Session closed for user: guest
+[Antigravity] Stream started...
+[Antigravity] Chunk #1 received
+[Antigravity] Generation aborted in stream loop.

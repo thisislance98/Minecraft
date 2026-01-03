@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { db } from '../config';
 import * as admin from 'firebase-admin';
+import { logError } from '../utils/logger';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post('/', async (req: Request, res: Response) => {
         res.json({ id: docRef.id });
     } catch (error: any) {
         console.error('[Destinations] Create error:', error);
+        logError('Destinations:Create', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -51,6 +53,7 @@ router.get('/:id', async (req: Request, res: Response) => {
         res.json({ x: data?.x, y: data?.y, z: data?.z });
     } catch (error: any) {
         console.error('[Destinations] Get error:', error);
+        logError('Destinations:Get', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });

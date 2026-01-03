@@ -32,8 +32,8 @@ export class LevitationProjectile {
         const sphere = new THREE.Mesh(geometry, material);
         group.add(sphere);
 
-        // Glow
-        const light = new THREE.PointLight(0xFFFF00, 1, 5);
+        // Glow - PERFORMANCE: Reduced intensity and range
+        const light = new THREE.PointLight(0xFFFF00, 0.5, 3);
         group.add(light);
 
         return group;

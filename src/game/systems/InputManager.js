@@ -125,10 +125,19 @@ export class InputManager {
                 return;
             }
 
+            // Arrow keys for profiler test scene
+            if (this.game.profilerTestScene && this.game.profilerTestScene.isActive) {
+                if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    this.game.profilerTestScene.handleKeyDown(e.code);
+                    return;
+                }
+            }
+
             // Debug Toggle (P) - REMOVED
-            // if (e.code === 'KeyP') {
-            //    this.game.toggleDebugPanel();
-            // }
+            if (e.code === 'KeyP') {
+                this.game.toggleDebugPanel();
+            }
 
             // T for Chat - opens chat and switches to player tab
             if (e.code === 'KeyT') {
@@ -158,6 +167,13 @@ export class InputManager {
             if (e.code === 'KeyI') {
                 if (!this.game.agent.isChatOpen) {
                     this.game.toggleInventory();
+                }
+            }
+
+            // Minimap Toggle (M)
+            if (e.code === 'KeyM' && !this.game.agent.isChatOpen) {
+                if (this.game.uiManager && this.game.uiManager.minimap) {
+                    this.game.uiManager.minimap.toggleVisibility();
                 }
             }
 

@@ -5,6 +5,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 const router = Router();
 
 import * as admin from 'firebase-admin';
+import { logError } from '../utils/logger';
 
 router.post('/login', async (req: Request, res: Response) => {
     try {
@@ -76,6 +77,7 @@ router.post('/login', async (req: Request, res: Response) => {
         console.error('[Auth] Unexpected error during login processing:', error);
         console.error('[Auth] Error stack:', error.stack);
         if (error.code) console.error('[Auth] Error code:', error.code);
+        logError('Auth:Login', error);
         res.status(500).json({
             error: 'Internal Server Error',
             details: error.message

@@ -53,6 +53,16 @@ export class Environment {
         this.updateDayNightCycle(0, new THREE.Vector3(0, 0, 0));
 
         this.moonEnabled = true;
+        this.shadowsEnabled = true;
+    }
+
+    toggleShadows(enabled) {
+        this.shadowsEnabled = enabled;
+        // Force update immediately
+        if (!enabled) {
+            if (this.sunLight) this.sunLight.castShadow = false;
+            if (this.moonLight) this.moonLight.castShadow = false;
+        }
     }
 
     toggleMoon(enabled) {
@@ -114,10 +124,10 @@ export class Environment {
         const sunAboveHorizon = Math.max(0, Math.sin(angle));
         this.sunLight.intensity = sunAboveHorizon * 1.2;
 
-        // PERFORMANCE FIX: Only cast shadows when sun is actually up
+        // PERFORMANCE FIX: Only cast shadows when sun is actually up AND shadows are globally enabled
         // This prevents double shadow-map rendering when both Moon and Sun are in the scene (one underground)
         const isSunUp = sunAboveHorizon > 0.01;
-        this.sunLight.castShadow = isSunUp;
+        this.sunLight.castShadow = isSunUp && this.shadowsEnabled;
         this.sunLight.visible = isSunUp;
 
         // Moon Logic
@@ -152,9 +162,9 @@ export class Environment {
                     // Max moon intensity 0.2, fade in/out near horizon
                     this.moonLight.intensity = moonAboveHorizon * 0.2;
 
-                    // PERFORMANCE FIX: Only cast shadows when moon is up
+                    // PERFORMANCE FIX: Only cast shadows when moon is up AND shadows are globally enabled
                     const isMoonUp = moonAboveHorizon > 0.01;
-                    this.moonLight.castShadow = isMoonUp;
+                    this.moonLight.castShadow = isMoonUp && this.shadowsEnabled;
                     this.moonLight.visible = isMoonUp;
                 }
             }

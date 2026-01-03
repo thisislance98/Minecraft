@@ -2092,7 +2092,7 @@ export class Player {
                 // Parent camera to head for orbiting behavior
                 if (this.head) {
                     this.head.add(this.game.camera);
-                    this.game.camera.position.set(0, 0, 4); // Behind head
+                    this.game.camera.position.set(0, 1.5, 4); // Behind and above head
                     this.game.camera.rotation.set(0, 0, 0); // Look forward (Z- matches Head Z-)
                 }
             } else if (this.cameraMode === 3) {

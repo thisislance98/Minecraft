@@ -1,0 +1,27 @@
+
+> minecraft-socketio-server@1.0.0 start
+> ts-node --transpile-only index.ts
+
+[dotenv@17.2.3] injecting env (7) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[dotenv@17.2.3] injecting env (1) from ../.env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[Config] Tried loading .env from: /Users/I850333/projects/experiments/Minecraft/server/.env and /Users/I850333/projects/experiments/Minecraft/.env
+[Config] Using provided service account key
+[Config] Firebase Admin initialized
+[Server] Startup: initializing...
+[DynamicCreatureService] Loaded 6 creature definitions from database
+[DynamicItemService] Loaded 4 item definitions from database
+[Server] Listening on http://0.0.0.0:2567
+[Server] Startup: complete
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Antigravity] Authenticated user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Socket] Client connected: QFM5dRz58ANjajOwAAAB
+[Socket] Created new room: g89o6mk with seed: 282265 (initialized to Noon)
+[Socket] Player QFM5dRz58ANjajOwAAAB joined room g89o6mk (1/4) starting at time: 0.25
+[Socket] Sent 1645 persisted entities to QFM5dRz58ANjajOwAAAB
+[DynamicCreatureService] Sent 6 creature definitions to new client
+[DynamicItemService] Sent 4 item(s) to client QFM5dRz58ANjajOwAAAB
+[Socket] Sent 386 persisted blocks to QFM5dRz58ANjajOwAAAB

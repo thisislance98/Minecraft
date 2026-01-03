@@ -1,0 +1,29 @@
+
+> minecraft-socketio-server@1.0.0 start
+> ts-node --transpile-only index.ts
+
+[dotenv@17.2.3] injecting env (7) from .env -- tip: ⚙️  override existing env vars with { override: true }
+[dotenv@17.2.3] injecting env (1) from ../.env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+[Config] Tried loading .env from: /Users/I850333/projects/experiments/Minecraft/server/.env and /Users/I850333/projects/experiments/Minecraft/.env
+[Config] Using provided service account key
+[Config] Firebase Admin initialized
+[Server] Startup: initializing...
+[DynamicCreatureService] Loaded 6 creature definitions from database
+[DynamicItemService] Loaded 4 item definitions from database
+[Server] Listening on http://0.0.0.0:2567
+[Server] Startup: complete
+[Antigravity] Client connected to Agent Brain. Verifying configuration...
+[Antigravity] API Key present. Initializing session...
+[Antigravity] Loaded 96 entities from src/game/entities/animals
+[Antigravity] Loaded 4 entities from src/game/entities/monsters
+[Antigravity] Loaded 22 entities from src/game/items
+[Auth] Login request received
+[Auth] User verified: TMgrnY2qNdPaGGoYhjMzTwuj4xl2 (thisislance98@gmail.com)
+[Antigravity] Authenticated user: TMgrnY2qNdPaGGoYhjMzTwuj4xl2
+[Socket] Client connected: c3lqKhjg0KrUEVkSAAAB
+[Socket] Created new room: wvilwwm with seed: 616381 (initialized to Noon)
+[Socket] Player c3lqKhjg0KrUEVkSAAAB joined room wvilwwm (1/4) starting at time: 0.25
+[Socket] Sent 1645 persisted entities to c3lqKhjg0KrUEVkSAAAB
+[DynamicCreatureService] Sent 6 creature definitions to new client
+[DynamicItemService] Sent 4 item(s) to client c3lqKhjg0KrUEVkSAAAB
+[Socket] Sent 386 persisted blocks to c3lqKhjg0KrUEVkSAAAB

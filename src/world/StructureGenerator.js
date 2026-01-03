@@ -50,7 +50,8 @@ export class StructureGenerator {
                 const featureRng = this.getPositionRng(wx, wz, 1);
                 if (featureRng.next() < 0.01) {
                     const groundHeight = this.worldGenerator.getTerrainHeight(wx, wz);
-                    const biome = this.worldGenerator.getBiome(wx, wz);
+                    // Use optimized biome lookup - reuse the height we just computed
+                    const biome = this.worldGenerator.getBiomeWithHeight(wx, wz, groundHeight);
 
                     if (groundHeight >= startY && groundHeight < startY + this.game.chunkSize) {
                         const wy = groundHeight;

@@ -143,6 +143,10 @@
                         <span>Position Display</span>
                     </label>
                     <label class="settings-toggle">
+                        <input type="checkbox" id="settings-minimap-toggle" checked>
+                        <span>Show Minimap</span>
+                    </label>
+                    <label class="settings-toggle">
                         <input type="checkbox" id="settings-mobile-toggle">
                         <span>Mobile Controls</span>
                     </label>
@@ -252,7 +256,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1069</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1097</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -323,8 +327,7 @@
     <script type="module">
         import { AntigravityClient } from '/src/game/ai/AntigravityClient.js';
         // Initialize AI Client immediately, independent of Game logic
-        window.antigravityClient = new AntigravityClient();
-    </script>
+        window.antigravityClient = new AntigravityClient    </script>
     <script type="module" src="/src/main.js"></script>
 </body>
 

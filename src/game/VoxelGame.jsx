@@ -168,7 +168,8 @@ export class VoxelGame {
         this.chunkSize = Config.WORLD.CHUNK_SIZE;
         this.renderDistance = Config.WORLD.RENDER_DISTANCE;
         this.terrainVisible = true; // Default visibility
-        this.terrainShadowsEnabled = true; // Default shadow state
+        this.terrainShadowsEnabled = true; // Default receive shadow state
+        this.terrainCastShadows = false; // PERFORMANCE: Default cast shadow to false
         this.generatedChunks = new Set();
         this.chunkGenQueue = []; // Queue for chunks to be generated
 
@@ -1119,6 +1120,119 @@ export class VoxelGame {
         }
     }
 
+    /**
+     * Check if any trees above/around position are now unsupported and should fall.
+     * Called after blocks are destroyed by explosions/projectiles.
+     * Handles single-block-wide trees (1 base log) and 4-block-wide trees (2x2 base).
+     */
+    checkTreeStability(destroyedPositions) {
+        const logTypes = [
+            Blocks.LOG, Blocks.PINE_WOOD, Blocks.BIRCH_WOOD,
+            Blocks.DARK_OAK_WOOD, Blocks.WILLOW_WOOD, Blocks.ACACIA_WOOD
+        ];
+
+        // Track which positions we've already checked to avoid duplicates
+        const checkedBases = new Set();
+
+        for (const pos of destroyedPositions) {
+            // Check log blocks above and around the destroyed position
+            for (let dy = 0; dy <= 2; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        const checkX = pos.x + dx;
+                        const checkY = pos.y + dy;
+                        const checkZ = pos.z + dz;
+
+                        const blockType = this.getBlockWorld(checkX, checkY, checkZ);
+                        if (!blockType || !logTypes.includes(blockType)) continue;
+
+                        // Found a log - trace down to find its base
+                        const base = this.findTreeBase(checkX, checkY, checkZ, blockType, logTypes);
+                        if (!base) continue;
+
+                        const baseKey = `${base.x},${base.y},${base.z}`;
+                        if (checkedBases.has(baseKey)) continue;
+                        checkedBases.add(baseKey);
+
+                        // Check if tree base is still supported
+                        if (!this.isTreeSupported(base.x, base.y, base.z, blockType, logTypes)) {
+                            console.log(`[TreeStability] Tree at ${base.x},${base.y},${base.z} is no longer supported - felling!`);
+                            this.physicsManager.checkAndFellTree(base.x, base.y, base.z, blockType);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Find the base (lowest log block) of a tree by tracing down.
+     */
+    findTreeBase(x, y, z, logType, logTypes) {
+        let baseY = y;
+        // Trace down to find the lowest log
+        while (baseY > 0) {
+            const below = this.getBlockWorld(x, baseY - 1, z);
+            if (below && logTypes.includes(below)) {
+                baseY--;
+            } else {
+                break;
+            }
+        }
+        return { x, y: baseY, z };
+    }
+
+    /**
+     * Check if a tree's base is still supported (connected to ground).
+     * For single-block trees: check if there's solid non-log block below.
+     * For 2x2 trees (dark oak style): check if all 4 base logs have support.
+     */
+    isTreeSupported(baseX, baseY, baseZ, logType, logTypes) {
+        // Check for 2x2 tree pattern (common for dark oak)
+        const is2x2 = this.is2x2Tree(baseX, baseY, baseZ, logType);
+
+        if (is2x2) {
+            // For 2x2 trees, all 4 base blocks must be supported
+            const offsets = [[0, 0], [1, 0], [0, 1], [1, 1]];
+            let supportedCount = 0;
+            for (const [dx, dz] of offsets) {
+                const below = this.getBlockWorld(baseX + dx, baseY - 1, baseZ + dz);
+                if (below && !logTypes.includes(below) && below !== Blocks.AIR && below !== Blocks.WATER) {
+                    supportedCount++;
+                }
+            }
+            // Tree needs all 4 supports for 2x2 trees
+            return supportedCount === 4;
+        } else {
+            // Single-block tree - needs 1 solid block below
+            const below = this.getBlockWorld(baseX, baseY - 1, baseZ);
+            return below && !logTypes.includes(below) && below !== Blocks.AIR && below !== Blocks.WATER;
+        }
+    }
+
+    /**
+     * Check if this is a 2x2 (4-block-wide) tree by looking for adjacent same-type logs at base level.
+     */
+    is2x2Tree(x, y, z, logType) {
+        // Check all 4 possible 2x2 configurations this block could be part of
+        const patterns = [
+            [[0, 0], [1, 0], [0, 1], [1, 1]],   // NW corner
+            [[-1, 0], [0, 0], [-1, 1], [0, 1]], // NE corner  
+            [[0, -1], [1, -1], [0, 0], [1, 0]], // SW corner
+            [[-1, -1], [0, -1], [-1, 0], [0, 0]] // SE corner
+        ];
+
+        for (const pattern of patterns) {
+            let matches = 0;
+            for (const [dx, dz] of pattern) {
+                const block = this.getBlockWorld(x + dx, y, z + dz);
+                if (block === logType) matches++;
+            }
+            if (matches === 4) return true;
+        }
+        return false;
+    }
+
     // --- Sign Logic ---
 
     setSignText(x, y, z, text) {
@@ -1584,13 +1698,17 @@ export class VoxelGame {
 
     // cleanupBlockData removed as it's no longer needed
 
-    // Frustum culling - hide chunks not in view
-    updateFrustumCulling() {
+    updateFrustum() {
         this.frustumMatrix.multiplyMatrices(
             this.camera.projectionMatrix,
             this.camera.matrixWorldInverse
         );
         this.frustum.setFromProjectionMatrix(this.frustumMatrix);
+    }
+
+    // Frustum culling - hide chunks not in view
+    updateChunkVisibility() {
+        // Reuse this.frustum which should be updated by updateFrustum() earlier in the frame
 
         // Get player chunk position for distance calculations
         const playerCX = Math.floor(this.player.position.x / this.chunkSize);
@@ -1656,6 +1774,99 @@ export class VoxelGame {
     }
 
     // updateHighlight removed - handled by PhysicsManager
+
+    // Voxel Raycast (DDA Algorithm) for Line of Sight
+    checkLineOfSight(start, end) {
+        // 1. Setup DDA
+        let x0 = Math.floor(start.x);
+        let y0 = Math.floor(start.y);
+        let z0 = Math.floor(start.z);
+        const x1 = Math.floor(end.x);
+        const y1 = Math.floor(end.y);
+        const z1 = Math.floor(end.z);
+
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const dz = Math.abs(z1 - z0);
+
+        const stepX = x0 < x1 ? 1 : -1;
+        const stepY = y0 < y1 ? 1 : -1;
+        const stepZ = z0 < z1 ? 1 : -1;
+
+        // Initial remainder (distance to next boundary)
+        // Correct DDA setup
+        // Delta distance: distance ray travels to go 1 step in X/Y/Z
+        // If dx is 0, delta is Infinity (handled by large number / logic)
+
+        // Ray direction
+        const rayDir = new THREE.Vector3().subVectors(end, start).normalize();
+
+        // Distance to traverse 1 unit in each direction
+        const deltaDistX = (dx === 0) ? Infinity : Math.abs(1 / rayDir.x);
+        const deltaDistY = (dy === 0) ? Infinity : Math.abs(1 / rayDir.y);
+        const deltaDistZ = (dz === 0) ? Infinity : Math.abs(1 / rayDir.z);
+
+        let sideDistX, sideDistY, sideDistZ;
+
+        // Calculate initial sideDist
+        if (rayDir.x < 0) {
+            sideDistX = (start.x - x0) * deltaDistX;
+        } else {
+            sideDistX = (x0 + 1.0 - start.x) * deltaDistX;
+        }
+        if (rayDir.y < 0) {
+            sideDistY = (start.y - y0) * deltaDistY;
+        } else {
+            sideDistY = (y0 + 1.0 - start.y) * deltaDistY;
+        }
+        if (rayDir.z < 0) {
+            sideDistZ = (start.z - z0) * deltaDistZ;
+        } else {
+            sideDistZ = (z0 + 1.0 - start.z) * deltaDistZ;
+        }
+
+        // Limit loop to avoid infinite freeze
+        let steps = 0;
+        const maxSteps = 100; // Limit ray length (approx 100 blocks) or calculate from dist
+
+        while (true) {
+            // Check current block
+            // Optimization: Ignore air and water? water might occlude? 
+            // Usually water is transparent. Leaves might be transparent-ish? 
+            // For culling, we only want SOLID opaque blocks.
+            // Transparent blocks (glass, water, leaves) should NOT occlude.
+            const block = this.getBlockWorld(x0, y0, z0);
+            if (block && block !== Blocks.AIR && block !== Blocks.WATER &&
+                !block.includes('glass') && !block.includes('leaves')) {
+                // Occulsion detected!
+                return false; // Not visible
+            }
+
+            if (x0 === x1 && y0 === y1 && z0 === z1) break;
+            if (steps++ > maxSteps) break; // Should unlikely hit this if end point is reasonable
+
+            // Step
+            if (sideDistX < sideDistY) {
+                if (sideDistX < sideDistZ) {
+                    sideDistX += deltaDistX;
+                    x0 += stepX;
+                } else {
+                    sideDistZ += deltaDistZ;
+                    z0 += stepZ;
+                }
+            } else {
+                if (sideDistY < sideDistZ) {
+                    sideDistY += deltaDistY;
+                    y0 += stepY;
+                } else {
+                    sideDistZ += deltaDistZ;
+                    z0 += stepZ;
+                }
+            }
+        }
+
+        return true; // Line of sight clear
+    }
 
     updateDebug() {
         this.uiManager.updatePosition(this.player.position);
@@ -1763,9 +1974,23 @@ export class VoxelGame {
         this.processChunkQueue();
         // this.profiler.end('WorldGen');
 
+        // PERFORMANCE: Update Frustum ONCE per frame
+        this.updateFrustum();
+
         const now = performance.now();
-        const deltaTime = (now - this.lastTime) / 1000;
+        let deltaTime = (now - this.lastTime) / 1000;
         this.lastTime = now;
+
+        // CRITICAL: Cap deltaTime to prevent physics explosion during lag spikes
+        // When frames take too long (e.g., mesh creation), uncapped dt causes:
+        // 1. Massive velocity accumulation
+        // 2. Player falling through terrain
+        // Cap at 50ms (0.05s) to maintain stable physics
+        const maxDeltaTime = 0.05;
+        if (deltaTime > maxDeltaTime) {
+            console.warn(`[Game] Frame took ${(deltaTime * 1000).toFixed(1)}ms, capping dt to ${maxDeltaTime * 1000}ms`);
+            deltaTime = maxDeltaTime;
+        }
 
         // UI Update (Speech bubbles)
         // this.profiler.start('UI');
@@ -1787,17 +2012,16 @@ export class VoxelGame {
             return;
         }
 
-        // Update physics and player only when locked (active play) OR mobile controls are enabled
-        if (this.controls.isLocked || this.gameState.flags.mobileControls) {
-            this.updateTimeStop(deltaTime);
-            // this.profiler.start('Player');
-            this.player.update(deltaTime);
-            // this.profiler.end('Player');
+        // Update physics and player
+        // Always update player physics (gravity) but only allow input when locked/mobile
+        this.updateTimeStop(deltaTime);
+        // this.profiler.start('Player');
+        this.player.update(deltaTime, this.controls.isLocked || this.gameState.flags.mobileControls);
+        // this.profiler.end('Player');
 
-            // this.profiler.start('Physics');
-            this.physicsManager.update();
-            // this.profiler.end('Physics');
-        }
+        // this.profiler.start('Physics');
+        this.physicsManager.update();
+        // this.profiler.end('Physics')
 
 
         // Always update chunks and check for new ones, so the world generates around you even before starting
@@ -1821,14 +2045,116 @@ export class VoxelGame {
 
         // Update animals
         // this.profiler.start('Entities');
+
+        // Optimization Reuse Objects
+        if (!this._cullingSphere) {
+            this._cullingSphere = new THREE.Sphere(new THREE.Vector3(), 2.0); // 2.0 radius covers all mobs
+        }
+
         for (let i = this.animals.length - 1; i >= 0; i--) {
             const animal = this.animals[i];
-            const keep = this.safelyUpdateEntity(animal, deltaTime, this.animals, i);
+
+            // --- OPTIMIZATION START ---
+            // 1. Distance Culling
+            const distSq = animal.position.distanceToSquared(this.player.position);
+
+            // Hard Despawn if too far (e.g., 128m) - handled in cleanupEntities mostly, but check here too?
+            // Existing cleanupEntities handles the removal. Here we just decide to UPDATE or RENDER.
+
+            // 2. Frustum Culling
+            // Move sphere to animal
+            this._cullingSphere.center.copy(animal.position);
+            // Adjust radius based on entity size if needed, but 2.0 is generous for current mobs
+            // const radius = Math.max(animal.width, animal.height, animal.depth);
+            // this._cullingSphere.radius = radius; 
+
+            const inFrustum = this.frustum.intersectsSphere(this._cullingSphere);
+            const isClose = distSq < 64 * 64; // Always update if within 64m (sound range, logic range)
+
+            // Logic:
+            // - If not in frustum AND on ground AND not close -> Skip update, hide mesh
+            // - Falling entities: Always update (gravity)
+            // - Close entities: Always update (audio, interactions)
+
+            let shouldUpdate = true;
+            let shouldRender = true;
+
+            if (!inFrustum && !isClose) {
+                if (animal.onGround) {
+                    shouldUpdate = false;
+                    shouldRender = false;
+                } else {
+                    // Falling/Airborne: Must update physics, but maybe hide mesh if VERY far?
+                    // If out of frustum, we don't *render*, but we *update* position.
+                    shouldRender = false;
+                    shouldUpdate = true;
+                }
+            } else if (!inFrustum && isClose) {
+                // Close but behind us
+                shouldRender = false;
+                shouldUpdate = true; // Logic still runs (sounds, chasing from behind)
+            } else {
+                // In Frustum
+                // 3. Occlusion Culling (Line of Sight)
+                // Only check if visible in frustum to save CPU
+                // Check from Camera to Entity Center (approx)
+                // Offset entity position up slightly (center of mass)
+                const entityCenter = animal.position.clone();
+                entityCenter.y += (animal.height || 1.0) * 0.5;
+
+                // Optimization: Don't raycast every frame? Or stride?
+                // For now, simple raycast every frame is fine if efficient.
+                const hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
+
+                if (!hasLOS) {
+                    // Blocked!
+                    if (animal.onGround) {
+                        shouldUpdate = false;
+                        shouldRender = false;
+                    } else {
+                        // Falling/Airborne: Must update physics
+                        shouldRender = false;
+                        shouldUpdate = true;
+                    }
+                } else {
+                    // Visible!
+                    shouldRender = true;
+                    shouldUpdate = true;
+                }
+            }
+
+            // Apply Rendering Visibility
+            // Also respect global toggles!
+            if (shouldRender) {
+                // Check global toggles only if frustum says render
+                const type = animal.constructor.name;
+                let categoryVisible = true;
+                if (type === 'Villager') categoryVisible = this.villagersVisible;
+                else if (type === 'Spaceship') categoryVisible = this.spaceshipsVisible;
+                else categoryVisible = this.creaturesVisible;
+
+                // Specific toggle
+                const specificVisible = this.allowedAnimalTypes.has(type);
+
+                shouldRender = categoryVisible && specificVisible;
+            }
+
+            // Toggle mesh visibility
+            if (animal.mesh) animal.mesh.visible = shouldRender;
+            if (animal.group) animal.group.visible = shouldRender;
+
+            // Execute Update
+            let keep = true;
+            if (shouldUpdate) {
+                keep = this.safelyUpdateEntity(animal, deltaTime, this.animals, i);
+            }
+
             if (!keep) {
                 if (animal.dispose) animal.dispose();
                 this.scene.remove(animal.mesh);
                 this.animals.splice(i, 1);
             }
+            // --- OPTIMIZATION END ---
         }
 
         // Update mini-games
@@ -1950,7 +2276,8 @@ export class VoxelGame {
         // this.profiler.end('Entities');
 
         // Frustum culling for performance
-        this.updateFrustumCulling();
+        // Frustum culling for performance
+        this.updateChunkVisibility();
 
         // Day/Night Cycle - use Environment module
         if (!this.gameState.debug || this.gameState.debug.environment) {
@@ -1991,6 +2318,11 @@ export class VoxelGame {
             for (const remotePlayer of this.remotePlayers.values()) {
                 remotePlayer.update(remoteDelta);
             }
+        }
+
+        // Update SocketManager for remote player mesh interpolation and voice chat
+        if (this.socketManager) {
+            this.socketManager.update(deltaTime);
         }
 
 
@@ -2086,13 +2418,22 @@ export class VoxelGame {
         if (this.environment) {
             this.environment.toggleShadows(enabled);
         }
-        console.log(`[Game] Toggling terrain shadows: ${enabled}`);
+        console.log(`[Game] Toggling terrain shadows (receive): ${enabled}`);
 
         // Update existing chunks
         for (const chunk of this.chunks.values()) {
             if (chunk && chunk.mesh) {
-                chunk.mesh.castShadow = enabled;
                 chunk.mesh.receiveShadow = enabled;
+            }
+        }
+    }
+
+    toggleTerrainCastShadows(enabled) {
+        this.terrainCastShadows = enabled;
+        console.log(`[Game] Toggling terrain cast shadows: ${enabled}`);
+        for (const chunk of this.chunks.values()) {
+            if (chunk && chunk.mesh) {
+                chunk.mesh.castShadow = enabled;
             }
         }
     }

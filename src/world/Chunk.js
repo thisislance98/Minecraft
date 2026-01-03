@@ -663,7 +663,7 @@ export class Chunk {
         this.mesh.userData.chunk = this;
         // Use global setting from game
         const shadowsEnabled = this.game.terrainShadowsEnabled !== false;
-        this.mesh.castShadow = shadowsEnabled;
+        this.mesh.castShadow = this.game.terrainCastShadows;
         this.mesh.receiveShadow = shadowsEnabled;
 
         // Respect global visibility toggle

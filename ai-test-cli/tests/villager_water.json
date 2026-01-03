@@ -1,0 +1,11 @@
+{
+    "name": "Villager Water Physics Test",
+    "headless": true,
+    "prompt": "Test Villager Water Physics",
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; const { Villager } = game.entities.find(e => e.constructor.name === 'Villager') ? { Villager: game.entities.find(e => e.constructor.name === 'Villager').constructor } : { Villager: null }; if (!Villager) return { success: false, message: 'Villager class not found' }; const { Blocks } = game; const startX = 100; const startY = 80; const startZ = 100; for (let x = -2; x <= 2; x++) { for (let z = -2; z <= 2; z++) { game.setBlock(startX + x, startY - 1, startZ + z, Blocks.STONE); game.setBlock(startX + x, startY, startZ + z, Blocks.WATER); game.setBlock(startX + x, startY + 1, startZ + z, Blocks.AIR); } } const v = new Villager(game, startX, startY + 0.5, startZ); game.addEntity(v); console.log('Spawned Villager at', v.position); return new Promise(resolve => { let ticks = 0; const interval = setInterval(() => { v.update(0.1); ticks++; if (ticks >= 20) { clearInterval(interval); resolve({ success: true, message: `Final Y: ${v.position.y.toFixed(3)}, InWater: ${game.getBlock(Math.floor(v.position.x), Math.floor(v.position.y), Math.floor(v.position.z))?.type === Blocks.WATER}` }); } }, 50); }); }"
+        }
+    ]
+}

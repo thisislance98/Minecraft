@@ -16,7 +16,7 @@ export class Player {
 
         this.position = new THREE.Vector3(spawnX, spawnY, spawnZ);
         this.velocity = new THREE.Vector3(0, 0, 0);
-        this.rotation = { x: 0, y: 0 };
+        this.rotation = { x: 0, y: Math.PI };
         this.orbitRotation = { x: 0, y: 0 }; // Camera orbit angles
         this.height = Config.PLAYER.HEIGHT;
         this.width = Config.PLAYER.WIDTH;
@@ -874,20 +874,13 @@ export class Player {
         if (this.rideWand) this.rideWand.visible = itemType === 'ride_wand';
         if (this.wizardTowerWand) this.wizardTowerWand.visible = itemType === 'wizard_tower_wand';
         if (this.broom) {
-            // Only show held broom if we are NOT flying OR if we are flying but not in rising mode?
-            // Actually:
-            // If flying AND holding broom -> Show RidingBroom (handled in update loop/toggle logic), Hide HeldBroom
-            // If flying AND NOT holding broom -> Show nothing? (Correct, assuming another item is held)
-            // If NOT flying -> Show HeldBroom if selected
-
-            // So hide held broom if flying AND holding it (because we show riding version)
-            // BUT this function is called every frame or on switch.
-
+            // Held broom: Only show if selected AND not flying (when flying we show riding version)
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
 
-            // Also update riding broom visibility here to handle item switching while flying
+            // Riding broom: Always show while flying (regardless of selected item)
+            // The broom only disappears when flight is toggled off via use item button
             if (this.ridingBroom) {
-                this.ridingBroom.visible = (this.isFlying && itemType === 'flying_broom');
+                this.ridingBroom.visible = this.isFlying;
             }
         }
 
@@ -902,6 +895,11 @@ export class Player {
 
         // Attempt to attack entity or player
         this.attackPlayer();
+
+        // Broadcast action to other players
+        if (this.game.socketManager) {
+            this.game.socketManager.sendPlayerAction('swing');
+        }
     }
 
     attackPlayer() {
@@ -967,7 +965,7 @@ export class Player {
         }
     }
 
-    update(deltaTime) {
+    update(deltaTime, allowInput = true) {
         // Skip update if player is dead
         if (this.isDead) return;
 
@@ -975,21 +973,30 @@ export class Player {
         // REF_FPS allows us to tune values as if running at 60 FPS
         const REF_FPS = 60.0;
 
-        // Scale speed to blocks/second
-        const speed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? this.sprintMultiplier : (input.isActionActive('SNEAK') ? 0.3 : 1));
+        // Only read movement input if allowed (pointer lock engaged or mobile controls)
+        let moveForward = 0;
+        let moveRight = 0;
+        let speed = 0;
+        let velX = 0;
+        let velZ = 0;
 
-        // Calculate movement input
-        const moveForward = (input.isActionActive('FORWARD') ? 1 : 0) - (input.isActionActive('BACKWARD') ? 1 : 0);
-        const moveRight = (input.isActionActive('RIGHT') ? 1 : 0) - (input.isActionActive('LEFT') ? 1 : 0);
+        if (allowInput) {
+            // Scale speed to blocks/second
+            speed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? this.sprintMultiplier : (input.isActionActive('SNEAK') ? 0.3 : 1));
 
-        // Apply rotation to movement (local to character facing direction)
-        const sin = Math.sin(this.rotation.y);
-        const cos = Math.cos(this.rotation.y);
+            // Calculate movement input
+            moveForward = (input.isActionActive('FORWARD') ? 1 : 0) - (input.isActionActive('BACKWARD') ? 1 : 0);
+            moveRight = (input.isActionActive('RIGHT') ? 1 : 0) - (input.isActionActive('LEFT') ? 1 : 0);
 
-        // Forward/back moves along camera facing direction, left/right strafes perpendicular
-        // These velocities are now in blocks per second
-        const velX = (-moveForward * sin + moveRight * cos) * speed;
-        const velZ = (-moveForward * cos - moveRight * sin) * speed;
+            // Apply rotation to movement (local to character facing direction)
+            const sin = Math.sin(this.rotation.y);
+            const cos = Math.cos(this.rotation.y);
+
+            // Forward/back moves along camera facing direction, left/right strafes perpendicular
+            // These velocities are now in blocks per second
+            velX = (-moveForward * sin + moveRight * cos) * speed;
+            velZ = (-moveForward * cos - moveRight * sin) * speed;
+        }
 
         // Studio mode - disable physics and allow free movement
         if (this.game.studio && this.game.studio.isActive) {
@@ -1151,8 +1158,8 @@ export class Player {
                     if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0;
                     if (Math.abs(this.velocity.z) < 0.1) this.velocity.z = 0;
 
-                    // Jump
-                    if (input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
+                    // Jump (only when input is allowed)
+                    if (allowInput && input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
                         this.velocity.y = this.jumpForce * REF_FPS;
                         this.onGround = false;
                     }
@@ -1380,6 +1387,11 @@ export class Player {
         // Visual Improvements: Camera Shake
         this.triggerCameraShake(0.1, 150); // intensity, duration ms
 
+        // Sync health immediately
+        if (this.game.socketManager) {
+            this.game.socketManager.sendPlayerState();
+        }
+
         // Check for death
         if (this.health <= 0) {
             this.onDeath();
@@ -1427,6 +1439,9 @@ export class Player {
 
     heal(amount) {
         this.health = Math.min(this.maxHealth, this.health + amount);
+        if (this.game.socketManager) {
+            this.game.socketManager.sendPlayerState();
+        }
     }
 
     eat(amount) {
@@ -1563,6 +1578,11 @@ export class Player {
         if (this.game.uiManager) {
             this.game.uiManager.showDeathScreen();
         }
+
+        // Notify server
+        if (this.game.socketManager) {
+            this.game.socketManager.sendDeath();
+        }
     }
 
     respawn() {
@@ -1690,7 +1710,7 @@ export class Player {
 
         // Mining animation (also used for eating)
         if (this.isMining && !isBowVisible) {
-            this.miningTimer += deltaTime * 15;
+            this.miningTimer += deltaTime * 10; // Adjusted swing speed
             if (this.miningTimer > Math.PI) {
                 this.isMining = false;
                 this.miningTimer = 0;
@@ -1698,7 +1718,7 @@ export class Player {
             } else {
                 if (this.rightArmPivot) {
                     // Mining swing override
-                    const swing = Math.sin(this.miningTimer) * 1.5;
+                    const swing = Math.sin(this.miningTimer) * 2.2; // Higher arm raise (was 1.5)
                     const basePitch = (this.cameraMode !== 0) ? this.rotation.x : 0;
                     this.rightArmPivot.rotation.x = basePitch + swing;
                     return; // Skip walking anim for right arm while mining

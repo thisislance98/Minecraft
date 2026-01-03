@@ -963,6 +963,9 @@ export class Animal {
             this.velocity.z *= 0.8;
             this.velocity.y *= 0.8;
 
+            // Gravity in water (reduced)
+            this.velocity.y -= this.gravity * 0.1 * dt;
+
             // Buoyancy - push up slightly
             // If they are deep, push up more? 
             // Simple logic: Tend towards surface.

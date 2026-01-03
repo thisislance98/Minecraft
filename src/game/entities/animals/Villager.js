@@ -172,6 +172,8 @@ export class Villager extends Animal {
         if (this.game && this.game.questSystem && this.rng.next() < 0.25) {
             this.game.questSystem.generateQuestForVillager(this);
         }
+
+        this.avoidsWater = true;
     }
 
     createBody() {
@@ -459,7 +461,7 @@ export class Villager extends Animal {
                         this.repathTimer = 1.0; // Re-path every 1s
                         this.lastTargetBlockPos = playerBlockPos.clone();
 
-                        const path = this.pathfinder.findPath(this.position, player.position);
+                        const path = this.pathfinder.findPath(this.position, player.position, 2000, { avoidWater: this.avoidsWater });
                         if (path) {
                             this.currentPath = path;
                             this.pathIndex = 0;

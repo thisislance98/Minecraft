@@ -155,41 +155,35 @@ export class Arrow {
             // Check Remote Players
             const socketManager = this.game.socketManager;
             if (socketManager && socketManager.playerMeshes) {
-                const remoteMeshes = [];
-                socketManager.playerMeshes.forEach((meshInfo) => {
-                    if (meshInfo.group) remoteMeshes.push(meshInfo.group);
-                });
+                // Use simple distance check (radius) instead of Raycaster for better hit registration (prevent tunneling/missing limbs)
+                // Player width is ~0.6, height ~1.8. 
+                // A radius of 0.8 covers the body well enough for "arrow hit" feel.
+                const hitRadius = 0.8;
+                const playerHeight = 1.8;
 
-                if (remoteMeshes.length > 0) {
-                    const raycaster = new THREE.Raycaster(this.position, this.velocity.clone().normalize(), 0, movement.length() + 0.1);
-                    const intersects = raycaster.intersectObjects(remoteMeshes, true);
+                for (const [id, meshInfo] of socketManager.playerMeshes) {
+                    if (!meshInfo.group) continue;
 
-                    if (intersects.length > 0) {
-                        const hitObject = intersects[0].object;
-                        const hitPoint = intersects[0].point;
+                    // Get player center position (approx)
+                    // Mesh position is at feet. Center is up by half height.
+                    const playerPos = meshInfo.group.position.clone();
+                    playerPos.y += playerHeight / 2;
 
-                        // Find player ID
-                        let playerId = null;
-                        let curr = hitObject;
-                        while (curr) {
-                            if (curr.userData && curr.userData.playerId) {
-                                playerId = curr.userData.playerId;
-                                break;
-                            }
-                            curr = curr.parent;
-                            if (curr === this.game.scene) break;
-                        }
+                    // Distance check to the segment this arrow traveled
+                    // closestPointToPoint returns the point on the segment [this.position, nextPos] closest to playerPos
+                    const closestPoint = new THREE.Vector3();
+                    segment.closestPointToPoint(playerPos, true, closestPoint);
 
-                        if (playerId) {
-                            console.log(`Arrow hit remote player ${playerId}!`);
-                            // Send damage
-                            socketManager.sendDamage(playerId, 4); // Arrow damage
+                    if (closestPoint.distanceTo(playerPos) < hitRadius) {
+                        console.log(`Arrow hit remote player ${id}!`);
+                        // Send damage - 7 damage (3 hits to kill 20 HP)
+                        socketManager.sendDamage(id, 7);
 
-                            this.isStuck = true;
-                            this.position.copy(hitPoint);
-                            this.mesh.position.copy(this.position);
-                            return true;
-                        }
+                        this.isStuck = true;
+                        // Stick to the closest point on the path
+                        this.position.copy(closestPoint);
+                        this.mesh.position.copy(this.position);
+                        return true;
                     }
                 }
             }

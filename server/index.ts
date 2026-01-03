@@ -131,6 +131,7 @@ interface PlayerState {
     pos: { x: number; y: number; z: number };
     rotY: number;
     name: string;
+    heldItem?: string | null;
 }
 
 interface Room {
@@ -262,9 +263,7 @@ io.on('connection', (socket) => {
 
         // Initialize player state to avoid null checks, though position is unknown until first move
         const playerName = payload?.name || `Player_${socket.id.substring(0, 4)}`;
-        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0, name: playerName };
-
-        // ATTACH HANDLERS IMMEDIATELY to prevent race conditions with async DB calls
+        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0, name: playerName, heldItem: null };
 
         // Handle player movement
         socket.on('player:move', (data) => {
@@ -276,10 +275,48 @@ io.on('connection', (socket) => {
                     room.playerStates[socket.id].rotY = data.rotY;
                 }
 
-                // Relay to others in the room (include name and crouch state so clients can display it)
+                // Relay to others in the room (include name, crouch state, and health so clients can display it)
                 const playerState = room?.playerStates[socket.id];
-                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching });
+                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching, health: data.health, maxHealth: data.maxHealth });
             }
+        });
+
+        // Handle player held item changes - MUST be registered early before any async operations
+        socket.on('player:hold', (data: { itemType: string | null }) => {
+            if (!roomId) return;
+
+            // Update server state
+            const room = rooms.get(roomId);
+            if (room && room.playerStates[socket.id]) {
+                room.playerStates[socket.id].heldItem = data.itemType;
+            }
+
+            // Broadcast to all other players in the room
+            socket.to(roomId).emit('player:hold', {
+                id: socket.id,
+                itemType: data.itemType
+            });
+        });
+
+        // Handle player damage (PvP combat) - MUST be registered early before any async operations
+        socket.on('player:damage', (data: { targetId: string, amount: number }) => {
+            if (!roomId) return;
+            console.log(`[Socket] Player ${socket.id} dealing ${data.amount} damage to ${data.targetId}`);
+            io.to(roomId).emit('player:damage', {
+                targetId: data.targetId,
+                amount: data.amount,
+                sourceId: socket.id
+            });
+        });
+
+        // Handle generic player actions (e.g. swing)
+        socket.on('player:action', (data: { action: string }) => {
+            if (!roomId) return;
+            // Broadcast to others in room
+            socket.to(roomId).emit('player:action', {
+                id: socket.id,
+                action: data.action
+            });
         });
 
         // Handle block changes (place/break)
@@ -490,140 +527,15 @@ io.on('connection', (socket) => {
         // Notify others
         // Include player name in the joined broadcast
         const joiningPlayerState = roomToJoin.playerStates[socket.id];
-        socket.to(roomId).emit('player:joined', { id: socket.id, name: joiningPlayerState?.name });
-
-        // Handle player movement
-        socket.on('player:move', (data) => {
-            // Update server state
-            if (roomId) {
-                const room = rooms.get(roomId);
-                if (room && room.playerStates[socket.id]) {
-                    room.playerStates[socket.id].pos = data.pos;
-                    room.playerStates[socket.id].rotY = data.rotY;
-                }
-
-                // Relay to others in the room (include name and crouch state so clients can display it)
-                const playerState = room?.playerStates[socket.id];
-                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching });
-            }
+        socket.to(roomId).emit('player:joined', {
+            id: socket.id,
+            name: joiningPlayerState?.name,
+            heldItem: joiningPlayerState?.heldItem
         });
 
-        // Handle block changes (place/break)
-        socket.on('block:change', async (data: { x: number; y: number; z: number; type: string | null }) => {
-            console.log(`[DEBUG] Received block:change from ${socket.id}:`, data);
-            if (!roomId) {
-                console.log(`[DEBUG] No roomId for socket ${socket.id}, skipping block change`);
-                return;
-            }
-
-            // 1. Broadcast to all other players in the room (real-time sync)
-            socket.to(roomId).emit('block:change', {
-                id: socket.id,
-                x: data.x,
-                y: data.y,
-                z: data.z,
-                type: data.type
-            });
-            console.log(`[DEBUG] Broadcasted block:change to room ${roomId}`);
-
-            // 2. Persist to Firebase (durable storage)
-            console.log(`[DEBUG] Calling worldPersistence.saveBlockChange for room ${roomId}`);
-            await worldPersistence.saveBlockChange(roomId, data.x, data.y, data.z, data.type);
-            console.log(`[DEBUG] Completed worldPersistence.saveBlockChange call`);
-        });
-
-        // Handle sign text update
-        socket.on('sign:update', async (data: { x: number; y: number; z: number; text: string }) => {
-            if (!roomId) return;
-
-            // Broadcast
-            socket.to(roomId).emit('sign:update', data);
-
-            // Persist
-            await worldPersistence.saveSignText(roomId, data.x, data.y, data.z, data.text);
-        });
-
-        // Handle entity updates (movement, health, state)
-        socket.on('entity:update', async (data: { id: string;[key: string]: any }) => {
-            if (!roomId) return;
-
-            // Broadcast to others (skip sender?)
-            // Usually entity updates are authoritative from one client (e.g. host or owner)
-            // Ideally we broadcast to everyone else so they see it move.
-            socket.to(roomId).emit('entity:update', data);
-
-            // Persist
-            await worldPersistence.saveEntity(roomId, data.id, data);
-        });
-
-        // Handle entity spawn (manual or initial)
-        socket.on('entity:spawn', async (data: { id: string; type: string; x: number; y: number; z: number; seed?: number;[key: string]: any }) => {
-            if (!roomId) return;
-
-            // Broadcast
-            socket.to(roomId).emit('entity:spawn', data);
-            console.log(`[Socket] Entity spawned by ${socket.id}: ${data.type} (${data.id})`);
-
-            // Persist
-            await worldPersistence.saveEntity(roomId, data.id, data);
-        });
-
-        // Handle PeerJS ID sharing for voice chat
-        socket.on('peerjs:id', (data: { peerId: string }) => {
-            if (!roomId) return;
-            // Broadcast to others in room so they can call this peer
-            socket.to(roomId).emit('peerjs:id', {
-                socketId: socket.id,
-                peerId: data.peerId
-            });
-            console.log(`[Socket] PeerJS ID shared: ${socket.id} -> ${data.peerId}`);
-        });
-
-        // Handle time changes (e.g. from "K" key)
-        socket.on('world:set_time', (time: number) => {
-            if (!roomId) return;
-            const room = rooms.get(roomId);
-            if (room) {
-                room.time = time;
-                // Immediate broadcast
-                console.log(`[Socket] Room ${roomId} time set to ${time} by ${socket.id}`);
-            }
-        });
-
-        // Handle voice activity state change
-        socket.on('player:voice', (active: boolean) => {
-            if (roomId) {
-                socket.to(roomId).emit('player:voice', { id: socket.id, active });
-            }
-        });
-
-        // Handle player chat messages (speech bubbles)
-        socket.on('player:chat', (data: { message: string }) => {
-            if (!roomId) return;
-            const room = rooms.get(roomId);
-            const playerState = room?.playerStates[socket.id];
-            console.log(`[Socket] Player ${socket.id} chat: "${data.message}"`);
-            // Broadcast to all other players in the room
-            socket.to(roomId).emit('player:chat', {
-                id: socket.id,
-                message: data.message,
-                name: playerState?.name
-            });
-        });
-
-        // Handle group chat messages (visible to all, no speech bubble)
-        socket.on('group:chat', (data: { message: string }) => {
-            if (!roomId) return;
-            const room = rooms.get(roomId);
-            const playerState = room?.playerStates[socket.id];
-            console.log(`[Socket] Group chat from ${socket.id}: "${data.message}"`);
-            // Broadcast to all other players in the room
-            socket.to(roomId).emit('group:chat', {
-                id: socket.id,
-                message: data.message,
-                name: playerState?.name
-            });
-        });
+        // NOTE: All socket event handlers (player:move, block:change, etc.) are registered earlier 
+        // (lines 269-419) before async operations to prevent race conditions.
+        // DO NOT add duplicate handlers here!
 
         // Handle villager chat requests (LLM-powered dialogue)
         socket.on('villager:chat', async (data: {

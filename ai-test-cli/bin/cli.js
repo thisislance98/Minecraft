@@ -521,6 +521,9 @@ program
                 console.log('  break [x y z]  - Break block (targeted or at coords)');
                 console.log('  drops          - Show dropped blocks (for lighting test)');
                 console.log('  setblock <x> <y> <z> <type> - Place a block');
+                console.log('  damage <amount> - Deal damage to player (test health sync)');
+                console.log('  health         - Show player health');
+                console.log('  players        - Show remote players');
                 console.log('  exit           - Close browser and exit');
                 console.log('');
             },
@@ -682,6 +685,35 @@ program
                         console.log(`${marker} [${i}] ${slot.item} x${slot.count}`);
                     } else {
                         console.log(`${marker} [${i}] ${chalk.dim('(empty)')}`);
+                    }
+                }
+            },
+            damage: async (amount = '5') => {
+                const result = await gc.takeDamage(browser, parseInt(amount));
+                if (result.error) {
+                    console.log(chalk.red(result.error));
+                } else {
+                    console.log(chalk.green(`Dealt ${result.damage} damage: ${result.oldHealth} → ${result.newHealth}`));
+                }
+            },
+            health: async () => {
+                const result = await gc.getPlayerHealth(browser);
+                if (result.error) {
+                    console.log(chalk.red(result.error));
+                } else {
+                    console.log(chalk.green(`Health: ${result.health}/${result.maxHealth}`));
+                }
+            },
+            players: async () => {
+                const result = await gc.getRemotePlayers(browser);
+                if (result.error) {
+                    console.log(chalk.red(result.error));
+                } else {
+                    console.log(chalk.blue('\n═══ Remote Players ═══'));
+                    console.log(`Count: ${result.count}`);
+                    for (const p of result.players) {
+                        const pos = p.position ? `(${p.position.x.toFixed(1)}, ${p.position.y.toFixed(1)}, ${p.position.z.toFixed(1)})` : 'unknown';
+                        console.log(`  ${p.id.substring(0, 8)}... at ${pos} [health bar: ${p.hasHealthBar ? 'yes' : 'no'}]`);
                     }
                 }
             }

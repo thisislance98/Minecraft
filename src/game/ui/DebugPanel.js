@@ -19,7 +19,9 @@ export class DebugPanel {
                 showTerrain: true,
                 dayNightCycle: true,
                 particles: true,
+                particles: true,
                 shadows: true,
+                castShadows: false,
                 water: true,
                 weather: true,
                 grass: true,
@@ -68,6 +70,7 @@ export class DebugPanel {
                     <label><input type="checkbox" id="dbg-moon" checked> Show Moon</label>
                     <label><input type="checkbox" id="dbg-particles" checked> Particles</label>
                     <label><input type="checkbox" id="dbg-shadows" checked> Terrain Shadows</label>
+                    <label><input type="checkbox" id="dbg-cast-shadows"> Terrain Cast Shadows</label>
                     <label><input type="checkbox" id="dbg-water" checked> Water</label>
                     <label><input type="checkbox" id="dbg-weather" checked> Weather</label>
                     <label><input type="checkbox" id="dbg-grass" checked> Grass</label>
@@ -133,6 +136,13 @@ export class DebugPanel {
 
         this.populateAnimalList();
         this.populateSpawnSelect();
+
+        // Sync UI with Game State
+        const castCheck = document.getElementById('dbg-cast-shadows');
+        if (castCheck && this.game) {
+            castCheck.checked = !!this.game.terrainCastShadows;
+            this.settings.world.castShadows = castCheck.checked;
+        }
     }
 
     populateAnimalList() {
@@ -234,6 +244,10 @@ export class DebugPanel {
         this.bindCheckbox('dbg-shadows', (val) => {
             this.settings.world.shadows = val;
             if (this.game.toggleTerrainShadows) this.game.toggleTerrainShadows(val);
+        });
+        this.bindCheckbox('dbg-cast-shadows', (val) => {
+            this.settings.world.castShadows = val;
+            if (this.game.toggleTerrainCastShadows) this.game.toggleTerrainCastShadows(val);
         });
         this.bindCheckbox('dbg-water', (val) => {
             this.settings.world.water = val;

@@ -65,9 +65,10 @@ export class Pathfinder {
      * @param {THREE.Vector3} start - Start position
      * @param {THREE.Vector3} end - Target position
      * @param {number} maxSteps - strict limit on iterations to prevent lag
+     * @param {object} options - pathfinding options (e.g. { avoidWater: boolean })
      * @returns {Array<THREE.Vector3>|null} - Array of points or null if no path
      */
-    findPath(start, end, maxSteps = 2000) {
+    findPath(start, end, maxSteps = 2000, options = {}) {
         const startNode = {
             x: Math.floor(start.x),
             y: Math.floor(start.y),
@@ -131,7 +132,7 @@ export class Pathfinder {
                 return this.reconstructPath(current);
             }
 
-            const neighbors = this.getNeighbors(current);
+            const neighbors = this.getNeighbors(current, options);
             for (const neighbor of neighbors) {
                 const nKey = key(neighbor);
                 if (closedSet.has(nKey)) continue;
@@ -179,7 +180,7 @@ export class Pathfinder {
         return path.reverse();
     }
 
-    getNeighbors(node) {
+    getNeighbors(node, options = {}) {
         const neighbors = [];
         const directions = [
             { x: 1, z: 0 }, { x: -1, z: 0 },
@@ -192,36 +193,39 @@ export class Pathfinder {
 
             // 1. Flat Move
             // Current Y
-            if (!this.isSolid(nx, node.y, nz) &&
-                !this.isSolid(nx, node.y + 1, nz) &&
+            // Body and Head used options (Obstacle check)
+            // Floor uses NO options (Support check - physics only)
+            if (!this.isSolid(nx, node.y, nz, options) &&
+                !this.isSolid(nx, node.y + 1, nz, options) &&
                 this.isSolid(nx, node.y - 1, nz)) {
                 neighbors.push({ x: nx, y: node.y, z: nz, cost: 1 });
                 continue;
             }
 
             // 2. Step Up (1 block)
-            // Block in front is solid, but space above it is empty
+            // Block in front is solid (base physics check for support), but space above it is empty
             // And we have headroom to jump
+            // We check if the block at (nx, y) is solid PHYSICALLY to stand on it.
             if (this.isSolid(nx, node.y, nz) &&
-                !this.isSolid(nx, node.y + 1, nz) &&
-                !this.isSolid(nx, node.y + 2, nz) &&
-                !this.isSolid(node.x, node.y + 2, node.z)) { // Headroom at current pos
+                !this.isSolid(nx, node.y + 1, nz, options) &&
+                !this.isSolid(nx, node.y + 2, nz, options) &&
+                !this.isSolid(node.x, node.y + 2, node.z, options)) { // Headroom at current pos
                 neighbors.push({ x: nx, y: node.y + 1, z: nz, cost: 1.5 });
                 continue;
             }
 
             // 3. Drop Down (up to 3 blocks)
-            if (!this.isSolid(nx, node.y, nz) &&
-                !this.isSolid(nx, node.y + 1, nz) &&
-                !this.isSolid(nx, node.y - 1, nz)) { // Gap!
+            if (!this.isSolid(nx, node.y, nz, options) &&
+                !this.isSolid(nx, node.y + 1, nz, options) &&
+                !this.isSolid(nx, node.y - 1, nz, options)) { // Gap! (Use options to avoid jumping INTO water if it's considered solid)
 
                 for (let i = 2; i <= 4; i++) {
                     const dropY = node.y - i;
-                    if (this.isSolid(nx, dropY, nz)) {
+                    if (this.isSolid(nx, dropY, nz)) { // Physical support check
                         // Found ground
                         // Check headroom at target
-                        if (!this.isSolid(nx, dropY + 1, nz) &&
-                            !this.isSolid(nx, dropY + 2, nz)) {
+                        if (!this.isSolid(nx, dropY + 1, nz, options) &&
+                            !this.isSolid(nx, dropY + 2, nz, options)) {
                             neighbors.push({ x: nx, y: dropY + 1, z: nz, cost: 1 + (i * 0.5) });
                         }
                         break;
@@ -236,9 +240,21 @@ export class Pathfinder {
         return neighbors;
     }
 
-    isSolid(x, y, z) {
+    isSolid(x, y, z, options = {}) {
         const block = this.game.getBlock(x, y, z);
         if (!block) return false; // Treat null/undefined as air
+
+        const type = (block && block.type) ? block.type : block;
+
+        // Check Water Avoidance
+        // If avoidWater is true, treat WATER as SOLID (impassable)
+        if (options.avoidWater && type === Blocks.WATER) {
+            return true;
+        }
+
+        if (options.avoidWater && type === 'water') {
+            return true;
+        }
 
         // Whitelist of passable blocks
         const PASSABLE = new Set([
@@ -261,6 +277,6 @@ export class Pathfinder {
             Blocks.SNOW // If it's the layer type? Assuming block type for now
         ]);
 
-        return !PASSABLE.has(block);
+        return !PASSABLE.has(type);
     }
 }

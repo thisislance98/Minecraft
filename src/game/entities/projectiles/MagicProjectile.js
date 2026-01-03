@@ -142,6 +142,45 @@ export class MagicProjectile {
             }
         }
 
+        // Check Remote Players (Prevent shoot-through)
+        const socketManager = this.game.socketManager;
+        if (socketManager && socketManager.playerMeshes) {
+            const hitRadius = 1.0; // Slightly larger for magic
+            const playerHeight = 1.8;
+
+            for (const [id, meshInfo] of socketManager.playerMeshes) {
+                if (!meshInfo.group) continue;
+
+                const playerPos = meshInfo.group.position.clone();
+                playerPos.y += playerHeight / 2;
+
+                // Check distance to segment [position, nextPos]
+                const segment = new THREE.Line3(this.position, nextPos);
+                const closestPoint = new THREE.Vector3();
+                segment.closestPointToPoint(playerPos, true, closestPoint);
+
+                if (closestPoint.distanceTo(playerPos) < hitRadius) {
+                    console.log(`Magic hit remote player ${id}!`);
+                    // Magic damage/effects handled in explode() usually? 
+                    // But explode() is local. We need to send damage if WE own this projectile.
+                    // MagicProjectile doesn't seem to track owner explicitly like Arrow, 
+                    // but usually local player fires it. 
+                    // Assuming local player fired it:
+
+                    // Send damage (Magic is usually strong? Let's say 5 or 6, or just explosion damage?)
+                    // explode() does area damage. 
+                    // If we hit directly, we should explode AT the player.
+
+                    // We return true here to trigger collision response in update() 
+                    // which calls explode(this.position).
+                    // However, update() uses `this.position` for explode.
+                    // We should update `this.position` to the hit point so explosion happens ON the player.
+                    this.position.copy(closestPoint);
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
@@ -159,6 +198,9 @@ export class MagicProjectile {
         const radius = 2;
         const center = new THREE.Vector3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
 
+        // Track destroyed positions for tree stability check
+        const destroyedPositions = [];
+
         for (let x = -radius; x <= radius; x++) {
             for (let y = -radius; y <= radius; y++) {
                 for (let z = -radius; z <= radius; z++) {
@@ -170,11 +212,17 @@ export class MagicProjectile {
                         const existing = this.game.getBlock(tx, ty, tz);
                         // Destroy block if it exists and is not bedrock/water (optional safety)
                         if (existing && existing.type !== 'bedrock') {
+                            destroyedPositions.push({ x: tx, y: ty, z: tz });
                             this.game.setBlock(tx, ty, tz, null);
                         }
                     }
                 }
             }
+        }
+
+        // 4. Check tree stability after destroying blocks
+        if (destroyedPositions.length > 0 && this.game.checkTreeStability) {
+            this.game.checkTreeStability(destroyedPositions);
         }
 
         // 3. Blow up creatures in area

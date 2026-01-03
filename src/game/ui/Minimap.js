@@ -8,7 +8,7 @@ export class Minimap {
         this.size = 180; // Slightly larger
         this.expandedSize = 400;
         this.isExpanded = false;
-        this.visible = true; // Visibility state
+        this.visible = false; // Visibility state (hidden by default)
 
         // Configuration
         this.zoom = 1;
@@ -50,6 +50,9 @@ export class Minimap {
 
         // Add to document
         document.body.appendChild(this.container);
+
+        // Apply initial visibility state
+        this.container.style.display = this.visible ? 'block' : 'none';
     }
 
     toggleVisibility() {

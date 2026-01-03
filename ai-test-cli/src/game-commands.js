@@ -530,7 +530,6 @@ export async function spawnCreatureAt(browser, creatureType, x, y, z) {
     }, creatureType, x, y, z);
 }
 
-
 /**
  * Set player rotation
  */
@@ -544,4 +543,64 @@ export async function setRotation(browser, x, y, z) {
     }, x, y, z);
 }
 
+/**
+ * Deal damage to the player (for testing health bar sync)
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {number} amount - Damage amount
+ */
+export async function takeDamage(browser, amount = 5) {
+    return await executeInBrowser(browser, (dmg) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        const oldHealth = game.player.health;
+        game.player.takeDamage(dmg);
+        return {
+            success: true,
+            damage: dmg,
+            oldHealth: oldHealth,
+            newHealth: game.player.health
+        };
+    }, amount);
+}
+
+/**
+ * Get player health info
+ */
+export async function getPlayerHealth(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+        return {
+            health: game.player.health,
+            maxHealth: game.player.maxHealth
+        };
+    });
+}
+
+/**
+ * Get info about remote players (for testing multiplayer)
+ */
+export async function getRemotePlayers(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.socketManager) return { error: 'Game not ready' };
+
+        const players = [];
+        if (game.socketManager.playerMeshes) {
+            game.socketManager.playerMeshes.forEach((meshInfo, id) => {
+                players.push({
+                    id: id,
+                    position: meshInfo.group ? {
+                        x: meshInfo.group.position.x,
+                        y: meshInfo.group.position.y,
+                        z: meshInfo.group.position.z
+                    } : null,
+                    hasHealthBar: !!meshInfo.healthBar
+                });
+            });
+        }
+        return { count: players.length, players };
+    });
+}
 

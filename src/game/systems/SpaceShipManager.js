@@ -354,6 +354,11 @@ export class SpaceShipManager {
         // Control room area: front of saucer, Z around -35 to -40
         const controlZ = saucerCenterZ - 10; // Forward in saucer
 
+        // Ensure entities array exists
+        if (!this.game.entities) {
+            this.game.entities = [];
+        }
+
         // 1. Captain (Center)
         const capChair = new Chair(this.game, this.startX, saucerFloorY, controlZ);
         this.game.entities.push(capChair);

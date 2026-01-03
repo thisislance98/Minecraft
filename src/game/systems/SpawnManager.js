@@ -151,7 +151,13 @@ export class SpawnManager {
             // Interactive Plants (Avatar-like)
             { type: 'HelicopterPlant', weight: 0.15, packSize: [3, 6], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] },
             { type: 'ShyPlant', weight: 0.15, packSize: [4, 8], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] },
-            { type: 'CrystalPlant', weight: 0.1, packSize: [2, 5], biomes: ['MOUNTAIN', 'SNOW', 'DESERT'] }
+            { type: 'CrystalPlant', weight: 0.1, packSize: [2, 5], biomes: ['MOUNTAIN', 'SNOW', 'DESERT'] },
+            // NEW Interactive Plants
+            { type: 'HummingBlossom', weight: 0.12, packSize: [2, 4], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] },
+            { type: 'BouncePod', weight: 0.10, packSize: [2, 5], biomes: ['FOREST', 'JUNGLE'] },
+            { type: 'MimicVine', weight: 0.10, packSize: [3, 6], biomes: ['JUNGLE', 'FOREST'] },
+            { type: 'SporeCloud', weight: 0.12, packSize: [3, 5], biomes: ['PLAINS', 'FOREST', 'MOUNTAIN'] },
+            { type: 'SnapTrap', weight: 0.08, packSize: [1, 3], biomes: ['JUNGLE', 'FOREST'] }
         ];
 
         // Hostile mobs (spawn always now for testing)
@@ -544,22 +550,20 @@ export class SpawnManager {
 
             if (groundY === null) {
                 // No valid ground found, skip spawning this animal
-                console.warn(`[SpawnManager] SKIP ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)} (Terrain:${terrainY}). CheckY:${y}. Chunk:${chunkKey} Loaded:${hasChunk}`);
+                // Skip logging for normal spawn skips
                 return;
             }
 
-            if (Math.abs(groundY - terrainY) > 5) {
-                console.log(`[SpawnManager] HIGH DEV ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)}. Terrain:${terrainY} Ground:${groundY}. Chunk:${chunkKey} Loaded:${hasChunk}`);
-            } else {
-                console.log(`[SpawnManager] SPAWN ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)}. Terrain:${terrainY} Ground:${groundY}. Chunk:${chunkKey} Loaded:${hasChunk}`);
-            }
+            // Only log significant ground/terrain deviations (debugging purposes)
+            // if (Math.abs(groundY - terrainY) > 5) {
+            //     console.log(`[SpawnManager] HIGH DEV ${AnimalClass.name} at ${x.toFixed(2)},${z.toFixed(2)}. Terrain:${terrainY} Ground:${groundY}`);
+            // }
 
             spawnY = groundY;
         }
 
         const animal = new AnimalClass(this.game, x, spawnY, z, seed);
-        console.log(`[SpawnManager] Created animal instance: ${AnimalClass.name} at ${x},${spawnY},${z}`);
-        console.trace(`[SpawnManager] Trace for ${AnimalClass.name} spawn`);
+        // Verbose spawn logging removed - was spamming console
 
         // If this is a LOCALLY generated animal (via chunk gen or debug), 
         // we might check if it conflicts with a persisted entity?

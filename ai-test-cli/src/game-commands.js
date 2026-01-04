@@ -254,7 +254,7 @@ export async function getEntities(browser) {
             byType[e.type] = (byType[e.type] || 0) + 1;
         }
 
-        return { count: entities.length, byType, entities: entities.slice(0, 20) };
+        return { count: entities.length, byType, entities: entities };
     });
 }
 
@@ -604,3 +604,47 @@ export async function getRemotePlayers(browser) {
     });
 }
 
+
+/**
+ * Get chat messages from the UI
+ * @returns {Array<{type: string, text: string}>}
+ */
+export async function getChatMessages(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.uiManager) return { error: 'Game not ready' };
+
+        // Access chat messages directly from DOM
+        const container = document.getElementById('chat-messages-ai');
+        if (!container) return { messages: [] };
+
+        const messages = Array.from(container.querySelectorAll('.message')).map(el => ({
+            type: el.classList.contains('ai') ? 'ai' :
+                el.classList.contains('user') ? 'user' :
+                    el.classList.contains('system') ? 'system' : 'unknown',
+            text: el.innerText
+        }));
+
+        return { messages };
+    });
+}
+
+/**
+ * Send a chat message (as if typed by player)
+ */
+export async function sendChatMessage(browser, text) {
+    return await executeInBrowser(browser, (msg) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.uiManager) return { error: 'Game not ready' };
+
+        // Ensure chat is open
+        game.uiManager.toggleChatPanel(true);
+        const input = document.getElementById('chat-input');
+        if (input) {
+            input.value = msg;
+            game.uiManager.handleSendMessage();
+            return { success: true, message: msg };
+        }
+        return { error: 'Chat input not found' };
+    }, text);
+}

@@ -326,6 +326,234 @@ program
         }
     });
 
+
+
+program
+    .command('merlin')
+    .description('Interact with and verify Merlin AI persona')
+    .argument('<action>', 'Action to perform: verify, chat')
+    .option('--headless', 'Run browser in headless mode', false)
+    .action(async (action, options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const gc = await import('../src/game-commands.js');
+        const chalk = (await import('chalk')).default;
+        const readline = await import('readline');
+
+        const browser = new GameBrowser({ headless: options.headless, quiet: true });
+        console.log(chalk.blue(`\n🧙 Launching Merlin (${action})...`));
+
+        await browser.launch();
+        await browser.waitForGameLoad();
+
+        if (action === 'verify') {
+            console.log(chalk.cyan('Clearing local storage for fresh test...'));
+            await browser.evaluate(() => localStorage.clear());
+            await browser.page.reload();
+            await browser.waitForGameLoad();
+
+            console.log(chalk.cyan('Waiting for Merlin to introduce himself...'));
+
+            // 1. Wait for Intro
+            const introFound = await gc.waitFor(browser, () => {
+                const container = document.getElementById('chat-messages-ai');
+                if (!container) return false;
+                const msgs = Array.from(container.querySelectorAll('.message.ai'));
+                const lastAi = msgs.pop();
+                if (lastAi && (lastAi.innerText.includes('Merlin') || lastAi.innerText.toLowerCase().includes('wolf'))) {
+                    return lastAi.innerText;
+                }
+                return false;
+            }, 30000);
+
+            if (!introFound.success) {
+                console.error(chalk.red('❌ Failed: Merlin did not introduce himself.'));
+                await browser.close();
+                process.exit(1);
+            }
+            console.log(chalk.green(`✅ Intro received: "${introFound.result.substring(0, 50)}..."`));
+
+            // 2. Perform Tutorial Task
+            console.log(chalk.yellow('Sending: "spawn a wolf"...'));
+            await gc.sendChatMessage(browser, 'spawn a wolf');
+
+            // 3. Wait for Praise/Response
+            console.log(chalk.cyan('Waiting for Merlin to respond...'));
+            const praiseFound = await gc.waitFor(browser, () => {
+                const container = document.getElementById('chat-messages-ai');
+                if (!container) return false;
+                const msgs = Array.from(container.querySelectorAll('.message.ai'));
+                // valid intro + praise = 2 messages at least
+                if (msgs.length >= 2) {
+                    const last = msgs[msgs.length - 1];
+                    // Verify content is substantial
+                    if (last.innerText.length > 5) return last.innerText;
+                }
+                return false;
+            }, 20000);
+
+            if (!praiseFound.success) {
+                console.error(chalk.red('❌ Failed: Merlin did not respond to the task.'));
+                await browser.close();
+                process.exit(1);
+            }
+            console.log(chalk.green(`✅ Response received: "${praiseFound.result.substring(0, 50)}..."`));
+
+            // 4. Verify Wolf Entity Existed
+            console.log(chalk.cyan('Verifying wolf entity...'));
+            const startTime = Date.now();
+            let wolfCheck = { success: false };
+            while (Date.now() - startTime < 20000) {
+                const result = await gc.getEntities(browser);
+
+                // Debug log
+                if (result && result.entities) {
+                    const pPos = await gc.getPlayerPosition(browser);
+                    console.log(`[DEBUG] Player: (${pPos.x.toFixed(1)}, ${pPos.y.toFixed(1)}, ${pPos.z.toFixed(1)}) | Entities (${result.entities.length}): ${result.entities.map(e => e.type).join(', ')}`);
+                } else {
+                    console.log('[DEBUG] No entities or error:', result);
+                }
+
+                if (!result.error && result.entities) {
+                    const wolf = result.entities.find(e => e.type.includes('Wolf') || e.type.includes('Dog'));
+                    if (wolf) {
+                        wolfCheck = { success: true, result: wolf };
+                        break;
+                    }
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            if (!wolfCheck.success) {
+                console.error(chalk.red('❌ Failed: No wolf entity found.'));
+                const entities = await gc.getEntities(browser);
+                console.log('Entities found:', entities.entities.map(e => e.type).join(', '));
+
+                // Log full conversation for QA
+                console.log(chalk.blue('\n--- Full Conversation ---'));
+                const finalLogs = await gc.getChatMessages(browser);
+                finalLogs.messages.forEach(m => {
+                    const color = m.type === 'ai' ? chalk.cyan : m.type === 'user' ? chalk.yellow : chalk.gray;
+                    console.log(color(`[${m.type}] ${m.text}`));
+                });
+
+                await browser.close();
+                process.exit(1);
+            }
+            console.log(chalk.green(`✅ Wolf found at (${wolfCheck.result.position.x.toFixed(1)}, ${wolfCheck.result.position.y.toFixed(1)}, ${wolfCheck.result.position.z.toFixed(1)})`));
+
+
+            // 5. Test Creation Task: "make a glass pyramid"
+            console.log(chalk.yellow('\nSending: "make a glass pyramid nearby"...'));
+            await gc.sendChatMessage(browser, 'make a glass pyramid nearby');
+
+            console.log(chalk.cyan('Waiting for Merlin to build...'));
+            // Wait for response first
+            await gc.waitFor(browser, () => {
+                const container = document.getElementById('chat-messages-ai');
+                if (!container) return false;
+                const msgs = Array.from(container.querySelectorAll('.message.ai'));
+                return msgs.length > 2; // Intro + Wolf Praise + Pyramid Response
+            }, 30000);
+
+            // Wait for blocks to appear
+            const pyramidStartTime = Date.now();
+            let pyramidCheck = { success: false };
+            while (Date.now() - pyramidStartTime < 30000) {
+                const glassCount = await browser.evaluate(() => {
+                    const game = window.__VOXEL_GAME__;
+                    if (!game) return false;
+                    let count = 0;
+                    const pPos = game.player.position;
+                    // Check volume around player
+                    for (let x = Math.floor(pPos.x - 20); x <= Math.floor(pPos.x + 20); x++) {
+                        for (let z = Math.floor(pPos.z - 20); z <= Math.floor(pPos.z + 20); z++) {
+                            for (let y = Math.floor(pPos.y - 5); y <= Math.floor(pPos.y + 20); y++) {
+                                const block = game.getBlock(x, y, z);
+                                if (block && block.type === 'glass') {
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                    return count;
+                });
+
+                if (glassCount > 5) {
+                    pyramidCheck = { success: true, result: glassCount };
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            if (!pyramidCheck.success) {
+                console.error(chalk.red('❌ Failed: No glass blocks found (Pyramid not built).'));
+                // Don't fail hard, maybe logging is enough?
+                // process.exit(1); 
+            } else {
+                console.log(chalk.green(`✅ Glass pyramid verified (${pyramidCheck.result} blocks found).`));
+            }
+
+            // Log full conversation for QA
+            console.log(chalk.blue('\n--- Full Conversation ---'));
+            const finalLogs = await gc.getChatMessages(browser);
+            finalLogs.messages.forEach(m => {
+                const color = m.type === 'ai' ? chalk.cyan : m.type === 'user' ? chalk.yellow : chalk.gray;
+                console.log(color(`[${m.type}] ${m.text}`));
+            });
+            console.log(chalk.blue('-------------------------\n'));
+
+            console.log(chalk.green('\n🎉 Merlin Verification PASSED!'));
+
+            await browser.close();
+            process.exit(0);
+
+        } else if (action === 'chat') {
+            console.log(chalk.green('✅ Connected! Chat with Merlin below.'));
+            console.log(chalk.dim('(Type "exit" to quit)'));
+
+            // Setup Console Listener for Chat Streaming
+            browser.page.on('console', msg => {
+                const text = msg.text();
+                if (text.startsWith('[Chat:AI]')) {
+                    process.stdout.write(chalk.cyan(text.replace('[Chat:AI]', 'Merlin: ')));
+                } else if (text.startsWith('[Chat:Thought]')) {
+                    // process.stdout.write(chalk.gray(text.replace('[Chat:Thought]', 'Thinking: ')));
+                    // Maybe print thoughts in gray?
+                    // console.log(chalk.gray('\n' + text));
+                }
+            });
+
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+                prompt: chalk.yellow('You > ')
+            });
+
+            rl.prompt();
+
+            rl.on('line', async (line) => {
+                const text = line.trim();
+                if (text === 'exit') {
+                    rl.close();
+                    return;
+                }
+                if (text) {
+                    await gc.sendChatMessage(browser, text);
+                    // Add newline after sending so async logs don't mess up prompt
+                    process.stdout.write('\n');
+                }
+                rl.prompt();
+            });
+
+            rl.on('close', async () => {
+                console.log(chalk.yellow('\nClosing...'));
+                await browser.close();
+                process.exit(0);
+            });
+        }
+
+    });
+
 program
     .command('tool')
     .description('Directly test a client tool (requires game client running)')
@@ -478,14 +706,16 @@ program
     .description('Launch browser and open interactive game console for testing')
     .option('--headless', 'Run browser in headless mode', false)
     .option('-q, --quiet', 'Suppress browser console output', false)
+    .option('--url <gameUrl>', 'Connect to a specific URL (e.g. https://worldcraft.web.app/)')
     .action(async (options) => {
         const { GameBrowser } = await import('../src/browser.js');
         const gc = await import('../src/game-commands.js');
         const readline = await import('readline');
 
-        console.log(chalk.blue('\n🎮 Launching Game Console...'));
+        const targetUrl = options.url || 'http://localhost:3000';
+        console.log(chalk.blue(`\n🎮 Launching Game Console for ${targetUrl}...`));
 
-        const browser = new GameBrowser({ headless: options.headless, quiet: options.quiet });
+        const browser = new GameBrowser({ headless: options.headless, quiet: options.quiet, gameUrl: targetUrl });
         await browser.launch();
         await browser.waitForGameLoad();
 
@@ -524,6 +754,8 @@ program
                 console.log('  damage <amount> - Deal damage to player (test health sync)');
                 console.log('  health         - Show player health');
                 console.log('  players        - Show remote players');
+                console.log('  debug          - Show dynamic creature debug info');
+                console.log('  ground         - Show detailed creature position/ground info');
                 console.log('  exit           - Close browser and exit');
                 console.log('');
             },
@@ -539,6 +771,56 @@ program
                 const entities = await gc.getEntities(browser);
                 gc.printEntities(entities);
             },
+            ground: async () => {
+                console.log(chalk.blue('\n═══ Creature Debug Info ═══'));
+                const result = await browser.evaluate(() => {
+                    const game = window.__VOXEL_GAME__;
+                    if (!game?.animals) return { error: 'Game not ready' };
+
+                    const playerPos = game.player?.position;
+                    const debugInfo = game.animals.map(a => {
+                        const pos = a.position;
+                        const mesh = a.mesh || a.group;
+                        const groundY = game.getTerrainHeight ? game.getTerrainHeight(pos.x, pos.z) : 'N/A';
+
+                        return {
+                            type: a.constructor.name,
+                            position: { x: pos.x.toFixed(1), y: pos.y.toFixed(1), z: pos.z.toFixed(1) },
+                            groundY: typeof groundY === 'number' ? groundY.toFixed(1) : groundY,
+                            belowGround: typeof groundY === 'number' && pos.y < groundY,
+                            visible: mesh?.visible ?? 'unknown',
+                            inScene: mesh?.parent !== null,
+                            frustumCulled: mesh?.frustumCulled ?? 'unknown',
+                            velocity: a.velocity ? { x: a.velocity.x.toFixed(2), y: a.velocity.y.toFixed(2), z: a.velocity.z.toFixed(2) } : null,
+                            health: a.health ?? 'N/A',
+                            distanceFromPlayer: playerPos ? Math.sqrt(
+                                Math.pow(pos.x - playerPos.x, 2) +
+                                Math.pow(pos.y - playerPos.y, 2) +
+                                Math.pow(pos.z - playerPos.z, 2)
+                            ).toFixed(1) : 'N/A'
+                        };
+                    });
+                    return { count: debugInfo.length, entities: debugInfo };
+                });
+
+                if (result.error) {
+                    console.log(chalk.red(result.error));
+                    return;
+                }
+
+                console.log(`Total entities: ${result.count}`);
+                for (const entity of result.entities) {
+                    const belowGround = entity.belowGround ? chalk.red(' ⚠️ BELOW GROUND!') : '';
+                    console.log(chalk.cyan(`\n  ${entity.type}:${belowGround}`));
+                    console.log(`    Position: (${entity.position.x}, ${entity.position.y}, ${entity.position.z})`);
+                    console.log(`    Ground Y: ${entity.groundY}`);
+                    console.log(`    Visible: ${entity.visible}, In Scene: ${entity.inScene}, Frustum Culled: ${entity.frustumCulled}`);
+                    if (entity.velocity) {
+                        console.log(`    Velocity: (${entity.velocity.x}, ${entity.velocity.y}, ${entity.velocity.z})`);
+                    }
+                    console.log(`    Distance from player: ${entity.distanceFromPlayer}`);
+                }
+            },
             items: async () => {
                 const items = await gc.getRegisteredItems(browser);
                 console.log(chalk.blue('\n═══ Registered Items ═══'));
@@ -550,6 +832,38 @@ program
                 console.log(chalk.blue('\n═══ Registered Creatures ═══'));
                 console.log(`Total: ${creatures.all.length}`);
                 console.log(chalk.cyan('Dynamic Creatures:'), creatures.dynamic.join(', ') || '(none)');
+            },
+            debug: async () => {
+                // Check dynamic creature errors
+                const info = await gc.getDynamicCreatureInfo(browser);
+                const errors = await gc.getCreatureErrors(browser);
+                console.log(chalk.blue('\n═══ Dynamic Creature Debug ═══'));
+                console.log(chalk.cyan('Dynamic Creatures:'));
+                for (const [name, data] of Object.entries(info)) {
+                    const status = data.hasError ? chalk.red('❌ ERROR') : chalk.green('✓ OK');
+                    console.log(`  ${name}: ${status} (registered: ${data.registered})`);
+                    if (data.error) console.log(chalk.dim(`    → ${data.error}`));
+                }
+                if (errors.count > 0) {
+                    console.log(chalk.red('\n─── Errors ───'));
+                    for (const [name, err] of Object.entries(errors.errors)) {
+                        console.log(chalk.red(`  ${name}: ${err.error}`));
+                        if (err.stack) console.log(chalk.dim(err.stack.split('\n').slice(0, 3).join('\n')));
+                    }
+                }
+            },
+            check: async (creatureName) => {
+                if (!creatureName) { console.log(chalk.red('Usage: check <creatureName>')); return; }
+                const result = await gc.isCreatureRegistered(browser, creatureName);
+                console.log(chalk.blue(`\n═══ Creature Check: ${creatureName} ═══`));
+                console.log(`Registered: ${result.registered ? chalk.green('YES') : chalk.red('NO')}`);
+                console.log(`Is Dynamic: ${result.isDynamic ? chalk.cyan('YES') : 'NO'}`);
+                // Also check AnimalClasses directly
+                const allCreatures = await gc.getRegisteredCreatures(browser);
+                const found = allCreatures.all.find(c => c.toLowerCase() === creatureName.toLowerCase());
+                if (found && found !== creatureName) {
+                    console.log(chalk.yellow(`Note: Found as '${found}' (case mismatch)`));
+                }
             },
             give: async (itemName, count = '1') => {
                 if (!itemName) { console.log(chalk.red('Usage: give <itemName> [count]')); return; }

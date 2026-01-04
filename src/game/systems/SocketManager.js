@@ -515,7 +515,7 @@ export class SocketManager {
             // Handle Swing Animation
             // Match local player's mining animation: arm raised then swung down to forward
             if (meshInfo.isSwinging) {
-                meshInfo.swingTimer += deltaTime * 10; // Match local player animation speed
+                meshInfo.swingTimer += deltaTime * 16; // Match local player animation speed
 
                 // Animation runs for one full sine cycle (2*PI)
                 if (meshInfo.swingTimer > Math.PI * 2) {

@@ -699,12 +699,23 @@ export class VoxelGame {
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
-        // Calculate ground height at spawn location
-        const spawnY = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z) + 2;
+        // Add random offset to prevent stacking ( +/- 5 blocks )
+        // Using a simple random offset for now. 
+        // In a real scenario we might want to check for collisions, but this is a good first step.
+        const offsetX = (Math.random() - 0.5) * 10;
+        const offsetZ = (Math.random() - 0.5) * 10;
 
-        console.log(`[Game] Spawning player at global spawn point: ${spawnPoint.x}, ${spawnY}, ${spawnPoint.z}`);
+        const finalX = spawnPoint.x + offsetX;
+        const finalZ = spawnPoint.z + offsetZ;
 
-        this.spawnPoint = new THREE.Vector3(spawnPoint.x, spawnY, spawnPoint.z);
+        // Calculate ground height at NEW spawn location
+        // Ensure we spawn *above* the ground
+        const terrainHeight = this.worldGen.getTerrainHeight(finalX, finalZ);
+        const spawnY = terrainHeight + 2;
+
+        console.log(`[Game] Spawning player at randomized point: ${finalX.toFixed(2)}, ${spawnY.toFixed(2)}, ${finalZ.toFixed(2)}`);
+
+        this.spawnPoint = new THREE.Vector3(finalX, spawnY, finalZ);
         this.player.position.copy(this.spawnPoint);
         this.player.velocity.set(0, 0, 0);
 
@@ -1699,6 +1710,8 @@ export class VoxelGame {
     // cleanupBlockData removed as it's no longer needed
 
     updateFrustum() {
+        this.camera.updateMatrix();
+        this.camera.updateMatrixWorld();
         this.frustumMatrix.multiplyMatrices(
             this.camera.projectionMatrix,
             this.camera.matrixWorldInverse
@@ -2071,6 +2084,15 @@ export class VoxelGame {
             const inFrustum = this.frustum.intersectsSphere(this._cullingSphere);
             const isClose = distSq < 64 * 64; // Always update if within 64m (sound range, logic range)
 
+            // Visibility Debug Logging (once per 30 seconds)
+            if (!this._lastVisibilityLog || performance.now() - this._lastVisibilityLog > 30000) {
+                if (i === this.animals.length - 1) { // Log only on first iteration of loop
+                    this._lastVisibilityLog = performance.now();
+                    const closeCount = this.animals.filter(a => a.position.distanceToSquared(this.player.position) < 400).length;
+                    console.log(`[Visibility] Total animals: ${this.animals.length}, Close (<20m): ${closeCount}, Frustum: ${inFrustum}, isClose: ${isClose}`);
+                }
+            }
+
             // Logic:
             // - If not in frustum AND on ground AND not close -> Skip update, hide mesh
             // - Falling entities: Always update (gravity)
@@ -2090,9 +2112,10 @@ export class VoxelGame {
                     shouldUpdate = true;
                 }
             } else if (!inFrustum && isClose) {
-                // Close but behind us
-                shouldRender = false;
-                shouldUpdate = true; // Logic still runs (sounds, chasing from behind)
+                // Close but behind us (or frustum calc is wrong/lagging)
+                // SAFETY: Always render close entities to prevent flickering/invisible bugs
+                shouldRender = true;
+                shouldUpdate = true;
             } else {
                 // In Frustum
                 // 3. Occlusion Culling (Line of Sight)
@@ -2104,7 +2127,24 @@ export class VoxelGame {
 
                 // Optimization: Don't raycast every frame? Or stride?
                 // For now, simple raycast every frame is fine if efficient.
-                const hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
+
+                // DISABLED OCCLUSION CULLING: This was causing all creatures to be invisible in production
+                // The DDA raycast was failing silently or being too aggressive
+                // Keep creatures visible if in frustum - performance is acceptable without occlusion
+                // DEPLOY_FIX_V2: 2026-01-03 - Ground creature visibility fix deployed
+                if (!this._occlisionFixLogged) {
+                    this._occlisionFixLogged = true;
+                    console.log('[DEPLOY_FIX] Occlusion culling DISABLED - ground creature visibility fix active (v2026-01-03)');
+                }
+                let hasLOS = true;
+                /* DISABLED - causing visibility issues
+                try {
+                    hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
+                } catch (e) {
+                    console.warn('[Visibility] LOS check failed:', e);
+                    hasLOS = true; // Default to visible on error
+                }
+                */
 
                 if (!hasLOS) {
                     // Blocked!
@@ -2127,7 +2167,7 @@ export class VoxelGame {
             // Also respect global toggles!
             if (shouldRender) {
                 // Check global toggles only if frustum says render
-                const type = animal.constructor.name;
+                const type = animal.type || animal.constructor.name;
                 let categoryVisible = true;
                 if (type === 'Villager') categoryVisible = this.villagersVisible;
                 else if (type === 'Spaceship') categoryVisible = this.spaceshipsVisible;

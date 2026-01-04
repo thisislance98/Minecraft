@@ -32,8 +32,15 @@ export class Agent {
         };
 
         // Connection (Delegate to global client)
-        if (window.antigravityClient) {
-            this.unsubscribe = window.antigravityClient.addListener(this.handleClientMessage.bind(this));
+        if (window.merlinClient) {
+            this.unsubscribe = window.merlinClient.addListener(this.handleClientMessage.bind(this));
+
+            // Race condition check: If client is ALREADY connected when we attach, trigger init
+            if (window.merlinClient.isConnected) {
+                console.log('[Agent] Client already connected, triggering persona init...');
+                // Small delay to ensure UI systems are fully ready
+                setTimeout(() => this.initializePersona(), 100);
+            }
         }
 
         // Voice Toggles (Legacy/Placeholder)
@@ -88,21 +95,29 @@ export class Agent {
     }
 
     // =========================================================================
-    // ANTIGRAVITY CLIENT LOGIC (Shims to Window Client)
+    // MERLIN CLIENT LOGIC (Shims to Window Client)
     // =========================================================================
 
     sendTextMessage(text, context = {}) {
-        if (!window.antigravityClient) {
-            this.game.uiManager.addChatMessage('error', 'Agent not initialized. Try refreshing the page.');
+        this._sendToMerlin(text, context, true);
+    }
+
+    sendHiddenMessage(text, context = {}) {
+        this._sendToMerlin(text, context, false);
+    }
+
+    _sendToMerlin(text, context = {}, showInChat = true) {
+        if (!window.merlinClient) {
+            if (showInChat) this.game.uiManager.addChatMessage('error', 'Agent not initialized. Try refreshing the page.');
             return;
         }
 
-        if (!window.antigravityClient.isConnected) {
-            this.game.uiManager.addChatMessage('error', 'Agent disconnected. Check your internet connection or server status.');
+        if (!window.merlinClient.isConnected) {
+            if (showInChat) this.game.uiManager.addChatMessage('error', 'Agent disconnected. Check your internet connection or server status.');
             return;
         }
 
-        window.antigravityClient.send({
+        window.merlinClient.send({
             type: 'input',
             text: text,
             context: {
@@ -114,12 +129,13 @@ export class Agent {
             }
         });
 
-        this.game.uiManager.addChatMessage('user', text);
-        this.game.uiManager.showThinking();
-
-        // UI Updates
-        this.currentStreamMsgId = null;
-        this.game.uiManager.toggleStopButton(true);
+        if (showInChat) {
+            this.game.uiManager.addChatMessage('user', text);
+            this.game.uiManager.showThinking();
+            // UI Updates
+            this.currentStreamMsgId = null;
+            this.game.uiManager.toggleStopButton(true);
+        }
     }
 
     requestIdea() {
@@ -135,8 +151,8 @@ export class Agent {
     }
 
     interruptGeneration() {
-        if (window.antigravityClient) {
-            window.antigravityClient.send({ type: 'interrupt' });
+        if (window.merlinClient) {
+            window.merlinClient.send({ type: 'interrupt' });
         }
 
         console.log('[Agent] Interrupting generation...');
@@ -147,14 +163,82 @@ export class Agent {
     }
 
     updateConfig(config) {
-        if (window.antigravityClient) {
+        if (window.merlinClient) {
             console.log('[Agent] Sending config update:', config);
-            window.antigravityClient.send({ type: 'config', config });
+            window.merlinClient.send({ type: 'config', config });
         }
     }
 
     handleClientMessage(msg) {
+        // Intercept status messages to trigger persona init
+        if (msg.type === 'status' && msg.status === 'connected') {
+            this.initializePersona();
+        }
         this.handleServerMessage(msg);
+    }
+
+    initializePersona() {
+        const hasMetMerlin = localStorage.getItem('hasMetMerlin');
+        const tutorialComplete = localStorage.getItem('merlinTutorialComplete');
+
+        // Tutorial steps: 0=Not started, 1=Waiting for Wolf, 2=Waiting for Build, 3=Exploration Tips, 4=Complete
+        if (tutorialComplete) {
+            this.tutorialStep = 4;
+        } else if (hasMetMerlin) {
+            // Returning player who hasn't finished tutorial - resume at step 2
+            this.tutorialStep = 2;
+        } else {
+            this.tutorialStep = 0;
+        }
+
+        // Define the persona prompt
+        const personaPrompt = `
+SYSTEM INSTRUCTION: PERSONA UPDATE
+You are Merlin, a wise and powerful wizard in this Minecraft-like world.
+
+PERSONALITY:
+- Warm, encouraging, and slightly theatrical
+- Use magical metaphors ("weave spells", "channel essence", "conjure")
+- Celebrate player achievements enthusiastically
+- Guide gently without being condescending
+
+CAPABILITIES:
+- Create anything using 'set_blocks' (describe as "weaving matter")
+- Summon creatures using 'spawn_creature' (describe as "conjuring spirits")
+- Always offer to demonstrate or help
+
+TUTORIAL MODE:
+- You are guiding a new apprentice through their first magical lessons
+- Be patient and encouraging
+- After each successful task, praise them and introduce the next challenge
+        `.trim();
+
+        if (!hasMetMerlin) {
+            console.log('[Agent] First time meeting Merlin. Starting tutorial...');
+            this.tutorialStep = 1; // Waiting for Wolf
+            this.tutorialStartPos = this.game.player?.position?.clone();
+
+            const introInstruction = `
+CRITICAL: You are meeting a new apprentice for the first time!
+
+1. Introduce yourself warmly as Merlin, the Archmage of these blocky realms
+2. Express excitement about training a new apprentice
+3. Explain that magic here works through spoken commands
+4. Give them their FIRST LESSON: Ask them to conjure a loyal companion by saying "spawn a wolf"
+5. Be encouraging - tell them you believe in their potential!
+
+Keep your response under 100 words. Be warm and inviting.
+            `.trim();
+
+            this.sendHiddenMessage(personaPrompt + "\n\n" + introInstruction);
+            localStorage.setItem('hasMetMerlin', 'true');
+        } else if (this.tutorialStep === 4) {
+            console.log('[Agent] Tutorial complete. Welcoming back...');
+            this.sendHiddenMessage(personaPrompt + "\n\n(Your apprentice returns! Welcome them back warmly. They have completed their training - treat them as a fellow wizard.)");
+        } else {
+            console.log('[Agent] Tutorial in progress. Resuming at step', this.tutorialStep);
+            this.sendHiddenMessage(personaPrompt + "\n\n(Your apprentice returns mid-training. Welcome them and remind them of their current challenge: building a small magical structure.)");
+        }
     }
 
     // Tool Name Mapping
@@ -207,6 +291,7 @@ export class Agent {
     }
 
     async handleServerMessage(msg) {
+        console.log('[Agent] Received Server Message:', msg);
         switch (msg.type) {
             case 'token':
                 this.game.uiManager.hideThinking();
@@ -258,6 +343,7 @@ export class Agent {
         }
         this.currentStreamText += text;
         this.game.uiManager.updateChatMessageContent(this.currentStreamMsgId, this.currentStreamText);
+        console.log(`[Chat:AI] ${text}`); // Log chunk for CLI
     }
 
     streamThoughtToUI(text) {
@@ -269,6 +355,7 @@ export class Agent {
         }
         this.currentThoughtText += text;
         this.game.uiManager.updateChatMessageContent(this.currentThoughtMsgId, this.currentThoughtText);
+        console.log(`[Chat:Thought] ${text}`); // Log chunk for CLI
     }
 
     async handleToolRequest(msg) {
@@ -298,12 +385,57 @@ export class Agent {
             result = { error: e.message };
         }
 
-        if (window.antigravityClient) {
-            window.antigravityClient.send({
+        if (window.merlinClient) {
+            window.merlinClient.send({
                 type: 'tool_response',
                 id,
                 result
             });
+        }
+
+        // Tutorial Progression Logic
+        if (this.tutorialStep === 1 && name === 'spawn_creature') {
+            const creatureName = (args.creature || '').toLowerCase();
+            if (creatureName.includes('wolf') || creatureName.includes('dog')) {
+                console.log('[Agent] Tutorial Step 1 Complete! Wolf spawned.');
+                this.tutorialStep = 2;
+                setTimeout(() => {
+                    this.sendHiddenMessage(`
+SYSTEM: The apprentice has successfully conjured their first creature - a wolf!
+
+Your response should:
+1. Praise their successful conjuration enthusiastically!
+2. Celebrate this milestone - they've proven they have magical talent
+3. Introduce LESSON 2: Ask them to build something small (suggest "build me a small tower" or "create a cozy cottage")
+4. Explain that they can describe what they want and you'll help weave it into existence
+
+Keep it under 80 words. Be proud of them!
+                    `.trim());
+                }, 1500);
+            }
+        } else if (this.tutorialStep === 2 && name === 'set_blocks') {
+            const blockCount = args.blocks?.length || 0;
+            if (blockCount >= 5) {
+                console.log('[Agent] Tutorial Step 2 Complete! Structure built with', blockCount, 'blocks.');
+                this.tutorialStep = 3;
+                setTimeout(() => {
+                    this.sendHiddenMessage(`
+SYSTEM: The apprentice just built their first magical structure (${blockCount} blocks)!
+
+Your response should:
+1. Marvel at their creation - describe what they built poetically
+2. Tell them they've mastered the basics of magical construction
+3. Give FINAL LESSON: Explain they can now explore freely
+4. Mention helpful tips: they can ask you to spawn creatures, build structures, teleport, etc.
+5. Encourage them to experiment and have fun!
+6. End with something like "Go forth, young wizard!"
+
+Keep it under 100 words. This is graduation!
+                    `.trim());
+                    localStorage.setItem('merlinTutorialComplete', 'true');
+                    this.tutorialStep = 4;
+                }, 1500);
+            }
         }
     }
 

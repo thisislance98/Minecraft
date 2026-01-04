@@ -2,9 +2,9 @@
 import { Item } from './Item.js';
 import * as THREE from 'three';
 
-export class AntigravityGuideItem extends Item {
+export class MerlinGuideItem extends Item {
     constructor() {
-        super('antigravity_guide', 'Antigravity Guide');
+        super('merlin_guide', 'Merlin\'s Guide');
         this.maxStack = 1;
     }
 

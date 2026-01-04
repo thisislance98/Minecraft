@@ -550,7 +550,7 @@ export class SpawnManager {
 
             if (groundY === null) {
                 // No valid ground found, skip spawning this animal
-                // Skip logging for normal spawn skips
+                console.warn(`[SpawnManager] Failed to find ground for ${AnimalClass.name} at ${x.toFixed(1)}, ${z.toFixed(1)}`);
                 return;
             }
 
@@ -597,6 +597,9 @@ export class SpawnManager {
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
         this.entities.set(animal.id, animal);
+
+        // Log successful spawn
+        console.log(`[SpawnManager] Spawned ${AnimalClass.name} at (${x.toFixed(1)}, ${spawnY.toFixed(1)}, ${z.toFixed(1)}), visible=${animal.mesh.visible}, total=${this.game.animals.length}`);
 
         return animal; // Return the animal so callers can send entity:spawn for manual spawns
 
@@ -677,6 +680,14 @@ export class SpawnManager {
         }
 
         // No valid ground found (chunk probably not loaded)
+        // FALLBACK: Use terrain height from noise function instead of failing
+        // This allows spawns even when chunk blocks aren't loaded yet
+        const terrainY = this.game.worldGen.getTerrainHeight(x, z);
+        if (terrainY > this.game.worldGen.seaLevel) {
+            console.log(`[SpawnManager] Using terrain fallback for spawn at ${x.toFixed(1)}, ${z.toFixed(1)}, Y=${Math.floor(terrainY) + 1}`);
+            return Math.floor(terrainY) + 1;
+        }
+        console.warn(`[SpawnManager] No valid ground at ${x.toFixed(1)}, ${z.toFixed(1)} (seaLevel=${this.game.worldGen.seaLevel})`);
         return null;
     }
 
@@ -901,7 +912,13 @@ export class SpawnManager {
             const ox = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
             const oz = (rng.next() - 0.5) * (count > 1 ? 4 : 0);
 
-            const animal = this.createAnimal(EntityClass, targetPos.x + ox, targetPos.y, targetPos.z + oz, snapToGround, rng.next());
+            let animal = this.createAnimal(EntityClass, targetPos.x + ox, targetPos.y, targetPos.z + oz, snapToGround, rng.next());
+
+            // Retry without snapToGround if failed (ensure spawn happens)
+            if (!animal && snapToGround) {
+                console.log(`[SpawnManager] Ground check failed for ${EntityClass.name}, forcing air spawn.`);
+                animal = this.createAnimal(EntityClass, targetPos.x + ox, targetPos.y, targetPos.z + oz, false, rng.next());
+            }
 
             if (animal) {
                 createdAnimals.push(animal);

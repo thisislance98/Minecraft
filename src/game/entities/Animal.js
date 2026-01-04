@@ -10,7 +10,8 @@ export class Animal {
 
         // Deterministic ID (if not provided, generate one)
         // Format: Type_Seed_X_Z (approx)
-        this.seed = seed || Math.random() * 0xffffffff;
+        this.seed = seed;
+        this.type = this.constructor.name; // Fallback, should be overridden by subclasses
         this.id = `${this.constructor.name}_${Math.floor(this.seed)}_${Math.floor(x)}_${Math.floor(z)}`;
 
         this.velocity = new THREE.Vector3(0, 0, 0);
@@ -199,10 +200,20 @@ export class Animal {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
+                    // Keep culling disabled for safety, but remove X-Ray materials
+                    child.frustumCulled = false;
+                    child.visible = true;
                 }
             });
             this.shadowsInitialized = true;
         }
+
+        // CONTINUOUS SAFETY: Ensure culling stays off (for new attachments)
+        this.mesh.frustumCulled = false;
+        this.mesh.traverse(c => {
+            c.frustumCulled = false;
+            c.visible = true;
+        });
 
         // Handle remote-controlled entities: smooth interpolation towards target position
         if (this.isRemoteControlled && this.targetPosition) {
@@ -987,6 +998,12 @@ export class Animal {
             pos.y = groundY;
             this.velocity.y = 0;
             this.onGround = true;
+        } else if (groundY === -Infinity) {
+            // DEFENSIVE: No ground detected (chunks not loaded yet)
+            // Don't fall - stay at current position until terrain loads
+            this.velocity.y = 0;
+            this.onGround = false;
+            // Don't move at all
         } else {
             // FALLING
             // Either we are high in the air, or groundY is -Infinity (hole)

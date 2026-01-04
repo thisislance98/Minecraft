@@ -1,0 +1,41 @@
+{
+    "name": "Debug Villager Visibility",
+    "headless": false,
+    "actions": [
+        {
+            "name": "teleportPlayer",
+            "args": [
+                0,
+                100,
+                0
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                1000
+            ]
+        },
+        {
+            "name": "spawnCreatureAt",
+            "args": [
+                "Villager",
+                5,
+                100,
+                5
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { console.log('Checking villagers...'); const villagers = window.__VOXEL_GAME__.animals.filter(a => a.constructor.name === 'Villager'); console.log('Villager count:', villagers.length); if(villagers.length > 0) { const v = villagers[0]; let culled = false; v.mesh.traverse(c => { if(c.isMesh && c.frustumCulled) culled = true; }); console.log('Villager FrustumCulled:', culled ? 'TRUE (FAIL)' : 'FALSE (PASS)'); if(culled) return {success:false, message:'Villager meshes still use frustum culling'}; return {success:true, message:'Villager meshes NOT using frustum culling'}; } return {success:false, message: 'No villager found'}; }"
+        }
+    ]
+}

@@ -1,6 +1,6 @@
 import { auth } from '../../config/firebase-client.js';
 
-export class AntigravityClient {
+export class MerlinClient {
     constructor() {
         this.ws = null;
         this.game = null; // Optional reference to the game engine
@@ -26,7 +26,7 @@ export class AntigravityClient {
 
         // Listen for auth changes to reconnect with new identity
         auth.onAuthStateChanged(async (user) => {
-            console.log('[AntigravityClient] Auth state changed. Reconnecting...');
+            console.log('[MerlinClient] Auth state changed. Reconnecting...');
             // If user logs out, we might want to stay connected as guest, or reconnect.
             // For now, simple reconnect is safest to pick up new token (or lack thereof).
             this.connect();
@@ -35,7 +35,7 @@ export class AntigravityClient {
 
     setGame(game) {
         this.game = game;
-        console.log('[AntigravityClient] Game instance attached.');
+        console.log('[MerlinClient] Game instance attached.');
         // Update UI with current status
         if (this.game.uiManager) {
             this.game.uiManager.updateAIStatus(this.isConnected ? 'Connected' : 'Disconnected');
@@ -70,21 +70,21 @@ export class AntigravityClient {
         const baseUrl = import.meta.env.VITE_SERVER_URL || (isDev ? 'http://localhost:2567' : window.location.origin);
 
         if (!isDev && baseUrl === window.location.origin) {
-            console.warn('[AntigravityClient] WARNING: Connecting via same-origin (Firebase Proxy). This is known to be unreliable for WebSockets. Please set VITE_SERVER_URL to the direct Cloud Run URL.');
+            console.warn('[MerlinClient] WARNING: Connecting via same-origin (Firebase Proxy). This is known to be unreliable for WebSockets. Please set VITE_SERVER_URL to the direct Cloud Run URL.');
         }
 
         // Construct WebSocket URL (replace http/https with ws/wss)
         let wsUrl = baseUrl.replace(/^http/, 'ws');
-        let url = `${wsUrl}/api/antigravity`;
+        let url = `${wsUrl}/api/antigravity`; // Keep endpoint same unless server changed
 
         // Add token if authenticated
         if (auth.currentUser) {
             try {
                 const token = await auth.currentUser.getIdToken();
                 url += `?token=${token}`;
-                console.log('[AntigravityClient] Connecting with Auth Token');
+                console.log('[MerlinClient] Connecting with Auth Token');
             } catch (e) {
-                console.warn('[AntigravityClient] Failed to get token:', e);
+                console.warn('[MerlinClient] Failed to get token:', e);
             }
         }
 
@@ -92,14 +92,14 @@ export class AntigravityClient {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('cli') === 'true') {
             url += (url.includes('?') ? '&' : '?') + 'cli=true&secret=asdf123';
-            console.log('[AntigravityClient] CLI mode detected, bypassing authentication');
+            console.log('[MerlinClient] CLI mode detected, bypassing authentication');
         }
 
-        console.log('[AntigravityClient] Connecting to:', url);
+        console.log('[MerlinClient] Connecting to:', url);
         this.ws = new WebSocket(url);
 
         this.ws.onopen = () => {
-            console.log('[AntigravityClient] Connected.');
+            console.log('[MerlinClient] Connected.');
             this.isConnected = true;
             this.currentReconnectDelay = this.baseReconnectDelay; // Reset backoff
             this.notifyListeners({ type: 'status', status: 'connected' });
@@ -113,12 +113,12 @@ export class AntigravityClient {
                 const msg = JSON.parse(event.data);
                 this.handleMessage(msg);
             } catch (e) {
-                console.error('[AntigravityClient] Error parsing message:', e);
+                console.error('[MerlinClient] Error parsing message:', e);
             }
         };
 
         this.ws.onclose = (event) => {
-            console.log(`[AntigravityClient] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+            console.log(`[MerlinClient] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
             this.isConnected = false;
             this.notifyListeners({ type: 'status', status: 'disconnected' });
 
@@ -127,7 +127,7 @@ export class AntigravityClient {
             }
 
             if (event.code === 1011) {
-                console.error('[AntigravityClient] Critical Server Error:', event.reason);
+                console.error('[MerlinClient] Critical Server Error:', event.reason);
                 // Don't retry if it's a configuration error
                 return;
             }
@@ -135,7 +135,7 @@ export class AntigravityClient {
             if (this.isExplicitlyDisconnected) return;
 
             // Exponential Backoff Reconnect
-            console.log(`[AntigravityClient] Reconnecting in ${this.currentReconnectDelay}ms...`);
+            console.log(`[MerlinClient] Reconnecting in ${this.currentReconnectDelay}ms...`);
             this.reconnectTimer = setTimeout(() => {
                 this.connect();
                 // Increase delay for next time, cap at max
@@ -145,7 +145,7 @@ export class AntigravityClient {
 
         this.ws.onerror = (err) => {
             // Just log it, onclose will handle the retry logic
-            console.error('[AntigravityClient] WebSocket error:', err);
+            console.error('[MerlinClient] WebSocket error:', err);
         };
     }
 
@@ -154,7 +154,7 @@ export class AntigravityClient {
             this.ws.send(JSON.stringify(data));
         } else {
             const readyState = this.ws ? this.ws.readyState : 'no socket';
-            console.warn(`[AntigravityClient] Cannot send, socket not open. State: ${readyState}`);
+            console.warn(`[MerlinClient] Cannot send, socket not open. State: ${readyState}`);
             // Ideally notify UI of offline state
             this.notifyListeners({ type: 'error', message: 'Cannot reach AI server. Reconnecting... Check if the server is running.' });
         }
@@ -175,7 +175,7 @@ export class AntigravityClient {
                 // For now, we bridge to the existing agent.
                 await this.game.agent.handleToolRequest(msg);
             } else {
-                console.warn('[AntigravityClient] Tool requested but Game/Agent not available:', msg.name);
+                console.warn('[MerlinClient] Tool requested but Game/Agent not available:', msg.name);
                 // We should probably reply with an error so the server doesn't hang
                 this.send({
                     type: 'tool_response',
@@ -187,7 +187,7 @@ export class AntigravityClient {
 
         // 3. Handle Balance Updates
         if (msg.type === 'balance_update') {
-            console.log('[AntigravityClient] Balance Update:', msg.tokens);
+            console.log('[MerlinClient] Balance Update:', msg.tokens);
             // Dispatch event for UI
             document.dispatchEvent(new CustomEvent('token-balance-update', { detail: msg.tokens }));
         }
@@ -218,20 +218,20 @@ export class AntigravityClient {
     reportError(errorDetails) {
         // Check if auto-fix errors is enabled
         if (!this.autoFixErrors) {
-            console.log('[AntigravityClient] Auto-fix disabled, error not reported to AI:', errorDetails.message);
+            console.log('[MerlinClient] Auto-fix disabled, error not reported to AI:', errorDetails.message);
             return;
         }
 
         // Check if AI is currently busy with a fix (Streaming)
         // If so, suppress new errors to prevent interruption/spam
         if (this.game && this.game.agent && this.game.agent.isStreaming) {
-            console.log('[AntigravityClient] Error suppressed (AI is streaming):', errorDetails.message);
+            console.log('[MerlinClient] Error suppressed (AI is streaming):', errorDetails.message);
             return;
         }
 
         // Deduplication: Don't send the exact same error twice in a row
         if (this.lastSentError === errorDetails.message) {
-            console.log('[AntigravityClient] Error suppressed (Duplicate):', errorDetails.message);
+            console.log('[MerlinClient] Error suppressed (Duplicate):', errorDetails.message);
             return;
         }
 
@@ -272,7 +272,7 @@ export class AntigravityClient {
             try {
                 listener(msg);
             } catch (e) {
-                console.error('[AntigravityClient] Listener error:', e);
+                console.error('[MerlinClient] Listener error:', e);
             }
         }
     }

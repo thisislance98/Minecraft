@@ -23,6 +23,8 @@ export class AntigravitySession {
     private userId: string | null = null;
     private headers: any;
     private cliMode: boolean = false;
+    private authReady: Promise<void>;
+    private authReadyResolve!: () => void;
 
     // Pricing Configuration (Gemini 3.0 Flash)
     private PRICE_INPUT_1M = 0.50;      // $0.50 per 1M input tokens
@@ -40,7 +42,11 @@ export class AntigravitySession {
             systemInstruction: getAntigravitySystemPrompt()
         });
 
-        // Extract token from URL
+        // Initialize auth ready promise - resolved once auth verification completes
+        this.authReady = new Promise((resolve) => {
+            this.authReadyResolve = resolve;
+        });
+
         // Extract token from URL
         const url = new URL(req.url || '', `http://${req.headers.host}`);
         const token = url.searchParams.get('token');
@@ -112,6 +118,9 @@ export class AntigravitySession {
         } else {
             console.log('[Antigravity] No auth token provided. Running as guest (limited?).');
         }
+
+        // Mark auth as complete so message handling can proceed
+        this.authReadyResolve();
     }
 
     private isInterrupted = false;
@@ -127,6 +136,9 @@ export class AntigravitySession {
     }
 
     private async handleInput(text: string, context: any) {
+        // Wait for auth to be verified before processing
+        await this.authReady;
+
         const contextStr = context ? `\n[Context: ${JSON.stringify(context)}]` : '';
         const fullMessage = text + contextStr;
 

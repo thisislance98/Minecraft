@@ -487,6 +487,10 @@ export class AssetManager {
             vertexColors: true
         });
 
+        if (!texture) {
+            console.error(`[AssetManager] Texture is undefined for '${name}'`);
+        }
+
         // Visual Improvements: Vertex Wind
         const windBlocks = ['long_grass', 'flower', 'sapling', 'leaves', 'fern', 'dead_bush'];
         const isWindy = windBlocks.some(type => name.includes(type));
@@ -604,6 +608,7 @@ export class AssetManager {
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
+        this.textures[name] = texture;
 
         const mat = new THREE.MeshLambertMaterial({
             map: texture,

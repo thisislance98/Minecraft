@@ -1710,7 +1710,7 @@ export class Player {
 
         // Mining animation (also used for eating)
         if (this.isMining && !isBowVisible) {
-            this.miningTimer += deltaTime * 10; // Adjusted swing speed
+            this.miningTimer += deltaTime * 16; // Faster swing speed
             if (this.miningTimer > Math.PI) {
                 this.isMining = false;
                 this.miningTimer = 0;

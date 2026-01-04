@@ -16,13 +16,24 @@ export class GameBrowser {
     }
 
     /**
+     * Check if the URL is remote (not localhost)
+     */
+    isRemoteUrl() {
+        return !this.gameUrl.includes('localhost') && !this.gameUrl.includes('127.0.0.1');
+    }
+
+    /**
      * Launch browser and navigate to game
      */
     async launch() {
-        // Ensure server is running before launching browser
-        const serverReady = await ensureServerRunning();
-        if (!serverReady) {
-            throw new Error('Server not available. Please start the server manually.');
+        // Only check local server if not connecting to a remote URL
+        if (!this.isRemoteUrl()) {
+            const serverReady = await ensureServerRunning();
+            if (!serverReady) {
+                throw new Error('Server not available. Please start the server manually.');
+            }
+        } else {
+            console.log(`🌍 Connecting to remote URL: ${this.gameUrl}`);
         }
 
         console.log(`🌐 Launching browser (headless: ${this.headless})...`);

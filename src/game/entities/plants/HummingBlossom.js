@@ -27,6 +27,18 @@ export class HummingBlossom extends InteractivePlant {
         // Note frequencies (pentatonic scale - always sounds nice)
         this.notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33]; // C4-D5 pentatonic
 
+        // Growth animation state
+        this.currentGrowth = 0.2; // Start at 20% height
+        this.targetGrowth = 0.2;  // Target growth level
+        this.growthSpeed = 2.0;   // How fast to grow/shrink
+        this.fullHeight = 1.0;    // Full height when grown
+
+        // Look-at-player rotation
+        this.currentRotationY = 0;
+        this.targetRotationY = 0;
+        this.rotationSpeed = 3.0;
+        this.rotationOffset = Math.PI / 2; // 90 degree offset to fix "looking left"
+
         this.createBody();
     }
 
@@ -127,11 +139,13 @@ export class HummingBlossom extends InteractivePlant {
     }
 
     onActivate(player) {
-        // When player enters range, start playing notes
+        // When player enters range, grow to full height
+        this.targetGrowth = 1.0;
     }
 
     onDeactivate() {
-        // Reset glow on all flowers
+        // Shrink back down and reset glow
+        this.targetGrowth = 0.2;
         for (const flower of this.flowers) {
             flower.isGlowing = false;
             flower.material.emissiveIntensity = 0;
@@ -164,6 +178,43 @@ export class HummingBlossom extends InteractivePlant {
     }
 
     updatePhysics(dt) {
+        // Animate growth toward target
+        if (this.currentGrowth !== this.targetGrowth) {
+            const diff = this.targetGrowth - this.currentGrowth;
+            const step = this.growthSpeed * dt;
+            if (Math.abs(diff) < step) {
+                this.currentGrowth = this.targetGrowth;
+            } else {
+                this.currentGrowth += Math.sign(diff) * step;
+            }
+        }
+
+        // Apply growth scale
+        this.mesh.scale.setY(this.currentGrowth);
+
+        // Look at player when active
+        const player = this.game.player;
+        if (this.isActive && player) {
+            const toPlayer = new THREE.Vector3().subVectors(player.position, this.position);
+            this.targetRotationY = Math.atan2(toPlayer.x, toPlayer.z) + this.rotationOffset;
+        }
+
+        // Smoothly rotate toward target
+        if (this.currentRotationY !== this.targetRotationY) {
+            let diff = this.targetRotationY - this.currentRotationY;
+            // Normalize angle difference to [-PI, PI]
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+
+            const step = this.rotationSpeed * dt;
+            if (Math.abs(diff) < step) {
+                this.currentRotationY = this.targetRotationY;
+            } else {
+                this.currentRotationY += Math.sign(diff) * step;
+            }
+        }
+        this.mesh.rotation.y = this.currentRotationY;
+
         // Animate flowers - gentle sway and glow
         const time = performance.now() / 1000;
 

@@ -40,8 +40,8 @@ window.addEventListener('load', () => {
     generateHotbarIcons();
     const game = new VoxelGame();
     window.__VOXEL_GAME__ = game;
-    if (window.antigravityClient) {
-        window.antigravityClient.setGame(game);
+    if (window.merlinClient) {
+        window.merlinClient.setGame(game);
     }
 
     // Check for new version badge

@@ -1,0 +1,627 @@
+
+Running Test: Debug Villager Visibility
+Prompt: "undefined"
+✓ Server already running
+🌐 Launching browser (headless: false)...
+  Navigating to http://localhost:3000?cli=true...
+  [Browser] [MerlinClient] CLI mode detected, bypassing authentication
+  [Browser] [MerlinClient] Connecting to: ws://localhost:2567/api/antigravity?cli=true&secret=asdf123
+  [Browser] [MerlinClient] Connected.
+  [Browser] [AnimalRegistry] Manually registered Firefly, Bee, and Hedgehog.
+  [Browser] [AnimalRegistry] Final AnimalClasses keys: JSHandle@array
+  Waiting for game to load...
+  [Browser] ThreePerf inited.
+  [Browser] AssetManager: Loading resources...
+  [Browser] [TextureGenerator] Explicit check for: 'torch'
+  [Browser] [TextureGenerator] Explicit check for: 'glowstone'
+  [Browser] AssetManager: Resources loaded.
+  [Browser] [Analytics] game_launch JSHandle@object
+  [Browser Warn] Socket not found for CommunityUI, will retry when UI opens
+  [Browser] [UIManager] updateMobileControlsVisibility(false)
+  [Browser] [UIManager] Desktop buttons display: block, feedbackBtn exists: true
+  🤖 [Agent] INIT v2 - set_blocks tool available
+  🤖 [Agent] Client already connected, triggering persona init...
+  [Browser] [Game] using hardcoded world seed: 1337
+  [Browser] WorldGenerator: Setting seed to 1337
+  [Browser] [Game] Spawning player at randomized point: 34.29, 36.00, 32.01
+  [Browser] [Game] Singleplayer Mode.
+  [Browser] [Game] CLI mode - auto-generated username: CLI_Player_ozuh
+  [Browser] [Scene] Total objects: 634, Animals: 0
+  [Browser] [SpaceShip] Assembling Galaxy Class Starship at 32, 120, 32
+  [Browser] [MerlinClient] Game instance attached.
+  [Browser] [SocketManager] Connecting to http://localhost:2567...
+  [Browser Warn] [Game] Frame took 96.1ms, capping dt to 50ms
+  [Browser] [Game] 748 chunks generated, spawning animals...
+  [Browser] [SpawnManager] World ready! Processing 169 queued chunk spawns...
+  [Browser] [SpawnManager] World ready, but waiting for initial sync before processing queue.
+  [Browser] [SpawnManager] Deferring kangaroo spawn (waiting for initial sync)
+  [Browser] [SpawnManager] Deferring Pugasus spawn (waiting for initial sync)
+  [Browser] [SpawnManager] Deferring Snowmen spawn (waiting for initial sync)
+  [Browser Warn] [Game] Frame took 955.8ms, capping dt to 50ms
+  🤖 [Agent] First time meeting Merlin. Injecting persona...
+  [Browser] [StructureGenerator] Generating redesigned village at 47, 35, 47
+  [Browser] [Village] Scheduling 6 plaza villagers at 47, 35, 47
+  [Browser Warn] [Game] Frame took 105.1ms, capping dt to 50ms
+  [Browser] [SocketManager] Connected! ID: 0-sVS4oYTwYPy5S4AAAb
+  [Browser] [SocketManager] Requesting to join game as: CLI_Player_ozuh
+  [Browser] [SocketManager] Joined room: JSHandle@object
+  [Browser] [SocketManager] Initial Room Time: 0.25
+  [Browser] [SocketManager] Syncing existing players: 4
+  [Browser] [SocketManager] Creating mesh for existing player aaYqrBjrmQ6xGQ67AAAB at JSHandle@object
+  [Browser] [SocketManager] Created character for aaYqrBjrmQ6xGQ67AAAB (using cached assets)
+  [Browser] [SocketManager] Syncing held item for aaYqrBjrmQ6xGQ67AAAB: pickaxe
+  [Browser] [SocketManager] Creating mesh for existing player 6UOrvR2MUjq4BMM_AAAD at JSHandle@object
+  [Browser] [SocketManager] Created character for 6UOrvR2MUjq4BMM_AAAD (using cached assets)
+  [Browser] [SocketManager] Syncing held item for 6UOrvR2MUjq4BMM_AAAD: pickaxe
+  [Browser] [SocketManager] Creating mesh for existing player C_U-ehgnVLRkAXfYAAAR at JSHandle@object
+  [Browser] [SocketManager] Created character for C_U-ehgnVLRkAXfYAAAR (using cached assets)
+  [Browser] [SocketManager] Syncing held item for C_U-ehgnVLRkAXfYAAAR: pickaxe
+  [Browser] [SocketManager] Force syncing initial held item: pickaxe
+  [Browser] [SpawnManager] Received entities:initial with 696 entities
+  [Browser] [SpawnManager] Persistence is OFF. Ignoring server entities and generating fresh creatures.
+  [Browser] [SpawnManager] Initial entity sync complete.
+  [Browser] [SpawnManager] Processing 169 queued chunk spawns...
+  [Browser] Spawning 4 kangaroos near player spawn
+  [Browser] Spawning 3 Pugasus near player spawn
+  [Browser] Spawning 2 Snowmen near player spawn
+  [Browser] [SocketManager] Received initial creature definitions: 6
+  [Browser] [DynamicCreatureRegistry] ✅ Registered creature: CloudPlatform
+  [Browser] [DynamicCreatureRegistry] Creature 'CrystalPlant' already exists, skipping
+  [Browser] [DynamicCreatureRegistry] ✅ Registered creature: FarmerVillager
+  [Browser] [DynamicCreatureRegistry] Creature 'HelicopterPlant' already exists, skipping
+  [Browser] [DynamicCreatureRegistry] ✅ Registered creature: PurpleZebra
+  [Browser] [DynamicCreatureRegistry] Creature 'ShyPlant' already exists, skipping
+  [Browser] [DynamicCreatureRegistry] Loaded 6 dynamic creature(s)
+  [Browser] [SocketManager] Received initial item definitions: 4
+  [Browser] [DynamicItemRegistry] Item 'FlyingBroomItem' already registered, skipping
+  [Browser] [DynamicItemRegistry] Stored icon for item id 'wand'
+  [Browser] [DynamicItemRegistry] ✅ Registered item: SparkWandItem
+  [Browser] [DynamicItemRegistry] Stored icon for item id 'speed_boost'
+  [Browser] [DynamicItemRegistry] ✅ Registered item: SpeedBoostItem
+  [Browser] [DynamicItemRegistry] Stored icon for item id 'wand'
+  [Browser] [DynamicItemRegistry] ✅ Registered item: TeleportWandItem
+  [Browser] [DynamicItemRegistry] Loaded 4 dynamic item(s)
+  [Browser] [Game] Processing 21 persisted blocks...
+  [Browser] [Game] Persisted blocks: 20 applied immediately, 1 queued for generation
+  [Browser] [MerlinClient] Auth state changed. Reconnecting...
+  [Browser] [MerlinClient] CLI mode detected, bypassing authentication
+  [Browser] [MerlinClient] Connecting to: ws://localhost:2567/api/antigravity?cli=true&secret=asdf123
+  [Browser] [MerlinClient] Connected.
+  🤖 [Agent] Player already met Merlin. Reinforcing persona...
+  🤖 [Agent] Received Server Message: JSHandle@object
+  [Browser] [SocketManager] Player 6UOrvR2MUjq4BMM_AAAD holding: pickaxe
+  [Browser] [SocketManager] Player C_U-ehgnVLRkAXfYAAAR holding: pickaxe
+  [Browser] [SocketManager] Player aaYqrBjrmQ6xGQ67AAAB holding: pickaxe
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 8
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b4513 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 8
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b4513 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 8
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b4513 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 708090 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 708090 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a4a4a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a4a4a Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser Warn] [Game] Frame took 130.2ms, capping dt to 50ms
+  [Browser] [Village] Spawning 6 plaza villagers now...
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: daa520 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a3222 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2d5a27 Map: 
+  [Browser] [Village] Spawned plaza villager 1 at (53.0, 36, 47.0)
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Village] Spawned plaza villager 2 at (50.4, 36, 52.8)
+  [Browser] [Villager] Body created. Mesh children: 8
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b4513 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Village] Spawned plaza villager 3 at (44.0, 36, 52.2)
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Village] Spawned plaza villager 4 at (39.9, 36, 47.0)
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 708090 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 708090 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b0000 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a4a4a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 4a4a4a Map: 
+  [Browser] [Village] Spawned plaza villager 5 at (42.5, 36, 39.2)
+  [Browser] [Villager] Body created. Mesh children: 7
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2f2f2f Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: e8e8e8 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Village] Spawned plaza villager 6 at (50.3, 36, 41.3)
+  [Browser] [Village] Total animals in game: 89
+  ✓ Game loaded
+
+⚡ Executing Direct Actions...
+  Running action: teleportPlayer [0,100,0]
+  Running action: wait [1000]
+  🤖 [Agent] Received Server Message: JSHandle@object
+  [Browser] [Chat:Thought] **Crafting a Charm**
+
+I'm pondering the best approach to greet the user and offer assistance in creating a magical item. Considering the vibrant jungle biome and its inhabitants – Monkey, Frog, Giraffe, Lorax, Pugasus, Elephant – I'm leaning toward a charm imbued with jungle essence. Location is (34.2). My mind is buzzing with possibilities.
+
+
+
+  [Browser Warn] [Game] Frame took 138.9ms, capping dt to 50ms
+  🤖 [Agent] Received Server Message: JSHandle@object
+  [Browser] [Chat:Thought] **Devising the Item**
+
+I've decided to refine the "Staff of the Jungle" idea, incorporating a Merlin-esque greeting. My goal is a concise and wizardly introduction. I'm focusing on the essence of the jungle, and how best to embody it, within the item. This location is (8, 36.20, 32.01).
+
+
+
+  🤖 [Agent] Received Server Message: JSHandle@object
+  [Browser] [Chat:AI] Greetings, traveler! You return to the heart of the jungle. The air is thick with ancient essences. Shall we weave a spell to craft your first magical relic? Perhaps a wand to command
+  🤖 [Agent] Received Server Message: JSHandle@object
+  [Browser] [Chat:AI]  the very flora around us?
+  🤖 [Agent] Received Server Message: JSHandle@object
+  🤖 [Agent] Received Server Message: JSHandle@object
+  Running action: spawnCreatureAt ["Villager",5,100,5]
+  [Browser] [Villager] Body created. Mesh children: 8
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 3b2713 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: ffffff Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 00aa00 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: bd8b68 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 2a1b0e Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 8b4513 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 1a1a1a Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  [Browser] [Villager] Child mesh: BoxGeometry MeshLambertMaterial Color: 333333 Map: 
+  Running action: wait [2000]
+  [Browser Warn] [Game] Frame took 214.1ms, capping dt to 50ms
+  [Browser Warn] [Game] Frame took 106.3ms, capping dt to 50ms
+  Waiting 2000ms for game state to update...
+  [Browser Warn] [Game] Frame took 400.1ms, capping dt to 50ms
+  [Browser] [Analytics] player_death JSHandle@object
+
+🔍 Running Verifications...
+  Querying game state directly...
+  Scene: {"Elephant":1,"ShyPlant":4,"SporeCloud":4,"Monkey":14,"Frog":4,"HelicopterPlant":2,"Deer":2,"Lorax":1,"MimicVine":2,"Fish":1,"Lion":1,"BouncePod":2,"HummingBlossom":2,"Kangaroo":3,"Pugasus":3,"Snowman":2,"Villager":16,"StaticLampost":4}
+  Running custom verification code...
+  [Browser] Checking villagers...
+  [Browser] Villager count: 23
+  [Browser] Villager 1 Mesh: JSHandle@object
+  Result: {"success":true,"message":"Check console logs"}
+  ✓ Check console logs
+
+✅ Test Passed: Debug Villager Visibility
+  ✓ Browser closed

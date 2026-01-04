@@ -131,6 +131,10 @@ export function generateTexture(type, size = 16) {
     const ctx = canvas.getContext('2d');
 
     let seed = type.charCodeAt(0) * 1000;
+    // console.log(`[TextureGenerator] Generating: '${type}'`);
+    if (type === 'torch' || type === 'glowstone') {
+        console.log(`[TextureGenerator] Explicit check for: '${type}'`);
+    }
 
     switch (type) {
         case 'grass_top':
@@ -1633,6 +1637,46 @@ export function generateTexture(type, size = 16) {
             }
             break;
         }
+
+        case 'torch':
+            ctx.clearRect(0, 0, size, size);
+            // Stick
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(7, 6, 2, 10);
+            // Flame (Red core, orange, yellow tip)
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(7, 4, 2, 2);
+            ctx.fillStyle = '#FFA500';
+            ctx.fillRect(7, 3, 2, 1);
+            ctx.fillStyle = '#FFFF00';
+            ctx.fillRect(7, 1, 2, 2);
+            break;
+
+        case 'glowstone':
+            // Bright bubbly yellow/orange texture
+            ctx.fillStyle = '#FFD700'; // Gold-ish base
+            ctx.fillRect(0, 0, size, size);
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    if (noise > 0.7) ctx.fillStyle = '#FFFF00'; // Bright yellow
+                    else if (noise < 0.3) ctx.fillStyle = '#FFA500'; // Orange
+                    else ctx.fillStyle = '#FFD700';
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Glow center
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.fillRect(4, 4, 8, 8);
+            break;
+
+        case 'lampost_glass':
+            ctx.fillStyle = 'rgba(255, 221, 0, 0.6)'; // Yellow transparent
+            ctx.fillRect(0, 0, size, size);
+            // Inner highlight
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.fillRect(4, 4, size - 8, size - 8);
+            break;
 
         default:
             // Fallback: Generate a visible debug texture (magenta/pink checkered)

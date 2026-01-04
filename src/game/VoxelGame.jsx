@@ -2131,11 +2131,6 @@ export class VoxelGame {
                 // DISABLED OCCLUSION CULLING: This was causing all creatures to be invisible in production
                 // The DDA raycast was failing silently or being too aggressive
                 // Keep creatures visible if in frustum - performance is acceptable without occlusion
-                // DEPLOY_FIX_V2: 2026-01-03 - Ground creature visibility fix deployed
-                if (!this._occlisionFixLogged) {
-                    this._occlisionFixLogged = true;
-                    console.log('[DEPLOY_FIX] Occlusion culling DISABLED - ground creature visibility fix active (v2026-01-03)');
-                }
                 let hasLOS = true;
                 /* DISABLED - causing visibility issues
                 try {

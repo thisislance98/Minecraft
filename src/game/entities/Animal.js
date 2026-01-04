@@ -200,8 +200,7 @@ export class Animal {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
-                    // Keep culling disabled for safety, but remove X-Ray materials
-                    child.frustumCulled = false;
+                    // Standard visibility
                     child.visible = true;
                 }
             });

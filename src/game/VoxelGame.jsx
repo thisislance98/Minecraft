@@ -704,9 +704,9 @@ export class VoxelGame {
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
-        // Village is generated at spawnPoint.x + 15, spawnPoint.z + 15
-        const villageX = spawnPoint.x + 15;
-        const villageZ = spawnPoint.z + 15;
+        // Village is generated at spawnPoint.x + 40, spawnPoint.z + 40 (see WorldGenerator.js)
+        const villageX = spawnPoint.x + 40;
+        const villageZ = spawnPoint.z + 40;
 
         // Calculate ground height at Village Center
         const terrainHeight = this.worldGen.getTerrainHeight(villageX, villageZ);
@@ -779,14 +779,41 @@ export class VoxelGame {
             }
         }
 
-        console.log(`[Game] Spawning player at Wizard Tower: ${finalX}, ${towerSpawnY}, ${finalZ}`);
+        // Verify spawn position - find actual ground level to avoid spawning on trees
+        let finalY = towerSpawnY;
+        if (this.spawnManager) {
+            // Use findGroundLevel to ensure we're not on a tree
+            const groundY = this.spawnManager.findGroundLevel(finalX, terrainHeight + 5, finalZ);
+            if (groundY !== null) {
+                // If at tower position, prefer tower spawn height; otherwise use ground level
+                if (finalX === villageX && finalZ === villageZ) {
+                    // Check if tower exists by seeing if there's solid ground at tower height
+                    const blockAtTowerFloor = this.getBlock(finalX, Math.floor(towerSpawnY) - 1, finalZ);
+                    if (blockAtTowerFloor) {
+                        console.log(`[Game] Spawning player at Wizard Tower: ${finalX}, ${towerSpawnY}, ${finalZ}`);
+                    } else {
+                        // Tower not generated yet, use ground level
+                        finalY = groundY;
+                        console.log(`[Game] Tower not ready, spawning on ground: ${finalX}, ${finalY}, ${finalZ}`);
+                    }
+                } else {
+                    // Offset position - use ground level
+                    finalY = groundY;
+                    console.log(`[Game] Spawning player on ground at: ${finalX}, ${finalY}, ${finalZ}`);
+                }
+            }
+        } else {
+            // Fallback: just use terrain height + 1
+            finalY = terrainHeight + 1;
+            console.log(`[Game] Spawning player (fallback) at: ${finalX}, ${finalY}, ${finalZ}`);
+        }
 
-        this.spawnPoint = new THREE.Vector3(finalX, towerSpawnY, finalZ);
+        this.spawnPoint = new THREE.Vector3(finalX, finalY, finalZ);
         this.player.position.copy(this.spawnPoint);
         this.player.velocity.set(0, 0, 0);
 
         // Reset fall damage trackers
-        this.player.highestY = towerSpawnY;
+        this.player.highestY = finalY;
         this.player.isDead = false;
         if (this.uiManager) {
             this.uiManager.hideDeathScreen();

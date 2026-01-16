@@ -10,6 +10,7 @@ export class Frog extends Animal {
         this.speed = 2.0;
         this.jumpForce = 8;
         this.canHop = true; // Frogs hop up mountains
+        this.avoidsWater = false; // Frogs are amphibians
         this.createBody();
     }
 

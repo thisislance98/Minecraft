@@ -8,6 +8,7 @@ export class Dolphin extends Animal {
         this.height = 0.8;
         this.depth = 2.0;
         this.speed = 3.5;
+        this.avoidsWater = false; // Dolphins live in water
         this.createBody();
     }
 

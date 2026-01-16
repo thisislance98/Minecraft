@@ -8,6 +8,7 @@ export class Shark extends Animal {
         this.height = 0.6;
         this.depth = 1.6; // Long body
         this.gravity = 0;
+        this.avoidsWater = false; // Sharks live in water
         this.createBody();
         this.state = 'walk'; // Using walk state for swimming
     }

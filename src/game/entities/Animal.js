@@ -82,7 +82,7 @@ export class Animal {
         this.fleeOnProximity = false;
         this.fleeRange = 8.0;
 
-        this.avoidsWater = false;
+        this.avoidsWater = true; // Land animals avoid water by default
 
         // Stuck detection
         this.lastPosition = new THREE.Vector3().copy(this.position);
@@ -988,11 +988,47 @@ export class Animal {
             this.velocity.y = 0;
             this.onGround = true;
         } else if (groundY === -Infinity) {
-            // DEFENSIVE: No ground detected (chunks not loaded yet)
-            // Don't fall - stay at current position until terrain loads
-            this.velocity.y = 0;
-            this.onGround = false;
-            // Don't move at all
+            // No ground detected from block checks - use terrain height as fallback
+            // This prevents entities from floating when chunks aren't fully loaded
+            if (this.game.worldGen) {
+                const terrainY = this.game.worldGen.getTerrainHeight(pos.x, pos.z);
+                const distToTerrain = pos.y - terrainY;
+
+                if (distToTerrain >= -0.1 && distToTerrain < 1.0) {
+                    // Snap to terrain
+                    pos.y = terrainY;
+                    this.velocity.y = 0;
+                    this.onGround = true;
+                } else if (distToTerrain >= 1.0) {
+                    // Above terrain - fall towards it
+                    this.onGround = false;
+                    this.velocity.y -= this.gravity * dt;
+                    this.velocity.y = Math.max(this.velocity.y, -40);
+                    pos.y += this.velocity.y * dt;
+
+                    if (pos.y < terrainY) {
+                        pos.y = terrainY;
+                        this.velocity.y = 0;
+                        this.onGround = true;
+                    }
+                } else {
+                    // Below terrain - push up
+                    pos.y = terrainY;
+                    this.velocity.y = 0;
+                    this.onGround = true;
+                }
+            } else {
+                // No worldGen available - just apply gravity with ground at y=0
+                this.onGround = false;
+                this.velocity.y -= this.gravity * dt;
+                this.velocity.y = Math.max(this.velocity.y, -40);
+                pos.y += this.velocity.y * dt;
+                if (pos.y < 0) {
+                    pos.y = 0;
+                    this.velocity.y = 0;
+                    this.onGround = true;
+                }
+            }
         } else {
             // FALLING
             // Either we are high in the air, or groundY is -Infinity (hole)
@@ -1139,6 +1175,16 @@ export class Animal {
             } else {
                 pos.y = newY;
                 this.onGround = false;
+
+                // Terrain fallback: prevent falling through unloaded chunks
+                if (this.game.worldGen) {
+                    const terrainY = this.game.worldGen.getTerrainHeight(pos.x, pos.z);
+                    if (pos.y < terrainY) {
+                        pos.y = terrainY;
+                        this.velocity.y = 0;
+                        this.onGround = true;
+                    }
+                }
             }
         } else if (dy > 0) {
             // Jumping

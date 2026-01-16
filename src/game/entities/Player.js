@@ -1,6 +1,7 @@
 // Player entity
 import * as THREE from 'three';
 import { Config } from '../core/Config.js';
+import { ThirdPersonCamera } from '../systems/ThirdPersonCamera.js';
 
 /**
  * Player class handles player state, physics, body model, and animation
@@ -47,8 +48,16 @@ export class Player {
         this.isMining = false;
         this.miningTimer = 0;
         this.wasSpacePressed = false;
-        this.cameraMode = 0; // 0: First Person, 1: Third Person Back, 2: Third Person Front
+        this.cameraMode = 0; // 0: First Person, 1: Third Person (smooth follow)
         this.wasCPressed = false;
+
+        // Third person camera controller
+        this.thirdPersonCamera = new ThirdPersonCamera(game, {
+            offset: new THREE.Vector3(0, 6, 12),       // Higher and further back
+            lookAtOffset: new THREE.Vector3(0, 2, -15), // Look far ahead of player so crosshair aims forward
+            smoothing: 0.02,                           // Very smooth follow
+            enableCollision: true
+        });
         this.isFlying = false;
         this.flightTime = 0;
 
@@ -1022,29 +1031,6 @@ export class Player {
             velX = (-moveForward * sin + moveRight * cos) * speed;
             velZ = (-moveForward * cos - moveRight * sin) * speed;
 
-            // In orbit camera mode, rotate player to face movement direction
-            if (this.cameraMode === 3 && (moveForward !== 0 || moveRight !== 0)) {
-                // Calculate target rotation based on movement direction relative to camera orbit
-                // Camera looks toward player, so forward movement should be opposite of camera position angle
-                const moveAngle = Math.atan2(moveRight, moveForward);
-                const targetRotation = this.orbitRotation.y + moveAngle;
-
-                // Smoothly rotate player toward movement direction
-                let angleDiff = targetRotation - this.rotation.y;
-                // Normalize to -PI to PI
-                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-                const turnSpeed = 10; // Radians per second
-                const maxTurn = turnSpeed * deltaTime;
-                this.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
-
-                // Recalculate velocity with updated rotation
-                const newSin = Math.sin(this.rotation.y);
-                const newCos = Math.cos(this.rotation.y);
-                velX = (-moveForward * newSin + moveRight * newCos) * speed;
-                velZ = (-moveForward * newCos - moveRight * newSin) * speed;
-            }
         }
 
         // Studio mode - disable physics and allow free movement
@@ -1260,55 +1246,15 @@ export class Player {
         // Update camera and body based on view mode
         const camera = this.game.camera;
 
-        // 3rd Person Back
+        // 3rd Person - Smooth Follow Camera
         if (this.cameraMode === 1) {
+            // Update body position for 3rd person view
             this.body.position.copy(this.position);
             this.body.position.y += 1.57 + this.stepSmoothingY;
             this.body.rotation.set(0, this.rotation.y, 0);
 
-            // Camera is now child of head, so no manual update needed here
-            // It will follow head position and rotation automatically
-
-        } else if (this.cameraMode === 2) {
-            // 3rd Person Front (Selfie)
-            this.body.position.copy(this.position);
-            this.body.position.y += 1.57 + this.stepSmoothingY;
-            this.body.rotation.set(0, this.rotation.y, 0);
-
-            const camDist = 4;
-            const camHeight = 2;
-            // Negative sin/cos to put camera IN FRONT like original bug
-            const cx = this.position.x - Math.sin(this.rotation.y) * camDist;
-            const cz = this.position.z - Math.cos(this.rotation.y) * camDist;
-            const cy = this.position.y + camHeight;
-
-            camera.position.set(cx, cy, cz);
-            camera.lookAt(this.position.x, this.position.y + 1.2, this.position.z);
-
-        } else if (this.cameraMode === 3) {
-            // Orbit Mode
-            this.body.position.copy(this.position);
-            this.body.position.y += 1.57 + this.stepSmoothingY;
-            this.body.rotation.set(0, this.rotation.y, 0);
-
-            const radius = 8;
-            // Calculate camera position from orbitRotation
-            // y is yaw (around Y axis), x is pitch (up/down)
-            // Three.js convention: Y is up.
-            // Z is forward for 0 rotation? Let's check math.
-            // We want camera to orbit.
-
-            const theta = this.orbitRotation.y; // Horizontal
-            const phi = this.orbitRotation.x;   // Vertical
-
-            // Standard spherical conversion (adjusted for Y-up)
-            const cy = this.position.y + 1.5 + Math.sin(phi) * radius;
-            const rH = Math.cos(phi) * radius; // Horizontal radius
-            const cx = this.position.x + Math.sin(theta) * rH;
-            const cz = this.position.z + Math.cos(theta) * rH;
-
-            camera.position.set(cx, cy, cz);
-            camera.lookAt(this.position.x, this.position.y + 1.2, this.position.z);
+            // Use smooth follow camera
+            this.thirdPersonCamera.update(deltaTime, this);
 
         } else {
             // 1st Person Logic (Default)
@@ -2156,92 +2102,48 @@ export class Player {
     rotate(dx, dy) {
         const sensitivity = 0.002;
 
-        if (this.cameraMode === 3) {
-            // Orbit rotation
-            this.orbitRotation.y -= dx * sensitivity;
-            this.orbitRotation.x += dy * sensitivity; // Invert pitch control for orbit feels natural usually, or match? Key is "move mouse"
-            // Let's stick to standard: mouse up (negative dy) -> look up (camera goes down? or camera looks up?) 
-            // In orbit: Mouse up usually moves camera UP (so you look down).
-            // dy is positive when moving down? Depends on event.
-            // Assuming standard fly controls:
-            // InputManager passes deltaX/Y.
-
-            // Limit vertical orbit
-            this.orbitRotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.orbitRotation.x));
-
-        } else {
-            // Character rotation
-            this.rotation.y -= dx * sensitivity;
-            this.rotation.x -= dy * sensitivity;
-            this.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.rotation.x));
-        }
+        // Character rotation (same for both first and third person)
+        this.rotation.y -= dx * sensitivity;
+        this.rotation.x -= dy * sensitivity;
+        this.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.rotation.x));
     }
 
     toggleCameraView() {
-        this.cameraMode = (this.cameraMode + 1) % 4; // Now 4 modes
+        this.cameraMode = (this.cameraMode + 1) % 2; // 2 modes: 0=First Person, 1=Third Person
 
-        // Reset camera to scene by default (handling switching from Mode 1)
+        // Reset camera to scene
         this.game.scene.add(this.game.camera);
 
         const crosshair = document.getElementById('crosshair');
 
-        if (this.cameraMode !== 0) {
-            // Switch to 3rd Person (Back, Front, or Orbit)
-            // Detach body from camera, attach to scene
+        if (this.cameraMode === 1) {
+            // Switch to 3rd Person (Smooth Follow)
             this.game.scene.add(this.body);
             this.body.visible = true;
             if (this.head) this.head.visible = true;
 
-            // Hide crosshair ONLY in selfie mode (Mode 2)
-            if (crosshair) {
-                if (this.cameraMode === 2) {
-                    crosshair.classList.add('hidden');
-                } else {
-                    crosshair.classList.remove('hidden');
-                }
-            }
-
-            if (this.cameraMode === 1) {
-                // 3rd Person Back
-                // Parent camera to head for orbiting behavior
-                if (this.head) {
-                    this.head.add(this.game.camera);
-                    this.game.camera.position.set(0, 1.5, 4); // Behind and above head
-                    this.game.camera.rotation.set(0, 0, 0); // Look forward (Z- matches Head Z-)
-                }
-            } else if (this.cameraMode === 3) {
-                // Init orbit rotation to current player facing to avoid snap?
-                // Or just start from back?
-                // Let's start from back:
-                this.orbitRotation.y = this.rotation.y + Math.PI; // Face player (camera is 'behind' so +PI in front? wait)
-                // If player is RotY = 0 (looking -Z), we want camera at +Z looking at -Z.
-                // Camera at Z=Radius.
-                // Theta = 0 -> Z = R*cos(0) = R. Correct.
-                // But if RotY=0, player looks -Z.
-                // So OrbitY=0 puts camera at +Z.
-                // Yes.
-                this.orbitRotation.y = this.rotation.y;
-                this.orbitRotation.x = 0;
-            }
+            // Reset/initialize the third person camera
+            this.thirdPersonCamera.reset(this);
 
             // Ensure body parts are visible in 3rd person
             if (this.torso) this.torso.visible = true;
             if (this.leftLegPivot) this.leftLegPivot.visible = true;
             if (this.rightLegPivot) this.rightLegPivot.visible = true;
 
+            // Keep crosshair visible in 3rd person
+            if (crosshair) crosshair.classList.remove('hidden');
+
         } else {
             // Switch to 1st Person
-            // Attach body to camera
             this.game.camera.add(this.body);
 
             // Position relative to camera to see arms
             this.body.position.set(0, -0.3, -0.4);
             this.body.rotation.set(0, 0, 0);
 
-            // Hide head and body parts in 1st person to prevent clipping/obstruction
+            // Hide head and body parts in 1st person
             if (this.head) this.head.visible = false;
             if (this.torso) this.torso.visible = false;
-            // Hide legs as looking down would see them "attached to chin" if they follow head pitch
             if (this.leftLegPivot) this.leftLegPivot.visible = false;
             if (this.rightLegPivot) this.rightLegPivot.visible = false;
 

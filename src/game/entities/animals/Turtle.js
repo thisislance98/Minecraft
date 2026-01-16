@@ -8,6 +8,7 @@ export class Turtle extends Animal {
         this.height = 0.5;
         this.depth = 0.8;
         this.speed = 1.0;
+        this.avoidsWater = false; // Turtles can swim
         this.createBody();
     }
 

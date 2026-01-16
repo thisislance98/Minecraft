@@ -8,6 +8,7 @@ export class Duck extends Animal {
         this.height = 0.6;
         this.depth = 0.6;
         this.speed = 2.5;
+        this.avoidsWater = false; // Ducks can swim
         this.createBody();
     }
 

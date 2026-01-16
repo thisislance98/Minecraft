@@ -49,9 +49,6 @@ export class Environment {
         // Visual Improvements: Moon
         this.createMoon();
 
-        // Initial update to ensure lights and sky are not dark on frame 0
-        this.updateDayNightCycle(0, new THREE.Vector3(0, 0, 0));
-
         this.moonEnabled = true;
         this.shadowsEnabled = true;
 
@@ -100,9 +97,14 @@ export class Environment {
                 nightColor: new THREE.Color(0x000000),
                 fogColor: 0x000000,
                 fogDensity: 0.0001,
-                ambientTint: 0xCCCCCC
+                ambientTint: 0xCCCCCC,
+                alwaysShowStars: true                     // Stars always visible in space
             }
         };
+
+        // Initial update to ensure lights and sky are not dark on frame 0
+        // Must be called AFTER worldPresets and currentWorld are initialized
+        this.updateDayNightCycle(0, new THREE.Vector3(0, 0, 0));
     }
 
     /**
@@ -148,6 +150,38 @@ export class Environment {
         }
     }
 
+    /**
+     * Detect which world the player is in based on Y position and update environment
+     * World boundaries (in blocks, chunk Y * 16):
+     * - Earth: Y < 640 (chunk Y < 40)
+     * - Moon: Y 640-767 (chunk Y 40-47)
+     * - Crystal: Y 800-927 (chunk Y 50-57)
+     * - Lava: Y 960-1087 (chunk Y 60-67)
+     */
+    detectWorldFromPosition(playerPos) {
+        const chunkY = Math.floor(playerPos.y / 16);
+        let detectedWorld = 'earth';
+
+        // Check world boundaries based on Config values
+        // Moon: chunks 40-47
+        if (chunkY >= 40 && chunkY < 48) {
+            detectedWorld = 'moon';
+        }
+        // Crystal World: chunks 50-57
+        else if (chunkY >= 50 && chunkY < 58) {
+            detectedWorld = 'crystal';
+        }
+        // Lava World: chunks 60-67
+        else if (chunkY >= 60 && chunkY < 68) {
+            detectedWorld = 'lava';
+        }
+
+        // Only switch if different from current world
+        if (detectedWorld !== this.currentWorld) {
+            this.setWorld(detectedWorld);
+        }
+    }
+
     toggleShadows(enabled) {
         this.shadowsEnabled = enabled;
         // Force update immediately
@@ -174,6 +208,9 @@ export class Environment {
             this.time += dt / this.dayDuration;
             if (this.time > 1.0) this.time -= 1.0;
         }
+
+        // Auto-detect world based on player Y position (chunk coordinates)
+        this.detectWorldFromPosition(playerPos);
 
         // Calculate sun position
         // angle 0 = sunrise, PI/2 = noon, PI = sunset, 3PI/2 = midnight

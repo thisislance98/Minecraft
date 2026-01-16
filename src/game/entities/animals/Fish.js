@@ -8,6 +8,7 @@ export class Fish extends Animal {
         this.height = 0.3;
         this.depth = 0.6;
         this.gravity = 0;
+        this.avoidsWater = false; // Fish live in water
         this.createBody();
         this.mesh.scale.set(0.6, 0.6, 0.6);
         this.state = 'walk'; // Using walk state for swimming

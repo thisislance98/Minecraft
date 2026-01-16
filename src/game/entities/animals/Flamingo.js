@@ -7,6 +7,7 @@ export class Flamingo extends Animal {
         this.width = 0.6;
         this.height = 1.8;
         this.depth = 0.6;
+        this.avoidsWater = false; // Flamingos wade in water
 
         // Flamingo Pink
         this.color = 0xFC74FD;

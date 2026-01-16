@@ -9,6 +9,7 @@ export class Penguin extends Animal {
         this.depth = 0.6;
         this.speed = 1.5; // Walking speed (slow)
         this.swimSpeed = 4.0; // Fast in water
+        this.avoidsWater = false; // Penguins can swim
         this.createBody();
     }
 

@@ -7,6 +7,7 @@ export class Starfish extends Animal {
         this.width = 0.6;
         this.height = 0.2;
         this.depth = 0.6;
+        this.avoidsWater = false; // Starfish are aquatic
         this.createBody();
     }
 

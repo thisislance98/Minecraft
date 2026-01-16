@@ -8,6 +8,7 @@ export class YellowDuck extends Animal {
         this.height = 0.8;
         this.depth = 0.8;
         this.speed = 1.5;
+        this.avoidsWater = false; // Ducks can swim
         this.createBody();
         this.mesh.scale.set(0.75, 0.75, 0.75);
     }

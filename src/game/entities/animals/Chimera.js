@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Animal } from '../Animal.js';
 
 export class Chimera extends Animal {
-    constructor(game, x, y, z, seed) {
-        super(game, x, y, z, seed);
+    constructor(game, x, y, z) {
+        super(game, x, y, z);
         this.width = 1.8;
         this.height = 2.2;
         this.depth = 2.5;

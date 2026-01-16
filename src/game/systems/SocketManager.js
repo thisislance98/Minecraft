@@ -213,10 +213,20 @@ export class SocketManager {
         });
 
         this.socket.on('player:move', (data) => {
-            // data: { id, pos, rotY, name, isCrouching, health, maxHealth }
+            // data: { id, pos, rotY, name, isCrouching, health, maxHealth, shirtColor }
             if (data && data.pos) {
                 this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY, data.name);
-                this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching, data.health, data.maxHealth);
+                this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching, data.health, data.maxHealth, data.shirtColor);
+            }
+        });
+
+        // Handle player color changes
+        this.socket.on('player:color', (data) => {
+            // data: { id, shirtColor }
+            console.log(`[SocketManager] Player ${data.id} changed color to:`, data.shirtColor);
+            const meshInfo = this.playerMeshes.get(data.id);
+            if (meshInfo && meshInfo.shirtMaterial) {
+                meshInfo.shirtMaterial.color.setHex(data.shirtColor);
             }
         });
 
@@ -294,14 +304,43 @@ export class SocketManager {
         // Handle world reset (triggered by settings menu)
         this.socket.on('world:reset', (data) => {
             console.log('[SocketManager] World reset received:', data);
-            // Show a brief message then reload the page with the new world
-            if (this.game.uiManager) {
-                this.game.uiManager.addChatMessage('system', 'World is being reset...');
+
+            // Check if this client initiated the reset (only initiator should respawn)
+            if (data.isInitiator) {
+                // Show a brief message then reload the page with the new world
+                if (this.game.uiManager) {
+                    this.game.uiManager.addChatMessage('system', 'World is being reset...');
+                }
+                // Short delay to let the message display, then reload
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            } else {
+                // Other players: just clear entities and blocks without respawning
+                if (this.game.uiManager) {
+                    this.game.uiManager.addChatMessage('system', 'World was reset by another player');
+                }
+
+                // Clear all entities
+                if (this.game.spawnManager) {
+                    this.game.spawnManager.clearAllEntities();
+                }
+
+                // Clear persisted block changes (world will regenerate naturally)
+                if (this.game.clearPersistedBlocks) {
+                    this.game.clearPersistedBlocks();
+                }
+
+                // Regenerate chunks around the player
+                if (this.game.updateChunks) {
+                    this.game.updateChunks();
+                }
+
+                // Update time
+                if (data.time !== undefined && this.game.environment) {
+                    this.game.environment.setTimeOfDay(data.time);
+                }
             }
-            // Short delay to let the message display, then reload
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
         });
 
         // Handle dynamic creature definitions
@@ -373,7 +412,7 @@ export class SocketManager {
             if (data.targetId === this.socketId) {
                 console.log(`[SocketManager] I took ${data.amount} damage from ${data.sourceId}`);
                 if (this.game.player && this.game.player.takeDamage) {
-                    this.game.player.takeDamage(data.amount);
+                    this.game.player.takeDamage(data.amount, 'Another Player');
 
                     // Knockback?
                     if (data.sourceId) {
@@ -397,6 +436,13 @@ export class SocketManager {
             // data: { id, action }
             console.log(`[SocketManager] Player ${data.id} action: ${data.action}`);
             this.handleRemoteAction(data.id, data.action);
+        });
+
+        // Handle remote projectile spawns (arrows, magic, etc.)
+        this.socket.on('projectile:spawn', (data) => {
+            // data: { id, type, pos, vel }
+            console.log(`[SocketManager] Remote projectile from ${data.id}: ${data.type}`);
+            this.spawnRemoteProjectile(data.type, data.pos, data.vel);
         });
 
         // Initialize for remote player updates (called from main game loop)
@@ -449,7 +495,15 @@ export class SocketManager {
 
         // deltaTime now passed in as argument
 
+        // Get local player's current world for cross-world visibility filtering
+        const localWorld = this.game.player ?
+            this.getWorldFromY(this.game.player.position.y) : 'earth';
+
         this.playerMeshes.forEach((meshInfo, id) => {
+            // 0. Cross-world visibility check - hide players in different worlds
+            const remoteWorld = this.getWorldFromY(meshInfo.targetPosition.y);
+            meshInfo.group.visible = (localWorld === remoteWorld);
+
             // 1. Interpolate Position
             // If we have a buffer, use it. Otherwise fall back to simple lerp (for now, or fully replace)
             if (meshInfo.buffer) {
@@ -635,8 +689,13 @@ export class SocketManager {
     joinGame() {
         if (this.socket && this.socket.connected) {
             const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
-            console.log('[SocketManager] Requesting to join game as:', playerName);
-            this.socket.emit('join_game', { name: playerName });
+            const shirtColor = localStorage.getItem('settings_shirt_color');
+
+            console.log('[SocketManager] Requesting to join game as:', playerName, 'with color:', shirtColor);
+            this.socket.emit('join_game', {
+                name: playerName,
+                shirtColor: shirtColor ? parseInt(shirtColor) : null
+            });
         }
     }
 
@@ -645,6 +704,24 @@ export class SocketManager {
      */
     isConnected() {
         return this.socket && this.socket.connected && this.roomId;
+    }
+
+    /**
+     * Determine which world a player is in based on Y position.
+     * Used for cross-world visibility filtering.
+     * @param {number} y - Y coordinate
+     * @returns {string} - 'earth', 'moon', 'crystal', 'lava'
+     */
+    getWorldFromY(y) {
+        const chunkY = Math.floor(y / 16);
+
+        // Check alien worlds first (higher Y values)
+        if (chunkY >= 60 && chunkY < 68) return 'lava';
+        if (chunkY >= 50 && chunkY < 58) return 'crystal';
+        if (chunkY >= 40 && chunkY < 48) return 'moon';
+
+        // Default to earth
+        return 'earth';
     }
 
     /**
@@ -748,6 +825,69 @@ export class SocketManager {
     sendPlayerAction(action) {
         if (!this.isConnected()) return;
         this.socket.emit('player:action', { action });
+    }
+
+    /**
+     * Send projectile spawn event to other players
+     * @param {string} type - Projectile type ('arrow', 'magic', 'shrink', 'levitation', 'giant', 'growth')
+     * @param {Object} pos - Starting position {x, y, z}
+     * @param {Object} vel - Velocity {x, y, z}
+     */
+    sendProjectileSpawn(type, pos, vel) {
+        if (!this.isConnected()) return;
+        console.log(`[SocketManager] Sending projectile spawn: ${type}`);
+        this.socket.emit('projectile:spawn', {
+            type,
+            pos: { x: pos.x, y: pos.y, z: pos.z },
+            vel: { x: vel.x, y: vel.y, z: vel.z }
+        });
+    }
+
+    /**
+     * Send shirt color update to server
+     * @param {number} shirtColor - The hex color value
+     */
+    sendShirtColor(shirtColor) {
+        if (!this.isConnected()) return;
+        console.log('[SocketManager] Sending shirt color update:', shirtColor);
+        this.socket.emit('player:color', { shirtColor });
+    }
+
+    /**
+     * Spawn a projectile from a remote player (called when receiving projectile:spawn event)
+     * @param {string} type - Projectile type
+     * @param {Object} pos - Position {x, y, z}
+     * @param {Object} vel - Velocity {x, y, z}
+     */
+    spawnRemoteProjectile(type, pos, vel) {
+        const position = new THREE.Vector3(pos.x, pos.y, pos.z);
+        const velocity = new THREE.Vector3(vel.x, vel.y, vel.z);
+
+        console.log(`[SocketManager] Spawning remote projectile: ${type} at`, pos);
+
+        switch (type) {
+            case 'arrow':
+                // Pass isRemote = true so arrow can damage local player
+                this.game.spawnArrow(position, velocity, null, true);
+                break;
+            case 'magic':
+                this.game.spawnMagicProjectile(position, velocity, true);
+                break;
+            case 'shrink':
+                this.game.spawnShrinkProjectile(position, velocity, true);
+                break;
+            case 'levitation':
+                this.game.spawnLevitationProjectile(position, velocity, true);
+                break;
+            case 'giant':
+                this.game.spawnGiantProjectile(position, velocity, true);
+                break;
+            case 'growth':
+                this.game.spawnGrowthProjectile(position, velocity, true);
+                break;
+            default:
+                console.warn(`[SocketManager] Unknown remote projectile type: ${type}`);
+        }
     }
 
     /**
@@ -1102,7 +1242,7 @@ export class SocketManager {
         console.log(`[SocketManager] Spatial audio setup for ${id}`);
     }
 
-    updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth) {
+    updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth, shirtColor) {
         let meshInfo = this.playerMeshes.get(id);
 
         if (!meshInfo || meshInfo instanceof THREE.Object3D) {
@@ -1111,7 +1251,7 @@ export class SocketManager {
             }
             // Get stored name from player:joined event if not provided
             const playerName = name || (this.playerNames?.get(id)) || `Player_${id.substring(0, 4)}`;
-            meshInfo = this.createCharacterModel(id, playerName);
+            meshInfo = this.createCharacterModel(id, playerName, shirtColor);
 
             // Check for pending held item
             if (this.pendingHeldItems && this.pendingHeldItems.has(id)) {
@@ -1159,6 +1299,15 @@ export class SocketManager {
         }
 
         // --- Buffer Update ---
+        // Skip position updates if player is dying (prevents moving in circle during death animation)
+        if (meshInfo.isDying) {
+            // Only process health updates for dying players
+            if (health !== undefined) {
+                this.updateHealthBar(meshInfo, health, maxHealth);
+            }
+            return;
+        }
+
         // Push new state with current timestamp
         const state = {
             time: performance.now(),
@@ -1200,7 +1349,7 @@ export class SocketManager {
 
 
 
-    createCharacterModel(id, playerName = 'Player') {
+    createCharacterModel(id, playerName = 'Player', shirtColor = null) {
         const group = new THREE.Group();
 
         // Create name label above head
@@ -1221,6 +1370,28 @@ export class SocketManager {
         const materials = {};
         for (const [key, mat] of Object.entries(sharedMaterials)) {
             materials[key] = mat.clone();
+        }
+
+        // Randomize shirt color for each player if not provided
+        if (shirtColor !== null && shirtColor !== undefined) {
+            materials.shirt.color.setHex(shirtColor);
+        } else {
+            const shirtColors = [
+                0xFF5733, // Orange-red
+                0x33FF57, // Green
+                0x3357FF, // Blue
+                0xFF33A8, // Pink
+                0xFFD700, // Gold
+                0x00CED1, // Dark cyan
+                0x9400D3, // Dark violet
+                0xFF6347, // Tomato
+                0x20B2AA, // Light sea green
+                0x8B4513, // Saddle brown
+                0x4169E1, // Royal blue
+                0xDC143C, // Crimson
+            ];
+            const randomShirtColor = shirtColors[Math.floor(Math.random() * shirtColors.length)];
+            materials.shirt.color.setHex(randomShirtColor);
         }
 
         // Torso
@@ -1313,7 +1484,8 @@ export class SocketManager {
             toolAttachment: toolAttachment, // Exposed for updates
             healthBar: healthBar,
             isDying: false,
-            deathTimer: 0
+            deathTimer: 0,
+            shirtMaterial: materials.shirt
         };
     }
 

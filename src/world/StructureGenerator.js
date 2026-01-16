@@ -1,16 +1,62 @@
 import { Villager } from '../game/entities/animals/Villager.js';
-import { StaticLampost } from '../game/entities/animals/StaticLampost.js';
+// StaticLampost import removed
 import { Blocks } from '../game/core/Blocks.js';
 import { SeededRandom } from '../utils/SeededRandom.js';
 import * as THREE from 'three';
 
 export class StructureGenerator {
 
+    // Book block types for varied bookshelves
+    static BOOK_BLOCKS = [
+        Blocks.BOOK_RED,
+        Blocks.BOOK_BLUE,
+        Blocks.BOOK_GREEN,
+        Blocks.BOOK_BROWN,
+        Blocks.BOOK_PURPLE,
+        Blocks.BOOK_MIXED
+    ];
+
     constructor(game, worldGenerator) {
         this.game = game;
         this.worldGenerator = worldGenerator;
         this.seed = 0;
         this.rng = new SeededRandom(0);
+        // Cache of recent tree positions to prevent trees from spawning too close
+        this.recentTreePositions = [];
+        this.minTreeDistance = 8; // Minimum distance between trees
+    }
+
+    /**
+     * Check if a tree can be placed at the given position (not too close to other trees)
+     */
+    canPlaceTree(x, z) {
+        for (const pos of this.recentTreePositions) {
+            const dx = x - pos.x;
+            const dz = z - pos.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist < this.minTreeDistance) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Mark a tree as placed at the given position
+     */
+    markTreePlaced(x, z) {
+        this.recentTreePositions.push({ x, z });
+        // Keep only the last 200 tree positions to prevent memory growth
+        if (this.recentTreePositions.length > 200) {
+            this.recentTreePositions.shift();
+        }
+    }
+
+    /**
+     * Get a random book block type for visual variety
+     */
+    getRandomBookBlock() {
+        return StructureGenerator.BOOK_BLOCKS[Math.floor(Math.random() * StructureGenerator.BOOK_BLOCKS.length)];
     }
 
     setSeed(seed) {
@@ -47,18 +93,24 @@ export class StructureGenerator {
                 const wx = startX + x;
                 const wz = startZ + z;
 
-                const featureRng = this.getPositionRng(wx, wz, 1);
-                if (featureRng.next() < 0.01) {
+                // OPTIMIZATION: Use a simple hash instead of creating a NEW SeededRandom object for every column
+                const hash = this.hashPosition(wx, wz, 1);
+                const rand = (hash % 10000) / 10000;
+
+                if (rand < 0.01) {
                     const groundHeight = this.worldGenerator.getTerrainHeight(wx, wz);
-                    // Use optimized biome lookup - reuse the height we just computed
                     const biome = this.worldGenerator.getBiomeWithHeight(wx, wz, groundHeight);
 
+                    // Reuse a local RNG for feature-specific checks to keep them deterministic but fast
+                    const featureRngValue = (hash % 12345) / 12345;
                     if (groundHeight >= startY && groundHeight < startY + this.game.chunkSize) {
                         const wy = groundHeight;
                         const blockBelow = this.game.getBlockWorld(wx, wy, wz);
 
                         if (blockBelow === Blocks.GRASS || (biome === 'SNOW' && blockBelow === Blocks.SNOW) || (biome === 'DESERT' && blockBelow === Blocks.SAND)) {
-                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && featureRng.next() < 0.1) {
+                            // Secondary roll for houses
+                            const houseRand = ((hash >> 2) % 10000) / 10000;
+                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && houseRand < 0.1) {
                                 let isFlat = true;
                                 const h0 = wy;
                                 const checkSize = 7;
@@ -76,12 +128,22 @@ export class StructureGenerator {
                                     this.generateHouse(wx, wy + 1, wz, biome);
                                 }
                             } else {
-                                const treeRand = featureRng.next();
+                                const treeRand = ((hash >> 4) % 10000) / 10000;
+                                // Check if tree can be placed (not too close to other trees)
+                                if (!this.canPlaceTree(wx, wz)) {
+                                    continue; // Skip - too close to another tree
+                                }
                                 if (biome === 'DESERT') {
-                                    if (treeRand < 0.2) this.generateCactus(wx, wy + 1, wz);
-                                    else if (treeRand < 0.205) this.generatePalmTree(wx, wy + 1, wz); // Rare Oasis Palm
+                                    if (treeRand < 0.2) {
+                                        this.generateCactus(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    } else if (treeRand < 0.205) {
+                                        this.generatePalmTree(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    }
                                 } else if (biome === 'JUNGLE') {
                                     this.generateJungleTree(wx, wy + 1, wz);
+                                    this.markTreePlaced(wx, wz);
                                 } else if (biome === 'FOREST') {
                                     // Forest Variety: Oak (40%), Birch (30%), Pine (15%), Dark Oak (10%), Willow (5%)
                                     if (treeRand < 0.40) this.generateOakTree(wx, wy + 1, wz);
@@ -89,15 +151,27 @@ export class StructureGenerator {
                                     else if (treeRand < 0.85) this.generatePineTree(wx, wy + 1, wz);
                                     else if (treeRand < 0.95) this.generateDarkOakTree(wx, wy + 1, wz);
                                     else this.generateWillowTree(wx, wy + 1, wz);
+                                    this.markTreePlaced(wx, wz);
                                 } else if (biome === 'MOUNTAIN' || biome === 'SNOW') {
                                     if (treeRand < 0.5) this.generatePineTree(wx, wy + 1, wz);
                                     else this.generateOakTree(wx, wy + 1, wz);
+                                    this.markTreePlaced(wx, wz);
                                 } else if (biome === 'PLAINS') {
-                                    if (treeRand < 0.05) this.generateOakTree(wx, wy + 1, wz);
-                                    else if (treeRand < 0.07) this.generateAcaciaTree(wx, wy + 1, wz); // Rare Acacia
-                                    else if (treeRand < 0.075) this.generateBeanstalk(wx, wy + 1, wz); // Very Rare Beanstalk
+                                    if (treeRand < 0.05) {
+                                        this.generateOakTree(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    } else if (treeRand < 0.07) {
+                                        this.generateAcaciaTree(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    } else if (treeRand < 0.075) {
+                                        this.generateBeanstalk(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    }
                                 } else {
-                                    if (treeRand < 0.1) this.generateOakTree(wx, wy + 1, wz);
+                                    if (treeRand < 0.1) {
+                                        this.generateOakTree(wx, wy + 1, wz);
+                                        this.markTreePlaced(wx, wz);
+                                    }
                                 }
                             }
                         }
@@ -134,16 +208,7 @@ export class StructureGenerator {
         const depth = shape.d;
         const height = shape.h;
 
-        for (let dx = 0; dx < width; dx++) {
-            for (let dz = 0; dz < depth; dz++) {
-                for (let fy = y - 4; fy < y; fy++) {
-                    const existingBlock = this.game.getBlockWorld(x + dx, fy, z + dz);
-                    if (!existingBlock || existingBlock === Blocks.AIR) {
-                        this.game.setBlock(x + dx, fy, z + dz, Blocks.STONE, true, true);
-                    }
-                }
-            }
-        }
+        // Foundation removed - houses now sit naturally on landscape
 
         for (let dx = 0; dx < width; dx++) {
             for (let dz = 0; dz < depth; dz++) {
@@ -526,14 +591,10 @@ export class StructureGenerator {
 
         const villageRng = this.getPositionRng(centerX, centerZ, 999);
 
-        // Generate central plaza with fountain
-        this.generatePlaza(centerX, centerY, centerZ);
+        // Generate Wizard Tower in the center (Replaces Plaza)
+        this.generateWizardTower(centerX, centerY, centerZ);
 
-        // Generate 4 lamp posts around plaza
-        this.generateLampPost(centerX - 6, centerY, centerZ - 6);
-        this.generateLampPost(centerX + 6, centerY, centerZ - 6);
-        this.generateLampPost(centerX - 6, centerY, centerZ + 6);
-        this.generateLampPost(centerX + 6, centerY, centerZ + 6);
+
 
         // Generate market stalls
         this.generateMarketStall(centerX - 8, centerY, centerZ);
@@ -584,7 +645,8 @@ export class StructureGenerator {
                 try {
                     const v = new Villager(this.game);
                     const angle = (i / 6) * Math.PI * 2;
-                    const dist = 3 + Math.random() * 8;
+                    // Move villagers further out so they don't spawn inside the wizard tower (radius 5)
+                    const dist = 9 + Math.random() * 6;
                     const vx = centerX + Math.cos(angle) * dist;
                     const vz = centerZ + Math.sin(angle) * dist;
                     v.position.set(vx, centerY + 1, vz);
@@ -647,19 +709,9 @@ export class StructureGenerator {
     /**
      * Lamp post with glowstone - REPLACED with Static Entity
      */
+    // Lamp post generation removed
     generateLampPost(x, y, z) {
-        // Find valid ground for the entity
-        // We spawned blocks at x, y+dy, z.
-        // Entity origin is at feet.
-        // x,y,z passed here is usually ground level?
-        // Let's check call sites: generateVillage calls it at centerY.
-        // generateVillage passes centerY which is often ground level.
-
-        setTimeout(() => {
-            const lamp = new StaticLampost(this.game, x, y + 1, z);
-            this.game.animals.push(lamp);
-            this.game.scene.add(lamp.mesh);
-        }, 1000); // Delay slightly to ensure world is ready?
+        // Removed at user request
     }
 
     /**
@@ -952,12 +1004,12 @@ export class StructureGenerator {
             }
         }
 
-        // Bookshelves inside
+        // Bookshelves inside - using varied book blocks
         for (let dz = 1; dz < d - 1; dz++) {
-            this.game.setBlock(x + 1, y + 1, z + dz, Blocks.BOOKSHELF, true, true);
-            this.game.setBlock(x + 1, y + 2, z + dz, Blocks.BOOKSHELF, true, true);
-            this.game.setBlock(x + w - 2, y + 1, z + dz, Blocks.BOOKSHELF, true, true);
-            this.game.setBlock(x + w - 2, y + 2, z + dz, Blocks.BOOKSHELF, true, true);
+            this.game.setBlock(x + 1, y + 1, z + dz, this.getRandomBookBlock(), true, true);
+            this.game.setBlock(x + 1, y + 2, z + dz, this.getRandomBookBlock(), true, true);
+            this.game.setBlock(x + w - 2, y + 1, z + dz, this.getRandomBookBlock(), true, true);
+            this.game.setBlock(x + w - 2, y + 2, z + dz, this.getRandomBookBlock(), true, true);
         }
 
         // Flat roof with parapet
@@ -1004,5 +1056,225 @@ export class StructureGenerator {
             this.game.setBlock(px, py, pz, Blocks.COBBLESTONE, true, true);
             this.game.setBlock(px + 1, py, pz, Blocks.COBBLESTONE, true, true);
         }
+    }
+    generateWizardTower(cx, cy, cz) {
+        console.log(`Generating Wizard Tower at ${cx}, ${cy}, ${cz}`);
+
+        // Dimensions
+        const baseRadius = 5; // Bigger radius
+        const shaftHeight = 18;
+        const roomRadius = 7; // Even wider top room
+        const roomHeight = 7;
+        const totalHeight = shaftHeight + roomHeight;
+
+        // Floor heights for interior rooms
+        const entranceFloorY = 0;   // Ground floor
+        const alchemyFloorY = 6;    // Second floor
+        const observatoryFloorY = 12; // Third floor
+
+        // --- SHAFT (Base to Top Room) with Interior Rooms ---
+        for (let y = 0; y < shaftHeight; y++) {
+            for (let x = -baseRadius; x <= baseRadius; x++) {
+                for (let z = -baseRadius; z <= baseRadius; z++) {
+                    const distSq = x * x + z * z;
+
+                    if (distSq <= baseRadius * baseRadius + 1) { // Roundish
+                        const isWall = distSq >= (baseRadius - 1) * (baseRadius - 1);
+                        const isStairArea = distSq >= (baseRadius - 3) * (baseRadius - 3) && distSq < (baseRadius - 1) * (baseRadius - 1);
+
+                        // Floor at bottom (Entrance Hall)
+                        if (y === entranceFloorY) {
+                            this.game.setBlock(cx + x, cy + y, cz + z, Blocks.STONE, true, true);
+                        }
+                        // Alchemy Lab floor
+                        else if (y === alchemyFloorY) {
+                            // Leave stair opening
+                            if (!isStairArea) {
+                                this.game.setBlock(cx + x, cy + y, cz + z, Blocks.PLANK, true, true);
+                            }
+                        }
+                        // Observatory floor
+                        else if (y === observatoryFloorY) {
+                            // Leave stair opening
+                            if (!isStairArea) {
+                                this.game.setBlock(cx + x, cy + y, cz + z, Blocks.POLISHED_STONE, true, true);
+                            }
+                        }
+                        // Walls
+                        else if (isWall) {
+                            // Windows in shaft
+                            if (y % 6 === 3 && (Math.abs(x) <= 1 || Math.abs(z) <= 1)) {
+                                this.game.setBlock(cx + x, cy + y, cz + z, Blocks.GLASS, true, true);
+                            } else {
+                                this.game.setBlock(cx + x, cy + y, cz + z, Blocks.STONE_BRICK, true, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ENTRANCE HALL DECORATIONS (Y+1 to Y+5) ---
+        // Carpet/rug pattern in center
+        for (let x = -2; x <= 2; x++) {
+            for (let z = -2; z <= 2; z++) {
+                if (Math.abs(x) + Math.abs(z) <= 3) {
+                    this.game.setBlock(cx + x, cy + 1, cz + z, Blocks.TERRACOTTA, true, true);
+                }
+            }
+        }
+        // Glowstone torches on walls
+        this.game.setBlock(cx + 3, cy + 3, cz, Blocks.GLOWSTONE, true, true);
+        this.game.setBlock(cx - 3, cy + 3, cz, Blocks.GLOWSTONE, true, true);
+        this.game.setBlock(cx, cy + 3, cz - 3, Blocks.GLOWSTONE, true, true);
+
+        // --- ALCHEMY LAB DECORATIONS (Y+6 to Y+11) ---
+        // Central cauldron area
+        this.game.setBlock(cx, cy + alchemyFloorY + 1, cz, Blocks.FURNACE, true, true);
+        // Brewing stands nearby
+        this.game.setBlock(cx + 2, cy + alchemyFloorY + 1, cz, Blocks.CRAFTING_TABLE, true, true);
+        this.game.setBlock(cx - 2, cy + alchemyFloorY + 1, cz, Blocks.CRAFTING_TABLE, true, true);
+        // Potion storage shelves along walls - using varied book blocks
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 2) {
+            const shelfX = Math.round(3 * Math.cos(angle));
+            const shelfZ = Math.round(3 * Math.sin(angle));
+            if (Math.abs(shelfX) > 1 || Math.abs(shelfZ) > 1) {
+                this.game.setBlock(cx + shelfX, cy + alchemyFloorY + 1, cz + shelfZ, this.getRandomBookBlock(), true, true);
+                this.game.setBlock(cx + shelfX, cy + alchemyFloorY + 2, cz + shelfZ, this.getRandomBookBlock(), true, true);
+            }
+        }
+        // Glowstone lighting
+        this.game.setBlock(cx, cy + alchemyFloorY + 5, cz, Blocks.GLOWSTONE, true, true);
+
+        // --- OBSERVATORY DECORATIONS (Y+12 to Y+17) ---
+        // Central telescope structure
+        this.game.setBlock(cx, cy + observatoryFloorY + 1, cz, Blocks.GOLD_BLOCK, true, true);
+        this.game.setBlock(cx, cy + observatoryFloorY + 2, cz, Blocks.GOLD_BLOCK, true, true);
+        this.game.setBlock(cx, cy + observatoryFloorY + 3, cz, Blocks.GLASS, true, true);
+        // Star map floor pattern
+        for (let x = -2; x <= 2; x++) {
+            for (let z = -2; z <= 2; z++) {
+                if ((x + z) % 2 === 0 && (x !== 0 || z !== 0)) {
+                    this.game.setBlock(cx + x, cy + observatoryFloorY, cz + z, Blocks.OBSIDIAN, true, true);
+                }
+            }
+        }
+        // Glowstone constellation ceiling
+        const constellationPattern = [
+            [-2, -2], [0, -3], [2, -1],
+            [-3, 1], [1, 2], [3, 0], [-1, 3]
+        ];
+        for (const [dx, dz] of constellationPattern) {
+            this.game.setBlock(cx + dx, cy + observatoryFloorY + 5, cz + dz, Blocks.GLOWSTONE, true, true);
+        }
+
+        // --- ENTRANCE (Door) ---
+        // Place door at +Z side
+        // Door is 2 blocks high.
+        this.game.setBlock(cx, cy + 1, cz + baseRadius, Blocks.DOOR_CLOSED, true, true);
+        this.game.setBlock(cx, cy + 2, cz + baseRadius, Blocks.DOOR_CLOSED, true, true);
+
+        // Clear entry
+        this.game.setBlock(cx, cy + 1, cz + baseRadius - 1, null, true, true);
+        this.game.setBlock(cx, cy + 2, cz + baseRadius - 1, null, true, true); // Interior clearance
+
+        // --- STAIRS ---
+        let stairY = 1;
+        let angle = Math.PI; // Start opposite door
+        while (stairY < shaftHeight) {
+            // Place a block at current angle/radius
+            const sx = Math.round((baseRadius - 1.5) * Math.cos(angle));
+            const sz = Math.round((baseRadius - 1.5) * Math.sin(angle));
+
+            // Use 'planks' for stairs
+            this.game.setBlock(cx + sx, cy + stairY, cz + sz, Blocks.PLANK, true, true);
+
+            // Make it wider (inner rail)
+            const sx2 = Math.round((baseRadius - 2.5) * Math.cos(angle));
+            const sz2 = Math.round((baseRadius - 2.5) * Math.sin(angle));
+            this.game.setBlock(cx + sx2, cy + stairY, cz + sz2, Blocks.PLANK, true, true);
+
+            // Increment angle
+            angle += 0.4; // ~20 degrees
+
+            // Let's just increment Y every 3 blocks placed?
+            if (angle % 0.8 < 0.4) {
+                // Rise
+                stairY++;
+            }
+        }
+
+
+        // --- TOP WIZARD ROOM ---
+        const roomY = cy + shaftHeight;
+
+        // Main Room
+        for (let y = 0; y < roomHeight; y++) {
+            const wy = roomY + y;
+            for (let x = -roomRadius; x <= roomRadius; x++) {
+                for (let z = -roomRadius; z <= roomRadius; z++) {
+                    const distSq = x * x + z * z;
+
+                    if (distSq <= roomRadius * roomRadius + 1) {
+                        const isWall = distSq >= (roomRadius - 1) * (roomRadius - 1);
+
+                        // Floor
+                        if (y === 0) {
+                            this.game.setBlock(cx + x, wy, cz + z, Blocks.PLANK, true, true);
+                        }
+                        // Walls
+                        else if (isWall) {
+                            // Large Windows
+                            if (y >= 2 && y <= 4 && (Math.abs(x) <= 2 || Math.abs(z) <= 2)) {
+                                this.game.setBlock(cx + x, wy, cz + z, Blocks.GLASS, true, true);
+                            } else {
+                                this.game.setBlock(cx + x, wy, cz + z, Blocks.STONE_BRICK, true, true);
+                            }
+                        }
+                        // Ceiling
+                        else if (y === roomHeight - 1) {
+                            // this.game.setBlock(cx + x, wy, cz + z, Blocks.PLANK, true, true); // Optional ceiling
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ROOF ---
+        const roofStart = roomY + roomHeight;
+        const roofH = 9;
+        for (let y = 0; y < roofH; y++) {
+            const r = roomRadius - Math.floor(y * (roomRadius / (roofH - 1)));
+            for (let x = -r; x <= r; x++) {
+                for (let z = -r; z <= r; z++) {
+                    this.game.setBlock(cx + x, roofStart + y, cz + z, Blocks.dark_oak_plank, true, true);
+                }
+            }
+        }
+
+        // --- DECOR ---
+        // Bookshelves lining the non-window walls
+        for (let x = -roomRadius + 1; x <= roomRadius - 1; x++) {
+            for (let z = -roomRadius + 1; z <= roomRadius - 1; z++) {
+                const distSq = x * x + z * z;
+                const isNearWall = distSq >= (roomRadius - 2) * (roomRadius - 2);
+
+                if (isNearWall) {
+                    if (Math.abs(x) > 3 && Math.abs(z) > 3) {
+                        this.game.setBlock(cx + x, roomY + 1, cz + z, this.getRandomBookBlock(), true, true);
+                        this.game.setBlock(cx + x, roomY + 2, cz + z, this.getRandomBookBlock(), true, true);
+                        this.game.setBlock(cx + x, roomY + 3, cz + z, this.getRandomBookBlock(), true, true);
+                    }
+                }
+            }
+        }
+
+        // Central Table
+        this.game.setBlock(cx, roomY + 1, cz, Blocks.CRAFTING_TABLE, true, true);
+        this.game.setBlock(cx, roomY + 1, cz + 1, Blocks.GOLD_BLOCK, true, true);
+
+        // Bed
+        this.game.setBlock(cx + 4, roomY + 1, cz, Blocks.BED, true, true);
+
     }
 }

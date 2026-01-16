@@ -326,6 +326,9 @@ export class PhysicsManager {
                     }
                     this.game.setBlock(target.x, target.y, target.z, null);
                     this.game.updateBlockCount();
+
+                    // Play block break sound
+                    this.game.soundManager.playSound('block_break', new THREE.Vector3(target.x + 0.5, target.y + 0.5, target.z + 0.5));
                 }
 
                 // Reset progress
@@ -461,6 +464,9 @@ export class PhysicsManager {
             // For now, let's force push it into 'projectiles' since they have update() called.
             this.game.projectiles.push(fallingTree);
 
+            // Play tree falling sound
+            this.game.soundManager.playSound('block_break', new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), 1.5);
+
         } else {
             // Not a valid tree (just a stump or pile), just break the single block
             this.game.spawnDrop(x, y, z, logType);
@@ -513,6 +519,9 @@ export class PhysicsManager {
             if (!collision && !this.game.getBlock(newX, newY, newZ)) {
                 this.game.setBlock(newX, newY, newZ, blockType);
                 this.game.updateBlockCount();
+
+                // Play block place sound
+                this.game.soundManager.playSound('block_place', new THREE.Vector3(newX + 0.5, newY + 0.5, newZ + 0.5));
 
                 // Consume Item
                 this.game.inventoryManager.useSelected();

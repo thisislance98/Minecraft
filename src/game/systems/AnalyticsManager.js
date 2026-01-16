@@ -37,7 +37,7 @@ export class AnalyticsManager {
                     is_creative: this.game.player?.isCreative || false
                 };
                 logEvent(this.analytics, eventName, enrichedParams);
-                console.log(`[Analytics] ${eventName}`, enrichedParams);
+                // console.log(`[Analytics] ${eventName}`, enrichedParams);
             } catch (e) {
                 console.warn('[Analytics] Failed to log event:', e);
             }

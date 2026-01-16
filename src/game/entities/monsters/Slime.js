@@ -13,20 +13,20 @@ export class Slime extends Animal {
         this.isHostile = true;
         this.canHop = true;
         this.jumpTimer = 0;
-        
+
         this.createBody();
     }
 
     createBody() {
         // Outer body - Translucent green
-        const outerMat = new THREE.MeshLambertMaterial({ 
-            color: 0x00FF00, 
-            transparent: true, 
-            opacity: 0.6 
+        const outerMat = new THREE.MeshLambertMaterial({
+            color: 0x00FF00,
+            transparent: true,
+            opacity: 0.6
         });
         const outerGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
         const outer = new THREE.Mesh(outerGeo, outerMat);
-        outer.position.set(0, 0.4, 0); 
+        outer.position.set(0, 0.4, 0);
         this.mesh.add(outer);
 
         // Inner core - Solid darker green
@@ -39,7 +39,7 @@ export class Slime extends Animal {
         // Eyes
         const eyeMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
         const eyeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.05);
-        
+
         const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
         leftEye.position.set(-0.2, 0.5, 0.4);
         this.mesh.add(leftEye);
@@ -53,7 +53,7 @@ export class Slime extends Animal {
         if (this.isDead || this.isDying) return;
 
         this.stateTimer -= dt;
-        
+
         // Target player
         const player = this.game.player;
         const dist = this.position.distanceTo(player.position);
@@ -83,7 +83,7 @@ export class Slime extends Animal {
                 this.velocity.y = 4.0;
                 this.onGround = false;
                 this.jumpTimer = 0.8 + this.rng.next() * 0.5;
-                
+
                 // Move forward
                 const moveSpeed = this.state === 'chase' ? this.speed * 1.5 : this.speed;
                 this.velocity.x = Math.sin(this.rotation) * moveSpeed;
@@ -97,9 +97,9 @@ export class Slime extends Animal {
 
         // Damage player on contact
         if (dist < 1.0 && this.attackTimer <= 0) {
-            player.takeDamage(this.damage);
+            player.takeDamage(this.damage, 'Slime');
             this.attackTimer = this.attackCooldown;
-            
+
             // Knockback player
             const knockDir = new THREE.Vector3().subVectors(player.position, this.position).normalize();
             player.knockback(knockDir, 0.5);

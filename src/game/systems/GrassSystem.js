@@ -91,6 +91,25 @@ export class GrassSystem {
     }
 
     /**
+     * Seeded pseudo-random number generator for deterministic grass placement.
+     * Uses the block's world coordinates and blade index to generate consistent random values.
+     * @param {number} x - World X coordinate
+     * @param {number} z - World Z coordinate
+     * @param {number} bladeIndex - Index of the blade within the block
+     * @param {number} offset - Additional offset for different random values (0, 1, 2, etc.)
+     * @returns {number} A pseudo-random number between 0 and 1
+     */
+    _seededRandom(x, z, bladeIndex, offset = 0) {
+        // Use a simple but effective hash function
+        let seed = (x * 73856093) ^ (z * 19349663) ^ (bladeIndex * 83492791) ^ (offset * 47165837);
+        seed = ((seed >> 16) ^ seed) * 0x45d9f3b;
+        seed = ((seed >> 16) ^ seed) * 0x45d9f3b;
+        seed = (seed >> 16) ^ seed;
+        // Normalize to 0-1 range
+        return (seed & 0x7FFFFFFF) / 0x7FFFFFFF;
+    }
+
+    /**
      * Updates the grass mesh for a specific chunk.
      * @param {Chunk} chunk - The chunk to update.
      * @param {Array<Object>} grassBlockPositions - Array of {x, y, z} world coordinates for grass blocks.
@@ -115,15 +134,15 @@ export class GrassSystem {
 
         for (const pos of grassBlockPositions) {
             for (let i = 0; i < this.bladesPerBlock; i++) {
-                // Random offset within the block (0 to 1)
-                const ox = Math.random() * 0.8 + 0.1;
-                const oz = Math.random() * 0.8 + 0.1;
+                // Use seeded random for deterministic placement based on block coordinates and blade index
+                const ox = this._seededRandom(pos.x, pos.z, i, 0) * 0.8 + 0.1;
+                const oz = this._seededRandom(pos.x, pos.z, i, 1) * 0.8 + 0.1;
 
-                // Random scale/rotation
+                // Seeded rotation and scale
                 dummy.position.set(pos.x + ox, pos.y + 1.0, pos.z + oz); // +1.0 to sit ON TOP of block
-                dummy.rotation.y = Math.random() * Math.PI * 2;
+                dummy.rotation.y = this._seededRandom(pos.x, pos.z, i, 2) * Math.PI * 2;
 
-                const scale = 0.8 + Math.random() * 0.4;
+                const scale = 0.8 + this._seededRandom(pos.x, pos.z, i, 3) * 0.4;
                 dummy.scale.set(scale, scale, scale);
 
                 dummy.updateMatrix();

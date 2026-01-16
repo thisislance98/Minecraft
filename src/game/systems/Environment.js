@@ -54,6 +54,98 @@ export class Environment {
 
         this.moonEnabled = true;
         this.shadowsEnabled = true;
+
+        // World-specific environment state
+        this.currentWorld = 'earth';
+
+        // Alien world moons (multiple moons for crystal/lava worlds)
+        this.alienMoons = [];
+
+        // World color presets
+        this.worldPresets = {
+            earth: {
+                skyColor: new THREE.Color(0x87CEEB),
+                nightColor: new THREE.Color(0x00000C),
+                fogColor: 0x87CEEB,
+                fogDensity: 0.0025,
+                ambientTint: 0xffffff
+            },
+            crystal: {
+                skyColor: new THREE.Color(0x050510),     // Black sky with slight purple tint
+                nightColor: new THREE.Color(0x020208),    // Deeper black night
+                fogColor: 0x1A0A2E,                       // Dark purple fog
+                fogDensity: 0.002,
+                ambientTint: 0xDDAAFF,
+                alwaysShowStars: true,                    // Stars always visible
+                moons: [
+                    { color: 0xCC88FF, size: 30, position: { x: 800, y: 1200, z: 400 } },    // Large purple moon
+                    { color: 0x8866DD, size: 15, position: { x: -600, y: 900, z: -300 } }    // Small distant moon
+                ]
+            },
+            lava: {
+                skyColor: new THREE.Color(0x0A0505),     // Black sky with slight red tint
+                nightColor: new THREE.Color(0x050202),    // Deeper black night
+                fogColor: 0x1A0808,                       // Dark red fog
+                fogDensity: 0.003,
+                ambientTint: 0xFFAA88,
+                alwaysShowStars: true,                    // Stars always visible
+                moons: [
+                    { color: 0xFF6633, size: 40, position: { x: 500, y: 1000, z: 200 } },    // Large orange moon
+                    { color: 0xDD4422, size: 20, position: { x: -400, y: 1100, z: -500 } },  // Medium red moon
+                    { color: 0x883311, size: 12, position: { x: 700, y: 800, z: -400 } }     // Small dark moon
+                ]
+            },
+            moon: {
+                skyColor: new THREE.Color(0x000000),     // Black space
+                nightColor: new THREE.Color(0x000000),
+                fogColor: 0x000000,
+                fogDensity: 0.0001,
+                ambientTint: 0xCCCCCC
+            }
+        };
+    }
+
+    /**
+     * Set the current world and update environment visuals
+     * @param {string} worldName - 'earth', 'crystal', 'lava', or 'moon'
+     */
+    setWorld(worldName) {
+        if (!this.worldPresets[worldName]) {
+            console.warn(`[Environment] Unknown world: ${worldName}`);
+            return;
+        }
+
+        console.log(`[Environment] Switching to ${worldName} world`);
+        this.currentWorld = worldName;
+
+        const preset = this.worldPresets[worldName];
+
+        // Update sky colors - these will be blended in updateDayNightCycle
+        this.skyColor.copy(preset.skyColor);
+        this.nightColor.copy(preset.nightColor);
+
+        // Update fog
+        this.scene.fog.color.setHex(preset.fogColor);
+        this.scene.fog.density = preset.fogDensity;
+
+        // Update ambient light tint
+        this.ambientLight.color.setHex(preset.ambientTint);
+
+        // Handle alien world moons
+        if (preset.moons) {
+            this.createAlienMoons(preset.moons);
+            // Hide Earth's moon in alien worlds
+            if (this.moonMesh) this.moonMesh.visible = false;
+        } else {
+            this.clearAlienMoons();
+            // Restore Earth's moon visibility
+            if (this.moonMesh && this.moonEnabled) this.moonMesh.visible = true;
+        }
+
+        // Hide clouds in alien worlds with black sky
+        if (this.clouds) {
+            this.clouds.visible = (worldName === 'earth');
+        }
     }
 
     toggleShadows(enabled) {
@@ -171,12 +263,14 @@ export class Environment {
         }
 
         // Calculate space transition factor
+        // Only apply space transition on Earth - alien worlds have their own sky colors
         const playerY = playerPos.y;
         const spaceStart = 200;
         const spaceFull = 600;
         let spaceFactor = 0;
 
-        if (playerY > spaceStart) {
+        // Space transition only applies on Earth world
+        if (this.currentWorld === 'earth' && playerY > spaceStart) {
             spaceFactor = Math.min(1, Math.max(0, (playerY - spaceStart) / (spaceFull - spaceStart)));
         }
 
@@ -226,25 +320,25 @@ export class Environment {
             this.skyMesh.material.uniforms.offset.value = 33;
             this.skyMesh.material.uniforms.exponent.value = 0.6;
 
-            // Update star visibility based on night OR space
+            // Update star visibility based on night OR space OR alien world
             if (this.starField) {
-                // Stars are visible at night (1.0) or in space (1.0) or blended
-                // Night opacity: 1.0 when full night, 0.0 when full day
-                const nightOpacity = this.isNight() ? 1.0 : 0.0;
-                // However, isNight is boolean. We want smooth transition if possible, 
-                // but for now let's respect the existing boolean logic for night, 
-                // keeping it 1.0 if night.
+                // Check if current world always shows stars (alien worlds)
+                const preset = this.worldPresets[this.currentWorld];
+                const alwaysShowStars = preset && preset.alwaysShowStars;
 
-                // Better approach with existing logic:
-                // If it's night, we want stars.
-                // If we are in space, we want stars even during day.
+                // Stars are visible at night (1.0) or in space (1.0) or in alien worlds (1.0)
+                const nightOpacity = this.isNight() ? 1.0 : 0.0;
 
                 let targetOpacity = nightOpacity;
 
-                // If strictly boolean isNight is used, it snaps. 
-                // Let's use sun position for smoother star fade if we want, but sticking to logic:
+                // In space, show stars even during day
                 if (spaceFactor > 0) {
                     targetOpacity = Math.max(targetOpacity, spaceFactor);
+                }
+
+                // In alien worlds with black sky, always show stars
+                if (alwaysShowStars) {
+                    targetOpacity = 1.0;
                 }
 
                 this.starField.material.opacity = targetOpacity;
@@ -257,6 +351,9 @@ export class Environment {
 
         // Update shooting stars
         this.updateShootingStars(dt);
+
+        // Update alien world moons
+        this.updateAlienMoons(playerPos);
     }
 
     isNight() {
@@ -618,6 +715,61 @@ export class Environment {
 
         this.scene.add(this.moonLight);
         this.scene.add(this.moonLight.target); // Important for direction
+    }
+
+    createAlienMoons(moonConfigs) {
+        // Remove existing alien moons
+        this.clearAlienMoons();
+
+        if (!moonConfigs || moonConfigs.length === 0) return;
+
+        for (const config of moonConfigs) {
+            const moonGeo = new THREE.SphereGeometry(config.size, 32, 32);
+            const moonMat = new THREE.MeshBasicMaterial({
+                color: config.color,
+                fog: false
+            });
+            const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+            moonMesh.position.set(config.position.x, config.position.y, config.position.z);
+
+            // Add a subtle glow effect
+            const glowGeo = new THREE.SphereGeometry(config.size * 1.3, 32, 32);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: config.color,
+                transparent: true,
+                opacity: 0.15,
+                fog: false
+            });
+            const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+            moonMesh.add(glowMesh);
+
+            this.scene.add(moonMesh);
+            this.alienMoons.push({
+                mesh: moonMesh,
+                basePosition: { ...config.position },
+                color: config.color
+            });
+        }
+    }
+
+    clearAlienMoons() {
+        for (const moon of this.alienMoons) {
+            this.scene.remove(moon.mesh);
+            moon.mesh.geometry.dispose();
+            moon.mesh.material.dispose();
+        }
+        this.alienMoons = [];
+    }
+
+    updateAlienMoons(playerPos) {
+        // Update alien moon positions relative to player (they follow the player like the sky)
+        for (const moon of this.alienMoons) {
+            moon.mesh.position.set(
+                playerPos.x + moon.basePosition.x,
+                playerPos.y + moon.basePosition.y,
+                playerPos.z + moon.basePosition.z
+            );
+        }
     }
 
     updateClouds(dt, playerPos) {

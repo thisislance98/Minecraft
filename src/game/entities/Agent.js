@@ -197,47 +197,42 @@ SYSTEM INSTRUCTION: PERSONA UPDATE
 You are Merlin, a wise and powerful wizard in this Minecraft-like world.
 
 PERSONALITY:
-- Warm, encouraging, and slightly theatrical
-- Use magical metaphors ("weave spells", "channel essence", "conjure")
-- Celebrate player achievements enthusiastically
-- Guide gently without being condescending
+- BE VERY CONCISE: Keep responses to 1-2 sentences max
+- Warm but brief - no lengthy explanations
+- Use short magical phrases ("Done!", "Conjured!", "As you wish!")
+- Skip theatrics unless celebrating a milestone
 
 CAPABILITIES:
-- Create anything using 'set_blocks' (describe as "weaving matter")
-- Summon creatures using 'spawn_creature' (describe as "conjuring spirits")
-- Always offer to demonstrate or help
+- Create anything using 'set_blocks' (just do it, don't over-explain)
+- Summon creatures using 'spawn_creature' (just do it, don't over-explain)
+- Act first, explain only if asked
 
-TUTORIAL MODE:
-- You are guiding a new apprentice through their first magical lessons
-- Be patient and encouraging
-- After each successful task, praise them and introduce the next challenge
+RESPONSE STYLE:
+- Maximum 30 words per response unless user asks for details
+- No preamble - get straight to action
+- After actions: confirm briefly ("Spawned 3 wolves nearby!")
         `.trim();
 
-        if (!hasMetMerlin) {
+        // Greeting disabled by default - skip tutorial intro
+        if (false && !hasMetMerlin) {
             console.log('[Agent] First time meeting Merlin. Starting tutorial...');
             this.tutorialStep = 1; // Waiting for Wolf
             this.tutorialStartPos = this.game.player?.position?.clone();
 
             const introInstruction = `
-CRITICAL: You are meeting a new apprentice for the first time!
-
-1. Introduce yourself warmly as Merlin, the Archmage of these blocky realms
-2. Express excitement about training a new apprentice
-3. Explain that magic here works through spoken commands
-4. Give them their FIRST LESSON: Ask them to conjure a loyal companion by saying "spawn a wolf"
-5. Be encouraging - tell them you believe in their potential!
-
-Keep your response under 100 words. Be warm and inviting.
+First meeting! Introduce yourself briefly as Merlin. Tell them to try: "spawn a wolf"
+Max 25 words total.
             `.trim();
 
             this.sendHiddenMessage(personaPrompt + "\n\n" + introInstruction);
             localStorage.setItem('hasMetMerlin', 'true');
-        } else if (this.tutorialStep === 4) {
-            console.log('[Agent] Tutorial complete. Welcoming back...');
-            this.sendHiddenMessage(personaPrompt + "\n\n(Your apprentice returns! Welcome them back warmly. They have completed their training - treat them as a fellow wizard.)");
+        } else if (this.tutorialStep === 4 || !hasMetMerlin) {
+            console.log('[Agent] Tutorial complete. Sending persona only (no greeting).');
+            if (window.merlinClient) window.merlinClient.silenceNextResponse();
+            this.sendHiddenMessage(personaPrompt);
         } else {
             console.log('[Agent] Tutorial in progress. Resuming at step', this.tutorialStep);
-            this.sendHiddenMessage(personaPrompt + "\n\n(Your apprentice returns mid-training. Welcome them and remind them of their current challenge: building a small magical structure.)");
+            this.sendHiddenMessage(personaPrompt);
         }
     }
 
@@ -378,6 +373,12 @@ Keep your response under 100 words. Be warm and inviting.
                 result = this.patchEntity(args);
             } else if (name === 'set_blocks') {
                 result = await this.setBlocks(args.blocks);
+            } else if (name === 'run_verification') {
+                result = this.runVerification(args);
+            } else if (name === 'capture_screenshot') {
+                result = this.captureScreenshot(args);
+            } else if (name === 'capture_logs') {
+                result = await this.captureLogs(args);
             } else {
                 throw new Error(`Unknown client tool: ${name}`);
             }
@@ -401,15 +402,7 @@ Keep your response under 100 words. Be warm and inviting.
                 this.tutorialStep = 2;
                 setTimeout(() => {
                     this.sendHiddenMessage(`
-SYSTEM: The apprentice has successfully conjured their first creature - a wolf!
-
-Your response should:
-1. Praise their successful conjuration enthusiastically!
-2. Celebrate this milestone - they've proven they have magical talent
-3. Introduce LESSON 2: Ask them to build something small (suggest "build me a small tower" or "create a cozy cottage")
-4. Explain that they can describe what they want and you'll help weave it into existence
-
-Keep it under 80 words. Be proud of them!
+SYSTEM: Wolf spawned! Praise briefly, then suggest: "build me a tower". Max 20 words.
                     `.trim());
                 }, 1500);
             }
@@ -420,17 +413,7 @@ Keep it under 80 words. Be proud of them!
                 this.tutorialStep = 3;
                 setTimeout(() => {
                     this.sendHiddenMessage(`
-SYSTEM: The apprentice just built their first magical structure (${blockCount} blocks)!
-
-Your response should:
-1. Marvel at their creation - describe what they built poetically
-2. Tell them they've mastered the basics of magical construction
-3. Give FINAL LESSON: Explain they can now explore freely
-4. Mention helpful tips: they can ask you to spawn creatures, build structures, teleport, etc.
-5. Encourage them to experiment and have fun!
-6. End with something like "Go forth, young wizard!"
-
-Keep it under 100 words. This is graduation!
+SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're ready - explore freely! Max 25 words.
                     `.trim());
                     localStorage.setItem('merlinTutorialComplete', 'true');
                     this.tutorialStep = 4;
@@ -627,6 +610,140 @@ Keep it under 100 words. This is graduation!
         }
     }
 
+    runVerification({ code, description }) {
+        console.log(`[Agent] Running verification: ${description}`);
+        try {
+            const V = new VerificationAPI(this.game);
+            // Create function with V API injected
+            const verifyFn = new Function('V', code);
+            const result = verifyFn(V);
+
+            // Log for debugging
+            console.log(`[Agent] Verification result:`, result);
+            return result;
+        } catch (e) {
+            console.error('[Agent] Verification script crash:', e);
+            return { success: false, error: `Verification script crash: ${e.message}` };
+        }
+    }
+
+    captureScreenshot({ label }) {
+        console.log(`[Agent] Capturing screenshot: ${label}`);
+        try {
+            if (!this.game.renderer || !this.game.renderer.domElement) {
+                return { error: "Renderer not available for screenshot" };
+            }
+
+            // Capture the canvas as data URL (JPEG 0.8 quality)
+            const dataUrl = this.game.renderer.domElement.toDataURL('image/jpeg', 0.8);
+
+            // Note: Server handles saving this to file
+            return {
+                success: true,
+                label: label,
+                image: dataUrl, // Pass full data URL to server
+                timestamp: Date.now()
+            };
+        } catch (e) {
+            console.error('[Agent] Screenshot failed:', e);
+            return { success: false, error: `Screenshot failed: ${e.message}` };
+        }
+    }
+
+    async captureLogs({ duration }) {
+        console.log(`[Agent] Capturing logs for ${duration}ms...`);
+        const captured = [];
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+
+        // Hook logs
+        const hook = (type, args) => {
+            try {
+                const msg = args.map(a => {
+                    try {
+                        return (typeof a === 'object' ? JSON.stringify(a) : String(a));
+                    } catch (e) {
+                        return '[Circular/Unserializable]';
+                    }
+                }).join(' ');
+                captured.push(`[${type}] ${msg}`);
+            } catch (e) {
+                // Ignore serialization errors in hook
+            }
+
+            // Pass through to original console
+            if (type === 'LOG') originalLog.apply(console, args);
+            if (type === 'WARN') originalWarn.apply(console, args);
+            if (type === 'ERROR') originalError.apply(console, args);
+        };
+
+        console.log = (...args) => hook('LOG', args);
+        console.warn = (...args) => hook('WARN', args);
+        console.error = (...args) => hook('ERROR', args);
+
+        // Wait
+        await new Promise(r => setTimeout(r, duration));
+
+        // Restore
+        console.log = originalLog;
+        console.warn = originalWarn;
+        console.error = originalError;
+
+        console.log(`[Agent] Captured ${captured.length} logs.`);
+        return { success: true, logs: captured };
+    }
+
+    async captureVideo({ duration_seconds, label }) {
+        console.log(`[Agent] Capturing video: ${label} (${duration_seconds}s)`);
+        const duration = Math.min(Math.max(duration_seconds || 5, 1), 10) * 1000;
+
+        try {
+            if (!this.game.renderer || !this.game.renderer.domElement) {
+                return { error: "Renderer not available" };
+            }
+
+            const stream = this.game.renderer.domElement.captureStream(30); // 30 FPS
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+            const chunks = [];
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunks.push(e.data);
+            };
+
+            const recordingPromise = new Promise((resolve, reject) => {
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result); // Returns data:video/webm;base64,...
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                };
+                recorder.onerror = reject;
+            });
+
+            recorder.start();
+
+            // Wait for duration
+            await new Promise(r => setTimeout(r, duration));
+
+            recorder.stop();
+            const videoData = await recordingPromise;
+
+            return {
+                success: true,
+                label: label,
+                videoData: videoData,
+                duration: duration
+            };
+
+        } catch (e) {
+            console.error('[Agent] Video capture failed:', e);
+            // Fallback for browsers without MediaRecorder or codec support
+            return { success: false, error: `Video capture failed: ${e.message}. Is MediaRecorder supported and https enabled?` };
+        }
+    }
+
     getSceneInfo() {
         const player = this.game.player;
         const pos = player.position;
@@ -671,5 +788,56 @@ Keep it under 100 words. This is graduation!
             nearbyCreatures, // Keep count for high-level summary
             nearbyEntities: nearbyEntities.slice(0, 20) // Detailed list for targeting
         };
+    }
+}
+
+class VerificationAPI {
+    constructor(game) {
+        this.game = game;
+    }
+
+    get entities() {
+        return this.game.spawnManager ? Array.from(this.game.spawnManager.entities.values()) : [];
+    }
+
+    findEntity(name) {
+        return this.entities.find(e => e.constructor.name.toLowerCase() === name.toLowerCase());
+    }
+
+    findAllEntities(name) {
+        return this.entities.filter(e => e.constructor.name.toLowerCase() === name.toLowerCase());
+    }
+
+    countEntities(name) {
+        return this.findAllEntities(name).length;
+    }
+
+    getPlayerPos() {
+        return this.game.player ? this.game.player.position.clone() : null;
+    }
+
+    getBlockAt(x, y, z) {
+        return this.game.world ? this.game.world.getBlock(x, y, z) : 0;
+    }
+
+    // Check if entity is roughly in front of player and not obstructed
+    isEntityVisible(entity) {
+        if (!entity || !entity.mesh) return false;
+
+        // Simple frustum check or distance check
+        // For now, just existance + material check
+        return entity.mesh.visible;
+    }
+
+    getEntityMaterial(entity) {
+        if (!entity || !entity.mesh) return null;
+        // Handle Group with children
+        const mesh = entity.mesh.isGroup ? entity.mesh.children[0] : entity.mesh;
+        return mesh ? mesh.material : null;
+    }
+
+    getRegistrationError(name) {
+        // Access global error registry if it exists
+        return window.DynamicCreatureErrors?.[name] || null;
     }
 }

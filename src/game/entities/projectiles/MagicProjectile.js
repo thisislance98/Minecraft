@@ -142,6 +142,25 @@ export class MagicProjectile {
             }
         }
 
+        // Check Local Player (Self-hit)
+        const player = this.game.player;
+        if (player && this.lifeTime > 0.2) {
+            const playerPos = player.position.clone();
+            playerPos.y += (player.height || 1.8) / 2;
+
+            // Check distance to segment
+            const segment = new THREE.Line3(this.position, nextPos);
+            const closestPoint = new THREE.Vector3();
+            segment.closestPointToPoint(playerPos, true, closestPoint);
+
+            if (closestPoint.distanceTo(playerPos) < 1.0) { // Hit radius
+                console.log("Magic hit local player!");
+                player.takeDamage(5, 'Magic Self-Hit');
+                this.position.copy(closestPoint);
+                return true;
+            }
+        }
+
         // Check Remote Players (Prevent shoot-through)
         const socketManager = this.game.socketManager;
         if (socketManager && socketManager.playerMeshes) {
@@ -161,20 +180,13 @@ export class MagicProjectile {
 
                 if (closestPoint.distanceTo(playerPos) < hitRadius) {
                     console.log(`Magic hit remote player ${id}!`);
-                    // Magic damage/effects handled in explode() usually? 
-                    // But explode() is local. We need to send damage if WE own this projectile.
-                    // MagicProjectile doesn't seem to track owner explicitly like Arrow, 
-                    // but usually local player fires it. 
-                    // Assuming local player fired it:
+                    // Send damage to the hit player - magic does 5 damage on direct hit
+                    const socketManager = this.game.socketManager;
+                    if (socketManager) {
+                        socketManager.sendDamage(id, 5);
+                    }
 
-                    // Send damage (Magic is usually strong? Let's say 5 or 6, or just explosion damage?)
-                    // explode() does area damage. 
-                    // If we hit directly, we should explode AT the player.
-
-                    // We return true here to trigger collision response in update() 
-                    // which calls explode(this.position).
-                    // However, update() uses `this.position` for explode.
-                    // We should update `this.position` to the hit point so explosion happens ON the player.
+                    // Move position to hit point so explosion happens ON the player
                     this.position.copy(closestPoint);
                     return true;
                 }
@@ -232,6 +244,34 @@ export class MagicProjectile {
                     // "Blow up" the creature
                     animal.isDead = true;
                     console.log("Creature blown up!");
+                }
+            }
+        }
+
+        // 4. Damage local player in explosion radius
+        const player = this.game.player;
+        if (player) {
+            if (player.position.distanceTo(center) <= radius + 2) {
+                console.log("Magic explosion hit local player!");
+                player.takeDamage(3, 'Magic Explosion');
+            }
+        }
+
+        // 4. Damage remote players in explosion radius
+        const socketManager = this.game.socketManager;
+        if (socketManager && socketManager.playerMeshes) {
+            const explosionRadius = radius + 2;
+            const playerHeight = 1.8;
+
+            for (const [id, meshInfo] of socketManager.playerMeshes) {
+                if (!meshInfo.group) continue;
+
+                const playerPos = meshInfo.group.position.clone();
+                playerPos.y += playerHeight / 2;
+
+                if (playerPos.distanceTo(center) <= explosionRadius) {
+                    console.log(`Magic explosion hit remote player ${id}!`);
+                    socketManager.sendDamage(id, 3); // 3 damage from explosion
                 }
             }
         }

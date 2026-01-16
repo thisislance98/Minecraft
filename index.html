@@ -17,6 +17,7 @@
     <div id="game-container" tabindex="0"></div>
 
     <div id="crosshair"></div>
+    <div id="creature-tooltip"></div>
 
     <!-- Damage overlay for visual feedback -->
     <div id="damage-overlay"></div>
@@ -129,6 +130,60 @@
                         <input type="checkbox" id="settings-voice-toggle">
                         <span>Voice Chat</span>
                     </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-thoughts-toggle">
+                        <span>Merlin Thoughts (Show AI reasoning)</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-bypass-tokens-toggle" checked>
+                        <span>Bypass Token Requirements (Free Mode)</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-ai-provider-toggle">
+                        <span>🧙 Use Claude Code (instead of Gemini)</span>
+                    </label>
+                    <p class="settings-description" style="margin: 4px 0 0 26px; font-size: 0.9em; opacity: 0.7;">When
+                        enabled, Merlin uses Claude Code with custom skills. Interact via the Claude Code terminal.</p>
+                </div>
+
+                <!-- Graphics Quality Presets -->
+                <div class="settings-section">
+                    <h4>🎮 Graphics</h4>
+                    <p class="settings-description" style="margin-bottom: 12px;">Choose a preset for your hardware or
+                        customize below.</p>
+                    <div class="graphics-presets" style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <button id="preset-fast" class="preset-btn" title="Best performance for older computers">⚡
+                            Fast</button>
+                        <button id="preset-balanced" class="preset-btn"
+                            title="Good balance of quality and performance">⚖️ Balanced</button>
+                        <button id="preset-beautiful" class="preset-btn"
+                            title="Maximum quality (requires good hardware)">✨ Beautiful</button>
+                    </div>
+                    <div class="settings-slider">
+                        <label for="settings-render-distance"
+                            style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>🌍 Render Distance</span>
+                            <span id="render-distance-value">6</span>
+                        </label>
+                        <input type="range" id="settings-render-distance" min="2" max="12" step="1" value="6"
+                            style="width: 100%;">
+                    </div>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-shadows-toggle" checked>
+                        <span>Shadows</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-particles-toggle" checked>
+                        <span>Particles</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-grass-toggle" checked>
+                        <span>Grass Details</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-weather-toggle" checked>
+                        <span>Weather Effects</span>
+                    </label>
                 </div>
 
                 <!-- Display Settings -->
@@ -189,6 +244,35 @@
                         <!-- <button id="settings-help-btn" class="spawn-btn" style="flex: 1;">❓ Help / Controls</button> REMOVED -->
                         <button id="reset-world-btn" class="danger-btn" style="flex: 1; width: 100%;">🗑️ Reset
                             World</button>
+                    </div>
+                </div>
+
+                <!-- Player Appearance Settings -->
+                <div class="settings-section">
+                    <h4>👤 Appearance</h4>
+                    <p class="settings-description">Choose your shirt color.</p>
+                    <div id="settings-shirt-color-picker" class="color-picker-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- World Warp Settings -->
+                <div class="settings-section">
+                    <h4>🚀 World Warp</h4>
+                    <p class="settings-description">Instantly travel to another world.</p>
+                    <div class="warp-buttons-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button id="settings-warp-earth" class="warp-btn warp-earth">
+                            🌍 Earth<br><small>Home World</small>
+                        </button>
+                        <button id="settings-warp-crystal" class="warp-btn warp-crystal">
+                            💎 Crystal<br><small>Purple Crystals</small>
+                        </button>
+                        <button id="settings-warp-lava" class="warp-btn warp-lava">
+                            🌋 Lava<br><small>Volcanic Terrain</small>
+                        </button>
+                        <button id="settings-warp-moon" class="warp-btn warp-moon">
+                            🌙 Moon<br><small>Lunar Surface</small>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -256,7 +340,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1130</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1228</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -292,6 +376,8 @@
     <div id="chat-panel" class="hidden">
         <div class="chat-header">
             <div class="chat-title">CHAT</div>
+            <button id="clear-chat" title="Clear Chat History"
+                style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">🗑️</button>
             <button id="copy-chat" title="Copy Conversation"
                 style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">📋</button>
             <button id="close-chat">×</button>
@@ -328,7 +414,6 @@
         import { MerlinClient } from '/src/game/ai/MerlinClient.js';
         // Initialize AI Client immediately, independent of Game logic
         window.merlinClient = new MerlinClient();
-        window.merlinClient.connect();
     </script>
     <script type="module" src="/src/main.js"></script>
 </body>

@@ -49,6 +49,7 @@ export class Animal {
 
         // Mesh group
         this.mesh = new THREE.Group();
+        this.mesh.userData.entity = this; // Link mesh back to entity for raycasting
         this.mesh.position.copy(this.position);
 
         // Parts for animation (populated in createBody)
@@ -97,6 +98,8 @@ export class Animal {
 
         // Visual Improvements: Blob Shadow
         this.createBlobShadow();
+
+        this.isRideable = false;
     }
 
     createBlobShadow() {
@@ -309,20 +312,7 @@ export class Animal {
         this.checkSync();
     }
 
-    checkSync() {
-        if (!this.game.socketManager || !this.game.socketManager.isConnected()) return;
-
-        // Simple distance check: if we moved significantly, send update
-        if (!this.lastSyncPos) this.lastSyncPos = this.position.clone();
-
-        const dist = this.position.distanceTo(this.lastSyncPos);
-        if (dist > 1.0) { // Sync every 1 block of movement
-            this.game.socketManager.sendEntityUpdate(this.serialize());
-            this.lastSyncPos.copy(this.position);
-        }
-    }
-
-    // Explicit sync trigger (e.g. after scale change)
+    // Sync entity state to server (with optional force flag for immediate updates)
     checkSync(force = false) {
         if (!this.game.socketManager || !this.game.socketManager.isConnected()) return;
 
@@ -664,7 +654,7 @@ export class Animal {
     attackPlayer(player) {
         // Melee attack
         const dir = new THREE.Vector3().subVectors(player.position, this.position).normalize();
-        player.takeDamage(this.damage);
+        player.takeDamage(this.damage, this.constructor.name);
         player.knockback(dir, 0.2);
 
         // Simple arm swing animation for mobs if they have armParts
@@ -944,7 +934,7 @@ export class Animal {
             const checkZ = pos.z + rz;
 
             // Check downward for this point
-            for (let y = checkBaseY; y >= checkBaseY - 2; y--) {
+            for (let y = checkBaseY; y >= checkBaseY - 10; y--) {
                 if (this.checkSolid(checkX, y, checkZ)) {
                     const blockTop = y + 1;
                     if (blockTop > highestGroundY) {

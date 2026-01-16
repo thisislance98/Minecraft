@@ -1,0 +1,18 @@
+{
+    "name": "Verify Plant Registration",
+    "headless": false,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [
+                5000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const classes = window.AnimalClasses || {}; const missing = []; if (!classes['HelicopterPlant']) missing.push('HelicopterPlant'); if (!classes['ShyPlant']) missing.push('ShyPlant'); if (!classes['CrystalPlant']) missing.push('CrystalPlant'); if (missing.length > 0) return { success: false, message: 'Missing classes: ' + missing.join(', ') }; return { success: true, message: 'All plant classes registered' }; }"
+        }
+    ]
+}

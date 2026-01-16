@@ -59,7 +59,63 @@ const palettes = {
     bed_top: { pillow: ['#ffffff', '#f0f0f0'], blanket: ['#d32f2f', '#c62828', '#b71c1c'] },
     bed_side: { wood: ['#6b4423', '#7a5533'], blanket: ['#d32f2f', '#c62828'] },
     stone_brick: ['#696969', '#757575', '#575757'], // Darker gray bricks
-    bookshelf: { wood: ['#8a6543', '#6b4423'], pages: ['#f0f0f0', '#e0e0e0'], covers: ['#d32f2f', '#1976d2', '#388e3c', '#fbc02d', '#7b1fa2'] },
+    bookshelf: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        pages: ['#f0f0f0', '#e0e0e0', '#dcdcdc'],
+        covers: [
+            '#8B0000', // Dark Red
+            '#00008B', // Dark Blue
+            '#006400', // Dark Green
+            '#4B0082', // Indigo
+            '#2F4F4F', // Dark Slate Gray
+            '#8B4513', // Saddle Brown
+            '#000000', // Black
+            '#556B2F', // Dark Olive Green
+            '#800000', // Maroon
+            '#191970', // Midnight Blue
+            '#704214', // Sepia/Dark Brown
+            '#36454F', // Charcoal
+            '#301934', // Dark Purple
+        ],
+        details: ['#FFD700', '#C0C0C0', '#B0C4DE'], // Gold, Silver, Light Metallic
+        labels: ['#F5F5DC', '#FFF8DC', '#D3D3D3'] // Beige, Cornsilk, Light Gray
+    },
+    book_red: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#8B0000', '#800000', '#A52A2A', '#B22222', '#CD5C5C', '#DC143C'],
+        details: ['#FFD700', '#C0C0C0'],
+        labels: ['#F5F5DC', '#FFF8DC']
+    },
+    book_blue: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#00008B', '#191970', '#000080', '#1E3A5F', '#2F4F4F', '#483D8B'],
+        details: ['#FFD700', '#C0C0C0'],
+        labels: ['#F5F5DC', '#FFF8DC']
+    },
+    book_green: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#006400', '#228B22', '#2E8B57', '#556B2F', '#3CB371', '#0B3D0B'],
+        details: ['#FFD700', '#C0C0C0'],
+        labels: ['#F5F5DC', '#FFF8DC']
+    },
+    book_brown: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#8B4513', '#A0522D', '#704214', '#5C4033', '#6B4423', '#8B5A2B'],
+        details: ['#FFD700', '#C0C0C0'],
+        labels: ['#F5F5DC', '#FFF8DC']
+    },
+    book_purple: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#4B0082', '#301934', '#483D8B', '#663399', '#800080', '#551A8B'],
+        details: ['#FFD700', '#C0C0C0'],
+        labels: ['#F5F5DC', '#FFF8DC']
+    },
+    book_mixed: {
+        wood: ['#8a6543', '#6b4423', '#5c4033'],
+        covers: ['#8B0000', '#00008B', '#006400', '#4B0082', '#8B4513', '#2F4F4F', '#800000', '#191970'],
+        details: ['#FFD700', '#C0C0C0', '#B0C4DE'],
+        labels: ['#F5F5DC', '#FFF8DC', '#D3D3D3']
+    },
     gold_block: ['#FFD700', '#FFC107', '#FFEA00', '#FDD835'],
     tapestry: ['#880E4F', '#AD1457', '#C2185B'], // Deep reds/purples
     trampoline_top: ['#2E8B57', '#3CB371', '#228B22'], // SeaGreen, MediumSeaGreen, ForestGreen
@@ -121,7 +177,23 @@ const palettes = {
     station_core: ['#1E40AF', '#3B82F6', '#60A5FA', '#FFFFFF'], // Bright blue energy core
     station_light: ['#F0FFF4', '#C6F6D5', '#9AE6B4'], // Soft green lights
     station_floor: ['#374151', '#4B5563', '#6B7280'], // Dark grey floor panels
-    station_console: ['#1E293B', '#00FFFF', '#06B6D4', '#0EA5E9'] // Dark with cyan interface
+    station_console: ['#1E293B', '#00FFFF', '#06B6D4', '#0EA5E9'], // Dark with cyan interface
+
+    // ===== ALIEN WORLD PALETTES =====
+
+    // Crystal World
+    crystal_ground: ['#6B4C9A', '#7B5AAA', '#5A3C8A', '#8A6ABA'], // Purple crystalline ground
+    crystal_stone: ['#8844AA', '#9955BB', '#7733AA', '#AA66CC'], // Deep purple stone
+    crystal_shard: ['#CC88FF', '#DD99FF', '#BB77EE', '#EECCFF'], // Glowing crystal
+    crystal_glow: ['#FF88FF', '#FFAAFF', '#FF66FF', '#FFCCFF'], // Bright glow
+    crystal_plant: ['#AA55DD', '#BB66EE', '#9944CC', '#CC77FF'], // Crystal vegetation
+
+    // Lava World  
+    obsidite_ground: ['#221100', '#331111', '#110800', '#442211'], // Dark volcanic ground
+    magma_stone: ['#442211', '#553322', '#332211', '#554433'], // Hot stone
+    cooled_lava: ['#111111', '#1a1a1a', '#0a0a0a', '#222222'], // Cooled lava rock
+    ember_block: ['#FF4400', '#FF6600', '#FF2200', '#FF8800'], // Glowing ember
+    fire_plant: ['#FF6600', '#FF8800', '#FF4400', '#FFAA00'] // Fire vegetation
 };
 
 export function generateTexture(type, size = 16) {
@@ -131,10 +203,6 @@ export function generateTexture(type, size = 16) {
     const ctx = canvas.getContext('2d');
 
     let seed = type.charCodeAt(0) * 1000;
-    // console.log(`[TextureGenerator] Generating: '${type}'`);
-    if (type === 'torch' || type === 'glowstone') {
-        console.log(`[TextureGenerator] Explicit check for: '${type}'`);
-    }
 
     switch (type) {
         case 'grass_top':
@@ -768,36 +836,172 @@ export function generateTexture(type, size = 16) {
             break;
 
         case 'bookshelf': {
-            const { wood, pages, covers } = palettes.bookshelf;
-            // Wood Top/Bottom
-            ctx.fillStyle = wood[0];
-            ctx.fillRect(0, 0, size, size);
-            // Shelves
-            ctx.fillRect(0, 0, size, 2);
-            ctx.fillRect(0, 7, size, 2);
-            ctx.fillRect(0, 14, size, 2);
+            const { wood, covers, details, labels } = palettes.bookshelf;
 
-            // Books
-            for (let row = 0; row < 2; row++) {
-                const y = row * 7 + 2;
+            // 1. Draw Wood Background (Shadowed inside the shelf)
+            ctx.fillStyle = wood[2] || '#5c4033'; // Darkest wood for back panel
+            ctx.fillRect(0, 0, size, size);
+
+            // 2. Draw Shelves
+            const shelfColor = wood[0];
+            const shelfShadow = wood[1];
+
+            const drawShelf = (y) => {
+                ctx.fillStyle = shelfColor;
+                ctx.fillRect(0, y, size, 2);
+                ctx.fillStyle = shelfShadow;
+                ctx.fillRect(0, y + 1, size, 1);
+            };
+
+            drawShelf(0);
+            drawShelf(7);
+            drawShelf(14);
+
+            // 3. Draw Books with VARIETY
+            const rows = [2, 9];
+
+            rows.forEach(baseY => {
                 let x = 1;
                 while (x < size - 1) {
-                    const width = 2 + Math.floor(seededRandom(seed++) * 2); // 2 or 3 px wide
+                    // Randomize book width (2 to 3 pixels mostly, rare 4)
+                    const width = 2 + Math.floor(seededRandom(seed++) * 2.5);
                     if (x + width > size - 1) break;
 
-                    const color = covers[Math.floor(seededRandom(seed++) * covers.length)];
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x, y, width, 5);
+                    // Height variation
+                    const height = 3 + Math.floor(seededRandom(seed++) * 3); // 3, 4, 5
+                    const y = baseY + (5 - height);
 
-                    // Pages?
-                    if (width > 2) {
-                        ctx.fillStyle = pages[0];
-                        ctx.fillRect(x + 1, y + 1, width - 2, 3);
+                    // Choose cover color
+                    const coverColor = covers[Math.floor(seededRandom(seed++) * covers.length)];
+                    ctx.fillStyle = coverColor;
+                    ctx.fillRect(x, y, width, height);
+
+                    // Spine Shading (Cylindrical effect)
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(x, y, 1, height); // Shadow on left edge
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(x + width - 1, y, 1, height); // Highlight on right edge
+
+                    // --- SPINE DETAILS ---
+                    const spineType = Math.floor(seededRandom(seed++) * 4); // 0-3
+
+                    // Type 0: Banded (Gold/Silver bands)
+                    if (spineType === 0) {
+                        const detailColor = details[Math.floor(seededRandom(seed++) * details.length)];
+                        ctx.fillStyle = detailColor;
+                        const bandY = y + 1 + Math.floor(seededRandom(seed++) * (height - 2));
+                        ctx.fillRect(x, bandY, width, 1);
+                        if (height > 4) { // Second band for tall books
+                            ctx.fillRect(x, bandY + 2, width, 1);
+                        }
+                    }
+                    // Type 1: Labeled (Paper label)
+                    else if (spineType === 1 && width >= 2) {
+                        const labelColor = labels[Math.floor(seededRandom(seed++) * labels.length)];
+                        ctx.fillStyle = labelColor;
+                        const labelY = y + height - 2; // Near bottom
+                        ctx.fillRect(x + 1, labelY, width - 2, 1);
+                    }
+                    // Type 2: Titled (Vertical line text hint)
+                    else if (spineType === 2 && height >= 4) {
+                        ctx.fillStyle = 'rgba(255,235,59,0.7)'; // Yellowish text
+                        // Draw a vertical dotted line or just a strip
+                        ctx.fillRect(x + Math.floor(width / 2), y + 1, 1, height - 2);
+                    }
+                    // Type 3: Standard / Worn
+                    else {
+                        // Maybe some noise/wear
+                        if (seededRandom(seed++) > 0.5) {
+                            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                            ctx.fillRect(x, y + 1, 1, 1); // Worn top corner
+                        }
                     }
 
-                    x += width + 1; // 1px gap
+                    x += width + Math.floor(seededRandom(seed++) * 1.2); // Random gap
                 }
-            }
+            });
+            break;
+        }
+
+        case 'book_red':
+        case 'book_blue':
+        case 'book_green':
+        case 'book_brown':
+        case 'book_purple':
+        case 'book_mixed': {
+            const palette = palettes[type];
+            const { wood, covers, details, labels } = palette;
+
+            // 1. Draw Wood Background
+            ctx.fillStyle = wood[2] || '#5c4033';
+            ctx.fillRect(0, 0, size, size);
+
+            // 2. Draw Shelves
+            const shelfColor = wood[0];
+            const shelfShadow = wood[1];
+
+            const drawShelf = (y) => {
+                ctx.fillStyle = shelfColor;
+                ctx.fillRect(0, y, size, 2);
+                ctx.fillStyle = shelfShadow;
+                ctx.fillRect(0, y + 1, size, 1);
+            };
+
+            drawShelf(0);
+            drawShelf(7);
+            drawShelf(14);
+
+            // 3. Draw Books with VARIETY
+            const rows = [2, 9];
+
+            rows.forEach(baseY => {
+                let x = 1;
+                while (x < size - 1) {
+                    const width = 2 + Math.floor(seededRandom(seed++) * 2.5);
+                    if (x + width > size - 1) break;
+
+                    const height = 3 + Math.floor(seededRandom(seed++) * 3);
+                    const y = baseY + (5 - height);
+
+                    const coverColor = covers[Math.floor(seededRandom(seed++) * covers.length)];
+                    ctx.fillStyle = coverColor;
+                    ctx.fillRect(x, y, width, height);
+
+                    // Spine Shading
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(x, y, 1, height);
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(x + width - 1, y, 1, height);
+
+                    // Spine Details
+                    const spineType = Math.floor(seededRandom(seed++) * 4);
+
+                    if (spineType === 0) {
+                        const detailColor = details[Math.floor(seededRandom(seed++) * details.length)];
+                        ctx.fillStyle = detailColor;
+                        const bandY = y + 1 + Math.floor(seededRandom(seed++) * (height - 2));
+                        ctx.fillRect(x, bandY, width, 1);
+                        if (height > 4) {
+                            ctx.fillRect(x, bandY + 2, width, 1);
+                        }
+                    } else if (spineType === 1 && width >= 2) {
+                        const labelColor = labels[Math.floor(seededRandom(seed++) * labels.length)];
+                        ctx.fillStyle = labelColor;
+                        const labelY = y + height - 2;
+                        ctx.fillRect(x + 1, labelY, width - 2, 1);
+                    } else if (spineType === 2 && height >= 4) {
+                        ctx.fillStyle = 'rgba(255,235,59,0.7)';
+                        ctx.fillRect(x + Math.floor(width / 2), y + 1, 1, height - 2);
+                    } else {
+                        if (seededRandom(seed++) > 0.5) {
+                            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                            ctx.fillRect(x, y + 1, 1, 1);
+                        }
+                    }
+
+                    x += width + Math.floor(seededRandom(seed++) * 1.2);
+                }
+            });
             break;
         }
 
@@ -1638,45 +1842,178 @@ export function generateTexture(type, size = 16) {
             break;
         }
 
-        case 'torch':
-            ctx.clearRect(0, 0, size, size);
-            // Stick
-            ctx.fillStyle = '#8B4513';
-            ctx.fillRect(7, 6, 2, 10);
-            // Flame (Red core, orange, yellow tip)
-            ctx.fillStyle = '#FF0000';
-            ctx.fillRect(7, 4, 2, 2);
-            ctx.fillStyle = '#FFA500';
-            ctx.fillRect(7, 3, 2, 1);
-            ctx.fillStyle = '#FFFF00';
-            ctx.fillRect(7, 1, 2, 2);
-            break;
+        // ===== CRYSTAL WORLD BLOCKS =====
 
-        case 'glowstone':
-            // Bright bubbly yellow/orange texture
-            ctx.fillStyle = '#FFD700'; // Gold-ish base
-            ctx.fillRect(0, 0, size, size);
+        case 'crystal_ground': {
+            const colors = palettes.crystal_ground;
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     const noise = seededRandom(seed++);
-                    if (noise > 0.7) ctx.fillStyle = '#FFFF00'; // Bright yellow
-                    else if (noise < 0.3) ctx.fillStyle = '#FFA500'; // Orange
-                    else ctx.fillStyle = '#FFD700';
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
                     ctx.fillRect(x, y, 1, 1);
                 }
             }
-            // Glow center
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.fillRect(4, 4, 8, 8);
+            // Add crystalline specks
+            ctx.fillStyle = '#CC88FF';
+            for (let i = 0; i < 8; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(rx, ry, 1, 1);
+            }
             break;
+        }
 
-        case 'lampost_glass':
-            ctx.fillStyle = 'rgba(255, 221, 0, 0.6)'; // Yellow transparent
-            ctx.fillRect(0, 0, size, size);
-            // Inner highlight
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.fillRect(4, 4, size - 8, size - 8);
+        case 'crystal_stone': {
+            const colors = palettes.crystal_stone;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
             break;
+        }
+
+        case 'crystal_shard': {
+            ctx.clearRect(0, 0, size, size);
+            const colors = palettes.crystal_shard;
+            // Draw crystal shape (tall, narrow)
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(6, 2, 4, 12);
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(7, 1, 2, 14);
+            ctx.fillStyle = colors[2];
+            ctx.fillRect(5, 4, 2, 8);
+            ctx.fillRect(9, 4, 2, 8);
+            // Bright highlight
+            ctx.fillStyle = colors[3];
+            ctx.fillRect(7, 3, 1, 6);
+            break;
+        }
+
+        case 'crystal_glow': {
+            const colors = palettes.crystal_glow;
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(0, 0, size, size);
+            // Pulsing center
+            ctx.fillStyle = colors[3];
+            ctx.fillRect(4, 4, 8, 8);
+            ctx.fillStyle = colors[2];
+            ctx.fillRect(5, 5, 6, 6);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(6, 6, 4, 4);
+            break;
+        }
+
+        case 'crystal_plant': {
+            ctx.clearRect(0, 0, size, size);
+            const colors = palettes.crystal_plant;
+            // Crystal plant stalks
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(7, 6, 2, 10);
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(4, 4, 2, 8);
+            ctx.fillRect(10, 5, 2, 7);
+            // Tips
+            ctx.fillStyle = colors[3];
+            ctx.fillRect(7, 4, 2, 2);
+            ctx.fillRect(4, 2, 2, 2);
+            ctx.fillRect(10, 3, 2, 2);
+            break;
+        }
+
+        // ===== LAVA WORLD BLOCKS =====
+
+        case 'obsidite_ground': {
+            const colors = palettes.obsidite_ground;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add orange lava veins
+            ctx.fillStyle = '#FF4400';
+            for (let i = 0; i < 5; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+            break;
+        }
+
+        case 'magma_stone': {
+            const colors = palettes.magma_stone;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add glowing cracks
+            ctx.fillStyle = '#FF6600';
+            for (let i = 0; i < 12; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+            break;
+        }
+
+        case 'cooled_lava': {
+            const colors = palettes.cooled_lava;
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'ember_block': {
+            const colors = palettes.ember_block;
+            ctx.fillStyle = colors[2];
+            ctx.fillRect(0, 0, size, size);
+            // Glowing ember pattern
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (seededRandom(seed++) > 0.6) {
+                        ctx.fillStyle = colors[Math.floor(seededRandom(seed++) * colors.length)];
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+            // Bright center
+            ctx.fillStyle = '#FFAA00';
+            ctx.fillRect(5, 5, 6, 6);
+            ctx.fillStyle = '#FFFF00';
+            ctx.fillRect(6, 6, 4, 4);
+            break;
+        }
+
+        case 'fire_plant': {
+            ctx.clearRect(0, 0, size, size);
+            const colors = palettes.fire_plant;
+            // Flame-like plant
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(7, 8, 2, 8);
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(6, 6, 4, 4);
+            ctx.fillRect(5, 4, 6, 2);
+            ctx.fillStyle = colors[3];
+            ctx.fillRect(7, 2, 2, 4);
+            // Flame tips
+            ctx.fillStyle = '#FFFF00';
+            ctx.fillRect(7, 1, 2, 2);
+            ctx.fillRect(5, 3, 2, 2);
+            ctx.fillRect(9, 3, 2, 2);
+            break;
+        }
 
         default:
             // Fallback: Generate a visible debug texture (magenta/pink checkered)

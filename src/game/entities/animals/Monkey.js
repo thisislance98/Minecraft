@@ -21,6 +21,7 @@ export class Monkey extends Animal {
         this.isJumping = false;
         this.jumpCooldown = 0;
         this.scanTimer = 0;
+        this.jumpTimer = 0; // Safety timer to prevent infinite jumping
 
         // Tree dwelling preference
         this.inTree = false;
@@ -185,9 +186,16 @@ export class Monkey extends Animal {
 
         // Handle jumping state
         if (this.isJumping) {
-            if (this.onGround || this.velocity.y === 0) {
+            this.jumpTimer += dt;
+
+            // Landing detection: on ground, velocity near zero, or max air time exceeded
+            const velocityNearZero = Math.abs(this.velocity.y) < 0.5;
+            const maxAirTimeExceeded = this.jumpTimer > 3.0; // Safety: 3 seconds max jump time
+
+            if (this.onGround || (velocityNearZero && this.jumpTimer > 0.5) || maxAirTimeExceeded) {
                 this.isJumping = false;
                 this.jumpCooldown = 1.0;
+                this.jumpTimer = 0;
                 this.state = 'idle';
                 if (!this.inTree) {
                     this.seekingTree = true;
@@ -220,7 +228,7 @@ export class Monkey extends Animal {
                 this.rotation = Math.atan2(dir.x, dir.z);
                 this.state = 'walk';
                 this.isMoving = true;
-                
+
                 // If blocked while seeking tree, try to climb or hop
                 this.checkObstacleClimb();
                 return;
@@ -231,7 +239,7 @@ export class Monkey extends Animal {
         if (this.isClimbing) {
             this.velocity.y = this.climbSpeed * this.climbDirection;
             this.isMoving = true;
-            
+
             if (this.climbTimer <= 0) {
                 this.isClimbing = false;
             }
@@ -272,11 +280,11 @@ export class Monkey extends Animal {
         const lookAhead = 0.8;
         const checkX = this.position.x + Math.sin(this.rotation) * lookAhead;
         const checkZ = this.position.z + Math.cos(this.rotation) * lookAhead;
-        
+
         // Check blocks at foot, waist, and head level
         const footBlock = this.game.getBlock(Math.floor(checkX), Math.floor(this.position.y), Math.floor(checkZ));
         const waistBlock = this.game.getBlock(Math.floor(checkX), Math.floor(this.position.y + 1), Math.floor(checkZ));
-        
+
         if (footBlock && footBlock.type !== 'air' && footBlock.type !== 'water') {
             // If it's a solid block, start climbing up it
             this.isClimbing = true;
@@ -309,9 +317,12 @@ export class Monkey extends Animal {
                     const dir = new THREE.Vector3(tx - pos.x, ty - pos.y + 2, tz - pos.z);
                     const dist = dir.length();
                     dir.normalize();
-                    
-                    this.velocity.copy(dir.multiplyScalar(dist * 0.8 + 5));
+
+                    // Cap the jump velocity to prevent flying into the sky
+                    const jumpSpeed = Math.min(dist * 0.6 + 4, 12); // Max velocity of 12
+                    this.velocity.copy(dir.multiplyScalar(jumpSpeed));
                     this.isJumping = true;
+                    this.jumpTimer = 0; // Reset jump timer
                     this.onGround = false;
                     this.rotation = Math.atan2(tx - pos.x, tz - pos.z);
                     this.jumpCooldown = 1.0;
@@ -332,12 +343,12 @@ export class Monkey extends Animal {
             );
             this.position.add(climbMove);
             this.velocity.y = 0; // Cancel gravity while climbing
-            
+
             // Still sync mesh
             this.mesh.position.copy(this.position);
             return;
         }
-        
+
         super.updatePhysics(dt);
     }
 }

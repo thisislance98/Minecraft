@@ -1,3 +1,4 @@
+// Player entity
 import * as THREE from 'three';
 import { Config } from '../core/Config.js';
 
@@ -38,6 +39,7 @@ export class Player {
         this.distanceTraveled = 0;
         this.lastPosition = null;
         this.highestY = 0; // Track highest point for fall damage
+        this.stepSmoothingY = 0; // Visual offset for smooth step-ups
 
         // Animation
         this.armSwingAngle = 0;
@@ -173,11 +175,35 @@ export class Player {
     createBody() {
         // Colors matching Minecraft Steve skin
         const skinColor = 0xB58D6E; // Steve's tan
-        const shirtColor = 0x00AAAA; // Cyan
+
+        // Load shirt color from localStorage or pick a random one
+        let shirtColor;
+        const savedColor = localStorage.getItem('settings_shirt_color');
+        if (savedColor) {
+            shirtColor = parseInt(savedColor);
+        } else {
+            const shirtColors = [
+                0xFF5733, // Orange-red
+                0x33FF57, // Green
+                0x3357FF, // Blue
+                0xFF33A8, // Pink
+                0xFFD700, // Gold
+                0x00CED1, // Dark cyan
+                0x9400D3, // Dark violet
+                0xFF6347, // Tomato
+                0x20B2AA, // Light sea green
+                0x8B4513, // Saddle brown
+                0x4169E1, // Royal blue
+                0xDC143C, // Crimson
+            ];
+            shirtColor = shirtColors[Math.floor(Math.random() * shirtColors.length)];
+            localStorage.setItem('settings_shirt_color', shirtColor);
+        }
+
         const pantsColor = 0x3333AA; // Indigo/Blue
 
         const skinMaterial = new THREE.MeshLambertMaterial({ color: skinColor });
-        const shirtMaterial = new THREE.MeshLambertMaterial({ color: shirtColor });
+        this.shirtMaterial = new THREE.MeshLambertMaterial({ color: shirtColor });
         const pantsMaterial = new THREE.MeshLambertMaterial({ color: pantsColor });
 
         this.body = new THREE.Group();
@@ -188,7 +214,7 @@ export class Player {
         const torsoDepth = 0.25;
 
         const torsoGeom = new THREE.BoxGeometry(torsoWidth, torsoHeight, torsoDepth);
-        this.torso = new THREE.Mesh(torsoGeom, shirtMaterial);
+        this.torso = new THREE.Mesh(torsoGeom, this.shirtMaterial);
         this.torso.position.set(0, -0.5, 0);
         this.body.add(this.torso);
 
@@ -324,7 +350,19 @@ export class Player {
         }
     }
 
+    /**
+     * Update the player's shirt color
+     * @param {number} color - Hex color
+     */
+    setShirtColor(color) {
+        if (this.shirtMaterial) {
+            this.shirtMaterial.color.setHex(color);
+        }
+    }
+
     mountEntity(entity) {
+        console.log('[Player] Attempting to mount:', entity.constructor.name, 'isRideable:', entity.isRideable);
+        if (entity.isRideable === false) return;
         if (this.mount) this.dismount();
         this.mount = entity;
         entity.rider = this;
@@ -390,167 +428,61 @@ export class Player {
         this.updateHeldItemVisibility();
     }
 
-    createWand() {
+    /**
+     * Factory method to create a wand with consistent styling
+     * @param {number} tipColor - Hex color for the gem tip
+     * @param {number} handleColor - Hex color for the handle (default: wood brown)
+     * @returns {THREE.Group} - The wand group (hidden by default)
+     */
+    createWandModel(tipColor, handleColor = 0x5C4033) {
         const wandGroup = new THREE.Group();
 
         // Handle (Stick)
         const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
+        const handleMat = new THREE.MeshLambertMaterial({ color: handleColor, depthTest: false });
         const handle = new THREE.Mesh(handleGeo, handleMat);
         handle.renderOrder = 999;
-        handle.position.y = -0.2; // Extend down from grip
+        handle.position.y = -0.2;
         wandGroup.add(handle);
 
         // Tip (Gem)
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08); // Cube gem
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0xFF00FF, depthTest: false }); // Glowing Magenta
+        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const tipMat = new THREE.MeshBasicMaterial({ color: tipColor, depthTest: false });
         const tip = new THREE.Mesh(tipGeo, tipMat);
         tip.renderOrder = 999;
-        tip.position.y = -0.42; // Bottom of handle
+        tip.position.y = -0.42;
         wandGroup.add(tip);
 
-        // Position handled by toolAttachment
         wandGroup.position.set(0, 0, 0);
         wandGroup.rotation.set(0, 0, 0);
 
         this.toolAttachment.add(wandGroup);
-        this.wand = wandGroup;
-        this.wand.visible = false;
+        wandGroup.visible = false;
+        return wandGroup;
+    }
+
+    createWand() {
+        this.wand = this.createWandModel(0xFF00FF); // Magenta
     }
 
     createLevitationWand() {
-        const wandGroup = new THREE.Group();
-
-        // Handle (Stick)
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Gem) - Yellow
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0xFFFF00, depthTest: false }); // Yellow
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.42;
-        wandGroup.add(tip);
-
-        // Position handled by toolAttachment
-        wandGroup.position.set(0, 0, 0);
-        wandGroup.rotation.set(0, 0, 0);
-
-        this.toolAttachment.add(wandGroup);
-        this.levitationWand = wandGroup;
-        this.levitationWand.visible = false;
+        this.levitationWand = this.createWandModel(0xFFFF00); // Yellow
     }
 
     createShrinkWand() {
-        const wandGroup = new THREE.Group();
-
-        // Handle (Stick) - Maybe darker wood?
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x3d2b1f, depthTest: false });
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Gem) - Cyan
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0x00FFFF, depthTest: false }); // Glowing Cyan
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.42;
-        wandGroup.add(tip);
-
-        // Position handled by toolAttachment
-        wandGroup.position.set(0, 0, 0);
-        wandGroup.rotation.set(0, 0, 0);
-
-        this.toolAttachment.add(wandGroup);
-        this.shrinkWand = wandGroup;
-        this.shrinkWand = wandGroup;
-        this.shrinkWand.visible = false;
+        this.shrinkWand = this.createWandModel(0x00FFFF, 0x3d2b1f); // Cyan, darker handle
     }
 
     createGrowthWand() {
-        const wandGroup = new THREE.Group();
-
-        // Handle (Stick)
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x3d2b1f, depthTest: false });
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Gem) - Green
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0x00FF00, depthTest: false }); // Glowing Green
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.42;
-        wandGroup.add(tip);
-
-        this.toolAttachment.add(wandGroup);
-        this.growthWand = wandGroup;
-        this.growthWand.visible = false;
+        this.growthWand = this.createWandModel(0x00FF00, 0x3d2b1f); // Green, darker handle
     }
 
-
-
     createRideWand() {
-        const wandGroup = new THREE.Group();
-
-        // Handle (Stick)
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Leather/Saddle style)
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0x8B4513, depthTest: false }); // Saddle Brown
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.42;
-        wandGroup.add(tip);
-
-        // Position handled by toolAttachment
-        wandGroup.position.set(0, 0, 0);
-        wandGroup.rotation.set(0, 0, 0);
-
-        this.toolAttachment.add(wandGroup);
-        this.rideWand = wandGroup;
-        this.rideWand.visible = false;
+        this.rideWand = this.createWandModel(0x8B4513); // Saddle Brown
     }
 
     createWizardTowerWand() {
-        const wandGroup = new THREE.Group();
-
-        // Handle (Stick)
-        const handleGeo = new THREE.BoxGeometry(0.04, 0.4, 0.04);
-        const handleMat = new THREE.MeshLambertMaterial({ color: 0x5C4033, depthTest: false }); // Wood
-        const handle = new THREE.Mesh(handleGeo, handleMat);
-        handle.renderOrder = 999;
-        handle.position.y = -0.2;
-        wandGroup.add(handle);
-
-        // Tip (Gem) - Purple
-        const tipGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const tipMat = new THREE.MeshBasicMaterial({ color: 0x8A2BE2, depthTest: false }); // BlueViolet
-        const tip = new THREE.Mesh(tipGeo, tipMat);
-        tip.renderOrder = 999;
-        tip.position.y = -0.42;
-        wandGroup.add(tip);
-
-        this.toolAttachment.add(wandGroup);
-        this.wizardTowerWand = wandGroup;
-        this.wizardTowerWand.visible = false;
+        this.wizardTowerWand = this.createWandModel(0x8A2BE2); // BlueViolet
     }
 
     createBroom() {
@@ -965,9 +897,102 @@ export class Player {
         }
     }
 
+    checkCrosshairTarget(dt) {
+        if (!this.game.camera || !this.tooltipElement) return;
+
+        // Raycast from camera center
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
+        raycaster.far = 10.0; // Check up to 10 blocks away
+
+        // 1. Check Entities (Animals/Monsters)
+        // We need to check all meshes in the scene that are children of Animals
+        // But looping all scene objects is slow.
+        // Game keeps a list of animals! game.animals (Array of Animal)
+
+        const candidates = [];
+        if (this.game.animals) {
+            for (const animal of this.game.animals) {
+                if (animal.mesh && animal.mesh.visible) {
+                    candidates.push(animal.mesh);
+                }
+            }
+        }
+
+        // Add remote players to candidates
+        if (this.game.socketManager && this.game.socketManager.playerMeshes) {
+            this.game.socketManager.playerMeshes.forEach((meshInfo) => {
+                if (meshInfo.group) {
+                    candidates.push(meshInfo.group);
+                }
+            });
+        }
+
+        const transmits = raycaster.intersectObjects(candidates, true);
+
+        let targetName = null;
+
+        if (transmits.length > 0) {
+            // Found something!
+            // Walk up to find the root object with userData.entity or userData.playerId
+            let hitObject = transmits[0].object;
+            let entity = null;
+            let distance = transmits[0].distance;
+
+            // Only care if close enough?
+            if (distance <= 10) {
+                while (hitObject) {
+                    if (hitObject.userData && hitObject.userData.entity) {
+                        entity = hitObject.userData.entity;
+                        targetName = entity.constructor.name; // "Pig", "Dragon", etc.
+                        break;
+                    }
+                    if (hitObject.userData && hitObject.userData.playerId) {
+                        targetName = "Player " + hitObject.userData.playerId.substr(0, 4);
+                        break;
+                    }
+                    hitObject = hitObject.parent;
+                    if (hitObject === this.game.scene) break;
+                }
+            }
+        }
+
+        // Update Tooltip Logic
+        if (targetName) {
+            if (this.lastCrosshairTarget === targetName) {
+                // Same target, increment timer
+                this.crosshairTimer += dt;
+            } else {
+                // New target, reset timer
+                this.lastCrosshairTarget = targetName;
+                this.crosshairTimer = 0;
+            }
+
+            // Show after 0.2 seconds of hovering
+            if (this.crosshairTimer > 0.2) {
+                this.tooltipElement.textContent = targetName;
+                this.tooltipElement.classList.add('visible');
+            }
+        } else {
+            // No target, clear and hide
+            this.lastCrosshairTarget = null;
+            this.crosshairTimer = 0;
+            this.tooltipElement.classList.remove('visible');
+        }
+    }
+
     update(deltaTime, allowInput = true) {
         // Skip update if player is dead
         if (this.isDead) return;
+
+        // Update Crosshair Target
+        this.checkCrosshairTarget(deltaTime);
+
+        // Update step smoothing
+        const smoothingSpeed = 10.0;
+        this.stepSmoothingY *= Math.max(0, 1 - deltaTime * smoothingSpeed);
+        if (Math.abs(this.stepSmoothingY) < 0.01) this.stepSmoothingY = 0;
+
 
         const input = this.game.inputManager;
         // REF_FPS allows us to tune values as if running at 60 FPS
@@ -992,10 +1017,34 @@ export class Player {
             const sin = Math.sin(this.rotation.y);
             const cos = Math.cos(this.rotation.y);
 
-            // Forward/back moves along camera facing direction, left/right strafes perpendicular
+            // Forward/back moves along player's facing direction, left/right strafes perpendicular
             // These velocities are now in blocks per second
             velX = (-moveForward * sin + moveRight * cos) * speed;
             velZ = (-moveForward * cos - moveRight * sin) * speed;
+
+            // In orbit camera mode, rotate player to face movement direction
+            if (this.cameraMode === 3 && (moveForward !== 0 || moveRight !== 0)) {
+                // Calculate target rotation based on movement direction relative to camera orbit
+                // Camera looks toward player, so forward movement should be opposite of camera position angle
+                const moveAngle = Math.atan2(moveRight, moveForward);
+                const targetRotation = this.orbitRotation.y + moveAngle;
+
+                // Smoothly rotate player toward movement direction
+                let angleDiff = targetRotation - this.rotation.y;
+                // Normalize to -PI to PI
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+                const turnSpeed = 10; // Radians per second
+                const maxTurn = turnSpeed * deltaTime;
+                this.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
+
+                // Recalculate velocity with updated rotation
+                const newSin = Math.sin(this.rotation.y);
+                const newCos = Math.cos(this.rotation.y);
+                velX = (-moveForward * newSin + moveRight * newCos) * speed;
+                velZ = (-moveForward * newCos - moveRight * newSin) * speed;
+            }
         }
 
         // Studio mode - disable physics and allow free movement
@@ -1055,9 +1104,9 @@ export class Player {
             // NORMAL PHYSICS OR FLYING
             if (this.isFlying) {
                 // Flying Physics
-                // Base flight speed is 3x walk speed
-                // Shift (Sprint) boosts it to 5x
-                let currentFlightSpeed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? 6.0 : 3.0);
+                // Base flight speed is 1.5x walk speed (Reduced from 3x)
+                // Shift (Sprint) boosts it to 3.0x (Reduced from 6x)
+                let currentFlightSpeed = (this.speed * REF_FPS) * (input.isActionActive('SPRINT') ? 3.0 : 1.5);
 
                 this.flightTime += deltaTime;
 
@@ -1124,9 +1173,32 @@ export class Player {
                     this.highestY = this.position.y;
                 }
 
-                // Void Damage
-                if (this.position.y < -64) {
-                    this.takeDamage(10); // Take damage every frame until death
+                // Void Damage - Check against current world's floor level
+                // Each world has different Y ranges:
+                // - Earth: Y < -64
+                // - Moon: Y chunks 40-48, floor at ~640
+                // - Crystal World: Y chunks 50-58, floor at ~800
+                // - Lava World: Y chunks 60-68, floor at ~960
+                const chunkSize = this.game.chunkSize || 16;
+                let voidThreshold = -64; // Earth default
+
+                // Determine current world based on Y position
+                const playerChunkY = Math.floor(this.position.y / chunkSize);
+
+                if (playerChunkY >= 60 || (this.position.y >= 960 && this.position.y < 1200)) {
+                    // Lava World - floor is at Y chunk 60 * 16 = 960, void below 900
+                    voidThreshold = 900;
+                } else if (playerChunkY >= 50 || (this.position.y >= 800 && this.position.y < 960)) {
+                    // Crystal World - floor is at Y chunk 50 * 16 = 800, void below 740
+                    voidThreshold = 740;
+                } else if (playerChunkY >= 40 || (this.position.y >= 640 && this.position.y < 800)) {
+                    // Moon - floor is at Y chunk 40 * 16 = 640, void below 580
+                    voidThreshold = 580;
+                }
+                // Else Earth: voidThreshold stays at -64
+
+                if (this.position.y < voidThreshold) {
+                    this.takeDamage(10, 'Void'); // Take damage every frame until death
                 }
 
                 // Apply gravity
@@ -1162,6 +1234,7 @@ export class Player {
                     if (allowInput && input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
                         this.velocity.y = this.jumpForce * REF_FPS;
                         this.onGround = false;
+                        this.game.soundManager.playSound('jump');
                     }
                 }
 
@@ -1190,7 +1263,7 @@ export class Player {
         // 3rd Person Back
         if (this.cameraMode === 1) {
             this.body.position.copy(this.position);
-            this.body.position.y += 1.57;
+            this.body.position.y += 1.57 + this.stepSmoothingY;
             this.body.rotation.set(0, this.rotation.y, 0);
 
             // Camera is now child of head, so no manual update needed here
@@ -1199,7 +1272,7 @@ export class Player {
         } else if (this.cameraMode === 2) {
             // 3rd Person Front (Selfie)
             this.body.position.copy(this.position);
-            this.body.position.y += 1.57;
+            this.body.position.y += 1.57 + this.stepSmoothingY;
             this.body.rotation.set(0, this.rotation.y, 0);
 
             const camDist = 4;
@@ -1215,10 +1288,10 @@ export class Player {
         } else if (this.cameraMode === 3) {
             // Orbit Mode
             this.body.position.copy(this.position);
-            this.body.position.y += 1.57;
+            this.body.position.y += 1.57 + this.stepSmoothingY;
             this.body.rotation.set(0, this.rotation.y, 0);
 
-            const radius = 5;
+            const radius = 8;
             // Calculate camera position from orbitRotation
             // y is yaw (around Y axis), x is pitch (up/down)
             // Three.js convention: Y is up.
@@ -1240,6 +1313,7 @@ export class Player {
         } else {
             // 1st Person Logic (Default)
             camera.position.copy(this.position);
+            camera.position.y += this.stepSmoothingY; // Apply smoothing to camera base position
 
             // Adjust camera height for Sneak
             const targetHeight = input.isActionActive('SNEAK') ? 1.4 : 1.6;
@@ -1339,7 +1413,6 @@ export class Player {
             this.distanceTraveled += distance;
 
             // Deplete hunger based on movement
-            // Deplete hunger based on movement
             if (this.distanceTraveled >= 10) {
                 const hungerLoss = input.isActionActive('SPRINT') ? 0.3 : 0.1;
                 this.hunger = Math.max(0, this.hunger - hungerLoss);
@@ -1359,22 +1432,24 @@ export class Player {
             this.regenTimer = 0;
         }
 
-        // Starvation damage when hunger is empty
+        // Starvation damage when hunger is empty (Disabled)
+        /*
         if (this.hunger <= 0) {
             this.starvationTimer += deltaTime;
             if (this.starvationTimer >= 4) {
-                this.takeDamage(1);
+                this.takeDamage(1, 'Starvation');
                 this.starvationTimer = 0;
             }
         } else {
             this.starvationTimer = 0;
         }
+        */
 
         // Update HUD
         this.updateStatusBars();
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, source = 'Unknown') {
         this.health = Math.max(0, this.health - amount);
 
         // Visual feedback - flash screen red
@@ -1383,6 +1458,9 @@ export class Player {
             damageOverlay.classList.add('active');
             setTimeout(() => damageOverlay.classList.remove('active'), 200);
         }
+
+        // Show damage source text
+        this.showDamageSource(source, amount);
 
         // Visual Improvements: Camera Shake
         this.triggerCameraShake(0.1, 150); // intensity, duration ms
@@ -1394,8 +1472,48 @@ export class Player {
 
         // Check for death
         if (this.health <= 0) {
+            this.lastDamageSource = source; // Store for death screen
             this.onDeath();
         }
+    }
+
+    showDamageSource(source, amount) {
+        // Create or get the damage source display element
+        let damageSourceEl = document.getElementById('damage-source-display');
+        if (!damageSourceEl) {
+            damageSourceEl = document.createElement('div');
+            damageSourceEl.id = 'damage-source-display';
+            damageSourceEl.style.cssText = `
+                position: fixed;
+                top: 30%;
+                left: 50%;
+                transform: translateX(-50%);
+                font-family: 'VT323', 'Minecraft', monospace;
+                font-size: 28px;
+                color: #ff4444;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.8), 0 0 10px rgba(255,68,68,0.5);
+                z-index: 2000;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.3s ease-out;
+                text-align: center;
+            `;
+            document.body.appendChild(damageSourceEl);
+        }
+
+        // Set the damage text
+        damageSourceEl.textContent = `💔 -${amount} ${source}`;
+        damageSourceEl.style.opacity = '1';
+
+        // Clear any existing timeout
+        if (this.damageSourceTimeout) {
+            clearTimeout(this.damageSourceTimeout);
+        }
+
+        // Hide after 2 seconds
+        this.damageSourceTimeout = setTimeout(() => {
+            damageSourceEl.style.opacity = '0';
+        }, 2000);
     }
 
     triggerCameraShake(intensity, durationMs) {
@@ -1448,20 +1566,7 @@ export class Player {
         this.hunger = Math.min(this.maxHunger, this.hunger + amount);
     }
 
-    mountEntity(entity) {
-        if (this.mount) return;
 
-        this.mount = entity;
-        entity.rider = this;
-
-        // Snap to it
-        this.position.copy(entity.position);
-        this.position.y += 0.8; // Initial snap lower
-        this.velocity.set(0, 0, 0);
-
-        // Notify
-        console.log("Mounted horse!");
-    }
 
     dismount() {
         if (!this.mount) return;
@@ -1592,23 +1697,22 @@ export class Player {
         this.hunger = this.maxHunger;
         this.highestY = -Infinity; // Reset fall damage tracker
 
-        // Respawn Logic:
-        // 1. If death position is valid (not in void), respawn there.
-        // 2. Otherwise fall back to global spawn.
+        // Always respawn in the main Earth world (Y level 0-127)
+        // Use default spawn position regardless of where player died
+        this.deathPosition = null;
 
-        let respawnPos = null;
-
-        if (this.deathPosition && this.deathPosition.y > 0) {
-            respawnPos = this.deathPosition.clone();
-            // Ensure we don't spawn Inside a block? 
-            // The death position should be valid as we were there.
-            // Maybe bump Y slightly to be safe?
-            respawnPos.y += 0.5;
+        // Reset environment to Earth world (fixes sky color staying red/purple from alien worlds)
+        if (this.game.environment && this.game.environment.setWorld) {
+            this.game.environment.setWorld('earth');
         }
 
-        if (respawnPos) {
-            this.position.copy(respawnPos);
+        if (this.game.spawnPlayer) {
+            this.game.spawnPlayer();
+        } else {
+            // Fallback to main world spawn
+            this.position.set(32, 80, 32);
             this.velocity.set(0, 0, 0);
+            this.highestY = 80;
 
             // Sync camera
             if (this.game.camera) {
@@ -1618,26 +1722,6 @@ export class Player {
 
             if (this.game.uiManager) {
                 this.game.uiManager.hideDeathScreen();
-            }
-
-            // Clear stored position
-            this.deathPosition = null;
-
-            // Reset highestY to current Y to prevent immediate fall damage
-            this.highestY = this.position.y;
-        } else {
-            // Fallback to default spawn
-            if (this.game.spawnPlayer) {
-                this.game.spawnPlayer();
-            } else {
-                // Fallback if mechanism fails
-                this.position.set(32, 80, 32);
-                this.velocity.set(0, 0, 0);
-                this.highestY = 80;
-
-                if (this.game.uiManager) {
-                    this.game.uiManager.hideDeathScreen();
-                }
             }
         }
 
@@ -1660,7 +1744,11 @@ export class Player {
             hungerFill.style.width = hungerPercent + '%';
         }
 
-        // Update heart icons
+        // Crosshair targeting initialization
+        this.crosshairTimer = 0;
+        this.lastCrosshairTarget = null;
+        this.tooltipElement = document.getElementById('creature-tooltip');
+
         this.updateHearts();
         this.updateDrumsticks();
     }
@@ -1937,11 +2025,13 @@ export class Player {
 
                         canMoveY = false;
 
-                        // Fall damage check
-                        if (!this.onGround) {
+                        // Fall damage check - disabled in alien worlds (lower gravity)
+                        // Crystal World: Y > 256, Lava World: Y > 512
+                        const isInAlienWorld = pos.y > 256;
+                        if (!this.onGround && !isInAlienWorld) {
                             const fallDistance = this.highestY - pos.y;
                             if (fallDistance > 6) {
-                                this.takeDamage(Math.floor(fallDistance - 6));
+                                this.takeDamage(Math.floor(fallDistance - 6), 'Fall Damage');
                             }
                         }
 
@@ -2010,7 +2100,9 @@ export class Player {
                             // No, assuming current X,Z is clear above.
 
                             // Perform step up
-                            pos.y += 1.1; // Snap up
+                            const stepHeight = 1.1; // Amount we are snapping up
+                            pos.y += stepHeight;
+                            this.stepSmoothingY -= stepHeight; // Counteract the snap visually
                             canMoveX = true; // Re-enable movement
                             // Don't set vertical velocity, just snap
                             this.onGround = true; // Still on "ground"
@@ -2046,7 +2138,9 @@ export class Player {
                         }
 
                         if (canStepUp) {
-                            pos.y += 1.1;
+                            const stepHeight = 1.1;
+                            pos.y += stepHeight;
+                            this.stepSmoothingY -= stepHeight;
                             canMoveZ = true;
                             this.onGround = true;
                             return;

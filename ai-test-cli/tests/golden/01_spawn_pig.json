@@ -1,0 +1,13 @@
+{
+    "name": "golden_01_spawn_pig",
+    "tier": 1,
+    "prompt": "spawn a pig",
+    "timeout": 30000,
+    "expectedKnowledge": [],
+    "verify": [
+        {
+            "type": "entityExists",
+            "entityName": "Pig"
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "name": "Repro 500 Error",
+    "headless": true,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [
+                1000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "async () => { const endpoints = ['/api/channels', '/api/feedback', '/api/destinations/invalid-id', '/api/auth/login', '/api/checkout']; const results = []; for (const url of endpoints) { try { const method = url.includes('login') || url.includes('checkout') ? 'POST' : 'GET'; const body = url.includes('login') ? JSON.stringify({idToken:'fake'}) : (url.includes('checkout') ? JSON.stringify({}) : undefined); const headers = body ? {'Content-Type':'application/json'} : undefined; console.log(`Fetching ${url}...`); const res = await fetch(url, { method, body, headers }); console.log(`${url} -> ${res.status}`); if (res.status === 500) return { success: false, message: `Endpoint ${url} returned 500` }; results.push(`${url}:${res.status}`); } catch (e) { console.error(e); } } return { success: true, message: `All checked. Statuses: ${results.join(', ')}` }; }"
+        }
+    ]
+}

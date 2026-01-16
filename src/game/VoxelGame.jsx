@@ -42,6 +42,7 @@ import { WaterSystem } from './systems/WaterSystem.js';
 import { StoreUI } from './ui/StoreUI.js';
 import { SocketManager } from './systems/SocketManager.js';
 import { AnimalClasses } from './AnimalRegistry.js';
+import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
@@ -170,7 +171,10 @@ export class VoxelGame {
         this.terrainVisible = true; // Default visibility
         this.terrainShadowsEnabled = true; // Default receive shadow state
         this.terrainCastShadows = false; // PERFORMANCE: Default cast shadow to false
+        this.shadowsAutoDisabled = false; // Track if shadows were auto-disabled due to low FPS
+        this.autoShadowManagement = true; // Enable automatic shadow management based on FPS
         this.generatedChunks = new Set();
+        this.protectedChunks = new Set(); // Chunks that should never be unloaded (e.g., starship)
         this.chunkGenQueue = []; // Queue for chunks to be generated
 
         // For raycasting - we need to track individual block positions
@@ -255,7 +259,7 @@ export class VoxelGame {
         this.questSystem = new QuestSystem(this);
         this.profilerTestScene = new ProfilerTestScene(this);
         this.updateTimeStop = (dt) => {
-            if (this.gameState && this.gameState.timers.timeStop > 0) {
+            if (this.gameState?.timers?.timeStop > 0) {
                 this.gameState.timers.timeStop -= dt;
                 if (this.gameState.timers.timeStop <= 0) {
                     this.gameState.timers.timeStop = 0;
@@ -366,6 +370,7 @@ export class VoxelGame {
         // (handled in processChunkQueue via _initialSpawnDone flag)
         this._initialSpawnDone = false;
         this.dragon = null;
+        this.merlin = null; // Merlin wizard companion
 
         // Projectiles
         this.projectiles = [];
@@ -699,28 +704,89 @@ export class VoxelGame {
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
-        // Add random offset to prevent stacking ( +/- 5 blocks )
-        // Using a simple random offset for now. 
-        // In a real scenario we might want to check for collisions, but this is a good first step.
-        const offsetX = (Math.random() - 0.5) * 10;
-        const offsetZ = (Math.random() - 0.5) * 10;
+        // Village is generated at spawnPoint.x + 15, spawnPoint.z + 15
+        const villageX = spawnPoint.x + 15;
+        const villageZ = spawnPoint.z + 15;
 
-        const finalX = spawnPoint.x + offsetX;
-        const finalZ = spawnPoint.z + offsetZ;
+        // Calculate ground height at Village Center
+        const terrainHeight = this.worldGen.getTerrainHeight(villageX, villageZ);
 
-        // Calculate ground height at NEW spawn location
-        // Ensure we spawn *above* the ground
-        const terrainHeight = this.worldGen.getTerrainHeight(finalX, finalZ);
-        const spawnY = terrainHeight + 2;
+        // Wizard Tower Dimensions:
+        // Shaft Height: 18
+        // Room starts at: terrainHeight + 18
+        // Room floor is at: terrainHeight + 18
+        // Player should spawn inside the room, say at +1 (y + 19)
+        const towerSpawnY = terrainHeight + 19;
 
-        console.log(`[Game] Spawning player at randomized point: ${finalX.toFixed(2)}, ${spawnY.toFixed(2)}, ${finalZ.toFixed(2)}`);
+        // Find a spawn position that doesn't overlap with other players
+        let finalX = villageX;
+        let finalZ = villageZ;
+        const minPlayerDistance = 2.0; // Minimum distance between players
 
-        this.spawnPoint = new THREE.Vector3(finalX, spawnY, finalZ);
+        // Check if we have remote players nearby and need to offset spawn position
+        if (this.socketManager && this.socketManager.playerMeshes) {
+            const nearbyPlayers = [];
+
+            // Collect positions of all remote players
+            this.socketManager.playerMeshes.forEach((meshInfo) => {
+                if (meshInfo.group) {
+                    nearbyPlayers.push({
+                        x: meshInfo.group.position.x,
+                        y: meshInfo.group.position.y,
+                        z: meshInfo.group.position.z
+                    });
+                }
+            });
+
+            // Check if spawn point is too close to any player
+            const isPositionClear = (x, z) => {
+                for (const player of nearbyPlayers) {
+                    // Check horizontal distance (Y doesn't matter much for spawn collision)
+                    const dx = x - player.x;
+                    const dz = z - player.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < minPlayerDistance) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            // If spawn point overlaps, try to find a clear position in a spiral pattern
+            if (!isPositionClear(finalX, finalZ)) {
+                console.log('[Game] Spawn position occupied, finding alternative...');
+
+                // Spiral outward to find clear position
+                const maxAttempts = 16;
+                const offsets = [
+                    [2, 0], [0, 2], [-2, 0], [0, -2],           // Cardinal directions
+                    [2, 2], [-2, 2], [-2, -2], [2, -2],         // Diagonals
+                    [3, 0], [0, 3], [-3, 0], [0, -3],           // Further cardinal
+                    [3, 3], [-3, 3], [-3, -3], [3, -3]          // Further diagonals
+                ];
+
+                for (let i = 0; i < maxAttempts; i++) {
+                    const testX = villageX + offsets[i][0];
+                    const testZ = villageZ + offsets[i][1];
+
+                    if (isPositionClear(testX, testZ)) {
+                        finalX = testX;
+                        finalZ = testZ;
+                        console.log(`[Game] Found clear spawn at offset (${offsets[i][0]}, ${offsets[i][1]})`);
+                        break;
+                    }
+                }
+            }
+        }
+
+        console.log(`[Game] Spawning player at Wizard Tower: ${finalX}, ${towerSpawnY}, ${finalZ}`);
+
+        this.spawnPoint = new THREE.Vector3(finalX, towerSpawnY, finalZ);
         this.player.position.copy(this.spawnPoint);
         this.player.velocity.set(0, 0, 0);
 
         // Reset fall damage trackers
-        this.player.highestY = spawnY;
+        this.player.highestY = towerSpawnY;
         this.player.isDead = false;
         if (this.uiManager) {
             this.uiManager.hideDeathScreen();
@@ -752,6 +818,28 @@ export class VoxelGame {
         const seed = Math.random() * 0xFFFFFF; // Or derive from worldSeed
         this.dragon = new Dragon(this, x, y, z, seed);
         this.scene.add(this.dragon.mesh);
+    }
+
+    /**
+     * Spawn the Merlin wizard companion near the player
+     */
+    spawnMerlin() {
+        // Spawn behind and to the side of the player
+        const x = this.player.position.x - 2;
+        const y = this.player.position.y + 0.5;
+        const z = this.player.position.z - 2;
+
+        const seed = 42; // Fixed seed for consistent appearance
+        this.merlin = new Merlin(this, x, y, z, seed);
+        this.scene.add(this.merlin.mesh);
+        this.animals.push(this.merlin);
+
+        // Connect to MerlinClient for speech bubbles
+        if (window.merlinClient) {
+            window.merlinClient.entity = this.merlin;
+        }
+
+        console.log('[Game] Merlin spawned near player');
     }
 
     createHighlightBox() {
@@ -994,61 +1082,89 @@ export class VoxelGame {
         return false;
     }
 
-    spawnArrow(pos, vel, owner = null) {
-        const arrow = new Arrow(this, pos, vel, owner || this.player);
-        this.projectiles.push(arrow);
-        this.scene.add(arrow.mesh);
-        console.log('Arrow fired!');
-    }
-
-    spawnMagicProjectile(pos, vel) {
-        const projectile = new MagicProjectile(this, pos, vel);
+    /**
+     * Generic projectile spawner
+     * @param {Class} ProjectileClass - The projectile class to instantiate
+     * @param {THREE.Vector3} pos - Starting position
+     * @param {THREE.Vector3} vel - Initial velocity
+     * @param {...any} extraArgs - Additional constructor arguments
+     * @returns {Object} - The spawned projectile
+     */
+    spawnProjectile(ProjectileClass, pos, vel, ...extraArgs) {
+        const projectile = new ProjectileClass(this, pos, vel, ...extraArgs);
         this.projectiles.push(projectile);
         this.scene.add(projectile.mesh);
-        console.log('Magic Fired!');
+        return projectile;
     }
 
-    spawnShrinkProjectile(pos, vel) {
-        const projectile = new ShrinkProjectile(this, pos, vel);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Shrink Magic Fired!');
+    spawnArrow(pos, vel, owner = null, isRemote = false) {
+        const projectile = this.spawnProjectile(Arrow, pos, vel, owner || this.player, isRemote);
+
+        // Broadcast to other players (unless this is a remote spawn)
+        if (!isRemote && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('arrow', pos, vel);
+        }
+
+        return projectile;
     }
 
-    spawnLevitationProjectile(pos, vel) {
-        const projectile = new LevitationProjectile(this, pos, vel);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Levitation Magic Fired!');
+    spawnMagicProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(MagicProjectile, pos, vel);
+
+        // Broadcast to other players
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('magic', pos, vel);
+        }
+
+        return projectile;
     }
 
-    spawnGiantProjectile(pos, vel) {
-        const projectile = new GiantProjectile(this, pos, vel);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Giant Magic Fired!');
+    spawnShrinkProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(ShrinkProjectile, pos, vel);
+
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('shrink', pos, vel);
+        }
+
+        return projectile;
+    }
+
+    spawnLevitationProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(LevitationProjectile, pos, vel);
+
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('levitation', pos, vel);
+        }
+
+        return projectile;
+    }
+
+    spawnGiantProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(GiantProjectile, pos, vel);
+
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('giant', pos, vel);
+        }
+
+        return projectile;
     }
 
     spawnWizardTowerProjectile(pos, vel) {
-        const projectile = new WizardTowerProjectile(this, pos, vel);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Wizard Tower Projectile Fired!');
+        return this.spawnProjectile(WizardTowerProjectile, pos, vel);
     }
 
+    spawnGrowthProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(GrowthProjectile, pos, vel);
 
-    spawnGrowthProjectile(pos, vel) {
-        const projectile = new GrowthProjectile(this, pos, vel);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Growth Magic Fired!');
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('growth', pos, vel);
+        }
+
+        return projectile;
     }
 
     spawnOmniProjectile(pos, vel, effects) {
-        const projectile = new OmniProjectile(this, pos, vel, effects);
-        this.projectiles.push(projectile);
-        this.scene.add(projectile.mesh);
-        console.log('Omni Magic Fired!');
+        return this.spawnProjectile(OmniProjectile, pos, vel, effects);
     }
 
     spawnTornado(pos) {
@@ -1515,6 +1631,9 @@ export class VoxelGame {
         const unloadDist = this.renderDistance + 2;
         const yUnloadDist = 3; // Smaller Y unload distance
         for (const [key, chunk] of this.chunks) {
+            // Skip protected chunks (e.g., starship chunks)
+            if (this.protectedChunks.has(key)) continue;
+
             const xzFar = Math.abs(chunk.cx - cx) > unloadDist || Math.abs(chunk.cz - cz) > unloadDist;
             const yFar = Math.abs(chunk.cy - cy) > yUnloadDist;
             if (xzFar || yFar) {
@@ -1532,7 +1651,7 @@ export class VoxelGame {
         // Generate chunks around the player
         // PERFORMANCE FIX: Use limited Y-range instead of full cubic renderDistance
         // This reduces chunks from ~4900 (17^3) to ~1400 (17*17*5)
-        const yRenderDistance = 2; // Only 2 chunks above/below player (5 total Y-levels)
+        const yRenderDistance = 6; // 6 chunks above/below player to render starship at Y=160
 
         for (let x = cx - this.renderDistance; x <= cx + this.renderDistance; x++) {
             for (let z = cz - this.renderDistance; z <= cz + this.renderDistance; z++) {
@@ -1552,7 +1671,10 @@ export class VoxelGame {
                     const chunkKey = `${x},${y},${z}`;
 
                     // Skip if already loaded
-                    if (this.chunks.has(chunkKey)) continue;
+                    // Skip if already generated
+                    // Fix: If chunk exists but !isGenerated (spillover), we MUST queue it
+                    const existing = this.chunks.get(chunkKey);
+                    if (existing && existing.isGenerated) continue;
 
                     // Skip if already in queue
                     const alreadyQueued = this.chunkGenQueue.some(req => req.key === chunkKey);
@@ -1621,6 +1743,26 @@ export class VoxelGame {
         }
     }
 
+    /**
+     * Clear all persisted block changes (used during world reset)
+     * This allows terrain to regenerate naturally without player modifications
+     */
+    clearPersistedBlocks() {
+        console.log(`[Game] Clearing ${this.persistedBlocks?.size || 0} persisted block entries`);
+
+        // Clear the persisted blocks map
+        if (this.persistedBlocks) {
+            this.persistedBlocks.clear();
+        }
+
+        // Mark all chunks as dirty so they rebuild with original terrain
+        for (const chunk of this.chunks.values()) {
+            chunk.dirty = true;
+        }
+
+        console.log('[Game] Persisted blocks cleared, chunks marked for rebuild');
+    }
+
     // Process queue of chunks to generate
     processChunkQueue() {
         if (this.chunkGenQueue.length === 0) return;
@@ -1643,12 +1785,20 @@ export class VoxelGame {
             let processed = 0;
             const isInitialLoad = this.generatedChunks.size < 9; // 3x3 chunks
 
+            // OPTIMIZATION: Process more chunks when queue is large (fast movement)
+            const queueSize = this.chunkGenQueue.length;
+            const isUrgent = queueSize > 15; // Slightly more sensitive
+            const minChunks = isUrgent ? 5 : 2; // Process more chunks per frame
+
             // Process as many chunks as we can while there's idle time OR if we are in initial load
-            while (this.chunkGenQueue.length > 0 && (deadline.timeRemaining() > 2 || isInitialLoad)) {
+            while (this.chunkGenQueue.length > 0 &&
+                (deadline.timeRemaining() > 1 || isInitialLoad || processed < minChunks)) {
                 const req = this.chunkGenQueue.shift();
 
                 // Double check if loaded (rare case)
-                if (this.chunks.has(req.key)) continue;
+                // Fix: Check if technically exists but wasn't generated (e.g. from spillover)
+                const existingChunk = this.chunks.get(req.key);
+                if (existingChunk && existingChunk.isGenerated) continue;
 
                 // Generate
                 const chunk = this.worldGen.generateChunk(req.cx, req.cy, req.cz);
@@ -1684,13 +1834,14 @@ export class VoxelGame {
                     this.spawnManager.spawnPugasusNearPlayer();
                     this.spawnManager.spawnSnowmenNearPlayer();
                     this.spawnDragon();
+                    this.spawnMerlin();
                 }
             }
 
             // If there's more to process, schedule another idle callback
             if (this.chunkGenQueue.length > 0) {
                 this._idleCallbackScheduled = true;
-                requestIdleCallback(processInIdle, { timeout: 100 });
+                requestIdleCallback(processInIdle, { timeout: 32 }); // Faster response
             }
         };
 
@@ -1701,7 +1852,7 @@ export class VoxelGame {
         if (this.generatedChunks.size < 9) {
             setTimeout(() => processInIdle({ timeRemaining: () => 999 }), 0);
         } else {
-            requestIdleCallback(processInIdle, { timeout: 100 });
+            requestIdleCallback(processInIdle, { timeout: 32 }); // Faster response (32ms ~ 2 frames)
         }
     }
 
@@ -1710,8 +1861,6 @@ export class VoxelGame {
     // cleanupBlockData removed as it's no longer needed
 
     updateFrustum() {
-        this.camera.updateMatrix();
-        this.camera.updateMatrixWorld();
         this.frustumMatrix.multiplyMatrices(
             this.camera.projectionMatrix,
             this.camera.matrixWorldInverse
@@ -2040,8 +2189,8 @@ export class VoxelGame {
         // Always update chunks and check for new ones, so the world generates around you even before starting
         // SKIP when in profiler test mode for clean isolated testing
         if (!this.profilerTestScene || !this.profilerTestScene.isActive) {
-            // Throttle chunk checking (expensive)
-            if (this.frameCount % 15 === 0) {
+            // Throttle chunk checking (Faster check for smoother generation)
+            if (this.frameCount % 5 === 0) {
                 this.checkChunks();
             }
 
@@ -2084,15 +2233,6 @@ export class VoxelGame {
             const inFrustum = this.frustum.intersectsSphere(this._cullingSphere);
             const isClose = distSq < 64 * 64; // Always update if within 64m (sound range, logic range)
 
-            // Visibility Debug Logging (once per 30 seconds)
-            if (!this._lastVisibilityLog || performance.now() - this._lastVisibilityLog > 30000) {
-                if (i === this.animals.length - 1) { // Log only on first iteration of loop
-                    this._lastVisibilityLog = performance.now();
-                    const closeCount = this.animals.filter(a => a.position.distanceToSquared(this.player.position) < 400).length;
-                    console.log(`[Visibility] Total animals: ${this.animals.length}, Close (<20m): ${closeCount}, Frustum: ${inFrustum}, isClose: ${isClose}`);
-                }
-            }
-
             // Logic:
             // - If not in frustum AND on ground AND not close -> Skip update, hide mesh
             // - Falling entities: Always update (gravity)
@@ -2112,10 +2252,9 @@ export class VoxelGame {
                     shouldUpdate = true;
                 }
             } else if (!inFrustum && isClose) {
-                // Close but behind us (or frustum calc is wrong/lagging)
-                // SAFETY: Always render close entities to prevent flickering/invisible bugs
-                shouldRender = true;
-                shouldUpdate = true;
+                // Close but behind us
+                shouldRender = false;
+                shouldUpdate = true; // Logic still runs (sounds, chasing from behind)
             } else {
                 // In Frustum
                 // 3. Occlusion Culling (Line of Sight)
@@ -2127,19 +2266,7 @@ export class VoxelGame {
 
                 // Optimization: Don't raycast every frame? Or stride?
                 // For now, simple raycast every frame is fine if efficient.
-
-                // DISABLED OCCLUSION CULLING: This was causing all creatures to be invisible in production
-                // The DDA raycast was failing silently or being too aggressive
-                // Keep creatures visible if in frustum - performance is acceptable without occlusion
-                let hasLOS = true;
-                /* DISABLED - causing visibility issues
-                try {
-                    hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
-                } catch (e) {
-                    console.warn('[Visibility] LOS check failed:', e);
-                    hasLOS = true; // Default to visible on error
-                }
-                */
+                const hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
 
                 if (!hasLOS) {
                     // Blocked!
@@ -2162,7 +2289,7 @@ export class VoxelGame {
             // Also respect global toggles!
             if (shouldRender) {
                 // Check global toggles only if frustum says render
-                const type = animal.type || animal.constructor.name;
+                const type = animal.constructor.name;
                 let categoryVisible = true;
                 if (type === 'Villager') categoryVisible = this.villagersVisible;
                 else if (type === 'Spaceship') categoryVisible = this.spaceshipsVisible;

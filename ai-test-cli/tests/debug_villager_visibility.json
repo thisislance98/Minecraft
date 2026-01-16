@@ -1,0 +1,41 @@
+{
+    "name": "Debug Villager Visibility",
+    "headless": false,
+    "actions": [
+        {
+            "name": "teleportPlayer",
+            "args": [
+                0,
+                100,
+                0
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                1000
+            ]
+        },
+        {
+            "name": "spawnCreatureAt",
+            "args": [
+                "Villager",
+                5,
+                100,
+                5
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { console.log('Checking villagers...'); const villagers = window.__VOXEL_GAME__.animals.filter(a => a.constructor.name === 'Villager'); console.log('Villager count:', villagers.length); if(villagers.length > 0) console.log('Villager 1 Mesh:', villagers[0].mesh); return {success: true, message: 'Check console logs'}; }"
+        }
+    ]
+}

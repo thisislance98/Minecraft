@@ -12,12 +12,7 @@ export class GameState {
             inventoryOpen: false,
             paused: false,
             isPointerLocked: false,
-            mobileControls: false,
-            isTimeStopped: false
-        };
-
-        this.timers = {
-            timeStop: 0
+            mobileControls: false
         };
 
         // Selection State

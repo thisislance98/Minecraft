@@ -35,6 +35,23 @@ export class CommunityUI {
 
         this.socketListenersSetup = false;
         this.setupSocketListeners();
+
+        // Check for announcements when the game loads (small delay to ensure game is ready)
+        setTimeout(() => this.checkAnnouncements(), 1500);
+
+        // Re-check admin status when Firebase auth state changes
+        // (the initial check in createUI may run before auth is ready)
+        auth.onAuthStateChanged((user) => {
+            const adminBtn = this.container.querySelector('#admin-announce-btn');
+            if (adminBtn) {
+                if (user && user.email === 'thisislance98@gmail.com') {
+                    adminBtn.classList.add('visible');
+                    console.log('[CommunityUI] Admin detected:', user.email);
+                } else {
+                    adminBtn.classList.remove('visible');
+                }
+            }
+        });
     }
 
     injectStyles() {
@@ -328,15 +345,36 @@ export class CommunityUI {
                 font-size: 10px;
             }
 
-            /* Notification Badge */
+            /* Notification Badge - Slack Style */
             .channel-badge {
-                background: #ed4245;
+                background: #e01e5a;
                 color: white;
-                font-size: 10px;
-                font-weight: bold;
-                padding: 2px 6px;
-                border-radius: 10px;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 1px 7px;
+                border-radius: 9px;
                 margin-left: auto;
+                min-width: 8px;
+                text-align: center;
+                line-height: 16px;
+                animation: badgePop 0.3s ease-out;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            }
+
+            @keyframes badgePop {
+                0% { transform: scale(0.5); opacity: 0; }
+                50% { transform: scale(1.1); }
+                100% { transform: scale(1); opacity: 1; }
+            }
+
+            /* Unread channel styling - bold like Slack */
+            .channel-item.has-unread {
+                color: white;
+                font-weight: 600;
+            }
+
+            .channel-item.has-unread .channel-hash {
+                color: white;
             }
 
             /* Username Settings Bar */
@@ -364,6 +402,208 @@ export class CommunityUI {
                 border-color: var(--comm-accent);
             }
 
+            /* Announcement Popup Styles */
+            .announcement-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.85);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            }
+
+            .announcement-popup {
+                background: linear-gradient(145deg, #1a1b1e 0%, #2c2e33 100%);
+                border-radius: 12px;
+                padding: 0;
+                max-width: 500px;
+                width: 90%;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(88, 101, 242, 0.3);
+                font-family: 'gg sans', 'Segoe UI', sans-serif;
+                color: white;
+                overflow: hidden;
+            }
+
+            .announcement-header {
+                background: linear-gradient(90deg, #5865f2 0%, #7289da 100%);
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .announcement-header.warning {
+                background: linear-gradient(90deg, #f0b232 0%, #faa61a 100%);
+            }
+
+            .announcement-header.success {
+                background: linear-gradient(90deg, #3ba55c 0%, #43b581 100%);
+            }
+
+            .announcement-header.update {
+                background: linear-gradient(90deg, #9b59b6 0%, #8e44ad 100%);
+            }
+
+            .announcement-icon {
+                font-size: 24px;
+            }
+
+            .announcement-title {
+                font-size: 18px;
+                font-weight: 600;
+            }
+
+            .announcement-body {
+                padding: 20px;
+            }
+
+            .announcement-message {
+                font-size: 15px;
+                line-height: 1.5;
+                color: #dcddde;
+                margin-bottom: 16px;
+            }
+
+            .announcement-time {
+                font-size: 12px;
+                color: #72767d;
+                margin-bottom: 16px;
+            }
+
+            .announcement-dismiss {
+                width: 100%;
+                padding: 12px;
+                background: #5865f2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .announcement-dismiss:hover {
+                background: #4752c4;
+            }
+
+            /* Admin Announcement Button */
+            .admin-announce-btn {
+                display: none;
+                width: 100%;
+                padding: 10px;
+                margin-top: 10px;
+                background: linear-gradient(90deg, #5865f2 0%, #7289da 100%);
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .admin-announce-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(88, 101, 242, 0.4);
+            }
+
+            .admin-announce-btn.visible {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+            }
+
+            /* Announcement Create Modal */
+            .announce-modal-content {
+                background: #1a1b1e;
+                border-radius: 8px;
+                width: 450px;
+                max-width: 90%;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            }
+
+            .announce-modal-header {
+                background: linear-gradient(90deg, #5865f2 0%, #7289da 100%);
+                padding: 16px 20px;
+                border-radius: 8px 8px 0 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            .announce-modal-header h3 {
+                margin: 0;
+                font-size: 18px;
+            }
+
+            .announce-modal-close {
+                background: none;
+                border: none;
+                color: white;
+                font-size: 24px;
+                cursor: pointer;
+            }
+
+            .announce-modal-body {
+                padding: 20px;
+            }
+
+            .announce-form-group {
+                margin-bottom: 16px;
+            }
+
+            .announce-form-group label {
+                display: block;
+                margin-bottom: 6px;
+                color: #b9bbbe;
+                font-size: 13px;
+            }
+
+            .announce-form-group input,
+            .announce-form-group textarea,
+            .announce-form-group select {
+                width: 100%;
+                padding: 10px;
+                background: #383a40;
+                border: 1px solid #4c4e54;
+                border-radius: 4px;
+                color: white;
+                font-size: 14px;
+                box-sizing: border-box;
+            }
+
+            .announce-form-group textarea {
+                min-height: 80px;
+                resize: vertical;
+            }
+
+            .announce-submit-btn {
+                width: 100%;
+                padding: 12px;
+                background: #5865f2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+            }
+
+            .announce-submit-btn:hover {
+                background: #4752c4;
+            }
+
+            .announce-submit-btn:disabled {
+                background: #72767d;
+                cursor: not-allowed;
+            }
+
         `;
         document.head.appendChild(style);
     }
@@ -379,6 +619,7 @@ export class CommunityUI {
                     <input type="text" class="comm-username-input" id="comm-username" value="${this.escapeHTML(this.username || '')}" maxlength="20" placeholder="Set your name..." />
                 </div>
                 <div id="channel-list">Loading...</div>
+                <button id="admin-announce-btn" class="admin-announce-btn">📢 Send Announcement</button>
             </div>
             
             <div class="comm-main">
@@ -422,6 +663,18 @@ export class CommunityUI {
                 this.updateInputPlaceholder();
             }
         };
+
+        // Admin announcement button
+        const adminBtn = div.querySelector('#admin-announce-btn');
+        if (adminBtn) {
+            adminBtn.onclick = () => this.showCreateAnnouncementModal();
+            // Show button only for admin
+            this.checkAdminStatus().then(isAdmin => {
+                if (isAdmin) {
+                    adminBtn.classList.add('visible');
+                }
+            });
+        }
 
         return div;
     }
@@ -605,11 +858,13 @@ export class CommunityUI {
         const list = this.container.querySelector('#channel-list');
         list.innerHTML = this.channels.map(c => {
             const unread = this.unreadCounts[c.id] || 0;
+            const hasUnreadClass = unread > 0 ? 'has-unread' : '';
+            const displayCount = unread > 99 ? '99+' : unread;
             return `
-            <div class="channel-item ${c.id === this.currentChannelId ? 'active' : ''}" data-id="${c.id}">
+            <div class="channel-item ${c.id === this.currentChannelId ? 'active' : ''} ${hasUnreadClass}" data-id="${c.id}">
                 <span class="channel-hash">#</span>
                 <span>${c.name}</span>
-                ${unread > 0 ? `<span class="channel-badge">${unread}</span>` : ''}
+                ${unread > 0 ? `<span class="channel-badge">${displayCount}</span>` : ''}
             </div>
         `;
         }).join('');
@@ -921,16 +1176,19 @@ export class CommunityUI {
                 badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
                 badge.style.cssText = `
                     position: absolute;
-                    top: -5px;
-                    right: -5px;
-                    background: #ed4245;
+                    top: -6px;
+                    right: -6px;
+                    background: #e01e5a;
                     color: white;
-                    font-size: 10px;
-                    font-weight: bold;
-                    padding: 2px 6px;
-                    border-radius: 10px;
-                    min-width: 16px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    padding: 1px 6px;
+                    border-radius: 9px;
+                    min-width: 8px;
                     text-align: center;
+                    line-height: 16px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                    animation: badgePop 0.3s ease-out;
                 `;
                 feedbackBtn.style.position = 'relative';
                 feedbackBtn.appendChild(badge);
@@ -974,6 +1232,96 @@ export class CommunityUI {
         }
     }
 
+    // ============ Announcement System ============
+
+    async checkAnnouncements() {
+        try {
+            const res = await fetch('/api/announcements');
+            if (!res.ok) return;
+
+            const data = await res.json();
+            const announcements = data.announcements || [];
+
+            // Get list of dismissed announcement IDs from localStorage
+            const dismissedIds = JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]');
+
+            // Filter to only show non-dismissed announcements
+            const newAnnouncements = announcements.filter(a => !dismissedIds.includes(a.id));
+
+            if (newAnnouncements.length > 0) {
+                // Show the most recent announcement
+                this.showAnnouncementPopup(newAnnouncements[0]);
+            }
+        } catch (error) {
+            console.error('[CommunityUI] Failed to check announcements:', error);
+        }
+    }
+
+    showAnnouncementPopup(announcement) {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'announcement-overlay';
+        overlay.id = `announcement-${announcement.id}`;
+
+        // Icons for different types
+        const icons = {
+            info: '📢',
+            warning: '⚠️',
+            success: '✅',
+            update: '🎮'
+        };
+
+        const icon = icons[announcement.type] || icons.info;
+        const title = announcement.title || 'Announcement';
+        const timeAgo = this.formatTimeAgo(announcement.createdAt);
+
+        overlay.innerHTML = `
+            <div class="announcement-popup">
+                <div class="announcement-header ${announcement.type}">
+                    <span class="announcement-icon">${icon}</span>
+                    <span class="announcement-title">${this.escapeHTML(title)}</span>
+                </div>
+                <div class="announcement-body">
+                    <div class="announcement-message">${this.escapeHTML(announcement.message)}</div>
+                    <div class="announcement-time">Posted ${timeAgo}</div>
+                    <button class="announcement-dismiss">Got it!</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Handle dismiss
+        const dismissBtn = overlay.querySelector('.announcement-dismiss');
+        dismissBtn.onclick = () => {
+            // Save to dismissed list
+            const dismissedIds = JSON.parse(localStorage.getItem('dismissedAnnouncements') || '[]');
+            dismissedIds.push(announcement.id);
+            localStorage.setItem('dismissedAnnouncements', JSON.stringify(dismissedIds));
+
+            // Remove popup
+            overlay.remove();
+        };
+
+        // Also dismiss on overlay click (outside popup)
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                dismissBtn.click();
+            }
+        };
+    }
+
+    formatTimeAgo(timestamp) {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+
+        return new Date(timestamp).toLocaleDateString();
+    }
+
     escapeHTML(str) {
         const div = document.createElement('div');
         div.textContent = str;
@@ -984,5 +1332,109 @@ export class CommunityUI {
         // Basic url linker
         const urlRegex = /(https?:\/\/[^\s]+)/g;
         return text.replace(urlRegex, '<a href="$1" target="_blank" style="color:var(--comm-accent)">$1</a>');
+    }
+
+    // ============ Admin Functions ============
+
+    async checkAdminStatus() {
+        const user = auth.currentUser;
+        if (!user) return false;
+
+        const ADMIN_EMAIL = 'thisislance98@gmail.com';
+        return user.email === ADMIN_EMAIL;
+    }
+
+    showCreateAnnouncementModal() {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'announcement-overlay';
+        overlay.id = 'create-announcement-modal';
+
+        overlay.innerHTML = `
+            <div class="announce-modal-content">
+                <div class="announce-modal-header">
+                    <h3>📢 Create Announcement</h3>
+                    <button class="announce-modal-close">&times;</button>
+                </div>
+                <div class="announce-modal-body">
+                    <div class="announce-form-group">
+                        <label>Title (optional)</label>
+                        <input type="text" id="announce-title" placeholder="e.g. New Feature!" maxlength="50">
+                    </div>
+                    <div class="announce-form-group">
+                        <label>Message *</label>
+                        <textarea id="announce-message" placeholder="Enter your announcement message..." maxlength="500"></textarea>
+                    </div>
+                    <div class="announce-form-group">
+                        <label>Type</label>
+                        <select id="announce-type">
+                            <option value="info">📢 Info</option>
+                            <option value="update">🎮 Update</option>
+                            <option value="warning">⚠️ Warning</option>
+                            <option value="success">✅ Success</option>
+                        </select>
+                    </div>
+                    <button class="announce-submit-btn" id="announce-submit">Send Announcement</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Event handlers
+        const closeModal = () => overlay.remove();
+
+        overlay.querySelector('.announce-modal-close').onclick = closeModal;
+        overlay.onclick = (e) => {
+            if (e.target === overlay) closeModal();
+        };
+
+        const submitBtn = overlay.querySelector('#announce-submit');
+        submitBtn.onclick = async () => {
+            const title = overlay.querySelector('#announce-title').value.trim();
+            const message = overlay.querySelector('#announce-message').value.trim();
+            const type = overlay.querySelector('#announce-type').value;
+
+            if (!message) {
+                alert('Please enter a message');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+
+            try {
+                const user = auth.currentUser;
+                if (!user) {
+                    throw new Error('Not logged in');
+                }
+
+                const token = await user.getIdToken();
+
+                const res = await fetch('/api/announcements', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ title, message, type })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('[CommunityUI] Announcement created:', data.id);
+                    closeModal();
+                    alert('✅ Announcement sent successfully!');
+                } else {
+                    const error = await res.json();
+                    throw new Error(error.error || 'Failed to create announcement');
+                }
+            } catch (error) {
+                console.error('[CommunityUI] Create announcement error:', error);
+                alert(`Failed to send announcement: ${error.message}`);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Announcement';
+            }
+        };
     }
 }

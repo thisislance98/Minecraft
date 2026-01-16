@@ -189,6 +189,86 @@ export function getAntigravityTools() {
                     },
                     required: ["name", "code", "icon", "description"]
                 }
+            },
+            // ============================================================
+            // VERIFICATION TOOLS
+            // ============================================================
+            {
+                name: "run_verification",
+                description: "Execute custom JavaScript verification code in the browser to check if an action succeeded. The code has access to a 'V' helper object with methods like findEntity(name), countEntities(name), isEntityVisible(entity). The code MUST return an object with { success: boolean, ... }.",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        code: { type: SchemaType.STRING, description: "JavaScript code to execute. Example: \"const e = V.findEntity('Pig'); return { success: !!e, pos: e ? e.position : null };\"" },
+                        description: { type: SchemaType.STRING, description: "Description of what is being verified (e.g. 'Verifying Pig spawned')" }
+                    },
+                    required: ["code", "description"]
+                }
+            },
+            {
+                name: "capture_screenshot",
+                description: "Capture a visual screenshot of the current game view. Use this to visually verify your creations (e.g. 'I made a red cube'). The screenshot will be saved and shown to you.",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        label: { type: SchemaType.STRING, description: "Short label for the screenshot (e.g. 'red_cube_verification')" }
+                    },
+                    required: ["label"]
+                }
+            },
+            {
+                name: "capture_video",
+                description: "Record a short video of the game view to verify animations or behaviors. Use for moving things (e.g. 'spinning cube', 'flying creature').",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        duration_seconds: { type: SchemaType.NUMBER, description: "Duration in seconds (default 5, max 10)" },
+                        label: { type: SchemaType.STRING, description: "Short label for the video (e.g. 'spinning_cube_proof')" }
+                    },
+                    required: ["label"]
+                }
+            },
+            // ============================================================
+            // KNOWLEDGE TOOLS
+            // ============================================================
+            {
+                name: "search_knowledge",
+                description: "Search Merlin's knowledge base for templates, gotchas, how-to guides, or past errors. Use before creating complex creatures.",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        query: { type: SchemaType.STRING, description: "Search query (e.g. 'spinning', 'flying creature', 'mesh position')" },
+                        category: { type: SchemaType.STRING, description: "Optional: 'template', 'gotcha', 'howto', or 'error'" }
+                    },
+                    required: ["query"]
+                }
+            },
+            {
+                name: "add_knowledge",
+                description: "Store a lesson learned for future reference. Use after fixing a code generation error.",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        category: { type: SchemaType.STRING, description: "'template', 'gotcha', 'howto', or 'error'" },
+                        title: { type: SchemaType.STRING, description: "Short descriptive title" },
+                        content: { type: SchemaType.STRING, description: "Detailed explanation or code snippet" },
+                        tags: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "Optional keywords for search" }
+                    },
+                    required: ["category", "title", "content"]
+                }
+            },
+            {
+                name: "verify_and_save",
+                description: "After spawning a creature, call this to verify it works correctly. Captures browser logs for 5 seconds, analyzes for errors/expected behaviors, attempts auto-fix if issues found (max 3 retries), and saves to knowledge base if verified working.",
+                parameters: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        creatureName: { type: SchemaType.STRING, description: "Name of the creature to verify (e.g., 'BouncingSlime')" },
+                        expectedBehaviors: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: "List of expected behaviors to look for in logs (e.g., ['bouncing', 'following player'])" },
+                        creatureCode: { type: SchemaType.STRING, description: "The full code of the creature (for fixing if needed)" }
+                    },
+                    required: ["creatureName", "expectedBehaviors", "creatureCode"]
+                }
             }
         ]
     }] as any;

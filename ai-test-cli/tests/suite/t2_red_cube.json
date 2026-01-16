@@ -1,0 +1,10 @@
+{
+    "name": "T2_red_cube",
+    "tier": 2,
+    "prompt": "make a red cube",
+    "timeout": 60000,
+    "visual_expectations": {
+        "type": "image",
+        "description": "A red cube visible in the game world"
+    }
+}

@@ -28,6 +28,7 @@ export class SpawnManager {
         // Each entry: { type: 'ClassName', weight (0-1), packSize: [min, max] }
         this.biomeSpawnConfig = {
             OCEAN: [
+                { type: 'Starfish', weight: 0.2, packSize: [3, 8] },
                 { type: 'Fish', weight: 0.5, packSize: [3, 7] },
                 { type: 'Shark', weight: 0.1, packSize: [1, 2] },
                 { type: 'Turtle', weight: 0.2, packSize: [1, 2] },
@@ -36,7 +37,8 @@ export class SpawnManager {
             BEACH: [
                 { type: 'Turtle', weight: 0.3, packSize: [1, 2] },
                 { type: 'Duck', weight: 0.3, packSize: [2, 4] },
-                { type: 'Flamingo', weight: 0.3, packSize: [2, 5] }
+                { type: 'Flamingo', weight: 0.3, packSize: [2, 5] },
+                { type: 'Crocodile', weight: 0.1, packSize: [1, 2] }
             ],
             PLAINS: [
                 { type: 'Horse', weight: 0.25, packSize: [3, 6] },
@@ -57,7 +59,15 @@ export class SpawnManager {
                 { type: 'Gymnast', weight: 0.05, packSize: [1, 2] },
                 { type: 'Raccoon', weight: 0.08, packSize: [1, 2] },
                 { type: 'WienerDog', weight: 0.15, packSize: [2, 3] },
-                { type: 'GoldenRetriever', weight: 0.2, packSize: [1, 2] }
+                { type: 'GoldenRetriever', weight: 0.2, packSize: [1, 2] },
+                { type: 'Cat', weight: 0.1, packSize: [1, 2] },
+                { type: 'Hedgehog', weight: 0.1, packSize: [1, 2] },
+                { type: 'Bee', weight: 0.15, packSize: [3, 5] },
+                { type: 'Butterflies', weight: 0.2, packSize: [4, 8] },
+                { type: 'Zebra', weight: 0.15, packSize: [3, 6] },
+                { type: 'Ostrich', weight: 0.1, packSize: [2, 4] },
+                { type: 'Rhinoceros', weight: 0.05, packSize: [1, 2] },
+                { type: 'Eagle', weight: 0.05, packSize: [1, 1] }
             ],
             FOREST: [
                 { type: 'Wolf', weight: 0.05, packSize: [2, 4] },
@@ -88,7 +98,13 @@ export class SpawnManager {
                 { type: 'Ladybug', weight: 0.1, packSize: [2, 5] },
                 { type: 'Toucan', weight: 0.08, packSize: [2, 4] },
                 { type: 'Raccoon', weight: 0.08, packSize: [1, 3] },
-                { type: 'GoldenRetriever', weight: 0.1, packSize: [1, 2] }
+                { type: 'GoldenRetriever', weight: 0.1, packSize: [1, 2] },
+                { type: 'Owl', weight: 0.1, packSize: [1, 2] },
+                { type: 'Firefly', weight: 0.2, packSize: [5, 10] },
+                { type: 'Bee', weight: 0.15, packSize: [3, 6] },
+                { type: 'Butterflies', weight: 0.2, packSize: [4, 8] },
+                { type: 'Hedgehog', weight: 0.08, packSize: [1, 2] },
+                { type: 'FlyingJellyfish', weight: 0.02, packSize: [1, 2] }
             ],
             JUNGLE: [
                 { type: 'Monkey', weight: 0.3, packSize: [3, 6] },
@@ -102,7 +118,12 @@ export class SpawnManager {
                 { type: 'Snail', weight: 0.15, packSize: [2, 5] },
                 { type: 'Toucan', weight: 0.25, packSize: [3, 5] },
                 { type: 'Flamingo', weight: 0.1, packSize: [2, 4] },
-                { type: 'Mouse', weight: 0.1, packSize: [2, 3] }
+                { type: 'Mouse', weight: 0.1, packSize: [2, 3] },
+                { type: 'Pangolin', weight: 0.15, packSize: [1, 2] },
+                { type: 'Giraffifant', weight: 0.05, packSize: [1, 1] },
+                { type: 'Butterflies', weight: 0.3, packSize: [5, 10] },
+                { type: 'Hippopotamus', weight: 0.1, packSize: [1, 3] },
+                { type: 'Crocodile', weight: 0.1, packSize: [1, 2] }
             ],
             DESERT: [
                 { type: 'Bunny', weight: 0.3, packSize: [1, 3] },
@@ -110,7 +131,11 @@ export class SpawnManager {
                 { type: 'Kangaroo', weight: 0.3, packSize: [2, 4] },
                 { type: 'Camel', weight: 0.35, packSize: [2, 4] },
                 { type: 'FennecFox', weight: 0.25, packSize: [2, 4] },
-                { type: 'Mouse', weight: 0.15, packSize: [1, 3] }
+                { type: 'Mouse', weight: 0.15, packSize: [1, 3] },
+                { type: 'Pangolin', weight: 0.2, packSize: [1, 3] },
+                { type: 'Zebra', weight: 0.1, packSize: [2, 5] },
+                { type: 'Eagle', weight: 0.1, packSize: [1, 1] },
+                { type: 'Ostrich', weight: 0.15, packSize: [2, 4] }
             ],
             SNOW: [
                 { type: 'Reindeer', weight: 0.3, packSize: [3, 5] },
@@ -125,7 +150,9 @@ export class SpawnManager {
                 { type: 'Reindeer', weight: 0.3, packSize: [2, 4] },
                 { type: 'Sheep', weight: 0.4, packSize: [2, 4] },
                 { type: 'Goat', weight: 0.3, packSize: [1, 3] },
-                { type: 'SantaClaus', weight: 0.05, packSize: [1, 1] }
+                { type: 'SantaClaus', weight: 0.05, packSize: [1, 1] },
+                { type: 'Eagle', weight: 0.2, packSize: [1, 2] },
+                { type: 'Owl', weight: 0.1, packSize: [1, 1] }
             ]
         };
 
@@ -140,7 +167,7 @@ export class SpawnManager {
             { type: 'MagicalCreature', weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'FOREST', 'JUNGLE'] }, // Unicorn-fox-toucan hybrid!
             { type: 'TRex', weight: 0.02, packSize: [1, 1], biomes: ['JUNGLE', 'FOREST', 'PLAINS'] }, // HUGE T-REX
             { type: 'Dragon', weight: 0.02, packSize: [1, 1], biomes: ['MOUNTAIN', 'SNOW', 'PLAINS', 'DESERT'] }, // Flying Dragons
-            { type: 'Lampost', weight: 0.04, packSize: [1, 1], biomes: ['PLAINS', 'FOREST', 'SNOW'] }, // Walking Lampost (Narnia vibes)
+            // Lampost removed
             { type: 'Pumpkin', weight: 0.05, packSize: [3, 5], biomes: ['FOREST', 'PLAINS'] }, // Flying Pumpkins
             { type: 'Lorax', weight: 0.1, packSize: [1, 1], biomes: ['FOREST'] }, // Speaks for the trees!
             { type: 'Snowflake', weight: 0.05, packSize: [1, 2], biomes: ['SNOW', 'MOUNTAIN'] },
@@ -157,7 +184,12 @@ export class SpawnManager {
             { type: 'BouncePod', weight: 0.10, packSize: [2, 5], biomes: ['FOREST', 'JUNGLE'] },
             { type: 'MimicVine', weight: 0.10, packSize: [3, 6], biomes: ['JUNGLE', 'FOREST'] },
             { type: 'SporeCloud', weight: 0.12, packSize: [3, 5], biomes: ['PLAINS', 'FOREST', 'MOUNTAIN'] },
-            { type: 'SnapTrap', weight: 0.08, packSize: [1, 3], biomes: ['JUNGLE', 'FOREST'] }
+            { type: 'SnapTrap', weight: 0.08, packSize: [1, 3], biomes: ['JUNGLE', 'FOREST'] },
+            { type: 'TigerBear', weight: 0.02, packSize: [1, 1], biomes: ['FOREST', 'MOUNTAIN'] },
+            { type: 'PurpleCow', weight: 0.02, packSize: [2, 4], biomes: ['PLAINS'] },
+            { type: 'FlyingPig', weight: 0.02, packSize: [1, 1], biomes: ['PLAINS', 'MOUNTAIN'] },
+            { type: 'Rhinoceros', weight: 0.03, packSize: [1, 2], biomes: ['PLAINS', 'DESERT'] },
+            { type: 'Hippopotamus', weight: 0.03, packSize: [1, 3], biomes: ['JUNGLE', 'PLAINS'] }
         ];
 
         // Hostile mobs (spawn always now for testing)
@@ -166,6 +198,20 @@ export class SpawnManager {
             { type: 'Skeleton', weight: 0.25, packSize: [1, 3] },
             { type: 'Creeper', weight: 0.25, packSize: [1, 2] }
         ];
+
+        // Alien World spawn configurations
+        this.worldSpawnConfig = {
+            CRYSTAL_WORLD: [
+                { type: 'CrystalElemental', weight: 0.35, packSize: [1, 2] },
+                { type: 'GlowBeetle', weight: 0.40, packSize: [3, 6] },
+                { type: 'PrismDragon', weight: 0.15, packSize: [1, 1] }
+            ],
+            LAVA_WORLD: [
+                { type: 'LavaGolem', weight: 0.30, packSize: [1, 2] },
+                { type: 'FireSalamander', weight: 0.45, packSize: [2, 4] },
+                { type: 'MagmaWurm', weight: 0.20, packSize: [1, 1] }
+            ]
+        };
 
         // Entity Lookup (for updates)
         this.entities = new Map(); // id -> Animal
@@ -302,6 +348,40 @@ export class SpawnManager {
     }
 
     /**
+     * Clear all entities from the world (used during world reset)
+     * Removes all animals/entities from scene and clears tracking data
+     */
+    clearAllEntities() {
+        console.log(`[SpawnManager] Clearing all ${this.entities.size} entities`);
+
+        // Remove all entities from scene
+        for (const [id, entity] of this.entities) {
+            if (entity.mesh) {
+                this.game.scene.remove(entity.mesh);
+            }
+            if (entity.dispose) {
+                entity.dispose();
+            }
+        }
+
+        // Clear game.animals array
+        if (this.game.animals) {
+            this.game.animals.length = 0;
+        }
+
+        // Clear tracking maps
+        this.entities.clear();
+        this.spawnedChunks.clear();
+        this.pendingSpawns = [];
+
+        // Reset state flags to allow fresh spawning
+        this.hasLoadedPersistedEntities = false;
+        this.hasReceivedInitialEntities = false;
+
+        console.log('[SpawnManager] All entities cleared');
+    }
+
+    /**
      * Spawn animals in a chunk area around the given center.
      * @param {number} centerCX - Center chunk X
      * @param {number} centerCZ - Center chunk Z
@@ -336,14 +416,15 @@ export class SpawnManager {
         }
         // --- DEFERRED SPAWNING LOGIC END ---
 
-        // Cap max entities (Reduced from 200 for performance)
-        if (this.game.animals.length > 50) return;
+        // Cap max entities (Increased to 200 for more life)
+        if (this.game.animals.length > 200) return;
 
         // Create deterministic RNG for this chunk
         const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, 1);
 
         // 25% chance per chunk to spawn something (increased from 20%)
-        if (chunkRng.next() > 0.25) return;
+        // 40% chance per chunk to spawn something (increased from 25%)
+        if (chunkRng.next() > 0.40) return;
 
         const chunkSize = this.game.chunkSize;
         const worldGen = this.game.worldGen;
@@ -358,6 +439,32 @@ export class SpawnManager {
         // If not, we should probably SKIP spawning here rather than fallback to terrain height
         // Because terrain height might put them in the air if the chunk mesh isn't there
         // But biome calculation relies on 2D noise which is always available.
+
+        // Detect current world based on player Y position
+        const playerY = this.game.player ? this.game.player.position.y : 0;
+        const chunkY = Math.floor(playerY / chunkSize);
+
+        // Import Config for world Y ranges
+        const Config = this.game.worldGen?.constructor?.Config || window.Config || { WORLD: {} };
+        const crystalStart = Config.WORLD?.CRYSTAL_WORLD_Y_START || 50;
+        const crystalEnd = crystalStart + (Config.WORLD?.CRYSTAL_WORLD_HEIGHT || 8);
+        const lavaStart = Config.WORLD?.LAVA_WORLD_Y_START || 60;
+        const lavaEnd = lavaStart + (Config.WORLD?.LAVA_WORLD_HEIGHT || 8);
+
+        let currentWorld = 'EARTH';
+        if (chunkY >= crystalStart && chunkY < crystalEnd) {
+            currentWorld = 'CRYSTAL_WORLD';
+        } else if (chunkY >= lavaStart && chunkY < lavaEnd) {
+            currentWorld = 'LAVA_WORLD';
+        }
+
+        // For alien worlds, use world-specific spawn configs
+        if (currentWorld !== 'EARTH' && this.worldSpawnConfig[currentWorld]) {
+            const worldConfig = this.worldSpawnConfig[currentWorld];
+            this.trySpawnFromConfig(worldConfig, bx, bz, currentWorld, chunkRng);
+            return; // Skip Earth biome spawns
+        }
+
         const biome = worldGen.getBiome(bx, bz);
 
         // console.log(`Spawning attempt in chunk ${cx}, ${cz} (Biome: ${biome})`);
@@ -598,9 +705,6 @@ export class SpawnManager {
         this.game.scene.add(animal.mesh);
         this.entities.set(animal.id, animal);
 
-        // Log successful spawn
-        console.log(`[SpawnManager] Spawned ${AnimalClass.name} at (${x.toFixed(1)}, ${spawnY.toFixed(1)}, ${z.toFixed(1)}), visible=${animal.mesh.visible}, total=${this.game.animals.length}`);
-
         return animal; // Return the animal so callers can send entity:spawn for manual spawns
 
         // Notify server that we spawned this (if it's not a remote echo)
@@ -629,7 +733,7 @@ export class SpawnManager {
     /**
      * Find valid ground level by checking actual blocks
      * @param {number} x - World X coordinate
-     * @param {number} y - Expected Y coordinate (hint)
+     * @param {number} y - Expected Y coordinate (hint - should be terrain surface)
      * @param {number} z - World Z coordinate
      * @returns {number|null} - Ground Y position (top of solid block + 1), or null if no ground
      */
@@ -637,12 +741,19 @@ export class SpawnManager {
         const checkX = Math.floor(x);
         const checkZ = Math.floor(z);
 
-        // Start from expected Y and search up and down
+        // Start from expected Y (terrain surface)
         const startY = Math.floor(y);
         const searchRange = 10;
 
-        // First, search downward for solid ground
-        for (let checkY = startY; checkY >= startY - searchRange; checkY--) {
+        // Get terrain height to ensure we don't spawn underground
+        const terrainY = this.game.worldGen.getTerrainHeight(x, z);
+
+        // ONLY search downward a LIMITED amount (max 2 blocks below terrain)
+        // This prevents spawning in caves/underground spaces
+        const minSearchY = Math.max(startY - 2, Math.floor(terrainY) - 1);
+
+        // First, search downward for solid ground (but not too far down)
+        for (let checkY = startY; checkY >= minSearchY; checkY--) {
             const block = this.game.getBlock(checkX, checkY, checkZ);
             if (block && block.type !== 'water') {
                 // Ignore Leaves and Logs
@@ -661,7 +772,7 @@ export class SpawnManager {
             }
         }
 
-        // If nothing found below, search upward (might be underground)
+        // If nothing found below, search upward (might be in a valley or depression)
         for (let checkY = startY + 1; checkY <= startY + searchRange; checkY++) {
             const block = this.game.getBlock(checkX, checkY, checkZ);
             if (block && block.type !== 'water') {
@@ -680,14 +791,6 @@ export class SpawnManager {
         }
 
         // No valid ground found (chunk probably not loaded)
-        // FALLBACK: Use terrain height from noise function instead of failing
-        // This allows spawns even when chunk blocks aren't loaded yet
-        const terrainY = this.game.worldGen.getTerrainHeight(x, z);
-        if (terrainY > this.game.worldGen.seaLevel) {
-            console.log(`[SpawnManager] Using terrain fallback for spawn at ${x.toFixed(1)}, ${z.toFixed(1)}, Y=${Math.floor(terrainY) + 1}`);
-            return Math.floor(terrainY) + 1;
-        }
-        console.warn(`[SpawnManager] No valid ground at ${x.toFixed(1)}, ${z.toFixed(1)} (seaLevel=${this.game.worldGen.seaLevel})`);
         return null;
     }
 

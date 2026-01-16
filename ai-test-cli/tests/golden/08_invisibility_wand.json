@@ -1,0 +1,15 @@
+{
+    "name": "golden_08_invisibility_wand",
+    "tier": 3,
+    "prompt": "create a wand that makes me invisible when I use it",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Invisibility Item Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const wand = Object.values(items).find(i => i.name.toLowerCase().includes('invis')); return wand ? { success: true } : { success: false }; }"
+        }
+    ]
+}

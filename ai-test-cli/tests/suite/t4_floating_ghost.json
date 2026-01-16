@@ -1,0 +1,11 @@
+{
+    "name": "T4_floating_ghost",
+    "tier": 4,
+    "prompt": "make a ghost that floats up and down and follows me",
+    "timeout": 90000,
+    "visual_expectations": {
+        "type": "video",
+        "duration": 8,
+        "description": "A transparent or ghost-like entity that hovers vertically and follows the camera view"
+    }
+}

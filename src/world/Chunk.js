@@ -18,6 +18,7 @@ export class Chunk {
         // Mesh for this chunk
         this.mesh = null;
         this.dirty = true; // Needs mesh rebuild
+        this.isGenerated = false;
 
         this.boundingBox = new THREE.Box3(
             new THREE.Vector3(cx * this.size, cy * this.size, cz * this.size),

@@ -1,0 +1,15 @@
+{
+    "name": "golden_07_healing_potion",
+    "tier": 3,
+    "prompt": "create a healing potion that restores my health when I drink it",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Healing Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const potion = Object.values(items).find(i => i.name.toLowerCase().includes('heal') || i.name.toLowerCase().includes('potion')); return potion ? { success: true } : { success: false }; }"
+        }
+    ]
+}

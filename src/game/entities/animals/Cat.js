@@ -4,8 +4,8 @@ import { Mouse } from './Mouse.js';
 import { BirdManager } from './Birds.js';
 
 export class Cat extends Animal {
-    constructor(game, x, y, z, seed) {
-        super(game, x, y, z, seed);
+    constructor(game, x, y, z) {
+        super(game, x, y, z);
         this.width = 0.5;
         this.height = 0.5;
         this.depth = 0.9;

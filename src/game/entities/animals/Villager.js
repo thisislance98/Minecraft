@@ -124,9 +124,6 @@ export class Villager extends Animal {
         this.width = 0.6;
         this.height = 1.95;
         this.depth = 0.6;
-        this.type = 'Villager'; // Explicit type to survive minification
-        this.npcType = 'villager';
-        this.shirtColor = Math.random() > 0.5 ? 0xffffff : 0xbd8b68; // White apron or plain
 
         // Assign random profession if not specified
         let pKey = professionKey;
@@ -142,36 +139,7 @@ export class Villager extends Animal {
         this.backstory = this.generateBackstory();
 
         this.createBody();
-        console.log('[Villager] Body created. Mesh children:', this.mesh.children.length);
-        this.mesh.traverse((child) => {
-            if (child.isMesh) {
-                console.log('[Villager] Child mesh:', child.geometry.type, child.material.type, 'Color:', child.material.color.getHexString(), 'Map:', child.material.map);
-            }
-        });
         this.mesh.scale.set(0.9, 0.9, 0.9);
-
-        // Fix for invisible villagers: Ensure visibility and disable frustum culling
-        this.mesh.visible = true;
-        this.mesh.traverse((child) => {
-            child.visible = true;
-            if (child.isMesh) {
-                child.frustumCulled = false;
-                child.renderOrder = 1; // Ensure villagers render after terrain
-                // Ensure material is set up correctly
-                if (child.material) {
-                    child.material.needsUpdate = true;
-                    child.material.visible = true;
-                }
-            }
-        });
-
-        // Log position and visibility state
-        console.log('[Villager] Mesh setup complete:', {
-            visible: this.mesh.visible,
-            position: this.mesh.position.toArray(),
-            childCount: this.mesh.children.length,
-            layers: this.mesh.layers.mask
-        });
 
         // Apply profession modifiers
         this.speed = 1.5 * (this.profession.speedMod || 1.0);
@@ -210,10 +178,9 @@ export class Villager extends Animal {
 
     createBody() {
         const prof = this.profession;
-        // Using MeshBasicMaterial instead of Lambert to avoid lighting dependency issues in production
-        const skinMat = new THREE.MeshBasicMaterial({ color: 0xbd8b68 });
-        const robeMat = new THREE.MeshBasicMaterial({ color: prof.robeColor });
-        const pantsMat = new THREE.MeshBasicMaterial({ color: prof.pantsColor });
+        const skinMat = new THREE.MeshLambertMaterial({ color: 0xbd8b68 });
+        const robeMat = new THREE.MeshLambertMaterial({ color: prof.robeColor });
+        const pantsMat = new THREE.MeshLambertMaterial({ color: prof.pantsColor });
 
         // Head geometry
         const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
@@ -231,7 +198,7 @@ export class Villager extends Animal {
 
         // -- Hair (hidden for helmet) --
         if (prof.accessory !== 'helmet') {
-            const hairMat = new THREE.MeshBasicMaterial({ color: 0x3B2713 });
+            const hairMat = new THREE.MeshLambertMaterial({ color: 0x3B2713 });
             const hairTopGeo = new THREE.BoxGeometry(0.55, 0.1, 0.55);
             const hairTop = new THREE.Mesh(hairTopGeo, hairMat);
             hairTop.position.set(0, 0.5, 0);
@@ -254,8 +221,8 @@ export class Villager extends Animal {
 
         // -- Eyes --
         // -- Eyes --
-        const eyeMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x00AA00 });
+        const eyeMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const pupilMat = new THREE.MeshLambertMaterial({ color: 0x00AA00 });
         const eyeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.05);
         const pupilGeo = new THREE.BoxGeometry(0.06, 0.06, 0.02);
 
@@ -276,7 +243,7 @@ export class Villager extends Animal {
         headGroup.add(rightPupil);
 
         // Brow
-        const browMat = new THREE.MeshBasicMaterial({ color: 0x2A1B0E });
+        const browMat = new THREE.MeshLambertMaterial({ color: 0x2A1B0E });
         const browGeo = new THREE.BoxGeometry(0.4, 0.05, 0.05);
         const brow = new THREE.Mesh(browGeo, browMat);
         brow.position.set(0, 0.32, 0.27);
@@ -289,7 +256,7 @@ export class Villager extends Animal {
 
         // Mouth
         const mouthGeo = new THREE.BoxGeometry(0.1, 0.02, 0.05);
-        const mouthMat = new THREE.MeshBasicMaterial({ color: 0x2A1B0E });
+        const mouthMat = new THREE.MeshLambertMaterial({ color: 0x2A1B0E });
         const mouth = new THREE.Mesh(mouthGeo, mouthMat);
         mouth.position.set(0, 0.05, 0.26);
         headGroup.add(mouth);
@@ -305,7 +272,7 @@ export class Villager extends Animal {
 
         // Apron for blacksmith
         if (prof.accessory === 'apron') {
-            const apronMat = new THREE.MeshBasicMaterial({ color: 0x8B4513 });
+            const apronMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
             const apronGeo = new THREE.BoxGeometry(0.4, 0.6, 0.05);
             const apron = new THREE.Mesh(apronGeo, apronMat);
             apron.position.set(0, 1.0, 0.18);
@@ -355,7 +322,7 @@ export class Villager extends Animal {
     addAccessory(headGroup, accessory) {
         switch (accessory) {
             case 'hat': {
-                const hatMat = new THREE.MeshBasicMaterial({ color: 0xDAA520 });
+                const hatMat = new THREE.MeshLambertMaterial({ color: 0xDAA520 });
                 const brimGeo = new THREE.BoxGeometry(0.8, 0.05, 0.8);
                 const brim = new THREE.Mesh(brimGeo, hatMat);
                 brim.position.set(0, 0.52, 0);
@@ -367,7 +334,7 @@ export class Villager extends Animal {
                 break;
             }
             case 'helmet': {
-                const helmetMat = new THREE.MeshBasicMaterial({ color: 0x708090 });
+                const helmetMat = new THREE.MeshLambertMaterial({ color: 0x708090 });
                 const helmetGeo = new THREE.BoxGeometry(0.55, 0.35, 0.55);
                 const helmet = new THREE.Mesh(helmetGeo, helmetMat);
                 helmet.position.set(0, 0.42, 0);
@@ -379,7 +346,7 @@ export class Villager extends Animal {
                 break;
             }
             case 'glasses': {
-                const glassesMat = new THREE.MeshBasicMaterial({ color: 0x2F2F2F });
+                const glassesMat = new THREE.MeshLambertMaterial({ color: 0x2F2F2F });
                 const frameGeo = new THREE.BoxGeometry(0.45, 0.1, 0.05);
                 const frame = new THREE.Mesh(frameGeo, glassesMat);
                 frame.position.set(0, 0.25, 0.30); // Moved forward to Z=0.30 to avoid Z-fighting
@@ -441,11 +408,12 @@ export class Villager extends Animal {
             this.state = 'talking';
             if (this.game?.player) {
                 const dx = this.game.player.position.x - this.position.x;
+                const dy = this.game.player.position.y - this.position.y;
                 const dz = this.game.player.position.z - this.position.z;
                 this.rotation = Math.atan2(dx, dz);
 
                 // End conversation if player walks away (> 5 blocks)
-                const distToPlayer = Math.sqrt(dx * dx + dz * dz);
+                const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 if (distToPlayer > 5) {
                     this.endConversation();
                 }
@@ -457,8 +425,9 @@ export class Villager extends Animal {
         const player = this.game?.player;
         if (player && !this.isConversing) {
             const dx = player.position.x - this.position.x;
+            const dy = player.position.y - this.position.y;
             const dz = player.position.z - this.position.z;
-            const distToPlayer = Math.sqrt(dx * dx + dz * dz);
+            const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
             if (distToPlayer < 10 && !this.conversationCooldown) {
                 // 1. Check if close enough to START conversation FIRST
@@ -543,8 +512,18 @@ export class Villager extends Animal {
                 this.stateTimer = (2 + this.rng.next() * 5) * (this.idleTimeMod || 1.0);
                 this.state = this.rng.next() < 0.5 ? 'idle' : 'walk';
                 if (this.state === 'walk') {
-                    this.rotation = this.rng.next() * Math.PI * 2;
-                    this.moveDirection.set(Math.sin(this.rotation), 0, Math.cos(this.rotation));
+                    // Smart wander: pick a direction that avoids water/obstacles
+                    const smartDir = this.findBestDirection(null);
+                    if (smartDir) {
+                        this.moveDirection.copy(smartDir);
+                        this.rotation = Math.atan2(smartDir.x, smartDir.z);
+                    } else {
+                        // Fallback but maybe we shouldn't walk if trapped?
+                        // For now, random is better than nothing, but it might lead to water.
+                        // Let's try random but re-check? findBestDirection essentially does that.
+                        // If null, we are excessively trapped. Let's just idle.
+                        this.state = 'idle';
+                    }
                 }
             }
             this.stateTimer -= dt;
@@ -769,8 +748,8 @@ export class Villager extends Animal {
             case 'GUARD':
             case 'BLACKSMITH':
                 // Iron Sword
-                weaponMat = new THREE.MeshBasicMaterial({ color: 0xDDDDDD }); // Blade
-                const handleMat = new THREE.MeshBasicMaterial({ color: 0x4A3222 }); // Wood
+                weaponMat = new THREE.MeshLambertMaterial({ color: 0xDDDDDD }); // Blade
+                const handleMat = new THREE.MeshLambertMaterial({ color: 0x4A3222 }); // Wood
 
                 const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.05), weaponMat);
                 blade.position.set(0, 0.4, 0);
@@ -787,8 +766,8 @@ export class Villager extends Animal {
 
             case 'FARMER':
                 // Hoe
-                const stickMat = new THREE.MeshBasicMaterial({ color: 0x4A3222 });
-                const headMat = new THREE.MeshBasicMaterial({ color: 0x888888 }); // Stone/Iron
+                const stickMat = new THREE.MeshLambertMaterial({ color: 0x4A3222 });
+                const headMat = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Stone/Iron
 
                 const stick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), stickMat);
                 stick.position.set(0, 0.15, 0); // Offset to hold
@@ -801,7 +780,7 @@ export class Villager extends Animal {
 
             default:
                 // Stick? Or nothing? Let's give them a stick
-                const wStickMat = new THREE.MeshBasicMaterial({ color: 0x4A3222 });
+                const wStickMat = new THREE.MeshLambertMaterial({ color: 0x4A3222 });
                 const wStick = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.05), wStickMat);
                 wStick.position.set(0, 0.25, 0);
                 weaponGroup.add(wStick);

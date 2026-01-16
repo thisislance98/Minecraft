@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export class Arrow {
-    constructor(game, position, velocity, owner = null) {
+    constructor(game, position, velocity, owner = null, isRemote = false) {
         this.game = game;
         this.owner = owner; // The entity that fired this arrow (player or animal)
+        this.isRemote = isRemote; // If true, this was spawned from a remote player
         this.position = position.clone();
         this.velocity = velocity.clone();
 
@@ -90,20 +91,21 @@ export class Arrow {
             const segment = new THREE.Line3(this.position, nextPos);
             const closestPoint = new THREE.Vector3();
 
-            // Check Player (skip if player fired this arrow)
+            // Check Player - only if this is a remote arrow (fired by another player/entity)
+            // Local arrows should never hit the local player
+            // Check Player collision (Local Player)
+            // - Remote arrows always hit us
+            // - Local arrows (fired by us) hit us after a grace period (0.5s) to avoid self-hit on spawn
             const player = this.game.player;
-            if (this.owner !== player && player) {
+            if (player && (this.isRemote || this.lifeTime > 0.5)) {
                 const playerPos = player.position.clone();
                 playerPos.y += (player.height || 1.8) / 2;
 
                 segment.closestPointToPoint(playerPos, true, closestPoint);
                 if (closestPoint.distanceTo(playerPos) < ((player.width || 0.6) + 0.5)) {
                     console.log('Arrow hit player!');
-                    if (player.takeDamage) player.takeDamage(1);
-                    if (player.takeDamage) player.takeDamage(1);
-                    console.log('Arrow hit player!');
+                    if (player.takeDamage) player.takeDamage(2, 'Arrow');
 
-                    // Check intersections with animals
                     this.isStuck = true;
                     return false; // Destroy arrow
                 }

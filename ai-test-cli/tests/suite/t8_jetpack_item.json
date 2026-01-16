@@ -1,0 +1,17 @@
+{
+    "name": "T8_jetpack_item",
+    "tier": 8,
+    "prompt": "Make a jetpack item that lets me fly when I use it",
+    "timeout": 60000,
+    "expectedTool": "patch_item",
+    "visual_expectations": {
+        "type": "image",
+        "description": "An item in the hand or inventory that looks like a jetpack or mechanical device"
+    },
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const jetpack = Object.values(items).find(i => i.id.includes('jetpack') || i.name.toLowerCase().includes('jetpack')); if (!jetpack) return { success: false, message: 'Jetpack item not found' }; return { success: true, message: `Found jetpack: ${jetpack.name}` }; }"
+        }
+    ]
+}

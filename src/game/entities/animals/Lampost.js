@@ -50,6 +50,7 @@ export class Lampost extends Animal {
 
         // 3. The Lantern Head
         const headGroup = new THREE.Group();
+        this.headGroup = headGroup;
         headGroup.position.set(0, 6.1, 0); // 1.0 base + 5.0 pole + 0.1 offset
         this.mesh.add(headGroup);
 
@@ -72,6 +73,7 @@ export class Lampost extends Animal {
         const light = new THREE.PointLight(0xFFDD00, 0.6, 6);
         light.position.set(0, 0, 0);
         headGroup.add(light);
+        this.light = light;
 
         // Cap (Pointy top)
         const capGeo = new THREE.ConeGeometry(0.4, 0.3, 4);
@@ -103,6 +105,17 @@ export class Lampost extends Animal {
     update(dt) {
         super.update(dt);
 
-        // Occasional light flicker could go here but standard logic is fine for now
+        // PERFORMANCE: Only enable light if close to player
+        if (this.light && this.game.camera && this.headGroup) {
+            const distSq = this.position.distanceToSquared(this.game.camera.position);
+            const isAttached = this.light.parent === this.headGroup;
+
+            // Hysteresis: Enable at 15m (225), Disable at 20m (400)
+            if (isAttached && distSq > 400) {
+                this.headGroup.remove(this.light);
+            } else if (!isAttached && distSq < 225) {
+                this.headGroup.add(this.light);
+            }
+        }
     }
 }

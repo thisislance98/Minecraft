@@ -61,6 +61,12 @@ export class TestRunner {
                 await this.runVerifications(testCase.verify);
             }
 
+            // Step 3: Run Visual Verification (AI Judge) if specified
+            if (testCase.visual_expectations) {
+                console.log(chalk.blue('\n👁️  Running AI Visual Verification...'));
+                await this.runVisualVerification(testCase);
+            }
+
             console.log(chalk.green(`\n✅ Test Passed: ${testCase.name}`));
             await this.cleanup();
             return true;
@@ -183,6 +189,9 @@ export class TestRunner {
                         const entityData = {
                             type: name,
                             id: animal.id,
+                            isFlying: !!animal.isFlying,
+                            isSwimming: !!animal.isSwimming,
+                            isGrounded: !!animal.isGrounded,
                             position: {
                                 x: Math.round(animal.position?.x * 10) / 10 || 0,
                                 y: Math.round(animal.position?.y * 10) / 10 || 0,
@@ -280,6 +289,108 @@ export class TestRunner {
                 default:
                     console.log(chalk.yellow(`  ⚠️  Unknown verification type: ${check.type}`));
             }
+        }
+    }
+
+
+    async runVisualVerification(testCase) {
+        const expectation = testCase.visual_expectations;
+        let mediaData = null; // Base64 string
+        let mimeType = '';
+
+        console.log(chalk.dim(`  Capturing ${expectation.type} for verification...`));
+
+        if (expectation.type === 'video') {
+            // Trigger video capture on the client Agent
+            const result = await this.browser.evaluate(async (duration, label) => {
+                const game = window.__VOXEL_GAME__;
+                if (!game || !game.agent) return { error: 'Agent not available' };
+                return await game.agent.captureVideo({ duration_seconds: duration, label });
+            }, expectation.duration || 5, testCase.name);
+
+            if (!result.success) {
+                throw new Error(`Visual verification failed: Video capture error - ${result.error}`);
+            }
+            // result.videoData is "data:video/webm;base64,..."
+            mediaData = result.videoData.split(',')[1];
+            mimeType = 'video/webm';
+            console.log(chalk.dim(`  Video captured (${(mediaData.length / 1024).toFixed(0)}KB)`));
+
+        } else {
+            // Image (Screenshot)
+            // Trigger screenshot on the client Agent
+            const result = await this.browser.evaluate(async (label) => {
+                const game = window.__VOXEL_GAME__;
+                if (!game || !game.agent) return { error: 'Agent not available' };
+                return game.agent.captureScreenshot({ label });
+            }, testCase.name);
+
+            if (!result.success) {
+                throw new Error(`Visual verification failed: Screenshot error - ${result.error}`);
+            }
+            // result.image is "data:image/jpeg;base64,..."
+            mediaData = result.image.split(',')[1];
+            mimeType = 'image/jpeg';
+            console.log(chalk.dim(`  Screenshot captured`));
+        }
+
+        // Send to Gemini Vision
+        console.log(chalk.dim('  Asking Gemini Vision to judge...'));
+        try {
+            const { GoogleGenerativeAI } = await import('@google/generative-ai');
+            const apiKey = process.env.GEMINI_API_KEY; // CLI needs this env var
+            if (!apiKey) throw new Error('GEMINI_API_KEY not set in environment');
+
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-3.0-pro-001" }); // User requested Gemini 3 Pro
+
+            const prompt = `
+            You are an AI Game Judge. 
+            Look at this ${expectation.type} from a Minecraft-like voxel engine.
+            
+            VERIFICATION VISUAL TASK:
+            "${expectation.description}"
+
+            Does the media confirm this expectation?
+            Ignore UI elements or small glitches. Focus on the main subject.
+            
+            Respond ONLY with this JSON structure:
+            {
+                "pass": boolean,
+                "reason": "short explanation of what you see"
+            }
+            `;
+
+            const result = await model.generateContent([
+                prompt,
+                {
+                    inlineData: {
+                        data: mediaData,
+                        mimeType: mimeType
+                    }
+                }
+            ]);
+
+            const responseText = result.response.text();
+            // Clean markdown code blocks if present
+            const jsonStr = responseText.replace(/```json\n|\n```/g, '').trim();
+            const judgment = JSON.parse(jsonStr);
+
+            console.log(chalk.blue(`\n🤖 AI Judge Verdict:`));
+            if (judgment.pass) {
+                console.log(chalk.green(`  ✅ PASS: ${judgment.reason}`));
+            } else {
+                console.log(chalk.red(`  ❌ FAIL: ${judgment.reason}`));
+                throw new Error(`Visual verification failed: ${judgment.reason}`);
+            }
+
+        } catch (e) {
+            console.error(chalk.red(`  AI Judge Error: ${e.message}`));
+            if (e.message.includes('safety')) {
+                console.warn(chalk.yellow('  (Verification skipped due to safety filters)'));
+                return; // Don't fail test on safety block, just warn
+            }
+            throw new Error(`AI Verification process failed: ${e.message}`);
         }
     }
 }

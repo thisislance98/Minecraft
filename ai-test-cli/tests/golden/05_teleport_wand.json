@@ -1,0 +1,15 @@
+{
+    "name": "golden_05_teleport_wand",
+    "tier": 3,
+    "prompt": "create a teleportation wand that teleports me forward when I click",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Teleport Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const wand = Object.values(items).find(i => i.name.toLowerCase().includes('teleport')); return wand ? { success: true } : { success: false, message: 'No teleport wand found' }; }"
+        }
+    ]
+}

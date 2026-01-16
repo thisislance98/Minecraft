@@ -1,0 +1,20 @@
+{
+    "name": "plan_creature_success",
+    "tier": 2,
+    "prompt": "Create a Blue Mystic Bird that flies and leaves a trail of blue particles. After spawning, you MUST call verify_and_save to check if it works correctly.",
+    "timeout": 90000,
+    "expectedKnowledge": [
+        "Flying Animal Template",
+        "Particle System"
+    ],
+    "verify": [
+        {
+            "type": "entityExists",
+            "name": "BlueMysticBird"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A blue bird creature flying with particles"
+    }
+}

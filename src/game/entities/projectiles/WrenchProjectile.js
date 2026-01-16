@@ -111,7 +111,7 @@ export class WrenchProjectile {
             playerPos.y += player.height / 2;
             if (this.position.distanceTo(playerPos) < 1.0) {
                 console.log('Wrench hit player!');
-                player.takeDamage(this.damage);
+                player.takeDamage(this.damage, 'Wrench');
                 const knockDir = this.velocity.clone().normalize();
                 knockDir.y = 0.2;
                 player.knockback(knockDir, 0.5);

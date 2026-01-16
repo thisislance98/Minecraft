@@ -33,13 +33,23 @@ import { Bee } from './entities/animals/Bee.js'; // Verification entity
 import { Starfish } from './entities/animals/Starfish.js';
 import { Car } from './entities/animals/Car.js';
 import { Hedgehog } from './entities/animals/Hedgehog.js';
+import { Merlin } from './entities/animals/Merlin.js';
+import { Rhinoceros } from './entities/animals/Rhinoceros.js';
+import { Hippopotamus } from './entities/animals/Hippopotamus.js';
+import { Crocodile } from './entities/animals/Crocodile.js';
+import { Ostrich } from './entities/animals/Ostrich.js';
 AnimalClasses['Slime'] = Slime;
 AnimalClasses['Firefly'] = Firefly;
 AnimalClasses['Bee'] = Bee;
 AnimalClasses['Starfish'] = Starfish;
 AnimalClasses['Car'] = Car;
 AnimalClasses['Hedgehog'] = Hedgehog;
-console.log('[AnimalRegistry] Manually registered Firefly, Bee, and Hedgehog.');
+AnimalClasses['Merlin'] = Merlin;
+AnimalClasses['Rhinoceros'] = Rhinoceros;
+AnimalClasses['Hippopotamus'] = Hippopotamus;
+AnimalClasses['Crocodile'] = Crocodile;
+AnimalClasses['Ostrich'] = Ostrich;
+console.log('[AnimalRegistry] Manually registered Firefly, Bee, Hedgehog, and Merlin.');
 console.log('[AnimalRegistry] Final AnimalClasses keys:', Object.keys(AnimalClasses));
 
 // Expose Animal base class to window for dynamic creature creation

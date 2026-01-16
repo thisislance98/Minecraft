@@ -288,6 +288,14 @@ export class InputManager {
                 }
             }
 
+            // F for Merlin Voice Input
+            if (e.code === 'KeyF' && !e.repeat && !this.game.agent.isChatOpen) {
+                e.preventDefault();
+                if (window.merlinClient) {
+                    window.merlinClient.toggleVoice();
+                }
+            }
+
             // V for Voice (Handled in Agent.js directly via document listener, ideally move here later)
 
 

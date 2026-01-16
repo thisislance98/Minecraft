@@ -257,13 +257,13 @@ export class MosquitoManager {
                 vz += (Math.random() - 0.5) * 5 * dt;
             }
 
-            // --- Biting ---
+            // --- Biting (Disabled Damage) ---
             if (distToPlayer < 1.5 && this.biteCooldowns[i] <= 0) {
                 // Global cooldown check: only allowing one bite every 2 seconds for the whole swarm
                 const now = performance.now() / 1000;
                 if (now - this.lastGlobalBiteTime > 2.0) {
-                    player.takeDamage(1);
-                    console.log("Mosquito bit player!");
+                    // player.takeDamage(1, 'Mosquito');
+                    // console.log("[MosquitoManager] Mosquito bit player!");
                     this.biteCooldowns[i] = 10.0 + Math.random() * 10.0; // 10-20 seconds individual cooldown
                     this.lastGlobalBiteTime = now;
 
@@ -292,6 +292,18 @@ export class MosquitoManager {
             const groundY = player.position.y;
             if (py < groundY + 1.0) {
                 vy += 5.0 * dt; // Stronger push up if near player foot level
+            }
+
+            // HEIGHT CEILING: Prevent flying up forever
+            const maxHeightAbovePlayer = 30;
+            if (py > cy + maxHeightAbovePlayer) {
+                vy -= 8.0 * dt; // Strong push downward
+                // If way too high, teleport back near player
+                if (py > cy + maxHeightAbovePlayer * 2) {
+                    this.positions[idx + 1] = cy + Math.random() * 10;
+                    py = this.positions[idx + 1];
+                    vy = 0;
+                }
             }
 
             if (py < -64) {

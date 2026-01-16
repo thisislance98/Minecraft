@@ -244,6 +244,11 @@ export class DebugPanel {
         this.bindCheckbox('dbg-shadows', (val) => {
             this.settings.world.shadows = val;
             if (this.game.toggleTerrainShadows) this.game.toggleTerrainShadows(val);
+            // Reset auto-disable flag when user manually toggles shadows
+            if (val) {
+                this.game.shadowsAutoDisabled = false;
+                console.log('[Debug] Terrain shadows manually re-enabled (auto-disable reset)');
+            }
         });
         this.bindCheckbox('dbg-cast-shadows', (val) => {
             this.settings.world.castShadows = val;

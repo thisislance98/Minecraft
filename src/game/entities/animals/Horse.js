@@ -8,6 +8,7 @@ export class Horse extends Animal {
         this.height = 1.4;
         this.depth = 1.6;
         this.speed = 6.0; // Horses are fast
+        this.isRideable = true;
         this.createBody();
     }
 

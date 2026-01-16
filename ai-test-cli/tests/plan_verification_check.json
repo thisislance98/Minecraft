@@ -1,0 +1,23 @@
+{
+    "name": "plan_verification_check",
+    "tier": 4,
+    "prompt": "Create a Glitch Bot. It should intentionally try to call 'this.nonExistentMethod()' in its update loop every frame, but you must ensure it eventually works by fixing it. The goal is to see if the verification system catches the error. You MUST call verify_and_save after spawning to trigger this check.",
+    "timeout": 120000,
+    "expectedKnowledge": [
+        "Follow Player Template"
+    ],
+    "verify": [
+        {
+            "type": "entityExists",
+            "name": "GlitchBot"
+        },
+        {
+            "type": "customCode",
+            "code": "() => { const entities = window.__VOXEL_GAME__.entities; const bot = entities.find(e => e.constructor.name === 'GlitchBot'); if (!bot) return { success: false, message: 'Bot not found' }; return { success: true, message: 'Bot exists' }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A robot entity"
+    }
+}

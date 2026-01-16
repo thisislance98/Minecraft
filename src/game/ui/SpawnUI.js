@@ -365,13 +365,6 @@ export class SpawnUI {
     spawn(className) {
         console.log(`Spawning ${this.activeTab}: ${className} `);
 
-        if (this.game.analyticsManager) {
-            this.game.analyticsManager.logEvent('spawn_from_ui', {
-                category: this.activeTab,
-                item: className
-            });
-        }
-
         if (this.activeTab === 'creature') {
             const AnimalClass = AnimalClasses[className];
             if (AnimalClass && this.game.spawnManager) {

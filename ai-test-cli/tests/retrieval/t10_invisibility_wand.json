@@ -1,0 +1,20 @@
+{
+    "name": "T10_invisibility_wand",
+    "tier": 10,
+    "prompt": "Create a magic wand called 'Invisibility Wand' that makes the player invisible when used",
+    "timeout": 60000,
+    "visual_expectations": {
+        "type": "image",
+        "description": "The player holding a wand. When used, the player model should become translucent or disappear."
+    },
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const wand = Object.values(items).find(i => i.name.toLowerCase().includes('invis')); if (!wand) return { success: false, message: 'Invisibility Wand item not found' }; return { success: true, message: `Found wand: ${wand.name}` }; }"
+        },
+        {
+            "type": "customCode",
+            "code": "() => { if(window.__VOXEL_GAME__.player.mesh.visible === false || window.__VOXEL_GAME__.player.mesh.material.opacity < 1) return { success: true, message: 'Player is invisible/translucent' }; return { success: false, message: 'Player is still fully visible' }; }"
+        }
+    ]
+}

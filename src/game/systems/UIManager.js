@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DebugPanel } from '../ui/DebugPanel.js';
 import { CommunityUI } from '../ui/CommunityUI.js';
 import { Minimap } from '../ui/Minimap.js';
+import { MinigameManager } from '../minigames/MinigameManager.js';
 import { auth } from '../../config/firebase-client.js';
 
 /**
@@ -58,6 +59,7 @@ export class UIManager {
         this.sendBtn = document.getElementById('send-chat');
         this.closeBtn = document.getElementById('close-chat');
         this.copyChatBtn = document.getElementById('copy-chat');
+        this.clearChatBtn = document.getElementById('clear-chat');
 
         // Chat mode state: 'ai', 'group', 'player'
         this.chatMode = 'ai';
@@ -80,6 +82,8 @@ export class UIManager {
         this.setupSettingsMenu();
         this.setupHelpModal();
         this.setupVoiceButton();
+        this.setupMerlinVoiceButton();
+        this.minigameManager = new MinigameManager(game);
 
         // Chat scroll state
         this.userHasScrolledUp = false;
@@ -97,147 +101,82 @@ export class UIManager {
         if (this.chatPanel) this.chatPanel.classList.add('hidden');
         if (this.settingsModal) document.getElementById('settings-modal').classList.add('hidden');
         if (this.helpModal) document.getElementById('help-modal').classList.add('hidden');
-        if (this.xboxModal) this.xboxModal.classList.add('hidden');
+        if (this.minigameManager) this.minigameManager.closeXboxUI();
         if (window.spawnUI && window.spawnUI !== exclude) window.spawnUI.closePanel();
 
         // Also unlock pointer if appropriate, though usually specific menus handle that
     }
 
     showXboxUI() {
-        if (this.xboxModal) {
-            this.xboxModal.classList.remove('hidden');
-            if (this.game.inputManager) this.game.inputManager.unlock();
-            this.showXboxMenu();
-            return;
+        if (this.minigameManager) {
+            this.minigameManager.showXboxUI();
+        }
+    }
+
+    setupMerlinVoiceButton() {
+        // Create Mic Button in Chat Input Area
+        const chatInputContainer = document.querySelector('#chat-panel .chat-input-container');
+        if (!chatInputContainer) return;
+
+        // Check if already exists
+        if (document.getElementById('voice-mic-btn')) return;
+
+        const micBtn = document.createElement('button');
+        micBtn.id = 'voice-mic-btn';
+        micBtn.innerHTML = '🎤';
+        micBtn.title = 'Speak to Merlin';
+        micBtn.style.cssText = `
+            background: #444; border: 1px solid #666; color: white;
+            width: 40px; height: 40px; border-radius: 4px;
+            font-size: 20px; cursor: pointer; margin-left: 5px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        `;
+
+        // Insert before Send button
+        const sendBtn = document.getElementById('send-chat');
+        if (sendBtn) {
+            chatInputContainer.insertBefore(micBtn, sendBtn);
+        } else {
+            chatInputContainer.appendChild(micBtn);
         }
 
-        const modal = document.createElement('div');
-        modal.id = 'xbox-modal';
-        modal.className = 'ui-modal';
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); display: flex; align-items: center;
-            justify-content: center; z-index: 3000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        `;
-
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: #101010; border: 4px solid #107c10; padding: 40px;
-            border-radius: 10px; text-align: center; color: white; width: 640px;
-            box-shadow: 0 0 50px rgba(16, 124, 16, 0.5);
-        `;
-
-        content.innerHTML = `
-            <div style="font-size: 48px; font-weight: bold; color: #107c10; margin-bottom: 20px; letter-spacing: 5px;">XBOX</div>
-            <div id="xbox-game-screen" style="background: #000; height: 360px; border: 4px solid #333; margin-bottom: 30px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-                <canvas id="xbox-canvas" width="600" height="340" style="display: none;"></canvas>
-                
-                <div id="xbox-boot" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
-                    <div style="font-size: 24px; margin-bottom: 20px; color: #107c10;">Xbox Live</div>
-                    <div id="xbox-loading-bar" style="width: 70%; height: 8px; background: #222; border-radius: 4px; overflow: hidden;">
-                        <div id="xbox-progress" style="width: 0%; height: 100%; background: #107c10; transition: width 0.3s;"></div>
-                    </div>
-                    <div id="xbox-status" style="margin-top: 15px; color: #888; font-size: 14px;">Initializing...</div>
-                </div>
-
-                <div id="xbox-menu" style="display: none; flex-direction: column; align-items: center; gap: 15px; width: 100%; overflow-y: auto; max-height: 330px; padding: 10px 0;">
-                    <div style="font-size: 24px; margin-bottom: 5px;">Select Game</div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; width: 90%;">
-                        <div class="xbox-game-card" id="play-platformer" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
-                            <div style="font-size: 32px; margin-bottom: 5px;">🏃</div>
-                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Platformer</div>
-                        </div>
-                        <div class="xbox-game-card" id="play-joust" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
-                            <div style="font-size: 32px; margin-bottom: 5px;">🛡️</div>
-                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Joust</div>
-                        </div>
-                        <div class="xbox-game-card" id="play-snake" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
-                            <div style="font-size: 32px; margin-bottom: 5px;">🐍</div>
-                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Snake</div>
-                        </div>
-                        <div class="xbox-game-card" id="play-bricks" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
-                            <div style="font-size: 32px; margin-bottom: 5px;">🧱</div>
-                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Bricks</div>
-                        </div>
-                        <div class="xbox-game-card" id="play-invaders" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
-                            <div style="font-size: 32px; margin-bottom: 5px;">👾</div>
-                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Invaders</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="xbox-game-over" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); flex-direction: column; align-items: center; justify-content: center; z-index: 10;">
-                    <div style="font-size: 40px; color: #ff3333; margin-bottom: 20px; font-weight: bold;">GAME OVER</div>
-                    <div style="display: flex; gap: 15px;">
-                        <button id="xbox-restart" style="background: #107c10; color: white; border: none; padding: 10px 20px; font-size: 18px; cursor: pointer; border-radius: 5px;">Try Again</button>
-                        <button id="xbox-back-menu" style="background: #444; color: white; border: none; padding: 10px 20px; font-size: 18px; cursor: pointer; border-radius: 5px;">Menu</button>
-                    </div>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div id="xbox-controls-hint" style="text-align: left; font-size: 14px; color: #888;">
-                    Select a game to start!
-                </div>
-                <button id="xbox-close" style="background: #333; color: white; border: 1px solid #555; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 5px;">Turn Off</button>
-            </div>
-            <style>
-                .xbox-game-card:hover { border-color: #107c10 !important; background: #333 !important; transform: translateY(-5px); }
-            </style>
-        `;
-
-        modal.appendChild(content);
-        document.body.appendChild(modal);
-        this.xboxModal = modal;
-
-        const closeBtn = document.getElementById('xbox-close');
-        closeBtn.onclick = () => {
-            this.stopXboxPlatformer();
-            this.stopXboxJoust();
-            modal.classList.add('hidden');
-            if (this.game.inputManager) this.game.inputManager.lock();
-        };
-
-        const restartBtn = document.getElementById('xbox-restart');
-        restartBtn.onclick = () => {
-            if (this.currentXboxGame === 'platformer') {
-                this.startXboxPlatformer(this.platformerState ? this.platformerState.levelIndex : 0);
-            } else if (this.currentXboxGame === 'joust') {
-                this.startXboxJoust();
-            } else if (this.currentXboxGame === 'snake') {
-                this.startXboxSnake();
-            } else if (this.currentXboxGame === 'bricks') {
-                this.startXboxBrickBreaker();
-            } else if (this.currentXboxGame === 'invaders') {
-                this.startXboxInvaders();
+        micBtn.onclick = () => {
+            if (this.game.merlinClient) {
+                this.game.merlinClient.toggleVoice();
             }
         };
 
-        const backMenuBtn = document.getElementById('xbox-back-menu');
-        backMenuBtn.onclick = () => this.showXboxMenu();
+        // Listen for status updates
+        if (this.game.merlinClient) {
+            this.game.merlinClient.addListener((msg) => {
+                if (msg.type === 'voice_status') {
+                    if (msg.status === 'listening') {
+                        micBtn.style.background = '#ff4444';
+                        micBtn.innerHTML = '🛑';
+                        micBtn.classList.add('pulse');
+                    } else {
+                        micBtn.style.background = '#444';
+                        micBtn.innerHTML = '🎤';
+                        micBtn.classList.remove('pulse');
+                    }
+                }
+            });
+        }
 
-        document.getElementById('play-platformer').onclick = () => {
-            this.currentXboxGame = 'platformer';
-            this.startXboxPlatformer(0);
-        };
-        document.getElementById('play-joust').onclick = () => {
-            this.currentXboxGame = 'joust';
-            this.startXboxJoust();
-        };
-        document.getElementById('play-snake').onclick = () => {
-            this.currentXboxGame = 'snake';
-            this.startXboxSnake();
-        };
-        document.getElementById('play-bricks').onclick = () => {
-            this.currentXboxGame = 'bricks';
-            this.startXboxBrickBreaker();
-        };
-        document.getElementById('play-invaders').onclick = () => {
-            this.currentXboxGame = 'invaders';
-            this.startXboxInvaders();
-        };
-
-        this.startXboxBootSequence();
-        if (this.game.inputManager) this.game.inputManager.unlock();
+        // Add pulse animation style
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes pulse {
+                0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.7); }
+                70% { box-shadow: 0 0 0 10px rgba(255, 68, 68, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); }
+            }
+            .pulse {
+                animation: pulse 1.5s infinite;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     setupTutorialModal() {
@@ -342,664 +281,7 @@ export class UIManager {
         // Usually we let the user click back into the game to lock.
     }
 
-    startXboxBootSequence() {
-        const progressBar = document.getElementById('xbox-progress');
-        const statusText = document.getElementById('xbox-status');
-        const bootDiv = document.getElementById('xbox-boot');
 
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress >= 100) {
-                progress = 100;
-                clearInterval(interval);
-                setTimeout(() => {
-                    this.showXboxMenu();
-                }, 500);
-            }
-            if (progressBar) progressBar.style.width = progress + '%';
-            if (statusText) {
-                if (progress < 30) statusText.innerHTML = "Signing in as MasterChief...";
-                else if (progress < 60) statusText.innerHTML = "Connecting to Xbox Live...";
-                else if (progress < 90) statusText.innerHTML = "Syncing achievements...";
-                else statusText.innerHTML = "Welcome back!";
-            }
-        }, 150);
-    }
-
-    showXboxMenu() {
-        this.stopAllXboxGames();
-        const bootDiv = document.getElementById('xbox-boot');
-        const menuDiv = document.getElementById('xbox-menu');
-        const canvas = document.getElementById('xbox-canvas');
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        const hintDiv = document.getElementById('xbox-controls-hint');
-
-        if (bootDiv) bootDiv.style.display = 'none';
-        if (canvas) canvas.style.display = 'none';
-        if (gameOverDiv) gameOverDiv.style.display = 'none';
-        if (menuDiv) menuDiv.style.display = 'flex';
-        if (hintDiv) hintDiv.innerHTML = 'Select a game to start!';
-
-        this.currentXboxGame = null;
-    }
-
-    startXboxPlatformer(levelIndex = 0) {
-        this.stopAllXboxGames();
-        const canvas = document.getElementById('xbox-canvas');
-        if (!canvas) return;
-
-        const menuDiv = document.getElementById('xbox-menu');
-        if (menuDiv) menuDiv.style.display = 'none';
-
-        const hintDiv = document.getElementById('xbox-controls-hint');
-        if (hintDiv) {
-            hintDiv.innerHTML = `
-                <b style="color: #fff;">W / Space</b> Jump, <b style="color: #fff;">A / D</b> Move | 
-                Avoid <b style="color: #ff3333;">Red</b> enemies | Reach <b style="color: #ffff00;">Gold</b> goal
-            `;
-        }
-
-        canvas.style.display = 'block';
-
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        gameOverDiv.style.display = 'none';
-
-        // Platformer Engine
-        const ctx = canvas.getContext('2d');
-        const GAME_WIDTH = canvas.width;
-        const GAME_HEIGHT = canvas.height;
-
-        const levelData = [
-            {
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: GAME_WIDTH, height: 20 },
-                    { x: 150, y: 260, width: 100, height: 15 },
-                    { x: 300, y: 200, width: 100, height: 15 },
-                    { x: 450, y: 140, width: 100, height: 15 },
-                    { x: 200, y: 100, width: 150, height: 15 },
-                    { x: 50, y: 160, width: 80, height: 15 }
-                ],
-                enemies: [
-                    { x: 200, y: 80, width: 20, height: 20, vx: 2, range: [200, 330] }
-                ],
-                goal: { x: 60, y: 140, width: 25, height: 20 }
-            },
-            {
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: 200, height: 20 },
-                    { x: 250, y: GAME_HEIGHT - 60, width: 100, height: 15 },
-                    { x: 400, y: GAME_HEIGHT - 100, width: 100, height: 15 },
-                    { x: 200, y: 150, width: 100, height: 15 },
-                    { x: 50, y: 100, width: 100, height: 15 },
-                    { x: 350, y: 80, width: 150, height: 15 },
-                    { x: 550, y: 120, width: 50, height: 15 }
-                ],
-                enemies: [
-                    { x: 250, y: GAME_HEIGHT - 80, width: 20, height: 20, vx: 3, range: [250, 330] },
-                    { x: 350, y: 60, width: 20, height: 20, vx: -2, range: [350, 480] }
-                ],
-                goal: { x: 560, y: 100, width: 25, height: 20 }
-            },
-            {
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: 100, height: 20 },
-                    { x: 150, y: 280, width: 100, height: 15 },
-                    { x: 300, y: 240, width: 100, height: 15 },
-                    { x: 450, y: 200, width: 100, height: 15 },
-                    { x: 300, y: 130, width: 100, height: 15 },
-                    { x: 150, y: 90, width: 100, height: 15 },
-                    { x: 0, y: 50, width: 100, height: 15 }
-                ],
-                enemies: [
-                    { x: 150, y: 260, width: 20, height: 20, vx: 2, range: [150, 230] },
-                    { x: 450, y: 180, width: 20, height: 20, vx: 4, range: [450, 530] },
-                    { x: 150, y: 70, width: 20, height: 20, vx: -3, range: [150, 230] }
-                ],
-                goal: { x: 10, y: 30, width: 25, height: 20 }
-            }
-        ];
-
-        const currentLevel = levelData[levelIndex % levelData.length];
-
-        this.platformerState = {
-            levelIndex: levelIndex,
-            player: {
-                x: 20,
-                y: GAME_HEIGHT - 60,
-                width: 20,
-                height: 20,
-                vx: 0,
-                vy: 0,
-                speed: 4,
-                jumpPower: -10,
-                grounded: false,
-                color: '#107c10'
-            },
-            platforms: currentLevel.platforms,
-            enemies: currentLevel.enemies.map(e => ({ ...e })),
-            goal: currentLevel.goal,
-            keys: {},
-            gravity: 0.5,
-            active: true
-        };
-
-        const handleKeyDown = (e) => {
-            this.platformerState.keys[e.code] = true;
-            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-                e.preventDefault();
-            }
-        };
-        const handleKeyUp = (e) => {
-            if (this.platformerState) this.platformerState.keys[e.code] = false;
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
-        this.platformerState.cleanup = () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-            this.platformerState.active = false;
-        };
-
-        const self = this;
-        let lastTime = 0;
-
-        function update(dt) {
-            if (!self.platformerState || !self.platformerState.active) return;
-            const p = self.platformerState.player;
-            const keys = self.platformerState.keys;
-
-            // Horizontal movement
-            const speedScale = dt * 60; // Normalize to 60fps
-            if (keys['KeyA'] || keys['ArrowLeft']) p.vx = -p.speed * speedScale;
-            else if (keys['KeyD'] || keys['ArrowRight']) p.vx = p.speed * speedScale;
-            else p.vx *= Math.pow(0.8, speedScale); // Friction scaled
-
-            p.x += p.vx;
-
-            // Bounds
-            if (p.x < 0) p.x = 0;
-            if (p.x + p.width > GAME_WIDTH) p.x = GAME_WIDTH - p.width;
-
-            // Gravity & Vertical movement
-            p.vy += self.platformerState.gravity * speedScale;
-            p.y += p.vy * speedScale;
-            p.grounded = false;
-
-            // Collision with platforms
-            for (const plat of self.platformerState.platforms) {
-                if (p.x + p.width > plat.x && p.x < plat.x + plat.width &&
-                    p.y + p.height > plat.y && p.y + p.height < plat.y + p.vy * speedScale + 5) {
-                    p.y = plat.y - p.height;
-                    p.vy = 0;
-                    p.grounded = true;
-                }
-            }
-
-            // Enemies movement & collision
-            for (const enemy of self.platformerState.enemies) {
-                enemy.x += enemy.vx * speedScale;
-                if (enemy.x < enemy.range[0] || enemy.x + enemy.width > enemy.range[1]) {
-                    enemy.vx *= -1;
-                }
-
-                // Player collision with enemy
-                if (p.x < enemy.x + enemy.width && p.x + p.width > enemy.x &&
-                    p.y < enemy.y + enemy.height && p.y + p.height > enemy.y) {
-                    self.platformerState.active = false;
-                    gameOverDiv.style.display = 'flex';
-                }
-            }
-
-            // Goal collision
-            const goal = self.platformerState.goal;
-            if (p.x < goal.x + goal.width && p.x + p.width > goal.x &&
-                p.y < goal.y + goal.height && p.y + p.height > goal.y) {
-                self.platformerState.active = false;
-                if (self.platformerState.levelIndex + 1 < levelData.length) {
-                    // Next level
-                    setTimeout(() => self.startXboxPlatformer(self.platformerState.levelIndex + 1), 500);
-                } else {
-                    // Win state
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '30px Arial';
-                    ctx.fillText('YOU WIN!', GAME_WIDTH / 2 - 60, GAME_HEIGHT / 2);
-                    setTimeout(() => self.startXboxPlatformer(0), 2000);
-                }
-            }
-
-            // Jump
-            if (p.grounded && (keys['KeyW'] || keys['Space'] || keys['ArrowUp'])) {
-                p.vy = p.jumpPower;
-                p.grounded = false;
-            }
-
-            // Fall off screen
-            if (p.y > GAME_HEIGHT) {
-                self.platformerState.active = false;
-                gameOverDiv.style.display = 'flex';
-            }
-        }
-
-        function draw() {
-            if (!self.platformerState || !self.platformerState.active) return;
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            // Draw Platforms
-            ctx.fillStyle = '#333';
-            for (const plat of self.platformerState.platforms) {
-                // Main platform
-                ctx.fillStyle = '#333';
-                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-                // "Shadow" border at bottom
-                ctx.fillStyle = '#107c10';
-                ctx.fillRect(plat.x, plat.y + plat.height - 2, plat.width, 2);
-            }
-            // Shadow blur removed for performance
-
-            // Draw Enemies
-            ctx.fillStyle = '#ff3333';
-            for (const enemy of self.platformerState.enemies) {
-                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(enemy.x + 4, enemy.y + 4, 3, 3);
-                ctx.fillRect(enemy.x + 13, enemy.y + 4, 3, 3);
-                ctx.fillStyle = '#ff3333';
-            }
-
-            // Draw Goal
-            ctx.fillStyle = '#ffff00';
-            ctx.fillRect(self.platformerState.goal.x, self.platformerState.goal.y, self.platformerState.goal.width, self.platformerState.goal.height);
-
-            // Draw Player
-            ctx.fillStyle = self.platformerState.player.color;
-            ctx.fillRect(self.platformerState.player.x, self.platformerState.player.y, self.platformerState.player.width, self.platformerState.player.height);
-
-            // Player eyes
-            ctx.fillStyle = '#fff';
-            const eyeX = self.platformerState.player.vx >= 0 ? 12 : 2;
-            ctx.fillRect(self.platformerState.player.x + eyeX, self.platformerState.player.y + 4, 4, 4);
-            ctx.fillRect(self.platformerState.player.x + eyeX + 3, self.platformerState.player.y + 4, 4, 4);
-
-            // Draw Level Text
-            ctx.fillStyle = '#888';
-            ctx.font = '12px Arial';
-            ctx.fillText(`Level ${self.platformerState.levelIndex + 1}`, 10, 20);
-        }
-
-        function loop(timestamp) {
-            if (!lastTime) lastTime = timestamp;
-            const dt = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-
-            update(Math.min(dt, 0.1));
-            draw();
-            if (self.platformerState && self.platformerState.active) {
-                requestAnimationFrame(loop);
-            }
-        }
-
-        requestAnimationFrame(loop);
-    }
-
-    startXboxJoust(levelIndex = 0) {
-        this.stopAllXboxGames();
-
-        const canvas = document.getElementById('xbox-canvas');
-        if (!canvas) return;
-
-        const menuDiv = document.getElementById('xbox-menu');
-        if (menuDiv) menuDiv.style.display = 'none';
-
-        const hintDiv = document.getElementById('xbox-controls-hint');
-        if (hintDiv) {
-            hintDiv.innerHTML = `
-                <b style="color: #fff;">W / Space</b> Flap, <b style="color: #fff;">A / D</b> Move | 
-                Hit <b style="color: #ff3333;">Enemies</b> from <b style="color: #fff;">Above</b>
-            `;
-        }
-
-        canvas.style.display = 'block';
-
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        gameOverDiv.style.display = 'none';
-
-        const ctx = canvas.getContext('2d');
-        const GAME_WIDTH = canvas.width;
-        const GAME_HEIGHT = canvas.height;
-
-        const joustLevels = [
-            {
-                enemies: [
-                    { x: 100, y: 100, width: 24, height: 24, vx: 2, type: 'patrol' },
-                    { x: 400, y: 150, width: 24, height: 24, vx: -2, type: 'patrol' }
-                ],
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: GAME_WIDTH, height: 20 },
-                    { x: 100, y: 240, width: 150, height: 10 },
-                    { x: 350, y: 240, width: 150, height: 10 }
-                ],
-                powerups: []
-            },
-            {
-                enemies: [
-                    { x: 100, y: 100, width: 24, height: 24, vx: 2.5, type: 'hunter' },
-                    { x: 400, y: 50, width: 24, height: 24, vx: -2, type: 'patrol' },
-                    { x: 250, y: 180, width: 30, height: 20, vx: 4, type: 'charger' }
-                ],
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: GAME_WIDTH, height: 20 },
-                    { x: 50, y: 200, width: 100, height: 10 },
-                    { x: 450, y: 200, width: 100, height: 10 },
-                    { x: 250, y: 120, width: 100, height: 10, type: 'bouncy' }
-                ],
-                powerups: [{ x: 300, y: 80, type: 'speed' }]
-            },
-            {
-                enemies: [
-                    { x: 50, y: 50, width: 24, height: 24, vx: 3, type: 'hunter' },
-                    { x: 550, y: 50, width: 24, height: 24, vx: -3, type: 'hunter' },
-                    { x: 300, y: 150, width: 40, height: 20, vx: 6, type: 'charger' }
-                ],
-                platforms: [
-                    { x: 0, y: GAME_HEIGHT - 20, width: GAME_WIDTH, height: 20 },
-                    { x: 150, y: 220, width: 80, height: 10 },
-                    { x: 370, y: 220, width: 80, height: 10 },
-                    { x: 260, y: 100, width: 80, height: 10, type: 'bouncy' }
-                ],
-                powerups: [{ x: 300, y: 260, type: 'flap' }]
-            }
-        ];
-
-        const level = joustLevels[levelIndex % joustLevels.length];
-
-        this.joustState = {
-            levelIndex,
-            player: {
-                x: GAME_WIDTH / 2 - 12,
-                y: GAME_HEIGHT - 50,
-                width: 24,
-                height: 24,
-                vx: 0,
-                vy: 0,
-                speed: 0.8,
-                maxSpeed: 5,
-                gravity: 0.25,
-                flapPower: -5,
-                color: '#107c10',
-                powerups: {}
-            },
-            enemies: level.enemies.map(e => ({ ...e, vy: 0, bounceY: Math.random() * Math.PI * 2 })),
-            platforms: level.platforms.map(p => ({ ...p })),
-            powerups: level.powerups.map(p => ({ ...p, width: 16, height: 16, collected: false })),
-            keys: {},
-            active: true
-        };
-
-        const handleKeyDown = (e) => {
-            this.joustState.keys[e.code] = true;
-            if (['Space', 'KeyW', 'ArrowUp'].includes(e.code)) {
-                if (this.joustState && this.joustState.active) {
-                    const p = this.joustState.player;
-                    p.vy = p.powerups.flap ? p.flapPower * 1.4 : p.flapPower;
-                }
-            }
-            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-                e.preventDefault();
-            }
-        };
-        const handleKeyUp = (e) => {
-            if (this.joustState) this.joustState.keys[e.code] = false;
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-
-        this.joustState.cleanup = () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-            this.joustState.active = false;
-        };
-
-        const self = this;
-        let lastTime = 0;
-
-        function update(dt) {
-            if (!self.joustState || !self.joustState.active) return;
-            const p = self.joustState.player;
-            const keys = self.joustState.keys;
-            const speedScale = dt * 60;
-
-            // Powerup timers
-            for (const type in p.powerups) {
-                if (p.powerups[type] > 0) {
-                    p.powerups[type] -= dt * 1000;
-                    if (p.powerups[type] <= 0) delete p.powerups[type];
-                }
-            }
-
-            // Movement
-            const currentMaxSpeed = p.powerups.speed ? p.maxSpeed * 1.6 : p.maxSpeed;
-            const currentAccel = p.speed * (p.powerups.speed ? 1.5 : 1) * speedScale;
-
-            if (keys['KeyA'] || keys['ArrowLeft']) p.vx -= currentAccel;
-            if (keys['KeyD'] || keys['ArrowRight']) p.vx += currentAccel;
-            p.vx *= Math.pow(0.95, speedScale); // Friction
-
-            if (Math.abs(p.vx) > currentMaxSpeed) p.vx = Math.sign(p.vx) * currentMaxSpeed;
-            p.x += p.vx * speedScale;
-
-            // Wrap horizontally
-            if (p.x < -p.width) p.x = GAME_WIDTH;
-            if (p.x > GAME_WIDTH) p.x = -p.width;
-
-            // Gravity
-            p.vy += p.gravity * speedScale;
-            p.y += p.vy * speedScale;
-
-            // Floor & Platform collision
-            let onGround = false;
-            for (const plat of self.joustState.platforms) {
-                if (p.x + p.width > plat.x && p.x < plat.x + plat.width &&
-                    p.y + p.height > plat.y && p.y + p.height < plat.y + p.vy * speedScale + 5 && p.vy >= 0) {
-
-                    if (plat.type === 'bouncy') {
-                        p.vy = -10;
-                    } else {
-                        p.y = plat.y - p.height;
-                        p.vy = 0;
-                        onGround = true;
-                    }
-                }
-            }
-            if (p.y + p.height > GAME_HEIGHT) {
-                p.y = GAME_HEIGHT - p.height;
-                p.vy = 0;
-                onGround = true;
-            }
-
-            // Powerup collection
-            for (const pu of self.joustState.powerups) {
-                if (!pu.collected && p.x < pu.x + pu.width && p.x + p.width > pu.x &&
-                    p.y < pu.y + pu.height && p.y + p.height > pu.y) {
-                    pu.collected = true;
-                    p.powerups[pu.type] = 8000; // 8 seconds
-                }
-            }
-
-            // Enemies
-            for (let i = self.joustState.enemies.length - 1; i >= 0; i--) {
-                const e = self.joustState.enemies[i];
-
-                if (e.type === 'patrol') {
-                    e.x += e.vx * speedScale;
-                    e.bounceY += 0.05 * speedScale;
-                    e.y += Math.sin(e.bounceY) * 0.5 * speedScale;
-                } else if (e.type === 'hunter') {
-                    const dx = p.x - e.x;
-                    const dy = p.y - e.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        e.x += (dx / dist) * 1.2 * speedScale;
-                        e.y += (dy / dist) * 1.2 * speedScale;
-                    }
-                } else if (e.type === 'charger') {
-                    e.x += e.vx * speedScale;
-                    if (e.x < 0 || e.x + e.width > GAME_WIDTH) e.vx *= -1;
-                }
-
-                if (e.x < -e.width) e.x = GAME_WIDTH;
-                if (e.x > GAME_WIDTH) e.x = -e.width;
-
-                // Collision
-                if (p.x < e.x + e.width && p.x + p.width > e.x &&
-                    p.y < e.y + e.height && p.y + p.height > e.y) {
-
-                    if (p.y + p.height < e.y + e.height / 2 && p.vy > 0) {
-                        self.joustState.enemies.splice(i, 1);
-                        p.vy = -4;
-
-                        if (self.joustState.enemies.length === 0) {
-                            setTimeout(() => {
-                                if (self.joustState) {
-                                    self.joustState.active = false;
-                                    ctx.fillStyle = '#fff';
-                                    ctx.font = '24px "Segoe UI"';
-                                    const nextLvl = self.joustState.levelIndex + 1;
-                                    if (nextLvl < joustLevels.length) {
-                                        ctx.fillText(`LEVEL ${self.joustState.levelIndex + 1} COMPLETE!`, GAME_WIDTH / 2 - 100, GAME_HEIGHT / 2);
-                                        setTimeout(() => self.startXboxJoust(nextLvl), 2000);
-                                    } else {
-                                        ctx.fillText('JOUST CHAMPION!', GAME_WIDTH / 2 - 100, GAME_HEIGHT / 2);
-                                        setTimeout(() => self.showXboxMenu(), 3000);
-                                    }
-                                }
-                            }, 500);
-                        }
-                    } else {
-                        self.joustState.active = false;
-                        const gameOverDiv = document.getElementById('xbox-game-over');
-                        if (gameOverDiv) gameOverDiv.style.display = 'flex';
-                    }
-                }
-            }
-        }
-
-        function draw() {
-            if (!self.joustState || !self.joustState.active) return;
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-            // Platforms
-            for (const plat of self.joustState.platforms) {
-                ctx.fillStyle = plat.type === 'bouncy' ? '#107c10' : '#333';
-                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
-                if (plat.type === 'bouncy') {
-                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                    ctx.fillRect(plat.x, plat.y, plat.width, 2);
-                }
-            }
-
-            // Powerups
-            for (const pu of self.joustState.powerups) {
-                if (!pu.collected) {
-                    ctx.fillStyle = pu.type === 'speed' ? '#ffff00' : '#00ffff';
-                    ctx.beginPath();
-                    ctx.arc(pu.x + 8, pu.y + 8, 6, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                }
-            }
-
-            // Enemies
-            for (const e of self.joustState.enemies) {
-                if (e.type === 'hunter') ctx.fillStyle = '#ff00ff';
-                else if (e.type === 'charger') ctx.fillStyle = '#ff8800';
-                else ctx.fillStyle = '#ff3333';
-
-                ctx.fillRect(e.x, e.y, e.width, e.height);
-
-                // Wings 
-                const wingY = Math.sin(Date.now() / 100) * 8;
-                ctx.fillRect(e.x - 5, e.y + e.height / 2 + wingY, 8, 3);
-                ctx.fillRect(e.x + e.width - 3, e.y + e.height / 2 + wingY, 8, 3);
-
-                // Eyes
-                ctx.fillStyle = '#000';
-                ctx.fillRect(e.x + 4, e.y + 6, 3, 3);
-                ctx.fillRect(e.x + e.width - 7, e.y + 6, 3, 3);
-            }
-
-            // Player
-            const p = self.joustState.player;
-            ctx.fillStyle = p.color;
-            if (p.powerups.speed) ctx.fillStyle = '#ffff00';
-
-            // Visual indication for flap powerup without expensive shadow
-            if (p.powerups.flap) {
-                ctx.fillStyle = '#00ffff';
-                // Draw outline/glow effect manually if needed, or just change color
-                ctx.strokeStyle = '#00ffff';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(p.x - 2, p.y - 2, p.width + 4, p.height + 4);
-            }
-
-            ctx.fillRect(p.x, p.y, p.width, p.height);
-
-            // Eyes
-            ctx.fillStyle = '#fff';
-            const eyeX = p.vx >= 0 ? 14 : 2;
-            ctx.fillRect(p.x + eyeX, p.y + 6, 4, 4);
-            ctx.fillRect(p.x + eyeX + 4, p.y + 6, 4, 4);
-
-            // UI
-            ctx.fillStyle = '#888';
-            ctx.font = '12px Arial';
-            ctx.fillText(`Level ${self.joustState.levelIndex + 1}`, 10, 20);
-
-            // Powerup UI
-            let puCount = 0;
-            for (const type in p.powerups) {
-                ctx.fillStyle = type === 'speed' ? '#ffff00' : '#00ffff';
-                ctx.fillRect(10, 35 + puCount * 10, (p.powerups[type] / 8000) * 100, 4);
-                puCount++;
-            }
-        }
-
-        function loop(timestamp) {
-            if (!lastTime) lastTime = timestamp;
-            const dt = Math.min(0.1, (timestamp - lastTime) / 1000);
-            lastTime = timestamp;
-
-            update(dt);
-            draw();
-
-            if (self.joustState && self.joustState.active) {
-                requestAnimationFrame(loop);
-            }
-        }
-
-        requestAnimationFrame(loop);
-    }
-
-    stopXboxPlatformer() {
-        if (this.platformerState && this.platformerState.cleanup) {
-            this.platformerState.cleanup();
-        }
-        this.platformerState = null;
-    }
-
-    stopXboxJoust() {
-        if (this.joustState && this.joustState.cleanup) {
-            this.joustState.cleanup();
-        }
-        this.joustState = null;
-    }
     openSettings() {
         if (!this.settingsModal) return;
         this.settingsModal.classList.remove('hidden');
@@ -1124,7 +406,7 @@ export class UIManager {
         const savedAudio = localStorage.getItem('settings_audio') !== 'false';
         const savedFps = localStorage.getItem('settings_fps') !== 'false';
         const savedPosition = localStorage.getItem('settings_position') !== 'false';
-        const savedMinimap = localStorage.getItem('settings_minimap') !== 'false';
+        const savedMinimap = localStorage.getItem('settings_minimap') === 'true';
 
         // Mobile Controls: default to auto-detected state if not previously set
         let savedMobile = localStorage.getItem('settings_mobile');
@@ -1225,6 +507,85 @@ export class UIManager {
                 }
                 // Sync the voice button in top-right controls
                 this.updateVoiceButtonState(enabled);
+            });
+        }
+
+        // Merlin Thoughts toggle
+        this.thoughtsToggle = document.getElementById('settings-thoughts-toggle');
+        if (this.thoughtsToggle) {
+            // Default to FALSE (Off by default)
+            const savedThoughts = localStorage.getItem('settings_thoughts') === 'true';
+            this.thoughtsToggle.checked = savedThoughts;
+
+            // Apply initial state to MerlinClient
+            if (window.merlinClient) {
+                window.merlinClient.thinkingEnabled = savedThoughts;
+            }
+
+            this.thoughtsToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_thoughts', enabled);
+                // Update MerlinClient
+                if (window.merlinClient) {
+                    window.merlinClient.thinkingEnabled = enabled;
+                    console.log('[UIManager] Merlin thoughts', enabled ? 'enabled' : 'disabled');
+                }
+            });
+        }
+
+        // Bypass Tokens toggle
+        this.bypassTokensToggle = document.getElementById('settings-bypass-tokens-toggle');
+        if (this.bypassTokensToggle) {
+            // Default to TRUE (On by default)
+            const savedBypassTokens = localStorage.getItem('settings_bypass_tokens') !== 'false';
+            this.bypassTokensToggle.checked = savedBypassTokens;
+
+            // Apply initial state to MerlinClient
+            if (window.merlinClient) {
+                window.merlinClient.bypassTokens = savedBypassTokens;
+            }
+
+            this.bypassTokensToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_bypass_tokens', enabled);
+                // Update MerlinClient
+                if (window.merlinClient) {
+                    window.merlinClient.bypassTokens = enabled;
+                    console.log('[UIManager] Bypass tokens', enabled ? 'enabled' : 'disabled');
+                }
+            });
+        }
+
+        // AI Provider toggle (Gemini vs Claude Code)
+        this.aiProviderToggle = document.getElementById('settings-ai-provider-toggle');
+        if (this.aiProviderToggle) {
+            // Default to FALSE (Gemini by default)
+            const savedProvider = localStorage.getItem('settings_ai_provider') || 'gemini';
+            this.aiProviderToggle.checked = savedProvider === 'claude';
+
+            // Apply initial state to MerlinClient
+            if (window.merlinClient) {
+                window.merlinClient.aiProvider = savedProvider;
+            }
+
+            this.aiProviderToggle.addEventListener('change', (e) => {
+                const useClaude = e.target.checked;
+                const provider = useClaude ? 'claude' : 'gemini';
+                localStorage.setItem('settings_ai_provider', provider);
+
+                // Update MerlinClient
+                if (window.merlinClient) {
+                    window.merlinClient.aiProvider = provider;
+                    console.log('[UIManager] AI Provider switched to:', provider);
+
+                    // Reconnect with new provider
+                    window.merlinClient.connect();
+                }
+
+                // Show info message
+                if (useClaude) {
+                    alert('🧙 Claude Code mode enabled!\n\nMerlin will now use Claude Code with custom skills.\n\nTo interact:\n1. Use the Claude Code terminal where you started the game\n2. Merlin has skills for creating creatures, items, and structures\n3. Example: "Create a bouncing slime creature"');
+                }
             });
         }
 
@@ -1363,7 +724,11 @@ export class UIManager {
 
         // Reset World button
         if (this.resetWorldBtn) {
-            this.resetWorldBtn.addEventListener('click', () => {
+            this.resetWorldBtn.addEventListener('click', (e) => {
+                // Stop propagation to prevent global click handlers (e.g., Merlin voice intro)
+                // from interfering with the native confirm() dialog
+                e.stopPropagation();
+
                 if (confirm('⚠️ Are you sure you want to reset the world?\n\nThis will:\n• Clear all placed blocks\n• Remove all creatures\n• Delete all signs\n• Generate new terrain\n\nThis action cannot be undone!')) {
                     // Close settings modal
                     this.settingsModal.classList.add('hidden');
@@ -1381,6 +746,353 @@ export class UIManager {
 
         // Hotkey Configuration
         this.setupHotkeyInputs();
+
+        // Graphics Quality Presets
+        this.setupGraphicsSettings();
+
+        // Player Appearance - Color Picker
+        this.setupShirtColorPicker();
+
+        // World Warp Buttons
+        this.setupWorldWarpButtons();
+    }
+
+    /**
+     * Setup world warp buttons in settings
+     */
+    setupWorldWarpButtons() {
+        const warpButtons = [
+            { id: 'settings-warp-earth', world: 'earth' },
+            { id: 'settings-warp-crystal', world: 'crystal' },
+            { id: 'settings-warp-lava', world: 'lava' },
+            { id: 'settings-warp-moon', world: 'moon' }
+        ];
+
+        warpButtons.forEach(({ id, world }) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    console.log(`[UIManager] Warp to ${world} requested from settings`);
+
+                    // Close settings modal
+                    if (this.settingsModal) {
+                        this.settingsModal.classList.add('hidden');
+                    }
+
+                    // Trigger warp via SpaceShipManager
+                    if (this.game.spaceShipManager) {
+                        this.game.spaceShipManager.warpToWorld(world);
+                    } else {
+                        console.error('[UIManager] SpaceShipManager not available for warp');
+                        this.addChatMessage('system', '❌ Warp system not available.');
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Setup shirt color picker in settings
+     */
+    setupShirtColorPicker() {
+        this.shirtColorPicker = document.getElementById('settings-shirt-color-picker');
+        if (!this.shirtColorPicker) return;
+
+        const shirtColors = [
+            0xFF5733, // Orange-red
+            0x33FF57, // Green
+            0x3357FF, // Blue
+            0xFF33A8, // Pink
+            0xFFD700, // Gold
+            0x00CED1, // Dark cyan
+            0x9400D3, // Dark violet
+            0xFF6347, // Tomato
+            0x20B2AA, // Light sea green
+            0x8B4513, // Saddle brown
+            0x4169E1, // Royal blue
+            0xDC143C, // Crimson
+            0x00AAAA, // Teal (Default)
+            0x333333, // Dark grey
+            0xFFFFFF, // White
+            0x000000, // Black
+        ];
+
+        // Load saved color
+        const savedColor = localStorage.getItem('settings_shirt_color');
+        const currentColor = savedColor ? parseInt(savedColor) : null;
+
+        // Populate colors
+        shirtColors.forEach(color => {
+            const btn = document.createElement('div');
+            btn.className = 'color-option';
+            if (currentColor === color) btn.classList.add('active');
+
+            // Format hex for CSS
+            const hex = '#' + color.toString(16).padStart(6, '0');
+            btn.style.backgroundColor = hex;
+            btn.title = hex;
+
+            btn.onclick = () => {
+                // Update active state
+                document.querySelectorAll('.color-option').forEach(el => el.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Save to localStorage
+                localStorage.setItem('settings_shirt_color', color);
+
+                // Apply to local player
+                if (this.game.player) {
+                    this.game.player.setShirtColor(color);
+                }
+
+                // Sync via socket
+                if (this.game.socketManager) {
+                    this.game.socketManager.sendShirtColor(color);
+                }
+            };
+
+            this.shirtColorPicker.appendChild(btn);
+        });
+    }
+
+    /**
+     * Setup graphics quality presets and settings
+     */
+    setupGraphicsSettings() {
+        // Cache elements
+        this.renderDistanceSlider = document.getElementById('settings-render-distance');
+        this.renderDistanceValue = document.getElementById('render-distance-value');
+        this.shadowsToggle = document.getElementById('settings-shadows-toggle');
+        this.particlesToggle = document.getElementById('settings-particles-toggle');
+        this.grassToggle = document.getElementById('settings-grass-toggle');
+        this.weatherToggle = document.getElementById('settings-weather-toggle');
+
+        // Load saved graphics settings or use defaults
+        const savedPreset = localStorage.getItem('settings_graphics_preset') || 'balanced';
+        const savedRenderDistance = parseInt(localStorage.getItem('settings_render_distance')) || 6;
+        const savedShadows = localStorage.getItem('settings_shadows') !== 'false';
+        const savedParticles = localStorage.getItem('settings_particles') !== 'false';
+        const savedGrass = localStorage.getItem('settings_grass') !== 'false';
+        const savedWeather = localStorage.getItem('settings_weather') !== 'false';
+
+        // Apply initial states
+        if (this.renderDistanceSlider) {
+            this.renderDistanceSlider.value = savedRenderDistance;
+            if (this.renderDistanceValue) this.renderDistanceValue.textContent = savedRenderDistance;
+        }
+        if (this.shadowsToggle) this.shadowsToggle.checked = savedShadows;
+        if (this.particlesToggle) this.particlesToggle.checked = savedParticles;
+        if (this.grassToggle) this.grassToggle.checked = savedGrass;
+        if (this.weatherToggle) this.weatherToggle.checked = savedWeather;
+
+        // Apply loaded settings to game
+        this.applyGraphicsSettings({
+            renderDistance: savedRenderDistance,
+            shadows: savedShadows,
+            particles: savedParticles,
+            grass: savedGrass,
+            weather: savedWeather
+        });
+
+        // Update preset button states
+        this.updatePresetButtonState(savedPreset);
+
+        // Render Distance slider
+        if (this.renderDistanceSlider) {
+            this.renderDistanceSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                if (this.renderDistanceValue) this.renderDistanceValue.textContent = value;
+                localStorage.setItem('settings_render_distance', value);
+                localStorage.setItem('settings_graphics_preset', 'custom');
+                this.updatePresetButtonState('custom');
+
+                // Apply to game
+                if (this.game.renderDistance !== undefined) {
+                    this.game.renderDistance = value;
+                    console.log(`[UIManager] Render distance set to: ${value}`);
+                }
+            });
+        }
+
+        // Shadows toggle
+        if (this.shadowsToggle) {
+            this.shadowsToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_shadows', enabled);
+                localStorage.setItem('settings_graphics_preset', 'custom');
+                this.updatePresetButtonState('custom');
+
+                if (this.game.toggleTerrainShadows) {
+                    this.game.toggleTerrainShadows(enabled);
+                }
+                // Reset auto-disable when manually enabling
+                if (enabled) this.game.shadowsAutoDisabled = false;
+            });
+        }
+
+        // Particles toggle
+        if (this.particlesToggle) {
+            this.particlesToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_particles', enabled);
+                localStorage.setItem('settings_graphics_preset', 'custom');
+                this.updatePresetButtonState('custom');
+
+                if (this.game.gameState) {
+                    this.game.gameState.debug.particles = enabled;
+                }
+            });
+        }
+
+        // Grass toggle
+        if (this.grassToggle) {
+            this.grassToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_grass', enabled);
+                localStorage.setItem('settings_graphics_preset', 'custom');
+                this.updatePresetButtonState('custom');
+
+                if (this.game.toggleGrass) {
+                    this.game.toggleGrass(enabled);
+                }
+            });
+        }
+
+        // Weather toggle
+        if (this.weatherToggle) {
+            this.weatherToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_weather', enabled);
+                localStorage.setItem('settings_graphics_preset', 'custom');
+                this.updatePresetButtonState('custom');
+
+                if (this.game.toggleWeather) {
+                    this.game.toggleWeather(enabled);
+                }
+            });
+        }
+
+        // Preset buttons
+        const presetFast = document.getElementById('preset-fast');
+        const presetBalanced = document.getElementById('preset-balanced');
+        const presetBeautiful = document.getElementById('preset-beautiful');
+
+        if (presetFast) {
+            presetFast.addEventListener('click', () => this.applyGraphicsPreset('fast'));
+        }
+        if (presetBalanced) {
+            presetBalanced.addEventListener('click', () => this.applyGraphicsPreset('balanced'));
+        }
+        if (presetBeautiful) {
+            presetBeautiful.addEventListener('click', () => this.applyGraphicsPreset('beautiful'));
+        }
+    }
+
+    /**
+     * Apply a graphics preset
+     */
+    applyGraphicsPreset(preset) {
+        const presets = {
+            fast: {
+                renderDistance: 3,
+                shadows: false,
+                particles: false,
+                grass: false,
+                weather: false
+            },
+            balanced: {
+                renderDistance: 6,
+                shadows: true,
+                particles: true,
+                grass: true,
+                weather: true
+            },
+            beautiful: {
+                renderDistance: 10,
+                shadows: true,
+                particles: true,
+                grass: true,
+                weather: true
+            }
+        };
+
+        const settings = presets[preset];
+        if (!settings) return;
+
+        // Update UI toggles
+        if (this.renderDistanceSlider) {
+            this.renderDistanceSlider.value = settings.renderDistance;
+            if (this.renderDistanceValue) this.renderDistanceValue.textContent = settings.renderDistance;
+        }
+        if (this.shadowsToggle) this.shadowsToggle.checked = settings.shadows;
+        if (this.particlesToggle) this.particlesToggle.checked = settings.particles;
+        if (this.grassToggle) this.grassToggle.checked = settings.grass;
+        if (this.weatherToggle) this.weatherToggle.checked = settings.weather;
+
+        // Save to localStorage
+        localStorage.setItem('settings_graphics_preset', preset);
+        localStorage.setItem('settings_render_distance', settings.renderDistance);
+        localStorage.setItem('settings_shadows', settings.shadows);
+        localStorage.setItem('settings_particles', settings.particles);
+        localStorage.setItem('settings_grass', settings.grass);
+        localStorage.setItem('settings_weather', settings.weather);
+
+        // Apply to game
+        this.applyGraphicsSettings(settings);
+
+        // Update preset button state
+        this.updatePresetButtonState(preset);
+
+        console.log(`[UIManager] Applied graphics preset: ${preset}`);
+    }
+
+    /**
+     * Apply graphics settings to the game
+     */
+    applyGraphicsSettings(settings) {
+        // Render distance
+        if (this.game.renderDistance !== undefined) {
+            this.game.renderDistance = settings.renderDistance;
+        }
+
+        // Shadows
+        if (this.game.toggleTerrainShadows) {
+            this.game.toggleTerrainShadows(settings.shadows);
+        }
+        if (!settings.shadows) {
+            this.game.shadowsAutoDisabled = false;
+        }
+
+        // Particles
+        if (this.game.gameState) {
+            this.game.gameState.debug.particles = settings.particles;
+        }
+
+        // Grass
+        if (this.game.toggleGrass) {
+            this.game.toggleGrass(settings.grass);
+        }
+
+        // Weather
+        if (this.game.toggleWeather) {
+            this.game.toggleWeather(settings.weather);
+        }
+    }
+
+    /**
+     * Update preset button active states
+     */
+    updatePresetButtonState(activePreset) {
+        const buttons = ['preset-fast', 'preset-balanced', 'preset-beautiful'];
+        buttons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.classList.remove('active');
+                if (id === `preset-${activePreset}`) {
+                    btn.classList.add('active');
+                }
+            }
+        });
     }
 
     /**
@@ -2132,7 +1844,9 @@ export class UIManager {
             if (e.code === 'KeyT' && !this.isPlayerChatOpen && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
                 e.preventDefault();
                 this.toggleChatPanel(true);
-                this.setChatMode('player');
+                // Always default to Merlin (AI) tab when pressing 't'
+                this.setChatMode('ai');
+                console.log('[UIManager] T key pressed - opening chat with AI (Merlin) mode');
                 setTimeout(() => this.chatInput?.focus(), 100);
             } else if (e.code === 'Escape' && !this.chatPanel.classList.contains('hidden')) {
                 e.preventDefault();
@@ -2350,6 +2064,10 @@ export class UIManager {
             this.copyChatBtn.onclick = () => this.copyChatToClipboard();
         }
 
+        if (this.clearChatBtn) {
+            this.clearChatBtn.onclick = () => this.clearChatHistory();
+        }
+
         if (this.chatInput) {
             this.chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -2399,6 +2117,32 @@ export class UIManager {
         }).catch(err => {
             console.error('Failed to copy chat:', err);
         });
+    }
+
+    clearChatHistory() {
+        // Only clear the currently active chat mode
+        if (!this.chatMessages) return;
+
+        // Confirm before clearing
+        if (!confirm('Clear all chat history for this tab? This cannot be undone.')) {
+            return;
+        }
+
+        // Remove all messages
+        const messages = this.chatMessages.querySelectorAll('.message');
+        messages.forEach(msg => msg.remove());
+
+        // Add a system message to confirm
+        this.addChatMessage('system', 'Chat history cleared.');
+
+        // Visual feedback on button
+        const originalText = this.clearChatBtn.innerHTML;
+        this.clearChatBtn.innerHTML = "✓";
+        setTimeout(() => {
+            if (this.clearChatBtn) this.clearChatBtn.innerHTML = originalText;
+        }, 2000);
+
+        console.log(`[UIManager] Cleared chat history for mode: ${this.chatMode}`);
     }
 
     toggleStopButton(visible) {
@@ -2643,9 +2387,10 @@ export class UIManager {
         if (!this.chatPanel) return;
 
         if (show) {
-            // Check if user is authenticated before allowing AI chat
-            if (!auth.currentUser) {
-                // Not signed in - open auth modal instead
+            // Check if user is authenticated before allowing AI chat (unless bypass tokens is enabled)
+            const bypassTokens = window.merlinClient?.bypassTokens ?? true; // Default to true
+            if (!auth.currentUser && !this.game.isCLI && !bypassTokens) {
+                // Not signed in and bypass disabled - open auth modal instead
                 if (this.game.storeUI) {
                     this.game.storeUI.openAuthModal();
                 }
@@ -2740,6 +2485,20 @@ export class UIManager {
                     this.fpsCounter.classList.add('low');
                 } else if (this.fps < 50) {
                     this.fpsCounter.classList.add('medium');
+                }
+            }
+
+            // Auto-disable terrain shadows when FPS drops below 60
+            // Only if auto-shadow management is enabled and shadows are currently on
+            if (this.game && this.game.autoShadowManagement !== false) {
+                if (this.fps < 60 && this.game.terrainShadowsEnabled && !this.game.shadowsAutoDisabled) {
+                    console.log(`[Performance] Auto-disabling terrain shadows due to low FPS (${this.fps})`);
+                    this.game.toggleTerrainShadows(false);
+                    this.game.shadowsAutoDisabled = true;
+
+                    // Update debug panel checkbox if visible
+                    const shadowCheck = document.getElementById('dbg-shadows');
+                    if (shadowCheck) shadowCheck.checked = false;
                 }
             }
         }
@@ -3329,479 +3088,9 @@ export class UIManager {
         }
     }
 
-    stopAllXboxGames() {
-        this.stopXboxPlatformer();
-        this.stopXboxJoust();
-        this.stopXboxSnake();
-        this.stopXboxBrickBreaker();
-        this.stopXboxInvaders();
-    }
 
-    startXboxSnake() {
-        this.stopAllXboxGames();
 
-        const canvas = document.getElementById('xbox-canvas');
-        if (!canvas) return;
 
-        const menuDiv = document.getElementById('xbox-menu');
-        const hintDiv = document.getElementById('xbox-controls-hint');
-        if (menuDiv) menuDiv.style.display = 'none';
-        if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">WASD / Arrows</b> Move | Eat <b style="color: #00ff00;">Green</b> Food`;
-        }
-
-        canvas.style.display = 'block';
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        gameOverDiv.style.display = 'none';
-
-        const ctx = canvas.getContext('2d');
-        const GRID_SIZE = 20;
-        const width = canvas.width;
-        const height = canvas.height;
-        const cols = Math.floor(width / GRID_SIZE);
-        const rows = Math.floor(height / GRID_SIZE);
-
-        this.snakeState = {
-            snake: [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }],
-            direction: { x: 1, y: 0 },
-            nextDirection: { x: 1, y: 0 },
-            food: { x: 15, y: 15 },
-            score: 0,
-            active: true,
-            lastUpdate: 0,
-            updateInterval: 0.15
-        };
-
-        const handleKeyDown = (e) => {
-            const s = this.snakeState;
-            if (!s) return;
-            if ((e.code === 'KeyW' || e.code === 'ArrowUp') && s.direction.y === 0) s.nextDirection = { x: 0, y: -1 };
-            if ((e.code === 'KeyS' || e.code === 'ArrowDown') && s.direction.y === 0) s.nextDirection = { x: 0, y: 1 };
-            if ((e.code === 'KeyA' || e.code === 'ArrowLeft') && s.direction.x === 0) s.nextDirection = { x: -1, y: 0 };
-            if ((e.code === 'KeyD' || e.code === 'ArrowRight') && s.direction.x === 0) s.nextDirection = { x: 1, y: 0 };
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        this.snakeState.cleanup = () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-
-        const spawnFood = () => {
-            let newFood;
-            while (true) {
-                newFood = {
-                    x: Math.floor(Math.random() * cols),
-                    y: Math.floor(Math.random() * rows)
-                };
-                if (!this.snakeState || !this.snakeState.snake.some(seg => seg.x === newFood.x && seg.y === newFood.y)) break;
-            }
-            this.snakeState.food = newFood;
-        };
-
-        const self = this;
-        let lastTimestamp = 0;
-
-        function update(dt) {
-            const s = self.snakeState;
-            if (!s || !s.active) return;
-
-            s.lastUpdate += dt;
-            if (s.lastUpdate >= s.updateInterval) {
-                s.lastUpdate = 0;
-                s.direction = s.nextDirection;
-
-                const head = { x: s.snake[0].x + s.direction.x, y: s.snake[0].y + s.direction.y };
-
-                // Collisions
-                if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows ||
-                    s.snake.some(seg => seg.x === head.x && seg.y === head.y)) {
-                    s.active = false;
-                    gameOverDiv.style.display = 'flex';
-                    return;
-                }
-
-                s.snake.unshift(head);
-                if (head.x === s.food.x && head.y === s.food.y) {
-                    s.score += 10;
-                    s.updateInterval = Math.max(0.05, 0.15 - (s.score / 500));
-                    spawnFood();
-                } else {
-                    s.snake.pop();
-                }
-            }
-        }
-
-        function draw() {
-            const s = self.snakeState;
-            if (!s) return;
-
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, 0, width, height);
-
-            // Food
-            ctx.fillStyle = '#107c10';
-            ctx.fillRect(s.food.x * GRID_SIZE, s.food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-
-            // Snake
-            s.snake.forEach((seg, i) => {
-                ctx.fillStyle = i === 0 ? '#1eb51e' : '#107c10';
-                ctx.fillRect(seg.x * GRID_SIZE, seg.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
-            });
-
-            ctx.fillStyle = '#fff';
-            ctx.font = '14px "Segoe UI"';
-            ctx.fillText(`Score: ${s.score}`, 10, 20);
-        }
-
-        function loop(timestamp) {
-            if (!lastTimestamp) lastTimestamp = timestamp;
-            const dt = (timestamp - lastTimestamp) / 1000;
-            lastTimestamp = timestamp;
-
-            update(dt);
-            draw();
-
-            if (self.snakeState && self.snakeState.active) {
-                requestAnimationFrame(loop);
-            }
-        }
-
-        requestAnimationFrame(loop);
-    }
-
-    stopXboxSnake() {
-        if (this.snakeState) {
-            if (this.snakeState.cleanup) this.snakeState.cleanup();
-            this.snakeState.active = false;
-        }
-        this.snakeState = null;
-    }
-
-    startXboxBrickBreaker() {
-        this.stopAllXboxGames();
-
-        const canvas = document.getElementById('xbox-canvas');
-        if (!canvas) return;
-
-        const menuDiv = document.getElementById('xbox-menu');
-        const hintDiv = document.getElementById('xbox-controls-hint');
-        if (menuDiv) menuDiv.style.display = 'none';
-        if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move Paddle | Clear all <b style="color: #ffd700;">Bricks</b>`;
-        }
-
-        canvas.style.display = 'block';
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        gameOverDiv.style.display = 'none';
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        this.bricksState = {
-            active: true,
-            paddle: { x: width / 2 - 40, y: height - 20, w: 80, h: 10 },
-            ball: { x: width / 2, y: height - 40, vx: 3, vy: -3, r: 6 },
-            bricks: [],
-            score: 0,
-            keys: {}
-        };
-
-        const brickRows = 5;
-        const brickCols = 8;
-        const brickW = 65;
-        const brickH = 20;
-        const brickPadding = 10;
-        const offsetTop = 40;
-        const offsetLeft = 5;
-
-        for (let r = 0; r < brickRows; r++) {
-            for (let c = 0; c < brickCols; c++) {
-                this.bricksState.bricks.push({
-                    x: c * (brickW + brickPadding) + offsetLeft,
-                    y: r * (brickH + brickPadding) + offsetTop,
-                    active: true
-                });
-            }
-        }
-
-        const handleKeyDown = (e) => { if (this.bricksState) this.bricksState.keys[e.code] = true; };
-        const handleKeyUp = (e) => { if (this.bricksState) this.bricksState.keys[e.code] = false; };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        this.bricksState.cleanup = () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-
-        const self = this;
-        let lastTime = 0;
-
-        function update(dt) {
-            const s = self.bricksState;
-            if (!s || !s.active) return;
-            const speedScale = dt * 60;
-
-            // Paddle move
-            if (s.keys['KeyA'] || s.keys['ArrowLeft']) s.paddle.x -= 7 * speedScale;
-            if (s.keys['KeyD'] || s.keys['ArrowRight']) s.paddle.x += 7 * speedScale;
-            if (s.paddle.x < 0) s.paddle.x = 0;
-            if (s.paddle.x + s.paddle.w > width) s.paddle.x = width - s.paddle.w;
-
-            // Ball move
-            s.ball.x += s.ball.vx * speedScale;
-            s.ball.y += s.ball.vy * speedScale;
-
-            // Walls
-            if (s.ball.x - s.ball.r < 0 || s.ball.x + s.ball.r > width) s.ball.vx *= -1;
-            if (s.ball.y - s.ball.r < 0) s.ball.vy *= -1;
-
-            // Paddle collision
-            if (s.ball.y + s.ball.r > s.paddle.y && s.ball.x > s.paddle.x && s.ball.x < s.paddle.x + s.paddle.w) {
-                s.ball.vy = -Math.abs(s.ball.vy);
-            }
-
-            // Floor
-            if (s.ball.y + s.ball.r > height) {
-                s.active = false;
-                gameOverDiv.style.display = 'flex';
-            }
-
-            // Bricks
-            let allCleared = true;
-            for (const b of s.bricks) {
-                if (b.active) {
-                    allCleared = false;
-                    if (s.ball.x > b.x && s.ball.x < b.x + brickW && s.ball.y > b.y && s.ball.y < b.y + brickH) {
-                        b.active = false;
-                        s.ball.vy *= -1;
-                        s.score += 10;
-                        break;
-                    }
-                }
-            }
-
-            if (allCleared) {
-                s.active = false;
-                ctx.fillStyle = '#fff';
-                ctx.font = '24px Arial';
-                ctx.fillText('BRICKS CLEARED!', width / 2 - 80, height / 2);
-                setTimeout(() => self.showXboxMenu(), 2000);
-            }
-        }
-
-        function draw() {
-            const s = self.bricksState;
-            if (!s) return;
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, 0, width, height);
-
-            // Bricks
-            s.bricks.forEach(b => {
-                if (b.active) {
-                    ctx.fillStyle = '#ffd700';
-                    ctx.fillRect(b.x, b.y, brickW, brickH);
-                }
-            });
-
-            // Paddle
-            ctx.fillStyle = '#107c10';
-            ctx.fillRect(s.paddle.x, s.paddle.y, s.paddle.w, s.paddle.h);
-
-            // Ball
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(s.ball.x, s.ball.y, s.ball.r, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#888';
-            ctx.font = '14px Arial';
-            ctx.fillText(`Score: ${s.score}`, 10, 20);
-        }
-
-        function loop(timestamp) {
-            if (!lastTime) lastTime = timestamp;
-            const dt = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-            update(dt);
-            draw();
-            if (self.bricksState && self.bricksState.active) requestAnimationFrame(loop);
-        }
-        requestAnimationFrame(loop);
-    }
-
-    stopXboxBrickBreaker() {
-        if (this.bricksState) {
-            if (this.bricksState.cleanup) this.bricksState.cleanup();
-            this.bricksState.active = false;
-        }
-        this.bricksState = null;
-    }
-
-    startXboxInvaders() {
-        this.stopAllXboxGames();
-
-        const canvas = document.getElementById('xbox-canvas');
-        if (!canvas) return;
-
-        const menuDiv = document.getElementById('xbox-menu');
-        const hintDiv = document.getElementById('xbox-controls-hint');
-        if (menuDiv) menuDiv.style.display = 'none';
-        if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move | <b style="color: #fff;">Space</b> Shoot | Repel the <b style="color: #ff3333;">Invaders</b>`;
-        }
-
-        canvas.style.display = 'block';
-        const gameOverDiv = document.getElementById('xbox-game-over');
-        gameOverDiv.style.display = 'none';
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        this.invadersState = {
-            active: true,
-            player: { x: width / 2 - 15, y: height - 30, w: 30, h: 20 },
-            bullets: [],
-            enemies: [],
-            enemyDir: 1,
-            enemyStep: 0,
-            score: 0,
-            keys: {}
-        };
-
-        for (let r = 0; r < 4; r++) {
-            for (let c = 0; c < 10; c++) {
-                this.invadersState.enemies.push({ x: c * 45 + 50, y: r * 35 + 40, w: 30, h: 20 });
-            }
-        }
-
-        const handleKeyDown = (e) => {
-            if (!this.invadersState) return;
-            this.invadersState.keys[e.code] = true;
-            if (e.code === 'Space') {
-                this.invadersState.bullets.push({ x: this.invadersState.player.x + 15, y: this.invadersState.player.y, r: 3 });
-            }
-        };
-        const handleKeyUp = (e) => { if (this.invadersState) this.invadersState.keys[e.code] = false; };
-
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        this.invadersState.cleanup = () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-
-        const self = this;
-        let lastTime = 0;
-
-        function update(dt) {
-            const s = self.invadersState;
-            if (!s || !s.active) return;
-            const speedScale = dt * 60;
-
-            if (s.keys['KeyA'] || s.keys['ArrowLeft']) s.player.x -= 5 * speedScale;
-            if (s.keys['KeyD'] || s.keys['ArrowRight']) s.player.x += 5 * speedScale;
-            if (s.player.x < 0) s.player.x = 0;
-            if (s.player.x + s.player.w > width) s.player.x = width - s.player.w;
-
-            // Bullets
-            for (let i = s.bullets.length - 1; i >= 0; i--) {
-                s.bullets[i].y -= 7 * speedScale;
-                if (s.bullets[i].y < 0) {
-                    s.bullets.splice(i, 1);
-                    continue;
-                }
-
-                for (let j = s.enemies.length - 1; j >= 0; j--) {
-                    const e = s.enemies[j];
-                    if (s.bullets[i] && s.bullets[i].x > e.x && s.bullets[i].x < e.x + e.w && s.bullets[i].y > e.y && s.bullets[i].y < e.y + e.h) {
-                        s.enemies.splice(j, 1);
-                        s.bullets.splice(i, 1);
-                        s.score += 20;
-                        break;
-                    }
-                }
-            }
-
-            // Enemies move
-            s.enemyStep += speedScale;
-            if (s.enemyStep > 30) {
-                s.enemyStep = 0;
-                let hitEdge = false;
-                for (const e of s.enemies) {
-                    e.x += 15 * s.enemyDir;
-                    if (e.x < 10 || e.x + e.w > width - 10) hitEdge = true;
-                }
-                if (hitEdge) {
-                    s.enemyDir *= -1;
-                    for (const e of s.enemies) e.y += 20;
-                }
-            }
-
-            // Lose condition
-            for (const e of s.enemies) {
-                if (e.y + e.h > s.player.y) {
-                    s.active = false;
-                    gameOverDiv.style.display = 'flex';
-                }
-            }
-
-            if (s.enemies.length === 0) {
-                s.active = false;
-                ctx.fillStyle = '#fff';
-                ctx.font = '24px Arial';
-                ctx.fillText('INVADERS REPELLED!', width / 2 - 100, height / 2);
-                setTimeout(() => self.showXboxMenu(), 2000);
-            }
-        }
-
-        function draw() {
-            const s = self.invadersState;
-            if (!s) return;
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(0, 0, width, height);
-
-            // Player
-            ctx.fillStyle = '#107c10';
-            ctx.fillRect(s.player.x, s.player.y, s.player.w, s.player.h);
-
-            // Enemies
-            ctx.fillStyle = '#ff3333';
-            s.enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
-
-            // Bullets
-            ctx.fillStyle = '#ffd700';
-            s.bullets.forEach(b => {
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            ctx.fillStyle = '#888';
-            ctx.font = '14px Arial';
-            ctx.fillText(`Score: ${s.score}`, 10, 20);
-        }
-
-        function loop(timestamp) {
-            if (!lastTime) lastTime = timestamp;
-            const dt = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-            update(dt);
-            draw();
-            if (self.invadersState && self.invadersState.active) requestAnimationFrame(loop);
-        }
-        requestAnimationFrame(loop);
-    }
-
-    stopXboxInvaders() {
-        if (this.invadersState) {
-            if (this.invadersState.cleanup) this.invadersState.cleanup();
-            this.invadersState.active = false;
-        }
-        this.invadersState = null;
-    }
 
     toggleSettingsModal() {
         const settingsModal = document.getElementById('settings-modal');
@@ -4588,27 +3877,40 @@ export class UIManager {
         const panel = document.createElement('div');
         panel.style.cssText = `
             background: #001122; border: 2px solid cyan; padding: 40px;
-            border-radius: 10px; width: 600px; text-align: center;
+            border-radius: 10px; width: 650px; text-align: center;
             box-shadow: 0 0 50px cyan;
         `;
 
         panel.innerHTML = `
-            <h1 style="margin-bottom: 30px; text-shadow: 0 0 10px cyan;">🚀 STARSHIP CONTROL DECK 🚀</h1>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-                <button id="ship-launch" style="padding: 15px; background: transparent; border: 1px solid cyan; color: cyan; cursor: pointer; font-size: 18px; transition: all 0.3s;">
-                    INITIATE LAUNCH
+            <h1 style="margin-bottom: 20px; text-shadow: 0 0 10px cyan;">🚀 STARSHIP CONTROL DECK 🚀</h1>
+            
+            <h3 style="color: #88ccff; margin: 20px 0 15px 0;">⭐ WARP TO WORLD</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                <button id="warp-earth" style="padding: 20px; background: linear-gradient(135deg, #2a5d3a 0%, #1a3d2a 100%); border: 2px solid #4a8d5a; color: #8aff8a; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s;">
+                    🌍 EARTH<br><small style="opacity: 0.7;">Home World</small>
                 </button>
-                <button id="ship-hyperdrive" style="padding: 15px; background: transparent; border: 1px solid magenta; color: magenta; cursor: pointer; font-size: 18px; transition: all 0.3s;">
-                    ENGAGE HYPERDRIVE
+                <button id="warp-crystal" style="padding: 20px; background: linear-gradient(135deg, #4a2d5d 0%, #2a1d3d 100%); border: 2px solid #8a5daa; color: #cc88ff; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s;">
+                    💎 CRYSTAL WORLD<br><small style="opacity: 0.7;">Purple Crystals</small>
                 </button>
-                <button id="ship-scan" style="padding: 15px; background: transparent; border: 1px solid lime; color: lime; cursor: pointer; font-size: 18px; transition: all 0.3s;">
-                    SCAN SECTOR
+                <button id="warp-lava" style="padding: 20px; background: linear-gradient(135deg, #5d2a2a 0%, #3d1a1a 100%); border: 2px solid #aa5d5d; color: #ff8866; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s;">
+                    🌋 LAVA WORLD<br><small style="opacity: 0.7;">Volcanic Terrain</small>
                 </button>
-                <button id="ship-destruct" style="padding: 15px; background: #330000; border: 1px solid red; color: red; cursor: pointer; font-size: 18px; transition: all 0.3s;">
-                    SELF DESTRUCT
+                <button id="warp-moon" style="padding: 20px; background: linear-gradient(135deg, #3d3d3d 0%, #1d1d1d 100%); border: 2px solid #7d7d7d; color: #cccccc; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s;">
+                    🌙 MOON<br><small style="opacity: 0.7;">Lunar Surface</small>
                 </button>
             </div>
-            <button id="ship-close" style="padding: 10px 30px; background: #333; color: white; border: none; cursor: pointer; font-size: 16px;">
+            
+            <h3 style="color: #88ccff; margin: 20px 0 15px 0;">🛸 SHIP CONTROLS</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                <button id="ship-launch" style="padding: 15px; background: transparent; border: 1px solid cyan; color: cyan; cursor: pointer; font-size: 16px; transition: all 0.3s;">
+                    INITIATE LAUNCH
+                </button>
+                <button id="ship-scan" style="padding: 15px; background: transparent; border: 1px solid lime; color: lime; cursor: pointer; font-size: 16px; transition: all 0.3s;">
+                    SCAN SECTOR
+                </button>
+            </div>
+            
+            <button id="ship-close" style="padding: 12px 40px; background: #333; color: white; border: none; cursor: pointer; font-size: 16px; border-radius: 5px;">
                 LEAVE CONTROLS
             </button>
         `;
@@ -4617,41 +3919,51 @@ export class UIManager {
         document.body.appendChild(modal);
         this.spaceShipModal = modal;
 
-        // Handlers
+        // Close handler
         document.getElementById('ship-close').onclick = () => this.showSpaceShipControls(false);
 
-        // Hover effects
+        // Hover effects for all buttons
         const buttons = panel.querySelectorAll('button');
         buttons.forEach(btn => {
-            const originalBg = btn.style.background;
             btn.onmouseover = () => {
-                if (btn.id !== 'ship-close') btn.style.background = 'rgba(255,255,255,0.1)';
-                btn.style.boxShadow = `0 0 15px ${btn.style.color}`;
+                btn.style.transform = 'scale(1.02)';
+                btn.style.boxShadow = `0 0 20px ${btn.style.color || 'white'}`;
             };
             btn.onmouseout = () => {
-                btn.style.background = originalBg;
+                btn.style.transform = 'scale(1)';
                 btn.style.boxShadow = 'none';
             };
         });
 
-        // Actions
+        // World warp handlers
+        document.getElementById('warp-earth').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('earth');
+        };
+
+        document.getElementById('warp-crystal').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('crystal');
+        };
+
+        document.getElementById('warp-lava').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('lava');
+        };
+
+        document.getElementById('warp-moon').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('moon');
+        };
+
+        // Ship control handlers
         document.getElementById('ship-launch').onclick = () => {
             this.showSpaceShipControls(false);
             if (this.game.spaceShipManager) this.game.spaceShipManager.launchShip();
         };
 
-        document.getElementById('ship-hyperdrive').onclick = () => {
-            this.showSpaceShipControls(false);
-            if (this.game.spaceShipManager) this.game.spaceShipManager.hyperDrive();
-        };
-
         document.getElementById('ship-scan').onclick = () => {
             this.addChatMessage('system', 'Scanning... Life signs detected: ' + this.game.animals.length);
-        };
-
-        document.getElementById('ship-destruct').onclick = () => {
-            this.showSpaceShipControls(false);
-            this.addChatMessage('system', 'Self Destruct sequence not implemented (Safety First!)');
         };
 
         if (this.game.inputManager) this.game.inputManager.unlock();

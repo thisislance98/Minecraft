@@ -342,8 +342,22 @@ export class SpaceShipManager {
         this.currentZ = this.startZ;
         this.orbitAngle = Math.atan2(this.startZ, this.startX);
         this.orbitRadius = Math.sqrt(this.startX * this.startX + this.startZ * this.startZ) || 300;
-        this.isOrbiting = true;
-        console.log(`[SpaceShip] Orbital movement active. ${this.shipBlocks.length} blocks tracked.`);
+        this.isOrbiting = false; // Keep starship stationary
+        console.log(`[SpaceShip] Starship stationary. ${this.shipBlocks.length} blocks tracked.`);
+
+        // Protect all chunks containing the starship from being unloaded
+        const chunkSize = this.game.chunkSize;
+        const protectedChunkKeys = new Set();
+        for (const block of this.shipBlocks) {
+            const cx = Math.floor(block.x / chunkSize);
+            const cy = Math.floor(block.y / chunkSize);
+            const cz = Math.floor(block.z / chunkSize);
+            protectedChunkKeys.add(`${cx},${cy},${cz}`);
+        }
+        for (const key of protectedChunkKeys) {
+            this.game.protectedChunks.add(key);
+        }
+        console.log(`[SpaceShip] Protected ${protectedChunkKeys.size} chunks from unloading.`);
 
         // Spawn Crew in Saucer Section (Main Control Room)
         // Saucer is centered at sY=15, sZ=-25, radius=32
@@ -444,12 +458,107 @@ export class SpaceShipManager {
     }
 
     hyperDrive() {
-        this.game.uiManager.addChatMessage('system', 'Warp 9 Engaged!');
-        const r = 2000;
-        const x = (Math.random() - 0.5) * r;
-        const z = (Math.random() - 0.5) * r;
-        const y = this.game.worldGen.getTerrainHeight(x, z) + 150;
-        this.game.player.position.set(x, y, z);
+        // Legacy method - defaults to random Earth location
+        this.warpToWorld('earth');
+    }
+
+    /**
+     * Warp to a specific world
+     * @param {string} worldName - 'earth', 'crystal', 'lava', or 'moon'
+     */
+    warpToWorld(worldName) {
+        const worldConfigs = {
+            earth: {
+                name: 'Earth',
+                yBase: 80,
+                message: 'Returning to Earth...'
+            },
+            crystal: {
+                name: 'Crystal World',
+                // Crystal World is at chunks 50-58, so Y = 50 * 16 + 32 = 832
+                yBase: 850,
+                message: 'Warping to Crystal World...'
+            },
+            lava: {
+                name: 'Lava World',
+                // Lava World is at chunks 60-68, so Y = 60 * 16 + 32 = 992
+                yBase: 1020,
+                message: 'Warping to Lava World...'
+            },
+            moon: {
+                name: 'Moon',
+                // Moon is at chunks 40-48, so Y = 40 * 16 + 32 = 672
+                yBase: 700,
+                message: 'Warping to the Moon...'
+            }
+        };
+
+        const config = worldConfigs[worldName];
+        if (!config) {
+            console.warn(`[SpaceShip] Unknown world: ${worldName}`);
+            return;
+        }
+
+        this.game.uiManager.addChatMessage('system', config.message);
+        this.game.uiManager.addChatMessage('system', 'Warp engines engaged!');
+        this.game.soundManager.playSound('rumble');
+
+        // Play warp effect
+        setTimeout(() => {
+            let x, z;
+
+            // Alien worlds have fixed spawn positions, Earth is random
+            if (worldName === 'earth') {
+                // Random X/Z position for Earth
+                const r = 500;
+                x = (Math.random() - 0.5) * r;
+                z = (Math.random() - 0.5) * r;
+            } else {
+                // Fixed spawn position for alien worlds (center of world)
+                x = 0;
+                z = 0;
+            }
+
+            // Set Y based on world
+            const y = config.yBase + 10;
+
+            this.game.player.position.set(x, y, z);
+
+            // Reset velocity to prevent fall damage from accumulated velocity
+            if (this.game.player.velocity) {
+                this.game.player.velocity.set(0, 0, 0);
+            }
+
+            // Temporarily set invulnerability to prevent fall damage while terrain loads
+            this.game.player.invulnerable = true;
+            this.game.player.lastGroundY = y; // Reset fall damage tracking
+            setTimeout(() => {
+                this.game.player.invulnerable = false;
+            }, 3000); // 3 seconds of immunity for terrain to load
+
+            // Update environment for new world
+            if (this.game.environment) {
+                this.game.environment.setWorld(worldName);
+            }
+
+            // Spawn the starship nearby in the new world (after a short delay for terrain)
+            setTimeout(() => {
+                // Clear old ship blocks from tracking (they're in a different world now)
+                this.shipBlocks = [];
+
+                // Spawn ship near the player but offset
+                const shipPos = {
+                    x: x + 150,
+                    y: config.yBase + 80, // High above terrain
+                    z: z + 150
+                };
+                this.spawnShip(shipPos);
+                this.game.uiManager.addChatMessage('system', '🚀 Starship has warped in nearby.');
+            }, 2000);
+
+            this.game.uiManager.addChatMessage('system', `Arrived at ${config.name}!`);
+            this.game.soundManager.playSound('levelup');
+        }, 1500);
     }
 
     createEngineParticles() {

@@ -1,0 +1,21 @@
+{
+    "name": "golden_10_glowing_pet_dragon",
+    "tier": 5,
+    "prompt": "create a small glowing pet dragon that follows me and breathes fire",
+    "timeout": 90000,
+    "expectedKnowledge": [
+        "Glowing Creature Template",
+        "Follow Player Template",
+        "Projectile Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const entities = window.__VOXEL_GAME__.entities; const dragon = entities.find(e => e.constructor.name.toLowerCase().includes('dragon')); return dragon ? { success: true } : { success: false }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A small glowing dragon creature near the player"
+    }
+}

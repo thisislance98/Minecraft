@@ -1,0 +1,16 @@
+{
+    "name": "T11_lightning_sword",
+    "tier": 10,
+    "prompt": "Create a sword called 'Lightning Blade' that strikes lightning where I look when I click",
+    "timeout": 60000,
+    "visual_expectations": {
+        "type": "image",
+        "description": "A lightning bolt striking the ground."
+    },
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const sword = Object.values(items).find(i => i.name.toLowerCase().includes('lightning')); if (!sword) return { success: false, message: 'Lightning Sword not found' }; return { success: true, message: `Found sword: ${sword.name}` }; }"
+        }
+    ]
+}

@@ -50,6 +50,49 @@ window.addEventListener('load', () => {
     // Initialize Spawn UI
     const spawnUI = new SpawnUI(game);
     window.spawnUI = spawnUI; // For debugging
+
+    // Merlin Voice Introduction (One-time)
+    const introKey = 'merlin_voice_intro_seen';
+    if (!localStorage.getItem(introKey)) {
+        let introInProgress = false;
+
+        const tryPlayIntro = async () => {
+            // Prevent concurrent attempts or if already seen
+            if (introInProgress || localStorage.getItem(introKey)) return;
+
+            if (window.merlinClient) {
+                introInProgress = true;
+                console.log('[Merlin] Attempting to play voice introduction...');
+
+                // Pass false to speak() to indicate this is a system-initiated message (if we wanted to distinguish)
+                const success = await window.merlinClient.speak("Hello! I am Merlin, your AI assistant. I can help you build and explore. Just press T to chat, or click the microphone to speak to me.");
+
+                if (success) {
+                    console.log('[Merlin] Voice intro success, saving state.');
+                    localStorage.setItem(introKey, 'true');
+                    // Remove listeners immediately on success
+                    window.removeEventListener('click', onInteraction);
+                    window.removeEventListener('keydown', onInteraction);
+                } else {
+                    console.log('[Merlin] Voice intro failed (likely autoplay blocked), will retry on next interaction.');
+                    introInProgress = false; // Reset to allow retry
+                }
+            }
+        };
+
+        // Try immediately after a delay (works if user already clicked)
+        setTimeout(() => {
+            tryPlayIntro();
+        }, 3000);
+
+        // Also add a listener for the first interaction to guarantee it plays if the timer failed
+        const onInteraction = () => {
+            tryPlayIntro();
+        };
+
+        window.addEventListener('click', onInteraction);
+        window.addEventListener('keydown', onInteraction);
+    }
 });
 
 // HMR Update Notifications

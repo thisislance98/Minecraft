@@ -1,0 +1,11 @@
+{
+    "name": "T5_fire_dragon",
+    "tier": 5,
+    "prompt": "make a dragon that breathes fire particles",
+    "timeout": 120000,
+    "visual_expectations": {
+        "type": "video",
+        "duration": 10,
+        "description": "A dragon-like creature emitting fire or particle effects"
+    }
+}

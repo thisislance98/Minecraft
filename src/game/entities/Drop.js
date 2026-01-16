@@ -182,8 +182,8 @@ export class Drop {
 
         if (added) {
             this.isDead = true;
-            // Play sound?
-            // this.game.playSound('pickup');
+            // Play pickup sound
+            this.game.soundManager.playSound('item_pickup');
         }
     }
 

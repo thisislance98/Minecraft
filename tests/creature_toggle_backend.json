@@ -1,0 +1,18 @@
+{
+    "name": "Backend Creature Toggle Test",
+    "headless": false,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "async () => { const game = window.__VOXEL_GAME__; if (!game) return { success: false, message: 'Game not found' }; const CowClass = game.AnimalClasses['Cow']; await new Promise(r => setTimeout(r, 1000)); if (CowClass) { game.spawnManager.spawnEntitiesInFrontOfPlayer(CowClass, 1); } else { return { success: false, message: 'Cow class missing' }; } await new Promise(r => setTimeout(r, 500)); const cow = game.animals.find(a => a.constructor.name === 'Cow'); if (!cow) return { success: false, message: 'Cow not spawned' }; if (!cow.mesh.visible) return { success: false, message: 'Cow initially hidden' }; if (typeof game.toggleAnimalVisibility !== 'function') return { success: false, message: 'toggleAnimalVisibility missing' }; game.toggleAnimalVisibility('Cow', false); if (cow.mesh.visible) return { success: false, message: 'Cow visible after toggle OFF' }; game.toggleAnimalVisibility('Cow', true); if (!cow.mesh.visible) return { success: false, message: 'Cow hidden after toggle ON' }; return { success: true, message: 'Backend toggle logic verified' }; }"
+        }
+    ]
+}

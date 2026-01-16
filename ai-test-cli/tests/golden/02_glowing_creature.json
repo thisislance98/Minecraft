@@ -1,0 +1,19 @@
+{
+    "name": "golden_02_glowing_creature",
+    "tier": 2,
+    "prompt": "create a glowing yellow orb that floats around",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Glowing Creature Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const c = window.__VOXEL_GAME__.creatures; const glowing = Object.values(c).find(e => e.name && e.name.toLowerCase().includes('glow')); return glowing ? { success: true } : { success: false, message: 'No glowing creature found' }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A glowing yellow sphere floating in the air"
+    }
+}

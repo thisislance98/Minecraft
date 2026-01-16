@@ -1,0 +1,11 @@
+{
+    "name": "Villager Pathfinding Water Avoidance",
+    "headless": true,
+    "actions": [],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game) return { success: false, message: 'Game not found' }; const villager = game.animals.find(a => a.constructor.name === 'Villager'); if (!villager) return { success: false, message: 'No villager found' }; const Pathfinder = villager.pathfinder; const start = { x: 100, y: 80, z: 100 }; const end = { x: 100, y: 80, z: 105 }; for (let x = 95; x <= 105; x++) { for (let z = 95; z <= 105; z++) { game.setBlock(x, 79, z, 'stone'); game.setBlock(x, 80, z, 'air'); game.setBlock(x, 81, z, 'air'); } } game.setBlock(100, 79, 102, 'water'); game.setBlock(100, 80, 102, 'water'); console.log('Testing Pathfinding...'); const path = Pathfinder.findPath(new THREE.Vector3(100, 80, 100), new THREE.Vector3(100, 80, 105), 1000, { avoidWater: true }); if (!path) return { success: false, message: 'No path found' }; const goesThroughWater = path.some(p => Math.floor(p.x) === 100 && Math.floor(p.z) === 102); if (goesThroughWater) return { success: false, message: 'Path goes through water at 100, 102' }; return { success: true, message: `Path found with ${path.length} steps, avoiding water.` }; }"
+        }
+    ]
+}

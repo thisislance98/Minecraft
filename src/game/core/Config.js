@@ -13,9 +13,17 @@ export const Config = {
         SEA_LEVEL: 30,
         BEDROCK_LEVEL: 0,
         MAX_HEIGHT: 256,
-        WORLD_RADIUS_CHUNKS: 24, // Finite world radius (chunks)
+        WORLD_RADIUS_CHUNKS: 48, // Finite world radius (chunks) - doubled for larger world
         MOON_CHUNK_Y_START: 40, // Height (in chunks) where moon generation starts
-        MOON_CHUNK_HEIGHT: 8   // Vertical thickness of Moon chunks range
+        MOON_CHUNK_HEIGHT: 8,   // Vertical thickness of Moon chunks range
+
+        // Alien World 1: Crystal World (purple/pink crystalline terrain)
+        CRYSTAL_WORLD_Y_START: 50,  // Y chunks 50-58
+        CRYSTAL_WORLD_HEIGHT: 8,
+
+        // Alien World 2: Lava World (volcanic terrain)
+        LAVA_WORLD_Y_START: 60,     // Y chunks 60-68
+        LAVA_WORLD_HEIGHT: 8
     },
 
     // Player
@@ -44,6 +52,7 @@ export const Config = {
         ORE_IRON: 0.04,
         ORE_GOLD: 0.015,
         ORE_DIAMOND: 0.005,
-        CAVE_THRESHOLD: 0.35
+        CAVE_THRESHOLD: 0.35,
+        ENABLE_RIVERS: true  // Rivers enabled
     }
 };

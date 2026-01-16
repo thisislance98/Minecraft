@@ -125,7 +125,7 @@ export class Creeper extends Animal {
         // Damage player if close
         if (dist < 4.0) {
             const dmg = Math.max(1, Math.floor(this.damage * (1 - dist / 4.0)));
-            player.takeDamage(dmg);
+            player.takeDamage(dmg, 'Creeper Explosion');
             const dir = new THREE.Vector3().subVectors(player.position, this.position).normalize();
             player.knockback(dir, 0.5);
         }

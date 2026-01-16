@@ -51,6 +51,7 @@ export class StaticLampost extends Animal {
 
         // 3. The Lantern Head
         const headGroup = new THREE.Group();
+        this.headGroup = headGroup;
         headGroup.position.set(0, 5.5, 0); // Top of pole roughly (0.4 + 5.0 + 0.1)
         this.mesh.add(headGroup);
 
@@ -73,6 +74,7 @@ export class StaticLampost extends Animal {
         const light = new THREE.PointLight(0xFFDD00, 0.6, 6);
         light.position.set(0, 0, 0);
         headGroup.add(light);
+        this.light = light;
 
         // Cap (Pointy top)
         const capGeo = new THREE.ConeGeometry(0.4, 0.3, 4);
@@ -88,6 +90,27 @@ export class StaticLampost extends Animal {
     updateAI(dt) {
         this.state = 'idle';
         this.isMoving = false;
+    }
+
+    // Override update to manage light visibility and physics
+    update(dt) {
+        super.update(dt);
+
+        // PERFORMANCE: Only enable light if close to player to prevent "blinking" 
+        // when exceeding WebGL light limit (usually ~8 lights).
+        // Use hysteresis to prevent flickering at the boundary.
+        // Also use add/remove to avoid fighting with Animal.js visibility enforcement.
+        if (this.light && this.game.camera && this.headGroup) {
+            const distSq = this.position.distanceToSquared(this.game.camera.position);
+            const isAttached = this.light.parent === this.headGroup;
+
+            // Hysteresis: Enable at 15m (225), Disable at 20m (400)
+            if (isAttached && distSq > 400) {
+                this.headGroup.remove(this.light);
+            } else if (!isAttached && distSq < 225) {
+                this.headGroup.add(this.light);
+            }
+        }
     }
 
     // Override physics to just stay put (simple gravity is fine if generated in air, but we usually place on ground)

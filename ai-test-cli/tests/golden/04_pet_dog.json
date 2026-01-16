@@ -1,0 +1,19 @@
+{
+    "name": "golden_04_pet_dog",
+    "tier": 3,
+    "prompt": "create a pet dog that follows me around",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Follow Player Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const entities = window.__VOXEL_GAME__.entities; const dog = entities.find(e => e.constructor.name.toLowerCase().includes('dog')); return dog ? { success: true } : { success: false, message: 'No dog found' }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A dog creature following the player"
+    }
+}

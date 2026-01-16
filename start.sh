@@ -1,11 +1,9 @@
 #!/bin/bash
-# Kill generic conflicting processes first (Aggressive cleanup)
-echo "Aggressively killing zombie processes (vite, server, etc.)..."
-pkill -f "vite" || true
-pkill -f "server/index.ts" || true
+# Kill processes specific to THIS project only (not other projects)
+echo "Killing Minecraft project processes..."
+pkill -f "vite.*Minecraft" || true
+pkill -f "Minecraft.*server/index.ts" || true
 pkill -f "smart-watch.js" || true
-# Avoid killing ourselves (start.sh) but try to catch other instances if possible,
-# though preventing self-kill is tricky with pkill -f start.sh.
 # We rely on port killing for the main bound processes.
 
 echo "Check & Stop processes on port 3000..."
@@ -28,6 +26,9 @@ fi
 
 
 sleep 1
+
+# Explicitly set PORT for Minecraft server (don't inherit from other projects)
+export PORT=2567
 
 if [ "$1" == "--no-server" ]; then
     echo "Starting in CUSTOM CLIENT-ONLY mode..."

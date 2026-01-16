@@ -1,0 +1,19 @@
+{
+    "name": "golden_03_flying_bird",
+    "tier": 2,
+    "prompt": "create a flying blue bird that floats around",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Flying Creature Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const entities = window.__VOXEL_GAME__.entities; const bird = entities.find(e => e.constructor.name.toLowerCase().includes('bird')); return bird ? { success: true } : { success: false, message: 'No bird found' }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A blue bird flying/floating in the air, not standing on ground"
+    }
+}

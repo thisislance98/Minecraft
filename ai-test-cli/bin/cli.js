@@ -159,20 +159,7 @@ program
         }
     });
 
-program
-    .command('run')
-    .description('Run an automated test verification file')
-    .argument('<file>', 'Path to valid .json test file')
-    .action(async (file) => {
-        const { TestRunner } = await import('../src/runner.js');
-        const runner = new TestRunner(file);
-        try {
-            await runner.run();
-            process.exit(0);
-        } catch (e) {
-            process.exit(1);
-        }
-    });
+// run command removed per user request
 
 program
     .command('test')
@@ -186,8 +173,10 @@ program
     .option('--verify-types <types>', 'Verify multiple types exist (comma-separated, e.g. Elephant,Lion,Giraffe)')
     .option('--verify-shape <type>', 'Verify a specific built shape (e.g. pyramid)')
     .option('--verify-material <id>', 'Material to check for shape verification')
+    .option('--verify-item <name>', 'Verify player has item in inventory')
     .option('--verify-distance <meters>', 'Distance to check (default 25)')
     .option('--verify-file <path>', 'Load custom verification code from file [GENERATED]')
+    .option('--verify-code <code>', 'Run custom verification code inline')
     .option('--verify-flying', 'Verify creature is flying', false)
     .option('--headless', 'Run browser in headless mode', false)
     .option('-t, --timeout <ms>', 'Timeout in milliseconds', '60000')
@@ -259,6 +248,31 @@ program
             });
         }
 
+        // Verify item in inventory
+        if (options.verifyItem) {
+            testCase.verify.push({
+                type: 'customCode',
+                code: `() => { 
+                    const game = window.__VOXEL_GAME__;
+                    if (!game || !game.inventoryManager) return { success: false, message: 'InventoryManager not found' };
+                    
+                    const itemName = '${options.verifyItem}'.toLowerCase();
+                    let hasItem = false;
+                    
+                    // Check slots
+                    for (let i = 0; i < 63; i++) {
+                        const slot = game.inventoryManager.getSlot(i);
+                        if (slot && slot.item && slot.item.toLowerCase().includes(itemName)) {
+                            hasItem = true;
+                            break;
+                        }
+                    }
+                    
+                    return { success: hasItem, message: hasItem ? 'Item found in inventory' : 'Item not found in inventory' };
+                }`
+            });
+        }
+
         // Verify shape (Legacy)
         if (options.verifyShape) {
             const shape = options.verifyShape.toLowerCase();
@@ -311,6 +325,14 @@ program
             testCase.verify.push({
                 type: 'customCode',
                 code: `() => { const game = window.__VOXEL_GAME__; const animals = game.animals || []; const counts = {}; for(const a of animals) { const name = a.constructor.name; counts[name] = (counts[name] || 0) + 1; } const types = ${JSON.stringify(types)}; const missing = []; for (const t of types) { if ((counts[t] || 0) === 0) missing.push(t); } const success = missing.length === 0; const msg = types.map(t => \`\${t}=\${counts[t]||0}\`).join(', '); return { success, message: success ? msg : \`Missing: \${missing.join(', ')}. Found: \${msg}\` }; }`
+            });
+        }
+
+        // Verify with inline custom code
+        if (options.verifyCode) {
+            testCase.verify.push({
+                type: 'customCode',
+                code: options.verifyCode
             });
         }
 
@@ -706,16 +728,14 @@ program
     .description('Launch browser and open interactive game console for testing')
     .option('--headless', 'Run browser in headless mode', false)
     .option('-q, --quiet', 'Suppress browser console output', false)
-    .option('--url <gameUrl>', 'Connect to a specific URL (e.g. https://worldcraft.web.app/)')
     .action(async (options) => {
         const { GameBrowser } = await import('../src/browser.js');
         const gc = await import('../src/game-commands.js');
         const readline = await import('readline');
 
-        const targetUrl = options.url || 'http://localhost:3000';
-        console.log(chalk.blue(`\n🎮 Launching Game Console for ${targetUrl}...`));
+        console.log(chalk.blue('\n🎮 Launching Game Console...'));
 
-        const browser = new GameBrowser({ headless: options.headless, quiet: options.quiet, gameUrl: targetUrl });
+        const browser = new GameBrowser({ headless: options.headless, quiet: options.quiet });
         await browser.launch();
         await browser.waitForGameLoad();
 
@@ -754,8 +774,6 @@ program
                 console.log('  damage <amount> - Deal damage to player (test health sync)');
                 console.log('  health         - Show player health');
                 console.log('  players        - Show remote players');
-                console.log('  debug          - Show dynamic creature debug info');
-                console.log('  ground         - Show detailed creature position/ground info');
                 console.log('  exit           - Close browser and exit');
                 console.log('');
             },
@@ -770,56 +788,6 @@ program
             entities: async () => {
                 const entities = await gc.getEntities(browser);
                 gc.printEntities(entities);
-            },
-            ground: async () => {
-                console.log(chalk.blue('\n═══ Creature Debug Info ═══'));
-                const result = await browser.evaluate(() => {
-                    const game = window.__VOXEL_GAME__;
-                    if (!game?.animals) return { error: 'Game not ready' };
-
-                    const playerPos = game.player?.position;
-                    const debugInfo = game.animals.map(a => {
-                        const pos = a.position;
-                        const mesh = a.mesh || a.group;
-                        const groundY = game.getTerrainHeight ? game.getTerrainHeight(pos.x, pos.z) : 'N/A';
-
-                        return {
-                            type: a.constructor.name,
-                            position: { x: pos.x.toFixed(1), y: pos.y.toFixed(1), z: pos.z.toFixed(1) },
-                            groundY: typeof groundY === 'number' ? groundY.toFixed(1) : groundY,
-                            belowGround: typeof groundY === 'number' && pos.y < groundY,
-                            visible: mesh?.visible ?? 'unknown',
-                            inScene: mesh?.parent !== null,
-                            frustumCulled: mesh?.frustumCulled ?? 'unknown',
-                            velocity: a.velocity ? { x: a.velocity.x.toFixed(2), y: a.velocity.y.toFixed(2), z: a.velocity.z.toFixed(2) } : null,
-                            health: a.health ?? 'N/A',
-                            distanceFromPlayer: playerPos ? Math.sqrt(
-                                Math.pow(pos.x - playerPos.x, 2) +
-                                Math.pow(pos.y - playerPos.y, 2) +
-                                Math.pow(pos.z - playerPos.z, 2)
-                            ).toFixed(1) : 'N/A'
-                        };
-                    });
-                    return { count: debugInfo.length, entities: debugInfo };
-                });
-
-                if (result.error) {
-                    console.log(chalk.red(result.error));
-                    return;
-                }
-
-                console.log(`Total entities: ${result.count}`);
-                for (const entity of result.entities) {
-                    const belowGround = entity.belowGround ? chalk.red(' ⚠️ BELOW GROUND!') : '';
-                    console.log(chalk.cyan(`\n  ${entity.type}:${belowGround}`));
-                    console.log(`    Position: (${entity.position.x}, ${entity.position.y}, ${entity.position.z})`);
-                    console.log(`    Ground Y: ${entity.groundY}`);
-                    console.log(`    Visible: ${entity.visible}, In Scene: ${entity.inScene}, Frustum Culled: ${entity.frustumCulled}`);
-                    if (entity.velocity) {
-                        console.log(`    Velocity: (${entity.velocity.x}, ${entity.velocity.y}, ${entity.velocity.z})`);
-                    }
-                    console.log(`    Distance from player: ${entity.distanceFromPlayer}`);
-                }
             },
             items: async () => {
                 const items = await gc.getRegisteredItems(browser);
@@ -1439,5 +1407,87 @@ program
         process.exit(issues.filter(i => i.severity === 'HIGH').length > 0 ? 1 : 0);
     });
 
-program.parse();
+// ============================================================================
+// VERIFY-KNOWLEDGE COMMAND - E2E Knowledge Retrieval Verification
+// ============================================================================
+program
+    .command('verify-knowledge <prompt>')
+    .description('Test knowledge retrieval E2E: prompt → knowledge search → code gen → verify')
+    .option('-t, --timeout <ms>', 'Timeout in milliseconds', '60000')
+    .option('--headless', 'Run browser in headless mode', false)
+    .option('--persist', 'Keep the browser open after the test completes', false)
+    .action(async (prompt, options) => {
+        console.log(chalk.blue('\n🧠 KNOWLEDGE VERIFICATION TEST\n'));
+        console.log(chalk.dim(`Prompt: "${prompt}"\n`));
 
+        const { GameBrowser } = await import('../src/browser.js');
+        const browser = new GameBrowser({ headless: options.headless });
+
+        // Track knowledge events
+        let knowledgeSearches = [];
+        let knowledgeGaps = [];
+
+        try {
+            console.log(chalk.dim('Launching browser...\n'));
+            await browser.launch();
+
+            // Listen for console logs
+            browser.page.on('console', (msg) => {
+                const text = msg.text();
+                // Forward server logs about knowledge
+                if (text.includes('[Knowledge]')) {
+                    console.log(chalk.cyan(`  📚 ${text}`));
+                    if (text.includes('Search:')) {
+                        const match = text.match(/query="([^"]+)"/);
+                        if (match) knowledgeSearches.push(match[1]);
+                    }
+                }
+                if (text.includes('[Knowledge Gap]')) {
+                    console.log(chalk.yellow(`  ⚠️  ${text}`));
+                    knowledgeGaps.push(text);
+                }
+            });
+
+            await browser.waitForGameLoad();
+
+            console.log(chalk.dim('Sending prompt to Merlin...\n'));
+            await browser.sendPrompt(prompt);
+
+            // Wait for AI to complete
+            console.log(chalk.dim(`Waiting ${options.timeout}ms for AI response...\n`));
+            await new Promise(r => setTimeout(r, parseInt(options.timeout)));
+
+            // Report
+            console.log(chalk.blue('\n═══════════════════════════════════════'));
+            console.log(chalk.bold('  KNOWLEDGE VERIFICATION REPORT'));
+            console.log(chalk.blue('═══════════════════════════════════════\n'));
+
+            console.log(`📚 Knowledge Searches: ${knowledgeSearches.length}`);
+            knowledgeSearches.forEach((q, i) => console.log(chalk.dim(`   ${i + 1}. "${q}"`)));
+
+            if (knowledgeGaps.length > 0) {
+                console.log(chalk.yellow(`\n⚠️  Knowledge Gaps: ${knowledgeGaps.length}`));
+                knowledgeGaps.forEach((g, i) => console.log(chalk.dim(`   ${i + 1}. ${g}`)));
+            } else {
+                console.log(chalk.green('\n✅ No knowledge gaps detected'));
+            }
+
+            console.log(chalk.blue('\n═══════════════════════════════════════\n'));
+
+            if (options.persist) {
+                console.log(chalk.yellow('Persist mode enabled. Keeping browser open. Press Ctrl+C to exit.'));
+                // Wait forever
+                await new Promise(() => { });
+            } else {
+                await browser.close();
+                process.exit(knowledgeGaps.length > 0 ? 1 : 0);
+            }
+
+        } catch (error) {
+            console.error(chalk.red(`Error: ${error.message}`));
+            if (!options.persist) await browser.close();
+            process.exit(1);
+        }
+    });
+
+program.parse();

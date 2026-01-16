@@ -1,0 +1,25 @@
+{
+    "name": "Villager Hit Reaction Test (Async Verify)",
+    "headless": true,
+    "actions": [
+        {
+            "name": "spawnCreature",
+            "args": [
+                "Villager",
+                1
+            ]
+        },
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "async () => { const game = window.__VOXEL_GAME__; const v = game.animals.find(a => a.constructor.name === 'Villager'); if(!v) return {success:false, message: 'No villager'}; console.log('Hurting villager...'); v.takeDamage(1, game.player); await new Promise(r => setTimeout(r, 500)); const bubble = document.getElementById('villager-speech-bubble'); if(bubble && bubble.innerText.length > 0 && parseFloat(bubble.style.opacity) > 0) return {success:true, message: 'Bubble found: ' + bubble.innerText}; return {success:false, message: 'No bubble found'}; }"
+        }
+    ]
+}

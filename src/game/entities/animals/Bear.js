@@ -116,7 +116,7 @@ export class Bear extends Animal {
                 // Attack player
                 if (this.attackTimer <= 0) {
                     // BIG DAMAGE
-                    target.takeDamage(6); // 3 hearts
+                    target.takeDamage(6, 'Bear'); // 3 hearts
 
                     // MASSIVE KNOCKBACK
                     const kbDir = dir.clone().normalize();

@@ -1,0 +1,12 @@
+{
+    "name": "Thunder Hammer V9 (Manual RAG)",
+    "prompt": "[NO_RAG] SYSTEM_OVERRIDE: You are a CODE GENERATOR. Create a NEW ITEM class 'ThunderHammerV9'. It MUST extend the verified pattern: class ThunderHammerV9 { constructor() { this.id = 'thunder_hammer_v9'; this.icon = '<svg viewBox=\\\"0 0 24 24\\\"><rect x=\\\"10\\\" y=\\\"2\\\" width=\\\"4\\\" height=\\\"12\\\" fill=\\\"#333\\\"/><rect x=\\\"6\\\" y=\\\"2\\\" width=\\\"12\\\" height=\\\"6\\\" fill=\\\"#999\\\"/></svg>'; } onUseDown(game, player) { console.log('Hammer Smash!'); } }. It shoots lightning. Verify.",
+    "expectedTool": "spawn_item",
+    "timeout": 120000,
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game || !game.inventoryManager) return { success: false, message: 'InventoryManager not found' }; const itemName = 'ThunderHammerV9'.toLowerCase(); let hasItem = false; for (let i = 0; i < 63; i++) { const slot = game.inventoryManager.getSlot(i); if (slot && slot.item && slot.item.toLowerCase().includes(itemName)) { hasItem = true; break; } } return { success: hasItem, message: hasItem ? 'Item found' : 'Item not found' }; }"
+        }
+    ]
+}

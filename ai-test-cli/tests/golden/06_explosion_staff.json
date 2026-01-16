@@ -1,0 +1,16 @@
+{
+    "name": "golden_06_explosion_staff",
+    "tier": 3,
+    "prompt": "create a staff that causes explosions where I click",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Explosion Template",
+        "Projectile Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const staff = Object.values(items).find(i => i.name.toLowerCase().includes('explosion') || i.name.toLowerCase().includes('staff')); return staff ? { success: true } : { success: false }; }"
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "name": "Debug Panel Toggles Verification (Fix)",
+    "headless": false,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game) return { success: false, message: 'Game not found' }; console.log('Checking toggles with culling...'); let errors = []; game.toggleGrass(false); game.updateFrustumCulling(); if (game.grassSystem.visible !== false) errors.push('Grass OFF state failed'); let visibleChunk = Array.from(game.chunks.values()).find(c => c.mesh && c.mesh.visible); if(visibleChunk && visibleChunk.grassMesh && visibleChunk.grassMesh.visible === true) errors.push('Grass Mesh still visible after OFF + Culling Update'); game.toggleGrass(true); game.updateFrustumCulling(); if (game.grassSystem.visible !== true) errors.push('Grass ON state failed'); if (errors.length > 0) return { success: false, message: errors.join(', ') }; return { success: true, message: 'Grass toggle persists through culling' }; }"
+        }
+    ]
+}

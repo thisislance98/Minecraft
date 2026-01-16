@@ -14,12 +14,14 @@ import { authRoutes } from './routes/auth';
 import { feedbackRoutes } from './routes/feedback';
 import { channelRoutes } from './routes/channels';
 import { destinationRoutes } from './routes/destinations';
+import { announcementRoutes } from './routes/announcements';
 import { auth } from './config'; // Initialize config
 import { worldPersistence } from './services/WorldPersistence';
 import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature } from './services/DynamicCreatureService';
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
+import { initKnowledgeService } from './services/KnowledgeService';
 import { WebSocketServer } from 'ws';
-import { AntigravitySession } from './services/AntigravitySession';
+import { MerlinSession } from './services/MerlinSession';
 import { logError } from './utils/logger';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -61,6 +63,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/feedback', feedbackRoutes); // Deprecated but kept for compatibility during migration
 app.use('/api/channels', channelRoutes);
 app.use('/api/destinations', destinationRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -97,15 +100,30 @@ httpServer.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws, req) => {
-    console.log('[Antigravity] Client connected to Agent Brain. Verifying configuration...');
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        console.error('[Antigravity] CRITICAL: Missing GEMINI_API_KEY in environment variables.');
-        ws.close(1011, 'Server configuration error: Missing API Key');
-        return;
+    console.log('[AI] Client connected to AI Agent. Checking provider...');
+
+    // Parse URL to determine which provider to use
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const provider = url.searchParams.get('provider') || 'gemini'; // Default to gemini
+
+    console.log(`[AI] Provider requested: ${provider}`);
+
+    if (provider === 'claude') {
+        // Claude provider not available - fall through to Gemini
+        console.log('[Claude] Claude provider not available, using Gemini instead');
     }
-    console.log('[Antigravity] API Key present. Initializing session...');
-    new AntigravitySession(ws, apiKey, req);
+
+    // Use Gemini (Google AI API)
+    {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            console.error('[Gemini] CRITICAL: Missing GEMINI_API_KEY in environment variables.');
+            ws.close(1011, 'Server configuration error: Missing Gemini API Key');
+            return;
+        }
+        console.log('[Gemini] API Key present. Initializing MerlinSession...');
+        new MerlinSession(ws, apiKey, req);
+    }
 });
 
 // Simple in-memory room storage
@@ -132,6 +150,7 @@ interface PlayerState {
     rotY: number;
     name: string;
     heldItem?: string | null;
+    shirtColor?: number | null;
 }
 
 interface Room {
@@ -214,8 +233,43 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Admin Announcement System
+    socket.on('admin:announce', async (data: { message: string, type?: string, token: string }) => {
+        console.log(`[Admin] Received admin:announce event from ${socket.id}:`, { messageLength: data.message?.length, type: data.type });
+        try {
+            if (!auth) throw new Error('Auth service unavailable');
+            console.log('[Admin] Verifying token for announcement...');
+            const decodedToken = await auth.verifyIdToken(data.token);
+            console.log('[Admin] Token verified for:', decodedToken.email);
 
-    socket.on('join_game', async (payload?: { name?: string }) => {
+            if (decodedToken.email !== ADMIN_EMAIL) {
+                throw new Error('Unauthorized: Admin access required');
+            }
+
+            const announcement = {
+                id: `ann-${Date.now()}`,
+                message: data.message,
+                type: data.type || 'info', // 'info', 'warning', 'success', 'error'
+                timestamp: Date.now(),
+                sender: decodedToken.email
+            };
+
+            console.log(`[Admin] Broadcasting announcement: "${data.message}" to all clients`);
+
+            // Broadcast to ALL connected clients
+            io.emit('announcement', announcement);
+
+            // Confirm success to admin
+            socket.emit('admin:announce:success', { id: announcement.id });
+
+        } catch (error: any) {
+            console.error('[Admin] Announcement failed:', error);
+            socket.emit('admin:error', { message: error.message });
+        }
+    });
+
+
+    socket.on('join_game', async (payload?: { name?: string, shirtColor?: number }) => {
         let roomToJoin: Room | undefined;
 
         // 1. Try to find an existing room with space
@@ -263,7 +317,8 @@ io.on('connection', (socket) => {
 
         // Initialize player state to avoid null checks, though position is unknown until first move
         const playerName = payload?.name || `Player_${socket.id.substring(0, 4)}`;
-        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0, name: playerName, heldItem: null };
+        const shirtColor = payload?.shirtColor !== undefined ? payload.shirtColor : null;
+        roomToJoin.playerStates[socket.id] = { pos: { x: 0, y: 0, z: 0 }, rotY: 0, name: playerName, heldItem: null, shirtColor: shirtColor };
 
         // Handle player movement
         socket.on('player:move', (data) => {
@@ -277,7 +332,16 @@ io.on('connection', (socket) => {
 
                 // Relay to others in the room (include name, crouch state, and health so clients can display it)
                 const playerState = room?.playerStates[socket.id];
-                socket.to(roomId).emit('player:move', { id: socket.id, pos: data.pos, rotY: data.rotY, name: playerState?.name, isCrouching: data.isCrouching, health: data.health, maxHealth: data.maxHealth });
+                socket.to(roomId).emit('player:move', {
+                    id: socket.id,
+                    pos: data.pos,
+                    rotY: data.rotY,
+                    name: playerState?.name,
+                    isCrouching: data.isCrouching,
+                    health: data.health,
+                    maxHealth: data.maxHealth,
+                    shirtColor: playerState?.shirtColor
+                });
             }
         });
 
@@ -319,6 +383,19 @@ io.on('connection', (socket) => {
             });
         });
 
+        // Handle projectile spawns (arrows, magic wands, etc.)
+        socket.on('projectile:spawn', (data: { type: string; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } }) => {
+            if (!roomId) return;
+            console.log(`[Socket] Projectile spawn from ${socket.id}: ${data.type}`);
+            // Broadcast to all other players in the room
+            socket.to(roomId).emit('projectile:spawn', {
+                id: socket.id,
+                type: data.type,
+                pos: data.pos,
+                vel: data.vel
+            });
+        });
+
         // Handle block changes (place/break)
         socket.on('block:change', async (data: { x: number; y: number; z: number; type: string | null }) => {
             console.log(`[DEBUG] Received block:change from ${socket.id}:`, data);
@@ -341,6 +418,20 @@ io.on('connection', (socket) => {
             console.log(`[DEBUG] Calling worldPersistence.saveBlockChange for room ${roomId}`);
             await worldPersistence.saveBlockChange(roomId, data.x, data.y, data.z, data.type);
             console.log(`[DEBUG] Completed worldPersistence.saveBlockChange call`);
+        });
+
+        // Handle player shirt color change
+        socket.on('player:color', (data: { shirtColor: number }) => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            if (room && room.playerStates[socket.id]) {
+                room.playerStates[socket.id].shirtColor = data.shirtColor;
+            }
+            // Broadcast to others
+            socket.to(roomId).emit('player:color', {
+                id: socket.id,
+                shirtColor: data.shirtColor
+            });
         });
 
         // Handle sign text update
@@ -435,10 +526,18 @@ io.on('connection', (socket) => {
                     room.time = 0.25; // Reset time to noon
                 }
 
-                // Broadcast reset to ALL clients in the room (including sender)
-                io.to(roomId).emit('world:reset', {
+                // Send reset to the initiator (they will respawn)
+                socket.emit('world:reset', {
                     worldSeed: currentSeed,
-                    time: 0.25
+                    time: 0.25,
+                    isInitiator: true
+                });
+
+                // Broadcast reset to all OTHER clients in the room (they should NOT respawn)
+                socket.to(roomId).emit('world:reset', {
+                    worldSeed: currentSeed,
+                    time: 0.25,
+                    isInitiator: false
                 });
 
                 console.log(`[Socket] World reset complete - keeping seed: ${currentSeed}`);
@@ -530,7 +629,8 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('player:joined', {
             id: socket.id,
             name: joiningPlayerState?.name,
-            heldItem: joiningPlayerState?.heldItem
+            heldItem: joiningPlayerState?.heldItem,
+            shirtColor: joiningPlayerState?.shirtColor
         });
 
         // NOTE: All socket event handlers (player:move, block:change, etc.) are registered earlier 
@@ -743,10 +843,18 @@ io.on('connection', (socket) => {
                     room.time = 0.25; // Reset time to noon
                 }
 
-                // Broadcast reset to ALL clients in the room (including sender)
-                io.to(roomId).emit('world:reset', {
+                // Send reset to the initiator (they will respawn)
+                socket.emit('world:reset', {
                     worldSeed: currentSeed,
-                    time: 0.25
+                    time: 0.25,
+                    isInitiator: true
+                });
+
+                // Broadcast reset to all OTHER clients in the room (they should NOT respawn)
+                socket.to(roomId).emit('world:reset', {
+                    worldSeed: currentSeed,
+                    time: 0.25,
+                    isInitiator: false
                 });
 
                 console.log(`[Socket] World reset complete - keeping seed: ${currentSeed}`);
@@ -863,7 +971,8 @@ console.log('[Server] Startup: initializing...');
 // Load dynamic content before starting server
 Promise.all([
     loadAllCreatures(),
-    loadAllItems()
+    loadAllItems(),
+    initKnowledgeService()
 ]).then(() => {
     httpServer.listen(port, '0.0.0.0', () => {
         console.log(`[Server] Listening on http://0.0.0.0:${port}`);

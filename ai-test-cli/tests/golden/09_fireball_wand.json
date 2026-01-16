@@ -1,0 +1,16 @@
+{
+    "name": "golden_09_fireball_wand",
+    "tier": 4,
+    "prompt": "create a wand that shoots fireballs that explode on impact",
+    "timeout": 60000,
+    "expectedKnowledge": [
+        "Projectile Template",
+        "Explosion Template"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const items = window.__VOXEL_GAME__.itemFactory.itemTypes; const wand = Object.values(items).find(i => i.name.toLowerCase().includes('fire')); return wand ? { success: true } : { success: false }; }"
+        }
+    ]
+}

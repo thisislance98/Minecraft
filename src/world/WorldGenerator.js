@@ -17,6 +17,9 @@ export class WorldGenerator {
         this.terrainGenerator = new TerrainGenerator(this.biomeManager);
         this.structureGenerator = new StructureGenerator(game, this);
 
+        // Apply config settings
+        this.terrainGenerator.setRiversEnabled(Config.GENERATION.ENABLE_RIVERS);
+
         // Village near spawn tracking
         this.spawnVillageGenerated = false;
     }
@@ -64,6 +67,16 @@ export class WorldGenerator {
             return this.generateMoonChunk(chunk, cx, cy, cz);
         }
 
+        // Crystal World Generation
+        if (cy >= Config.WORLD.CRYSTAL_WORLD_Y_START && cy < Config.WORLD.CRYSTAL_WORLD_Y_START + Config.WORLD.CRYSTAL_WORLD_HEIGHT) {
+            return this.generateCrystalWorldChunk(chunk, cx, cy, cz);
+        }
+
+        // Lava World Generation
+        if (cy >= Config.WORLD.LAVA_WORLD_Y_START && cy < Config.WORLD.LAVA_WORLD_Y_START + Config.WORLD.LAVA_WORLD_HEIGHT) {
+            return this.generateLavaWorldChunk(chunk, cx, cy, cz);
+        }
+
         const startX = cx * this.game.chunkSize;
         const startY = cy * this.game.chunkSize;
         const startZ = cz * this.game.chunkSize;
@@ -73,56 +86,43 @@ export class WorldGenerator {
                 const wx = startX + x;
                 const wz = startZ + z;
 
-                // 2D Terrain Height
+                // 2D Terrain Height (Cached in TerrainGenerator)
                 const groundHeight = this.getTerrainHeight(wx, wz);
-                // Use optimized biome lookup - reuse the height we just computed
                 const biome = this.getBiomeWithHeight(wx, wz, groundHeight);
+
+                // OPTIMIZATION: Check if this column is entirely above groundwork once
+                const columnIsUnderground = startY <= groundHeight;
 
                 for (let y = 0; y < this.game.chunkSize; y++) {
                     const wy = startY + y;
 
-                    // Bedrock
+                    // Bedrock (Always first)
                     if (wy === 0) {
                         this.game.setBlock(wx, wy, wz, Blocks.BEDROCK, true, true);
                         continue;
                     }
 
-                    // Caves
-                    if (this.isCave(wx, wy, wz) && wy < groundHeight && wy > 0) {
+                    // Caves: Only check if we are below ground level
+                    // Swap order: check wy < groundHeight BEFORE expensive 3D noise isCave
+                    if (wy < groundHeight && wy > 0 && this.isCave(wx, wy, wz)) {
                         this.game.setBlock(wx, wy, wz, null, true, true); // Air
                         continue;
                     }
 
-                    // Terrain
+                    // Terrain Generation
                     if (wy <= groundHeight) {
                         let type = Blocks.STONE;
 
-                        // Ore Generation - use position-based seeded random for determinism
-                        if (type === Blocks.STONE) {
-                            const depth = groundHeight - wy;
-                            // Create deterministic random based on position and world seed
-                            const oreHash = this.getPositionHash(wx, wy, wz);
-                            const oreRand = (oreHash % 10000) / 10000;
+                        // Ore Generation
+                        const oreHash = this.getPositionHash(wx, wy, wz);
+                        const oreRand = (oreHash % 10000) / 10000;
 
-                            // Coal: Common, anywhere under ground
-                            // Iron: Uncommon, below sea level or deep
-                            // Gold: Rare, deep
-                            // Diamond: Very Rare, very deep
-                            // Make it explicit priority to avoid higher probability overwriting
-                            // Let's rewrite for clarity and priority (rarest first)
+                        if (wy < 8 && oreRand < Config.GENERATION.ORE_DIAMOND) type = Blocks.DIAMOND_ORE;
+                        else if (wy < 15 && oreRand < Config.GENERATION.ORE_GOLD) type = Blocks.GOLD_ORE;
+                        else if (wy < this.seaLevel && oreRand < Config.GENERATION.ORE_IRON) type = Blocks.IRON_ORE;
+                        else if (oreRand < Config.GENERATION.ORE_COAL) type = Blocks.COAL_ORE;
 
-                            if (wy < 8 && oreRand < Config.GENERATION.ORE_DIAMOND) { // Diamond
-                                type = Blocks.DIAMOND_ORE;
-                            } else if (wy < 15 && oreRand < Config.GENERATION.ORE_GOLD) { // Gold
-                                type = Blocks.GOLD_ORE;
-                            } else if (wy < this.seaLevel && oreRand < Config.GENERATION.ORE_IRON) { // Iron
-                                type = Blocks.IRON_ORE;
-                            } else if (oreRand < Config.GENERATION.ORE_COAL) { // Coal
-                                type = Blocks.COAL_ORE;
-                            }
-                        }
-
-                        // Dirt/Grass layers
+                        // Surface/Sub-surface layers
                         if (wy === groundHeight) {
                             if (biome === 'DESERT') type = Blocks.SAND;
                             else if (biome === 'SNOW') type = Blocks.SNOW;
@@ -134,11 +134,9 @@ export class WorldGenerator {
                         }
 
                         this.game.setBlock(wx, wy, wz, type, true, true);
-                    } else {
+                    } else if (wy <= this.seaLevel) {
                         // Water
-                        if (wy <= this.seaLevel) {
-                            this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
-                        }
+                        this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
                     }
                 }
             }
@@ -148,12 +146,12 @@ export class WorldGenerator {
         this.generateFeatures(cx, cy, cz);
 
         // Generate village near spawn (spawn is at 32, 80, 32 = chunk 2, 5, 2)
-        // Trigger when we generate the spawn chunk
-        if (!this.spawnVillageGenerated && cx === 2 && cz === 2) {
+        // Trigger when we generate a nearby chunk
+        if (!this.spawnVillageGenerated && cx === 3 && cz === 3) {
             this.spawnVillageGenerated = true;
-            // Place village slightly offset from spawn so player spawns near (not inside) village
-            const villageX = Config.PLAYER.SPAWN_POINT.x + 15;
-            const villageZ = Config.PLAYER.SPAWN_POINT.z + 15;
+            // Place village 40 blocks from spawn so player can see it but doesn't spawn inside it
+            const villageX = Config.PLAYER.SPAWN_POINT.x + 40;
+            const villageZ = Config.PLAYER.SPAWN_POINT.z + 40;
             const villageY = this.getTerrainHeight(villageX, villageZ);
             // Defer to ensure terrain is ready
             setTimeout(() => {
@@ -203,6 +201,140 @@ export class WorldGenerator {
 
                     if (wy <= height) {
                         this.game.setBlock(wx, wy, wz, Blocks.STONE, true, true);
+                    }
+                }
+            }
+        }
+
+        chunk.isGenerated = true;
+        return chunk;
+    }
+
+    generateCrystalWorldChunk(chunk, cx, cy, cz) {
+        const startX = cx * this.game.chunkSize;
+        const startY = cy * this.game.chunkSize;
+        const startZ = cz * this.game.chunkSize;
+
+        // Base height of Crystal World surface
+        const crystalBaseY = Config.WORLD.CRYSTAL_WORLD_Y_START * this.game.chunkSize + 32;
+
+        for (let x = 0; x < this.game.chunkSize; x++) {
+            for (let z = 0; z < this.game.chunkSize; z++) {
+                const wx = startX + x;
+                const wz = startZ + z;
+
+                // Crystal terrain with spiky formations
+                const baseNoise = this.noise.get2D(wx, wz, 0.015, 1);
+                const detailNoise = this.noise.get2D(wx, wz, 0.06, 1);
+                const spireNoise = this.noise.get2D(wx + 2000, wz + 2000, 0.08, 1);
+
+                let height = crystalBaseY + baseNoise * 20 + detailNoise * 5;
+
+                // Crystal spire formations
+                if (spireNoise > 0.5) {
+                    const spireHeight = (spireNoise - 0.5) * 30;
+                    height += spireHeight;
+                }
+
+                for (let y = 0; y < this.game.chunkSize; y++) {
+                    const wy = startY + y;
+
+                    if (wy <= height) {
+                        // Surface layer
+                        if (wy > height - 2) {
+                            // Crystal spires glow at tips
+                            if (spireNoise > 0.6 && wy > height - 1) {
+                                this.game.setBlock(wx, wy, wz, Blocks.CRYSTAL_GLOW, true, true);
+                            } else {
+                                this.game.setBlock(wx, wy, wz, Blocks.CRYSTAL_GROUND, true, true);
+                            }
+                        } else if (wy > height - 6) {
+                            this.game.setBlock(wx, wy, wz, Blocks.CRYSTAL_STONE, true, true);
+                        } else {
+                            this.game.setBlock(wx, wy, wz, Blocks.STONE, true, true);
+                        }
+                    }
+                }
+
+                // Add crystal shard decorations
+                const shardNoise = this.noise.get2D(wx + 500, wz + 500, 0.1, 1);
+                if (shardNoise > 0.7 && height > crystalBaseY + 5) {
+                    const shardHeight = Math.floor((shardNoise - 0.7) * 10) + 1;
+                    for (let s = 1; s <= shardHeight; s++) {
+                        const wy = Math.floor(height) + s;
+                        if (wy >= startY && wy < startY + this.game.chunkSize) {
+                            this.game.setBlock(wx, wy, wz, Blocks.CRYSTAL_SHARD, true, true);
+                        }
+                    }
+                }
+            }
+        }
+
+        chunk.isGenerated = true;
+        return chunk;
+    }
+
+    generateLavaWorldChunk(chunk, cx, cy, cz) {
+        const startX = cx * this.game.chunkSize;
+        const startY = cy * this.game.chunkSize;
+        const startZ = cz * this.game.chunkSize;
+
+        // Base height of Lava World surface
+        const lavaBaseY = Config.WORLD.LAVA_WORLD_Y_START * this.game.chunkSize + 32;
+        const lavaLevelY = lavaBaseY - 5; // Lava lakes below this level
+
+        for (let x = 0; x < this.game.chunkSize; x++) {
+            for (let z = 0; z < this.game.chunkSize; z++) {
+                const wx = startX + x;
+                const wz = startZ + z;
+
+                // Volcanic terrain with craters
+                const baseNoise = this.noise.get2D(wx, wz, 0.02, 1);
+                const detailNoise = this.noise.get2D(wx, wz, 0.05, 1);
+                const craterNoise = this.noise.get2D(wx + 3000, wz + 3000, 0.015, 1);
+
+                let height = lavaBaseY + baseNoise * 18 + detailNoise * 4;
+
+                // Crater logic - dig down into lava lakes  
+                if (craterNoise > 0.55) {
+                    const depth = (craterNoise - 0.55) * 35;
+                    height -= depth;
+
+                    // Crater rim
+                    if (craterNoise < 0.6) {
+                        height += 3;
+                    }
+                }
+
+                for (let y = 0; y < this.game.chunkSize; y++) {
+                    const wy = startY + y;
+
+                    if (wy <= height) {
+                        // Surface layer
+                        if (wy > height - 2) {
+                            // Ember blocks near lava level
+                            if (height < lavaLevelY + 3) {
+                                this.game.setBlock(wx, wy, wz, Blocks.EMBER_BLOCK, true, true);
+                            } else {
+                                this.game.setBlock(wx, wy, wz, Blocks.OBSIDITE_GROUND, true, true);
+                            }
+                        } else if (wy > height - 8) {
+                            this.game.setBlock(wx, wy, wz, Blocks.MAGMA_STONE, true, true);
+                        } else {
+                            this.game.setBlock(wx, wy, wz, Blocks.COOLED_LAVA, true, true);
+                        }
+                    } else if (wy <= lavaLevelY && height < lavaLevelY) {
+                        // Fill with lava (use fire for visual effect)
+                        this.game.setBlock(wx, wy, wz, Blocks.FIRE, true, true);
+                    }
+                }
+
+                // Add fire plants on safe surfaces
+                const plantNoise = this.noise.get2D(wx + 700, wz + 700, 0.12, 1);
+                if (plantNoise > 0.75 && height > lavaLevelY + 3) {
+                    const plantY = Math.floor(height) + 1;
+                    if (plantY >= startY && plantY < startY + this.game.chunkSize) {
+                        this.game.setBlock(wx, plantY, wz, Blocks.FIRE_PLANT, true, true);
                     }
                 }
             }

@@ -1,0 +1,18 @@
+{
+    "name": "Debug Panel Toggles Verification",
+    "headless": false,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [
+                2000
+            ]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game) return { success: false, message: 'Game not found' }; console.log('Checking toggles...'); let errors = []; game.toggleGrass(false); if (game.grassSystem.visible !== false) errors.push('Grass OFF failed'); game.toggleGrass(true); if (game.grassSystem.visible !== true) errors.push('Grass ON failed'); game.toggleCreatures(false); if (game.creaturesVisible !== false) errors.push('Creatures OFF failed'); game.toggleCreatures(true); if (game.creaturesVisible !== true) errors.push('Creatures ON failed'); game.toggleVillagers(false); if (game.villagersVisible !== false) errors.push('Villagers OFF failed'); game.toggleSpaceships(false); if (game.spaceshipsVisible !== false) errors.push('Spaceships OFF failed'); if (errors.length > 0) return { success: false, message: errors.join(', ') }; return { success: true, message: 'All toggles verified' }; }"
+        }
+    ]
+}

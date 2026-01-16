@@ -21,9 +21,21 @@ export class SoundManager {
         // Sound Registry
         this.sounds = new Map();
         this.soundRegistry = {
-            'click': '/sounds/click.mp3', // Placeholder if needed
+            'click': '/sounds/click.mp3',
             'pig_oink': '/sounds/pig_oink.mp3',
-            'cow_moo': '/sounds/cow_moo.mp3'
+            'cow_moo': '/sounds/cow_moo.mp3',
+            // ElevenLabs generated sounds
+            'footstep_grass': '/sounds/footstep_grass.mp3',
+            'footstep_stone': '/sounds/footstep_stone.mp3',
+            'block_break': '/sounds/block_break.mp3',
+            'block_place': '/sounds/block_place.mp3',
+            'item_pickup': '/sounds/item_pickup.mp3',
+            'jump': '/sounds/jump.mp3',
+            'damage': '/sounds/damage.mp3',
+            'levelup': '/sounds/levelup.mp3',
+            'teleport': '/sounds/teleport.mp3',
+            'rumble': '/sounds/rumble.mp3',
+            'splash': '/sounds/splash.mp3'
         };
 
         // Load mute preference - default to muted (music off)

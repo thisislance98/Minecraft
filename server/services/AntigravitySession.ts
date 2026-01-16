@@ -10,6 +10,8 @@ import { auth } from '../config';
 import { addTokens, getUserTokens } from './tokenService';
 import { saveCreature } from './DynamicCreatureService';
 import { saveItem } from './DynamicItemService';
+import { searchKnowledge, addKnowledge, initKnowledgeService } from './KnowledgeService';
+import { semanticSearch, isCreationRequest, formatTemplatesForInjection } from './SemanticSearch';
 import { IncomingMessage } from 'http';
 
 const PENDING_TOOL_CALLS = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
@@ -26,6 +28,9 @@ export class AntigravitySession {
     private authReady: Promise<void>;
     private authReadyResolve!: () => void;
 
+    // Knowledge gap detection
+    private lastKnowledgeSearch: { query: string; timestamp: number; resultsCount: number } | null = null;
+
     // Pricing Configuration (Gemini 3.0 Flash)
     private PRICE_INPUT_1M = 0.50;      // $0.50 per 1M input tokens
     private PRICE_OUTPUT_1M = 3.00;     // $3.00 per 1M output tokens
@@ -37,7 +42,7 @@ export class AntigravitySession {
         this.headers = req.headers;
         this.genAI = new GoogleGenerativeAI(apiKey);
         this.model = this.genAI.getGenerativeModel({
-            model: "gemini-3-flash-preview",
+            model: "gemini-3-pro-preview",
             tools: getAntigravityTools(),
             systemInstruction: getAntigravitySystemPrompt()
         });
@@ -88,7 +93,7 @@ export class AntigravitySession {
             try {
                 const msg = JSON.parse(data.toString());
                 if (msg.type === 'input') {
-                    await this.handleInput(msg.text, msg.context);
+                    await this.handleInput(msg.text, msg.context, msg.settings);
                 } else if (msg.type === 'tool_response') {
                     this.handleToolResponse(msg.id, msg.result, msg.error);
                 } else if (msg.type === 'interrupt') {
@@ -125,6 +130,8 @@ export class AntigravitySession {
 
     private isInterrupted = false;
 
+    private thinkingEnabled: boolean = false; // Default to false
+
     private send(type: string, payload: any) {
         if (this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({ type, ...payload }));
@@ -135,12 +142,38 @@ export class AntigravitySession {
         this.send('error', { message });
     }
 
-    private async handleInput(text: string, context: any) {
+    private async handleInput(text: string, context: any, settings?: any) {
         // Wait for auth to be verified before processing
         await this.authReady;
 
+        // Update thinking preference from client settings
+        if (settings && typeof settings.thinkingEnabled === 'boolean') {
+            this.thinkingEnabled = settings.thinkingEnabled;
+            console.log('[Antigravity] Thinking enabled:', this.thinkingEnabled);
+        }
+
+        // ====== FORCED RAG INJECTION ======
+        // Check if this looks like a creation request and inject relevant templates
+        let augmentedText = text;
+        if (isCreationRequest(text)) {
+            console.log('[Merlin] Creation request detected, running semantic search...');
+            try {
+                const results = await semanticSearch(text, 5, 0.25);
+                if (results.length > 0) {
+                    const templatesStr = formatTemplatesForInjection(results);
+                    augmentedText = text + templatesStr;
+                    console.log(`[Merlin] Injected ${results.length} templates into context`);
+                } else {
+                    console.log('[Merlin] No semantic matches found, proceeding without templates');
+                }
+            } catch (e: any) {
+                console.warn('[Merlin] Semantic search failed:', e.message);
+                // Continue without templates
+            }
+        }
+
         const contextStr = context ? `\n[Context: ${JSON.stringify(context)}]` : '';
-        const fullMessage = text + contextStr;
+        const fullMessage = augmentedText + contextStr;
 
         // Add user message to contents
         this.contents.push({
@@ -192,12 +225,12 @@ export class AntigravitySession {
             // Note: SDK uses snake_case for these parameters
             const request: any = {
                 contents: this.contents,
-                generationConfig: {
+                generationConfig: this.thinkingEnabled ? {
                     thinkingConfig: {
                         include_thoughts: true,
                         thinking_level: 'low'  // Use low thinking for Gemini 3 - faster output
                     }
-                }
+                } : {}
             };
 
             result = await this.model.generateContentStream(request);
@@ -353,6 +386,55 @@ export class AntigravitySession {
                     result = await this.executeServerTool(name, args);
                 } else if (this.isClientTool(name)) {
                     result = await this.executeClientTool(name, args);
+
+                    // Special handling for screenshot: save base64 to file
+                    if (name === 'capture_screenshot' && result.success && result.image) {
+                        try {
+                            const base64Data = result.image.replace(/^data:image\/jpeg;base64,/, "");
+                            const artifactsDir = path.join(process.cwd(), 'artifacts', 'screenshots');
+                            await fs.mkdir(artifactsDir, { recursive: true });
+
+                            const filename = `${args.label || 'screenshot'}_${Date.now()}.jpg`;
+                            const filePath = path.join(artifactsDir, filename);
+                            await fs.writeFile(filePath, base64Data, 'base64');
+
+                            // Return path instead of massive base64 string
+                            result = {
+                                success: true,
+                                message: `Screenshot saved to ${filePath}`,
+                                filePath: filePath,
+                                markdown: `![${args.label}](file://${filePath})`
+                            };
+                        } catch (err: any) {
+                            console.error('Failed to save screenshot:', err);
+                            result = { success: false, error: "Failed to save screenshot: " + err.message };
+                        }
+                    }
+
+                    // Special handling for video: save base64/blob to file
+                    if (name === 'capture_video' && result.success && result.videoData) {
+                        try {
+                            // Data URL format: data:video/webm;base64,...
+                            const base64Data = result.videoData.replace(/^data:video\/webm;base64,/, "");
+                            const artifactsDir = path.join(process.cwd(), 'artifacts', 'videos');
+                            await fs.mkdir(artifactsDir, { recursive: true });
+
+                            const filename = `${args.label || 'video'}_${Date.now()}.webm`;
+                            const filePath = path.join(artifactsDir, filename);
+                            // Need to handle large files carefully, but for short clips this is OK
+                            await fs.writeFile(filePath, base64Data, 'base64');
+
+                            result = {
+                                success: true,
+                                message: `Video saved to ${filePath}`,
+                                filePath: filePath,
+                                markdown: `[VIDEO: ${args.label}](file://${filePath})`
+                            };
+                        } catch (err: any) {
+                            console.error('Failed to save video:', err);
+                            result = { success: false, error: "Failed to save video: " + err.message };
+                        }
+                    }
                 } else {
                     result = { error: `Unknown tool ${name}` };
                 }
@@ -382,11 +464,11 @@ export class AntigravitySession {
     }
 
     private isServerTool(name: string) {
-        return ['view_file', 'list_dir', 'write_to_file', 'replace_file_content', 'create_creature', 'create_item'].includes(name);
+        return ['view_file', 'list_dir', 'write_to_file', 'replace_file_content', 'create_creature', 'create_item', 'search_knowledge', 'add_knowledge', 'verify_and_save'].includes(name);
     }
 
     private isClientTool(name: string) {
-        const clientTools = ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity', 'patch_entity', 'set_blocks'];
+        const clientTools = ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity', 'patch_entity', 'set_blocks', 'run_verification', 'capture_screenshot', 'capture_video', 'capture_logs'];
         console.log(`[Antigravity] Checking tool '${name}'. Server: ${this.isServerTool(name)}, Client: ${clientTools.includes(name)}`);
         return clientTools.includes(name);
     }
@@ -460,6 +542,22 @@ export class AntigravitySession {
                     return { error: 'Missing required fields: name and code' };
                 }
 
+                // Knowledge gap detection
+                const recentSearch = this.lastKnowledgeSearch &&
+                    (Date.now() - this.lastKnowledgeSearch.timestamp) < 60000;
+                if (!recentSearch) {
+                    console.warn(`[Knowledge Gap] create_creature '${name}' called without recent knowledge search`);
+                    if (this.socket) {
+                        this.socket.emit('knowledge_gap', {
+                            tool: 'create_creature',
+                            name,
+                            message: 'Creature created without searching knowledge first'
+                        });
+                    }
+                } else {
+                    console.log(`[Knowledge] Using knowledge from search: "${this.lastKnowledgeSearch!.query}" (${this.lastKnowledgeSearch!.resultsCount} results)`);
+                }
+
                 const result = await saveCreature({
                     name,
                     code,
@@ -469,6 +567,10 @@ export class AntigravitySession {
                 });
 
                 if (result.success) {
+                    // NOTE: Auto-save to knowledge removed - should only save after
+                    // user verifies the creature actually works as expected.
+                    // Consider adding "save_to_knowledge" tool that user can trigger.
+
                     return {
                         success: true,
                         message: `Created creature '${name}'. It is now available for all players to spawn!`,
@@ -483,6 +585,22 @@ export class AntigravitySession {
                 const { name, code, icon, description } = args;
                 if (!name || !code || !icon) {
                     return { error: 'Missing required fields: name, code, and icon' };
+                }
+
+                // Knowledge gap detection
+                const recentSearch = this.lastKnowledgeSearch &&
+                    (Date.now() - this.lastKnowledgeSearch.timestamp) < 60000;
+                if (!recentSearch) {
+                    console.warn(`[Knowledge Gap] create_item '${name}' called without recent knowledge search`);
+                    if (this.socket) {
+                        this.socket.emit('knowledge_gap', {
+                            tool: 'create_item',
+                            name,
+                            message: 'Item created without searching knowledge first'
+                        });
+                    }
+                } else {
+                    console.log(`[Knowledge] Using knowledge from search: "${this.lastKnowledgeSearch!.query}" (${this.lastKnowledgeSearch!.resultsCount} results)`);
                 }
 
                 const result = await saveItem({
@@ -500,6 +618,165 @@ export class AntigravitySession {
                     };
                 } else {
                     return { error: result.error };
+                }
+            }
+
+            case 'search_knowledge': {
+                const { query, category } = args;
+                if (!query) {
+                    return { error: 'Query is required' };
+                }
+
+                // Debug logging for knowledge retrieval
+                console.log(`[Knowledge] Search: query="${query}" category="${category || 'any'}"`);
+
+                const results = searchKnowledge(query, category);
+
+                // Log results
+                console.log(`[Knowledge] Found ${results.length} results:`);
+                results.forEach((r, i) => {
+                    console.log(`  [${i + 1}] ${r.title} (tags: ${r.tags?.join(', ') || 'none'})`);
+                });
+
+                // Emit knowledge_search event to client for CLI visibility
+                if (this.socket) {
+                    this.socket.emit('knowledge_search', {
+                        query,
+                        category: category || 'any',
+                        resultCount: results.length,
+                        resultTitles: results.map(r => r.title)
+                    });
+                }
+
+                // Track that knowledge was searched (for gap detection)
+                this.lastKnowledgeSearch = {
+                    query,
+                    timestamp: Date.now(),
+                    resultsCount: results.length
+                };
+
+                return {
+                    success: true,
+                    count: results.length,
+                    results: results.map(r => ({
+                        id: r.id,
+                        category: r.category,
+                        title: r.title,
+                        content: r.content.slice(0, 500), // Truncate for context limit
+                        tags: r.tags
+                    }))
+                };
+            }
+
+            case 'add_knowledge': {
+                const { category, title, content, tags } = args;
+                const result = await addKnowledge({ category, title, content, tags });
+                if (result.success) {
+                    return {
+                        success: true,
+                        message: `Knowledge '${title}' stored for future reference`,
+                        id: result.id
+                    };
+                } else {
+                    return { error: result.error };
+                }
+            }
+
+            case 'verify_and_save': {
+                const { creatureName, expectedBehaviors, creatureCode } = args;
+
+                console.log(`[Verification] Starting verification for ${creatureName}...`);
+
+                // 1. Capture logs from client
+                // We'll ask client to capture logs for 3 seconds
+                const logResult: any = await this.executeClientTool('capture_logs', { duration: 3000 });
+
+                if (logResult.error) {
+                    return { error: `Failed to capture logs: ${logResult.error}` };
+                }
+
+                const logs = logResult.logs || [];
+                const behaviorLogs = logs.filter((l: string) => l.includes('[BEHAVIOR]'));
+                const errorLogs = logs.filter((l: string) => l.toLowerCase().includes('error') || l.toLowerCase().includes('crash'));
+
+                // 2. Simple Heuristic Verification first
+                const hasCrash = errorLogs.length > 0;
+                const hasBehavior = behaviorLogs.length > 0;
+
+                // 3. LLM Verification (Robust)
+                // We use a fresh model instance for impartial judging
+                let verificationAnalysis = "";
+                let verified = false;
+
+                try {
+                    const apiKey = process.env.GEMINI_API_KEY;
+                    if (apiKey) {
+                        const { GoogleGenerativeAI } = require('@google/generative-ai');
+                        const genAI = new GoogleGenerativeAI(apiKey);
+                        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+                        const prompt = `
+                        Verify if the creature '${creatureName}' is behaving correctly based on these browser logs.
+                        
+                        Expected Behaviors: ${JSON.stringify(expectedBehaviors)}
+                        
+                        Browser Logs:
+                        ${logs.join('\n')}
+                        
+                        Task:
+                        1. Did the creature crash or cause errors?
+                        2. Do the logs show the expected behaviors?
+                        3. Is the '[BEHAVIOR]' log pattern being used?
+                        
+                        Return JSON: { "verified": boolean, "analysis": string, "suggestions": string }
+                        `;
+
+                        const result = await model.generateContent(prompt);
+                        const text = result.response.text();
+                        // Robust JSON extraction
+                        const jsonMatch = text.match(/\{[\s\S]*\}/);
+                        if (!jsonMatch) {
+                            throw new Error("No JSON object found in response");
+                        }
+                        const json = JSON.parse(jsonMatch[0]);
+
+                        verified = json.verified;
+                        verificationAnalysis = json.analysis;
+                    } else {
+                        // Fallback if no key (shouldn't happen in this env)
+                        verified = !hasCrash && hasBehavior;
+                        verificationAnalysis = "Key missing, using heuristic check.";
+                    }
+                } catch (e: any) {
+                    console.error('[Verification] LLM check failed:', e);
+                    verified = !hasCrash && hasBehavior;
+                    verificationAnalysis = `LLM check failed (${e.message}). Heuristic: Crash=${hasCrash}, Logs=${behaviorLogs.length}`;
+                }
+
+                // 4. Save or Fail
+                if (verified) {
+                    // Auto-save to knowledge
+                    await addKnowledge({
+                        category: 'example',
+                        title: `Verified: ${creatureName}`,
+                        content: `// ${creatureName} - Verified working\n// Behaviors: ${expectedBehaviors.join(', ')}\n// Created: ${new Date().toISOString()}\n\n${creatureCode}`,
+                        tags: ['verified', 'example', 'creature', creatureName.toLowerCase(), ...expectedBehaviors]
+                    });
+
+                    return {
+                        success: true,
+                        verified: true,
+                        message: `✅ Verification PASSED! ${creatureName} has been saved to the Knowledge Base.`,
+                        analysis: verificationAnalysis
+                    };
+                } else {
+                    return {
+                        success: false,
+                        verified: false,
+                        message: `❌ Verification FAILED for ${creatureName}. Please fix the code and try again.`,
+                        analysis: verificationAnalysis,
+                        logs: logs.slice(0, 20) // Send sample logs back
+                    };
                 }
             }
 

@@ -1,0 +1,20 @@
+{
+    "name": "plan_item_success",
+    "tier": 2,
+    "prompt": "Create a Fire Wand that shoots fireballs when used. After creating it, give it to me. After spawning, you MUST call verify_and_save to check if it works correctly.",
+    "timeout": 90000,
+    "expectedKnowledge": [
+        "Ranged Weapon Template",
+        "Projectile System"
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const inventory = window.__VOXEL_GAME__.player.inventory; const hasItem = inventory.items.some(i => i && i.name.toLowerCase().includes('firewand')) || inventory.hotbar.some(i => i && i.name.toLowerCase().includes('firewand')); return hasItem ? { success: true } : { success: false, message: 'Fire Wand not found in inventory' }; }"
+        }
+    ],
+    "visual_expectations": {
+        "type": "image",
+        "description": "A player holding a wand that shoots fire"
+    }
+}

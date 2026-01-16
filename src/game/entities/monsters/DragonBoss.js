@@ -13,10 +13,10 @@ export class DragonBoss extends Animal {
         this.damage = 40;
         this.maxHealth = 500;
         this.health = 500;
-        
+
         this.fireCooldown = 0;
         this.wingTimer = 0;
-        
+
         this.createBody();
     }
 
@@ -91,7 +91,7 @@ export class DragonBoss extends Animal {
 
     updateAI(dt) {
         super.updateAI(dt);
-        
+
         this.wingTimer += dt * 5;
         this.leftWing.rotation.z = Math.sin(this.wingTimer) * 0.5;
         this.rightWing.rotation.z = -Math.sin(this.wingTimer) * 0.5;
@@ -108,23 +108,23 @@ export class DragonBoss extends Animal {
 
     breatheFire() {
         this.fireCooldown = 3.0; // Seconds between fire breaths
-        
+
         // Visual effect: burst of fire particles
         for (let i = 0; i < 20; i++) {
             const fire = new THREE.Mesh(
                 new THREE.BoxGeometry(0.5, 0.5, 0.5),
                 new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.8 })
             );
-            
+
             // Start at head
             const startPos = new THREE.Vector3();
             this.headGroup.getWorldPosition(startPos);
             fire.position.copy(startPos);
-            
+
             // Project forward
             const direction = new THREE.Vector3(0, 0, 1);
             direction.applyQuaternion(this.mesh.quaternion);
-            
+
             const spread = 0.5;
             const velocity = direction.clone().multiplyScalar(10 + Math.random() * 10);
             velocity.x += (Math.random() - 0.5) * spread * 10;
@@ -132,7 +132,7 @@ export class DragonBoss extends Animal {
             velocity.z += (Math.random() - 0.5) * spread * 10;
 
             this.game.scene.add(fire);
-            
+
             // Simple particle animation
             let life = 1.0;
             const interval = setInterval(() => {
@@ -152,9 +152,9 @@ export class DragonBoss extends Animal {
         const toPlayer = this.game.player.position.clone().sub(this.mesh.position);
         const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.mesh.quaternion);
         const dot = toPlayer.normalize().dot(forward);
-        
+
         if (dot > 0.7 && this.game.player.position.distanceTo(this.mesh.position) < 12) {
-            this.game.player.takeDamage(this.damage);
+            this.game.player.takeDamage(this.damage, 'Dragon');
         }
     }
 }

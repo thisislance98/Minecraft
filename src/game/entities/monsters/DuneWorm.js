@@ -196,6 +196,27 @@ export class DuneWorm extends Animal {
         const player = this.game.player;
         const distToPlayer = this.position.distanceTo(player.position);
 
+        // Check if we're still in desert - don't leave the desert!
+        const worldGen = this.game.worldGen;
+        if (worldGen) {
+            const currentBiome = worldGen.getBiome(this.position.x, this.position.z);
+            const playerBiome = worldGen.getBiome(player.position.x, player.position.z);
+
+            // If player is not in desert, don't chase them
+            if (playerBiome !== 'DESERT') {
+                // Just wander randomly within the desert instead
+                this.rotation += (Math.random() - 0.5) * this.turnSpeed * dt;
+                return;
+            }
+
+            // If we're about to leave the desert, turn back
+            if (currentBiome !== 'DESERT') {
+                // Turn around - head back towards desert
+                this.rotation += Math.PI * dt; // Turn around
+                return;
+            }
+        }
+
         // Turn towards player
         const dx = player.position.x - this.position.x;
         const dy = player.position.y - this.position.y;
@@ -309,7 +330,7 @@ export class DuneWorm extends Animal {
         const player = this.game.player;
         const dist = this.position.distanceTo(player.position);
         if (dist < 3.0) { // Mouth radius
-            player.takeDamage(this.damage);
+            player.takeDamage(this.damage, 'Dune Worm');
             // Eat effect?
             console.log("Player eaten by Dune Worm!");
 

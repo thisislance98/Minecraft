@@ -16,8 +16,8 @@ const PHRASES = [
 ];
 
 export class Wolf extends Animal {
-    constructor(game, x, y, z, seed) {
-        super(game, x, y, z, seed);
+    constructor(game, x, y, z) {
+        super(game, x, y, z);
         this.width = 0.6;
         this.height = 0.8;
         this.depth = 3.0; // Accurate length ~3.0

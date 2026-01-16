@@ -1,0 +1,12 @@
+[
+    {
+        "description": "Verify creature spawn success happy path",
+        "prompt": "spawn a pig and verify it is there",
+        "verifications": [
+            {
+                "type": "customCode",
+                "code": "return window.__VOXEL_GAME__.animals.some(a => a.constructor.name === 'Pig')"
+            }
+        ]
+    }
+]

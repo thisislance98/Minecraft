@@ -1,0 +1,87 @@
+        case 'bookshelf': {
+            const { wood, covers, details, labels } = palettes.bookshelf;
+
+            // 1. Draw Wood Background (Shadowed inside the shelf)
+            ctx.fillStyle = wood[2] || '#5c4033'; // Darkest wood for back panel
+            ctx.fillRect(0, 0, size, size);
+
+            // 2. Draw Shelves
+            const shelfColor = wood[0];
+            const shelfShadow = wood[1];
+            
+            const drawShelf = (y) => {
+                ctx.fillStyle = shelfColor;
+                ctx.fillRect(0, y, size, 2);
+                ctx.fillStyle = shelfShadow;
+                ctx.fillRect(0, y + 1, size, 1);
+            };
+
+            drawShelf(0);
+            drawShelf(7);
+            drawShelf(14);
+
+            // 3. Draw Books with VARIETY
+            const rows = [2, 9]; 
+            
+            rows.forEach(baseY => {
+                let x = 1;
+                while (x < size - 1) {
+                    // Randomize book width (2 to 3 pixels mostly, rare 4)
+                    const width = 2 + Math.floor(seededRandom(seed++) * 2.5); 
+                    if (x + width > size - 1) break;
+
+                    // Height variation
+                    const height = 3 + Math.floor(seededRandom(seed++) * 3); // 3, 4, 5
+                    const y = baseY + (5 - height); 
+
+                    // Choose cover color
+                    const coverColor = covers[Math.floor(seededRandom(seed++) * covers.length)];
+                    ctx.fillStyle = coverColor;
+                    ctx.fillRect(x, y, width, height);
+
+                    // Spine Shading (Cylindrical effect)
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(x, y, 1, height); // Shadow on left edge
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(x + width - 1, y, 1, height); // Highlight on right edge
+
+                    // --- SPINE DETAILS ---
+                    const spineType = Math.floor(seededRandom(seed++) * 4); // 0-3
+
+                    // Type 0: Banded (Gold/Silver bands)
+                    if (spineType === 0) {
+                        const detailColor = details[Math.floor(seededRandom(seed++) * details.length)];
+                        ctx.fillStyle = detailColor;
+                        const bandY = y + 1 + Math.floor(seededRandom(seed++) * (height - 2));
+                        ctx.fillRect(x, bandY, width, 1);
+                        if (height > 4) { // Second band for tall books
+                            ctx.fillRect(x, bandY + 2, width, 1);
+                        }
+                    }
+                    // Type 1: Labeled (Paper label)
+                    else if (spineType === 1 && width >= 2) {
+                        const labelColor = labels[Math.floor(seededRandom(seed++) * labels.length)];
+                        ctx.fillStyle = labelColor;
+                        const labelY = y + height - 2; // Near bottom
+                        ctx.fillRect(x + 1, labelY, width - 2, 1);
+                    }
+                    // Type 2: Titled (Vertical line text hint)
+                    else if (spineType === 2 && height >= 4) {
+                        ctx.fillStyle = 'rgba(255,235,59,0.7)'; // Yellowish text
+                        // Draw a vertical dotted line or just a strip
+                        ctx.fillRect(x + Math.floor(width/2), y + 1, 1, height - 2);
+                    }
+                    // Type 3: Standard / Worn
+                    else {
+                        // Maybe some noise/wear
+                         if (seededRandom(seed++) > 0.5) {
+                             ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                             ctx.fillRect(x, y + 1, 1, 1); // Worn top corner
+                         }
+                    }
+
+                    x += width + Math.floor(seededRandom(seed++) * 1.2); // Random gap
+                }
+            });
+            break;
+        }

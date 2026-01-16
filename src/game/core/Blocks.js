@@ -20,6 +20,12 @@ export const Blocks = {
     GOLD_BLOCK: 'gold_block',
     TNT: 'tnt',
     BOOKSHELF: 'bookshelf',
+    BOOK_RED: 'book_red',
+    BOOK_BLUE: 'book_blue',
+    BOOK_GREEN: 'book_green',
+    BOOK_BROWN: 'book_brown',
+    BOOK_PURPLE: 'book_purple',
+    BOOK_MIXED: 'book_mixed',
     CRAFTING_TABLE: 'crafting_table',
     FURNACE: 'furnace',
     COAL_ORE: 'coal_ore',
@@ -117,4 +123,18 @@ export const Blocks = {
     THATCH: 'thatch',
     HALF_TIMBER: 'half_timber',
     STONE_BRICK: 'stone_brick',
+
+    // Crystal World Blocks
+    CRYSTAL_GROUND: 'crystal_ground',
+    CRYSTAL_STONE: 'crystal_stone',
+    CRYSTAL_SHARD: 'crystal_shard',
+    CRYSTAL_GLOW: 'crystal_glow',
+    CRYSTAL_PLANT: 'crystal_plant',
+
+    // Lava World Blocks
+    OBSIDITE_GROUND: 'obsidite_ground',
+    MAGMA_STONE: 'magma_stone',
+    COOLED_LAVA: 'cooled_lava',
+    EMBER_BLOCK: 'ember_block',
+    FIRE_PLANT: 'fire_plant',
 };

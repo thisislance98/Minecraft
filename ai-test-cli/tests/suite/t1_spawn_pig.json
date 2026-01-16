@@ -1,0 +1,21 @@
+{
+    "name": "T1_spawn_pig",
+    "tier": 1,
+    "prompt": "spawn a pig",
+    "timeout": 60000,
+    "visual_expectations": {
+        "type": "image",
+        "description": "A pig entity visible in the game world. CRITICAL: The pig must be standing ON the ground, not floating in the air. Look for contact shadows or feet touching blocks."
+    },
+    "verify": [
+        {
+            "type": "entityExists",
+            "creature": "Pig",
+            "minCount": 1
+        },
+        {
+            "type": "customCode",
+            "code": "() => { const pig = window.__VOXEL_GAME__.animals.find(a => a.constructor.name === 'Pig'); if (!pig) return { success: false, message: 'Pig not found' }; const onGround = pig.onGround || (pig.velocity && Math.abs(pig.velocity.y) < 0.1 && pig.position.y < 60); return { success: true, message: `Pig found at y=${pig.position.y.toFixed(1)}, onGround=${Boolean(pig.onGround)}` }; }"
+        }
+    ]
+}

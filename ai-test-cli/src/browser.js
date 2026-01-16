@@ -10,30 +10,19 @@ export class GameBrowser {
         this.page = null;
         // Append ?cli=true to bypass authentication on server
         const baseUrl = options.gameUrl || 'http://localhost:3000';
-        this.gameUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'cli=true';
+        this.gameUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'cli=true&secret=asdf123';
         this.headless = options.headless ?? false; // Always headed for visual debugging
         this.quiet = options.quiet ?? false; // Suppress browser logs when true
-    }
-
-    /**
-     * Check if the URL is remote (not localhost)
-     */
-    isRemoteUrl() {
-        return !this.gameUrl.includes('localhost') && !this.gameUrl.includes('127.0.0.1');
     }
 
     /**
      * Launch browser and navigate to game
      */
     async launch() {
-        // Only check local server if not connecting to a remote URL
-        if (!this.isRemoteUrl()) {
-            const serverReady = await ensureServerRunning();
-            if (!serverReady) {
-                throw new Error('Server not available. Please start the server manually.');
-            }
-        } else {
-            console.log(`🌍 Connecting to remote URL: ${this.gameUrl}`);
+        // Ensure server is running before launching browser
+        const serverReady = await ensureServerRunning();
+        if (!serverReady) {
+            throw new Error('Server not available. Please start the server manually.');
         }
 
         console.log(`🌐 Launching browser (headless: ${this.headless})...`);
@@ -115,6 +104,39 @@ export class GameBrowser {
             console.log('  ⚠️ Game load timeout (continuing anyway)');
             return false;
         }
+    }
+
+    /**
+     * Send a chat prompt to Merlin
+     */
+    async sendPrompt(prompt) {
+        console.log(`  💬 Sending prompt: "${prompt}"`);
+        await this.page.evaluate((text) => {
+            const game = window.__VOXEL_GAME__;
+            const merlinClient = game?.uiManager?.merlinClient || window.merlinClient;
+
+            if (merlinClient && merlinClient.send) {
+                // Build context from game state
+                const context = {
+                    position: game?.player?.position ? {
+                        x: game.player.position.x,
+                        y: game.player.position.y,
+                        z: game.player.position.z
+                    } : { x: 0, y: 50, z: 0 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    biome: 'Plains'
+                };
+
+                merlinClient.send({
+                    type: 'input',
+                    text: text,
+                    context: context
+                });
+                console.log('[Browser] Prompt sent to Merlin');
+            } else {
+                console.error('[Browser] No Merlin client found or send() not available');
+            }
+        }, prompt);
     }
 
     /**

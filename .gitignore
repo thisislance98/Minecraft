@@ -4,5 +4,9 @@ dist/
 .DS_Store
 coverage/
 .vscode/
+
+# Credentials - keep in .env or secure location
 server/firebase-service-account.json
 src/config/firebase-credentials.json
+*.credentials.json
+*-service-account.json

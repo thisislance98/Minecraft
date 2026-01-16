@@ -1,0 +1,11 @@
+{
+    "name": "T3_spinning_sphere",
+    "tier": 3,
+    "prompt": "make a large blue sphere that spins",
+    "timeout": 90000,
+    "visual_expectations": {
+        "type": "video",
+        "duration": 5,
+        "description": "A blue sphere that is rotating or spinning"
+    }
+}

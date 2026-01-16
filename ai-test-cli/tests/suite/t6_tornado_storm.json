@@ -1,0 +1,16 @@
+{
+    "name": "T6_tornado_storm",
+    "tier": 6,
+    "prompt": "Spawn a storm of particles that spins items around",
+    "timeout": 90000,
+    "visual_expectations": {
+        "type": "image",
+        "description": "A dense cloud of particles/points swirling in a circular or spiral pattern"
+    },
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const entities = window.__VOXEL_GAME__.animals; const storm = entities.find(e => e.constructor.name === 'ParticleEntity' || (e.particles && e.particles.length > 50)); if (!storm) return { success: false, message: 'Particle storm not found' }; return { success: true, message: `Found storm with ${storm.particles ? storm.particles.length : 'N/A'} particles` }; }"
+        }
+    ]
+}

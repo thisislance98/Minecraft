@@ -48,18 +48,20 @@ export class ThirdPersonCamera {
         // Start with base offset
         this._idealOffset.copy(this.offset);
 
-        // Apply player's Y rotation (yaw) to position camera behind player
+        // Apply player's pitch (X rotation) - camera pivots around player vertically
+        const pitchQuat = new THREE.Quaternion();
+        pitchQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -player.rotation.x);
+        this._idealOffset.applyQuaternion(pitchQuat);
+
+        // Apply player's yaw (Y rotation) - camera follows player's facing direction
         this._targetQuaternion.setFromAxisAngle(
             new THREE.Vector3(0, 1, 0),
             player.rotation.y
         );
         this._idealOffset.applyQuaternion(this._targetQuaternion);
 
-        // Add player position
+        // Add player position (pivot point is at player's body)
         this._idealOffset.add(player.position);
-
-        // Add slight vertical offset based on player pitch for more dynamic feel
-        this._idealOffset.y += player.rotation.x * 0.5;
 
         return this._idealOffset;
     }
@@ -71,7 +73,7 @@ export class ThirdPersonCamera {
         // Start with base look-at offset
         this._idealLookat.copy(this.lookAtOffset);
 
-        // Apply player's Y rotation
+        // Apply player's Y rotation only (yaw)
         this._targetQuaternion.setFromAxisAngle(
             new THREE.Vector3(0, 1, 0),
             player.rotation.y

@@ -704,109 +704,62 @@ export class VoxelGame {
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
-        // Village is generated at spawnPoint.x + 40, spawnPoint.z + 40 (see WorldGenerator.js)
-        const villageX = spawnPoint.x + 40;
-        const villageZ = spawnPoint.z + 40;
-
-        // Calculate ground height at Village Center
-        const terrainHeight = this.worldGen.getTerrainHeight(villageX, villageZ);
-
-        // Wizard Tower Dimensions:
-        // Shaft Height: 18
-        // Room starts at: terrainHeight + 18
-        // Room floor is at: terrainHeight + 18
-        // Player should spawn inside the room, say at +1 (y + 19)
-        const towerSpawnY = terrainHeight + 19;
-
-        // Find a spawn position that doesn't overlap with other players
-        let finalX = villageX;
-        let finalZ = villageZ;
-        const minPlayerDistance = 2.0; // Minimum distance between players
+        // Spawn at the default spawn point
+        let finalX = spawnPoint.x;
+        let finalZ = spawnPoint.z;
+        const minPlayerDistance = 2.0;
 
         // Check if we have remote players nearby and need to offset spawn position
         if (this.socketManager && this.socketManager.playerMeshes) {
             const nearbyPlayers = [];
 
-            // Collect positions of all remote players
             this.socketManager.playerMeshes.forEach((meshInfo) => {
                 if (meshInfo.group) {
                     nearbyPlayers.push({
                         x: meshInfo.group.position.x,
-                        y: meshInfo.group.position.y,
                         z: meshInfo.group.position.z
                     });
                 }
             });
 
-            // Check if spawn point is too close to any player
             const isPositionClear = (x, z) => {
                 for (const player of nearbyPlayers) {
-                    // Check horizontal distance (Y doesn't matter much for spawn collision)
                     const dx = x - player.x;
                     const dz = z - player.z;
-                    const dist = Math.sqrt(dx * dx + dz * dz);
-                    if (dist < minPlayerDistance) {
+                    if (Math.sqrt(dx * dx + dz * dz) < minPlayerDistance) {
                         return false;
                     }
                 }
                 return true;
             };
 
-            // If spawn point overlaps, try to find a clear position in a spiral pattern
             if (!isPositionClear(finalX, finalZ)) {
-                console.log('[Game] Spawn position occupied, finding alternative...');
-
-                // Spiral outward to find clear position
-                const maxAttempts = 16;
                 const offsets = [
-                    [2, 0], [0, 2], [-2, 0], [0, -2],           // Cardinal directions
-                    [2, 2], [-2, 2], [-2, -2], [2, -2],         // Diagonals
-                    [3, 0], [0, 3], [-3, 0], [0, -3],           // Further cardinal
-                    [3, 3], [-3, 3], [-3, -3], [3, -3]          // Further diagonals
+                    [2, 0], [0, 2], [-2, 0], [0, -2],
+                    [2, 2], [-2, 2], [-2, -2], [2, -2]
                 ];
-
-                for (let i = 0; i < maxAttempts; i++) {
-                    const testX = villageX + offsets[i][0];
-                    const testZ = villageZ + offsets[i][1];
-
-                    if (isPositionClear(testX, testZ)) {
-                        finalX = testX;
-                        finalZ = testZ;
-                        console.log(`[Game] Found clear spawn at offset (${offsets[i][0]}, ${offsets[i][1]})`);
+                for (const [ox, oz] of offsets) {
+                    if (isPositionClear(finalX + ox, finalZ + oz)) {
+                        finalX += ox;
+                        finalZ += oz;
                         break;
                     }
                 }
             }
         }
 
-        // Verify spawn position - find actual ground level to avoid spawning on trees
-        let finalY = towerSpawnY;
+        // Find ground level (avoids spawning on trees)
+        const terrainHeight = this.worldGen.getTerrainHeight(finalX, finalZ);
+        let finalY = terrainHeight + 1;
+
         if (this.spawnManager) {
-            // Use findGroundLevel to ensure we're not on a tree
             const groundY = this.spawnManager.findGroundLevel(finalX, terrainHeight + 5, finalZ);
             if (groundY !== null) {
-                // If at tower position, prefer tower spawn height; otherwise use ground level
-                if (finalX === villageX && finalZ === villageZ) {
-                    // Check if tower exists by seeing if there's solid ground at tower height
-                    const blockAtTowerFloor = this.getBlock(finalX, Math.floor(towerSpawnY) - 1, finalZ);
-                    if (blockAtTowerFloor) {
-                        console.log(`[Game] Spawning player at Wizard Tower: ${finalX}, ${towerSpawnY}, ${finalZ}`);
-                    } else {
-                        // Tower not generated yet, use ground level
-                        finalY = groundY;
-                        console.log(`[Game] Tower not ready, spawning on ground: ${finalX}, ${finalY}, ${finalZ}`);
-                    }
-                } else {
-                    // Offset position - use ground level
-                    finalY = groundY;
-                    console.log(`[Game] Spawning player on ground at: ${finalX}, ${finalY}, ${finalZ}`);
-                }
+                finalY = groundY;
             }
-        } else {
-            // Fallback: just use terrain height + 1
-            finalY = terrainHeight + 1;
-            console.log(`[Game] Spawning player (fallback) at: ${finalX}, ${finalY}, ${finalZ}`);
         }
+
+        console.log(`[Game] Spawning player on ground at: ${finalX}, ${finalY}, ${finalZ}`);
 
         this.spawnPoint = new THREE.Vector3(finalX, finalY, finalZ);
         this.player.position.copy(this.spawnPoint);

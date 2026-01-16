@@ -149,9 +149,10 @@ export class WorldGenerator {
         // Trigger when we generate a nearby chunk
         if (!this.spawnVillageGenerated && cx === 3 && cz === 3) {
             this.spawnVillageGenerated = true;
-            // Place village 40 blocks from spawn so player can see it but doesn't spawn inside it
-            const villageX = Config.PLAYER.SPAWN_POINT.x + 40;
-            const villageZ = Config.PLAYER.SPAWN_POINT.z + 40;
+            // Place village at least 20 blocks from spawn so player doesn't spawn inside it
+            const minVillageDistance = 20;
+            const villageX = Config.PLAYER.SPAWN_POINT.x + minVillageDistance;
+            const villageZ = Config.PLAYER.SPAWN_POINT.z + minVillageDistance;
             const villageY = this.getTerrainHeight(villageX, villageZ);
             // Defer to ensure terrain is ready
             setTimeout(() => {

@@ -349,8 +349,23 @@ export class SocketManager {
                 }, 500);
             } else {
                 // Other players: just clear entities and blocks without respawning
+                // IMPORTANT: Preserve player position - don't let them fall during reset
                 if (this.game.uiManager) {
                     this.game.uiManager.addChatMessage('system', 'World was reset by another player');
+                }
+
+                // Save the player's current position before reset
+                const savedPosition = this.game.player ? {
+                    x: this.game.player.position.x,
+                    y: this.game.player.position.y,
+                    z: this.game.player.position.z
+                } : null;
+
+                // Temporarily disable physics/gravity to prevent falling during chunk rebuild
+                const wasGravityEnabled = this.game.player ? !this.game.player.isFlying : true;
+                if (this.game.player) {
+                    this.game.player.isFlying = true; // Prevent falling
+                    this.game.player.velocity.set(0, 0, 0); // Stop any movement
                 }
 
                 // Clear all entities
@@ -372,6 +387,22 @@ export class SocketManager {
                 if (data.time !== undefined && this.game.environment) {
                     this.game.environment.setTimeOfDay(data.time);
                 }
+
+                // Restore player position and physics after a short delay to let chunks rebuild
+                setTimeout(() => {
+                    if (this.game.player && savedPosition) {
+                        // Restore exact position
+                        this.game.player.position.set(savedPosition.x, savedPosition.y, savedPosition.z);
+                        this.game.player.velocity.set(0, 0, 0);
+
+                        // Restore gravity/flying state
+                        if (wasGravityEnabled) {
+                            this.game.player.isFlying = false;
+                        }
+
+                        console.log('[SocketManager] Player position restored after world reset:', savedPosition);
+                    }
+                }, 500); // Wait for chunks to rebuild
             }
         });
 

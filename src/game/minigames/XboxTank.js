@@ -1,6 +1,6 @@
 /**
  * XboxTank - Tank battle game with mouse-controlled turret
- * Controls: WASD to move tank, Mouse to aim turret, Click to fire
+ * Controls: WASD/Arrow keys for directional movement (Up=up, Right=right, etc.), Mouse to aim turret, Click to fire
  * Features: Maze levels, moving enemy tanks, bullets bounce once off walls
  * Now supports multiplayer PvP via socket.io
  */
@@ -421,13 +421,60 @@ export class XboxTank {
             }
         });
 
+        // Handle player joining mid-game (host receives this)
+        socket.on('minigame:playerJoined', (data) => {
+            if (data.sessionId === this.sessionId && this.isHost) {
+                console.log(`[XboxTank] Player joined mid-game:`, data.player);
+                this.addMultiplayerPlayer(data.player);
+            }
+        });
+
         // Handle player leaving mid-game
         socket.on('minigame:playerLeft', (data) => {
             if (data.sessionId === this.sessionId) {
                 console.log(`[XboxTank] Player left: ${data.playerId}`);
                 this.multiplayerPlayers.delete(data.playerId);
+                this.remoteInputs.delete(data.playerId);
             }
         });
+    }
+
+    /**
+     * Add a new player to the multiplayer game (mid-game join)
+     */
+    addMultiplayerPlayer(playerData) {
+        if (this.multiplayerPlayers.has(playerData.id)) {
+            console.log(`[XboxTank] Player ${playerData.id} already exists`);
+            return;
+        }
+
+        const spawnX = playerData.spawnPoint.x * this.TILE_SIZE + this.TILE_SIZE / 2;
+        const spawnY = playerData.spawnPoint.y * this.TILE_SIZE + this.TILE_SIZE / 2;
+
+        this.multiplayerPlayers.set(playerData.id, {
+            id: playerData.id,
+            name: playerData.name,
+            x: spawnX,
+            y: spawnY,
+            angle: playerData.playerIndex < 2 ? 0 : Math.PI,
+            turretAngle: playerData.playerIndex < 2 ? 0 : Math.PI,
+            size: 14,
+            speed: 2,
+            rotationSpeed: 0.05,
+            health: 3,
+            maxHealth: 3,
+            bullet: null,
+            lastShot: 0,
+            fireRate: 400,
+            score: 0,
+            color: playerData.color,
+            playerIndex: playerData.playerIndex,
+            isAlive: true,
+            respawnTimer: 0,
+            spawnPoint: playerData.spawnPoint
+        });
+
+        console.log(`[XboxTank] Added player ${playerData.id}, total players: ${this.multiplayerPlayers.size}`);
     }
 
     /**
@@ -701,6 +748,7 @@ export class XboxTank {
 
     /**
      * Update a specific player's movement
+     * Uses Xbox-style directional controls: Up moves up, Right moves right, etc.
      */
     updatePlayerMovement(playerId, keys, mouseX, mouseY, dt) {
         const player = this.multiplayerPlayers.get(playerId);
@@ -711,23 +759,31 @@ export class XboxTank {
         const dy = mouseY - player.y;
         player.turretAngle = Math.atan2(dy, dx);
 
-        // Tank body rotation (A/D or Left/Right)
-        if (keys['KeyA'] || keys['ArrowLeft']) {
-            player.angle -= player.rotationSpeed;
-        }
-        if (keys['KeyD'] || keys['ArrowRight']) {
-            player.angle += player.rotationSpeed;
-        }
-
-        // Tank movement (W/S or Up/Down moves in body direction)
+        // Xbox-style directional movement (Up=up, Right=right, etc.)
         let moveX = 0, moveY = 0;
         if (keys['KeyW'] || keys['ArrowUp']) {
-            moveX = Math.cos(player.angle) * player.speed;
-            moveY = Math.sin(player.angle) * player.speed;
+            moveY = -player.speed; // Up on screen
         }
         if (keys['KeyS'] || keys['ArrowDown']) {
-            moveX = Math.cos(player.angle) * -player.speed * 0.6;
-            moveY = Math.sin(player.angle) * -player.speed * 0.6;
+            moveY = player.speed; // Down on screen
+        }
+        if (keys['KeyA'] || keys['ArrowLeft']) {
+            moveX = -player.speed; // Left on screen
+        }
+        if (keys['KeyD'] || keys['ArrowRight']) {
+            moveX = player.speed; // Right on screen
+        }
+
+        // Normalize diagonal movement to prevent faster diagonal speed
+        if (moveX !== 0 && moveY !== 0) {
+            const diagonalFactor = 1 / Math.sqrt(2);
+            moveX *= diagonalFactor;
+            moveY *= diagonalFactor;
+        }
+
+        // Update tank body angle to face movement direction (if moving)
+        if (moveX !== 0 || moveY !== 0) {
+            player.angle = Math.atan2(moveY, moveX);
         }
 
         // Apply movement with collision check
@@ -1136,23 +1192,31 @@ export class XboxTank {
         const dy = this.state.mouseY - p.y;
         p.turretAngle = Math.atan2(dy, dx);
 
-        // Tank body rotation (A/D or Left/Right)
-        if (keys['KeyA'] || keys['ArrowLeft']) {
-            p.angle -= p.rotationSpeed;
-        }
-        if (keys['KeyD'] || keys['ArrowRight']) {
-            p.angle += p.rotationSpeed;
-        }
-
-        // Tank movement (W/S or Up/Down moves in body direction)
+        // Xbox-style directional movement (Up=up, Right=right, etc.)
         let moveX = 0, moveY = 0;
         if (keys['KeyW'] || keys['ArrowUp']) {
-            moveX = Math.cos(p.angle) * p.speed;
-            moveY = Math.sin(p.angle) * p.speed;
+            moveY = -p.speed; // Up on screen
         }
         if (keys['KeyS'] || keys['ArrowDown']) {
-            moveX = Math.cos(p.angle) * -p.speed * 0.6;
-            moveY = Math.sin(p.angle) * -p.speed * 0.6;
+            moveY = p.speed; // Down on screen
+        }
+        if (keys['KeyA'] || keys['ArrowLeft']) {
+            moveX = -p.speed; // Left on screen
+        }
+        if (keys['KeyD'] || keys['ArrowRight']) {
+            moveX = p.speed; // Right on screen
+        }
+
+        // Normalize diagonal movement to prevent faster diagonal speed
+        if (moveX !== 0 && moveY !== 0) {
+            const diagonalFactor = 1 / Math.sqrt(2);
+            moveX *= diagonalFactor;
+            moveY *= diagonalFactor;
+        }
+
+        // Update tank body angle to face movement direction (if moving)
+        if (moveX !== 0 || moveY !== 0) {
+            p.angle = Math.atan2(moveY, moveX);
         }
 
         // Apply movement with collision check
@@ -1332,7 +1396,7 @@ export class XboxTank {
 
             ctx.fillStyle = '#888';
             ctx.font = '12px Arial';
-            ctx.fillText('WASD to move • Mouse to aim • Click to fire', this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2 + 45);
+            ctx.fillText('Arrow keys/WASD to move • Mouse to aim • Click to fire', this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2 + 45);
         }
     }
 
@@ -1483,7 +1547,7 @@ export class XboxTank {
 
             ctx.fillStyle = '#888';
             ctx.font = '12px Arial';
-            ctx.fillText('WASD to move • Mouse to aim • Click to fire', this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2 + 45);
+            ctx.fillText('Arrow keys/WASD to move • Mouse to aim • Click to fire', this.GAME_WIDTH / 2, this.GAME_HEIGHT / 2 + 45);
         }
     }
 

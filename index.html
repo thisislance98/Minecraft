@@ -186,6 +186,24 @@
                     </label>
                 </div>
 
+                <!-- Startup Settings -->
+                <div class="settings-section">
+                    <h4>🚀 Startup</h4>
+                    <p class="settings-description">Control what shows when the game starts.</p>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-show-name-prompt-toggle">
+                        <span>Show Name Prompt</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-show-help-toggle">
+                        <span>Show Help on First Visit</span>
+                    </label>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-show-announcements-toggle">
+                        <span>Show Announcements</span>
+                    </label>
+                </div>
+
                 <!-- Display Settings -->
                 <div class="settings-section">
                     <h4>📊 Display</h4>
@@ -340,7 +358,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1234</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1235</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>

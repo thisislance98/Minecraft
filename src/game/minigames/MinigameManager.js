@@ -126,7 +126,21 @@ export class MinigameManager {
         socket.on('minigame:gameStart', (data) => {
             console.log('[MinigameManager] Game starting!', data);
             this.isInLobby = false;
+
+            // Remove waiting UI if present
+            const waitingDiv = document.getElementById('xbox-waiting');
+            if (waitingDiv) waitingDiv.remove();
+
             this.startMultiplayerGame(data);
+        });
+
+        // Waiting for players (auto-join mode)
+        socket.on('minigame:waiting', (data) => {
+            console.log('[MinigameManager] Waiting for players:', data);
+            const waitingMessage = document.getElementById('waiting-message');
+            if (waitingMessage) {
+                waitingMessage.textContent = data.message || 'Waiting for another player...';
+            }
         });
 
         // Error handling
@@ -174,6 +188,126 @@ export class MinigameManager {
         });
 
         console.log(`[MinigameManager] Joining ${gameType} lobby in room ${this.roomId}`);
+    }
+
+    /**
+     * Auto-join a minigame without showing a lobby
+     * Will join an existing game or wait for another player
+     */
+    autoJoinMinigame(gameType) {
+        if (!this.socketManager || !this.roomId) {
+            console.warn('[MinigameManager] No socket connection, starting single-player');
+            this.startSinglePlayerGame(gameType);
+            return;
+        }
+
+        this.setupSocketListeners();
+        this.currentXboxGame = gameType;
+
+        // Hide game menu
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        // Show waiting UI
+        this.showWaitingUI(gameType);
+
+        // Auto-join on the server
+        this.socketManager.socket.emit('minigame:autoJoin', {
+            gameType,
+            roomId: this.roomId,
+            playerName: this.playerName
+        });
+
+        console.log(`[MinigameManager] Auto-joining ${gameType} in room ${this.roomId}`);
+    }
+
+    /**
+     * Show a simple waiting UI while looking for other players
+     */
+    showWaitingUI(gameType) {
+        const gameScreen = document.getElementById('xbox-game-screen');
+        if (!gameScreen) return;
+
+        // Remove any existing waiting UI
+        const existingWaiting = document.getElementById('xbox-waiting');
+        if (existingWaiting) existingWaiting.remove();
+
+        const gameNames = {
+            tank: 'TANK BATTLE',
+            joust: 'JOUST',
+            pong: 'PONG',
+            platformer: 'PLATFORMER'
+        };
+
+        const waitingDiv = document.createElement('div');
+        waitingDiv.id = 'xbox-waiting';
+        waitingDiv.style.cssText = `
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 20px;
+            box-sizing: border-box; color: white; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        waitingDiv.innerHTML = `
+            <div style="font-size: 28px; color: #107c10; margin-bottom: 20px; font-weight: bold;">
+                ${gameNames[gameType] || gameType.toUpperCase()}
+            </div>
+            <div id="waiting-spinner" style="
+                width: 50px; height: 50px; border: 4px solid #333;
+                border-top-color: #107c10; border-radius: 50%;
+                animation: spin 1s linear infinite; margin-bottom: 20px;
+            "></div>
+            <div id="waiting-message" style="font-size: 18px; color: #888; text-align: center;">
+                Waiting for another player...
+            </div>
+            <div style="margin-top: 30px;">
+                <button id="waiting-cancel-btn" style="
+                    background: #333; color: white; border: 1px solid #555;
+                    padding: 10px 25px; font-size: 16px; cursor: pointer;
+                    border-radius: 5px; transition: all 0.2s;
+                ">Cancel</button>
+            </div>
+            <style>
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+            </style>
+        `;
+
+        gameScreen.appendChild(waitingDiv);
+
+        // Cancel button handler
+        const cancelBtn = document.getElementById('waiting-cancel-btn');
+        cancelBtn.onclick = () => {
+            this.cancelAutoJoin();
+        };
+
+        // Update controls hint
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                Looking for other players in the same room
+                <span style="color:#666">(ESC to cancel)</span>
+            `;
+        }
+    }
+
+    /**
+     * Cancel auto-join and return to menu
+     */
+    cancelAutoJoin() {
+        console.log('[MinigameManager] Canceling auto-join');
+
+        if (this.socketManager?.socket) {
+            this.socketManager.socket.emit('minigame:leave');
+        }
+
+        // Remove waiting UI
+        const waitingDiv = document.getElementById('xbox-waiting');
+        if (waitingDiv) waitingDiv.remove();
+
+        // Show menu again
+        this.showXboxMenu();
     }
 
     /**
@@ -671,13 +805,8 @@ export class MinigameManager {
             this.startXboxInvaders();
         };
         document.getElementById('play-tank').onclick = () => {
-            // Show multiplayer lobby for Tank Battle
-            if (this.multiplayerEnabled && this.socketManager?.isConnected()) {
-                this.showMinigameLobby('tank');
-            } else {
-                this.currentXboxGame = 'tank';
-                this.startXboxTank();
-            }
+            // Show mode selection for Tank Battle
+            this.showTankModeSelection();
         };
         document.getElementById('play-pong').onclick = () => {
             this.currentXboxGame = 'pong';
@@ -716,8 +845,8 @@ export class MinigameManager {
     showXboxMenu() {
         this.stopAllXboxGames();
 
-        // Leave any active lobby
-        if (this.isInLobby) {
+        // Leave any active lobby or waiting state
+        if (this.isInLobby || this.currentXboxGame) {
             if (this.socketManager?.socket) {
                 this.socketManager.socket.emit('minigame:leave');
             }
@@ -732,11 +861,15 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         const backToMenuBtn = document.getElementById('xbox-back-to-menu');
         const lobbyDiv = document.getElementById('xbox-lobby');
+        const waitingDiv = document.getElementById('xbox-waiting');
+        const modeSelectDiv = document.getElementById('xbox-tank-mode-select');
 
         if (bootDiv) bootDiv.style.display = 'none';
         if (canvas) canvas.style.display = 'none';
         if (gameOverDiv) gameOverDiv.style.display = 'none';
         if (lobbyDiv) lobbyDiv.remove();
+        if (waitingDiv) waitingDiv.remove();
+        if (modeSelectDiv) modeSelectDiv.remove();
         if (menuDiv) menuDiv.style.display = 'flex';
         if (hintDiv) hintDiv.innerHTML = 'Select a game to start! <span style="color:#666">(ESC to close)</span>';
         if (backToMenuBtn) backToMenuBtn.style.display = 'none';
@@ -900,6 +1033,110 @@ export class MinigameManager {
             this.xboxTank = null;
         }
         this.tankState = null;
+    }
+
+    /**
+     * Show mode selection UI for Tank Battle (Single Player vs Multiplayer)
+     */
+    showTankModeSelection() {
+        const gameScreen = document.getElementById('xbox-game-screen');
+        if (!gameScreen) return;
+
+        // Hide the main menu
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        // Remove any existing mode selection UI
+        const existingModeSelect = document.getElementById('xbox-tank-mode-select');
+        if (existingModeSelect) existingModeSelect.remove();
+
+        const modeSelectDiv = document.createElement('div');
+        modeSelectDiv.id = 'xbox-tank-mode-select';
+        modeSelectDiv.style.cssText = `
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 20px;
+            box-sizing: border-box; color: white; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        const multiplayerAvailable = this.multiplayerEnabled && this.socketManager?.isConnected();
+
+        modeSelectDiv.innerHTML = `
+            <div style="font-size: 32px; color: #107c10; margin-bottom: 10px; font-weight: bold;">
+                🎖️ TANK BATTLE
+            </div>
+            <div style="font-size: 14px; color: #888; margin-bottom: 30px;">
+                Select Game Mode
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 300px;">
+                <button id="tank-mode-single" style="
+                    background: linear-gradient(180deg, #1a5a1a 0%, #107c10 100%);
+                    color: white; border: 2px solid #2a8a2a;
+                    padding: 20px 30px; font-size: 18px; cursor: pointer;
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                ">
+                    <span style="font-size: 28px;">🤖</span>
+                    <div>
+                        <div style="font-weight: bold;">Single Player</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Battle against the computer</div>
+                    </div>
+                </button>
+                <button id="tank-mode-multiplayer" style="
+                    background: ${multiplayerAvailable ? 'linear-gradient(180deg, #1a4a7a 0%, #3366cc 100%)' : '#333'};
+                    color: ${multiplayerAvailable ? 'white' : '#666'};
+                    border: 2px solid ${multiplayerAvailable ? '#4477dd' : '#444'};
+                    padding: 20px 30px; font-size: 18px;
+                    cursor: ${multiplayerAvailable ? 'pointer' : 'not-allowed'};
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                " ${multiplayerAvailable ? '' : 'disabled'}>
+                    <span style="font-size: 28px;">👥</span>
+                    <div>
+                        <div style="font-weight: bold;">Multiplayer</div>
+                        <div style="font-size: 12px; opacity: 0.8;">
+                            ${multiplayerAvailable ? 'Battle other players in your room' : 'Not connected to server'}
+                        </div>
+                    </div>
+                </button>
+            </div>
+            <button id="tank-mode-back" style="
+                margin-top: 30px; background: #333; color: white; border: 1px solid #555;
+                padding: 10px 25px; font-size: 14px; cursor: pointer;
+                border-radius: 5px; transition: all 0.2s;
+            ">◀ Back to Menu</button>
+            <style>
+                #tank-mode-single:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(16, 124, 16, 0.5); }
+                #tank-mode-multiplayer:not([disabled]):hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(51, 102, 204, 0.5); }
+            </style>
+        `;
+
+        gameScreen.appendChild(modeSelectDiv);
+
+        // Update controls hint
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `Choose your game mode <span style="color:#666">(ESC to go back)</span>`;
+        }
+
+        // Button handlers
+        document.getElementById('tank-mode-single').onclick = () => {
+            modeSelectDiv.remove();
+            this.currentXboxGame = 'tank';
+            this.startXboxTank(0);
+        };
+
+        if (multiplayerAvailable) {
+            document.getElementById('tank-mode-multiplayer').onclick = () => {
+                modeSelectDiv.remove();
+                this.autoJoinMinigame('tank');
+            };
+        }
+
+        document.getElementById('tank-mode-back').onclick = () => {
+            modeSelectDiv.remove();
+            this.showXboxMenu();
+        };
     }
 
     // --- Pong ---

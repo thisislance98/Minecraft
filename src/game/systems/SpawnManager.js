@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/SeededRandom.js';
 import { Blocks } from '../core/Blocks.js';
 import { AnimalClasses } from '../AnimalRegistry.js';
+import { Config } from '../core/Config.js';
 
 /**
  * SpawnManager handles all animal spawning logic.
@@ -21,7 +22,11 @@ export class SpawnManager {
 
         // Deferred spawning - wait until world is ready
         this.isWorldReady = false;
-        this.pendingSpawns = []; // Queue of {cx, cz} to spawn when world is ready
+        this.pendingSpawns = []; // Queue of {cx, cz, world} to spawn when world is ready
+
+        // Track current world for spawn detection
+        this.currentWorld = 'EARTH';
+        this.lastCheckedPlayerY = 0;
 
 
         // Biome spawn configuration
@@ -290,9 +295,83 @@ export class SpawnManager {
         this.pendingSpawns = []; // Clear queue
 
         for (const req of queue) {
-            const key = `${req.cx},${req.cz} `;
+            const world = req.world || this.getCurrentWorld();
+            const key = `${req.cx},${req.cz},${world}`;
             this.spawnedChunks.delete(key); // Allow re-run
             this.spawnChunk(req.cx, req.cz);
+        }
+    }
+
+    /**
+     * Determine which world/planet the player is currently on based on Y position
+     * @returns {string} - World name: 'EARTH', 'MOON', 'CRYSTAL_WORLD', or 'LAVA_WORLD'
+     */
+    getCurrentWorld() {
+        if (!this.game.player) return 'EARTH';
+
+        const playerY = this.game.player.position.y;
+        const chunkSize = this.game.chunkSize || Config.WORLD.CHUNK_SIZE;
+        const chunkY = Math.floor(playerY / chunkSize);
+
+        const crystalStart = Config.WORLD.CRYSTAL_WORLD_Y_START;
+        const crystalEnd = crystalStart + Config.WORLD.CRYSTAL_WORLD_HEIGHT;
+        const lavaStart = Config.WORLD.LAVA_WORLD_Y_START;
+        const lavaEnd = lavaStart + Config.WORLD.LAVA_WORLD_HEIGHT;
+        const moonStart = Config.WORLD.MOON_CHUNK_Y_START;
+        const moonEnd = moonStart + Config.WORLD.MOON_CHUNK_HEIGHT;
+
+        if (chunkY >= lavaStart && chunkY < lavaEnd) {
+            return 'LAVA_WORLD';
+        } else if (chunkY >= crystalStart && chunkY < crystalEnd) {
+            return 'CRYSTAL_WORLD';
+        } else if (chunkY >= moonStart && chunkY < moonEnd) {
+            return 'MOON';
+        }
+
+        return 'EARTH';
+    }
+
+    /**
+     * Check if player has moved to a new world and trigger spawns if needed
+     * Should be called periodically (e.g., in game update loop)
+     */
+    checkWorldChange() {
+        if (!this.game.player || !this.isWorldReady || this.waitingForInitialSync) return;
+
+        const newWorld = this.getCurrentWorld();
+
+        if (newWorld !== this.currentWorld) {
+            console.log(`[SpawnManager] World changed from ${this.currentWorld} to ${newWorld}`);
+            this.currentWorld = newWorld;
+
+            // Trigger spawns for the new world
+            if (newWorld !== 'EARTH' && newWorld !== 'MOON') {
+                this.spawnCreaturesForCurrentWorld();
+            }
+        }
+    }
+
+    /**
+     * Spawn creatures around the player for the current alien world
+     */
+    spawnCreaturesForCurrentWorld() {
+        const world = this.currentWorld;
+        if (world === 'EARTH' || world === 'MOON') return;
+
+        const player = this.game.player;
+        if (!player) return;
+
+        const chunkSize = this.game.chunkSize || Config.WORLD.CHUNK_SIZE;
+        const playerCX = Math.floor(player.position.x / chunkSize);
+        const playerCZ = Math.floor(player.position.z / chunkSize);
+        const spawnRange = 4; // Spawn in chunks around player
+
+        console.log(`[SpawnManager] Spawning ${world} creatures around player at chunks (${playerCX}, ${playerCZ})`);
+
+        for (let cx = playerCX - spawnRange; cx <= playerCX + spawnRange; cx++) {
+            for (let cz = playerCZ - spawnRange; cz <= playerCZ + spawnRange; cz++) {
+                this.spawnChunkForWorld(cx, cz, world);
+            }
         }
     }
 
@@ -397,7 +476,10 @@ export class SpawnManager {
     }
 
     spawnChunk(cx, cz) {
-        const key = `${cx},${cz} `;
+        // Get current world based on player position
+        const currentWorld = this.getCurrentWorld();
+        const key = `${cx},${cz},${currentWorld}`;
+
         if (this.spawnedChunks.has(key)) return;
         this.spawnedChunks.add(key);
 
@@ -411,7 +493,7 @@ export class SpawnManager {
         // If world is not ready OR we are waiting for server sync, queue it
         if (!this.isWorldReady || this.waitingForInitialSync) {
             // console.log(`[SpawnManager] Queuing spawn for chunk ${cx}, ${cz} (Ready: ${this.isWorldReady}, Sync: ${!this.waitingForInitialSync})`);
-            this.pendingSpawns.push({ cx, cz });
+            this.pendingSpawns.push({ cx, cz, world: currentWorld });
             return;
         }
         // --- DEFERRED SPAWNING LOGIC END ---
@@ -419,11 +501,13 @@ export class SpawnManager {
         // Cap max entities (Increased to 200 for more life)
         if (this.game.animals.length > 200) return;
 
-        // Create deterministic RNG for this chunk
-        const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, 1);
+        // Create deterministic RNG for this chunk + world combination
+        const worldSeed = currentWorld === 'EARTH' ? 1 :
+                          currentWorld === 'CRYSTAL_WORLD' ? 100 :
+                          currentWorld === 'LAVA_WORLD' ? 200 : 1;
+        const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, worldSeed);
 
-        // 25% chance per chunk to spawn something (increased from 20%)
-        // 40% chance per chunk to spawn something (increased from 25%)
+        // 40% chance per chunk to spawn something
         if (chunkRng.next() > 0.40) return;
 
         const chunkSize = this.game.chunkSize;
@@ -433,41 +517,14 @@ export class SpawnManager {
         const bx = cx * chunkSize + Math.floor(chunkRng.next() * chunkSize);
         const bz = cz * chunkSize + Math.floor(chunkRng.next() * chunkSize);
 
-        // --- GROUND CHECK FIX ---
-        // Ensure the column is actually loaded before we try to spawn
-        // We need to check if we can find ground here
-        // If not, we should probably SKIP spawning here rather than fallback to terrain height
-        // Because terrain height might put them in the air if the chunk mesh isn't there
-        // But biome calculation relies on 2D noise which is always available.
-
-        // Detect current world based on player Y position
-        const playerY = this.game.player ? this.game.player.position.y : 0;
-        const chunkY = Math.floor(playerY / chunkSize);
-
-        // Import Config for world Y ranges
-        const Config = this.game.worldGen?.constructor?.Config || window.Config || { WORLD: {} };
-        const crystalStart = Config.WORLD?.CRYSTAL_WORLD_Y_START || 50;
-        const crystalEnd = crystalStart + (Config.WORLD?.CRYSTAL_WORLD_HEIGHT || 8);
-        const lavaStart = Config.WORLD?.LAVA_WORLD_Y_START || 60;
-        const lavaEnd = lavaStart + (Config.WORLD?.LAVA_WORLD_HEIGHT || 8);
-
-        let currentWorld = 'EARTH';
-        if (chunkY >= crystalStart && chunkY < crystalEnd) {
-            currentWorld = 'CRYSTAL_WORLD';
-        } else if (chunkY >= lavaStart && chunkY < lavaEnd) {
-            currentWorld = 'LAVA_WORLD';
-        }
-
         // For alien worlds, use world-specific spawn configs
-        if (currentWorld !== 'EARTH' && this.worldSpawnConfig[currentWorld]) {
+        if (currentWorld !== 'EARTH' && currentWorld !== 'MOON' && this.worldSpawnConfig[currentWorld]) {
             const worldConfig = this.worldSpawnConfig[currentWorld];
-            this.trySpawnFromConfig(worldConfig, bx, bz, currentWorld, chunkRng);
+            this.trySpawnFromConfigForWorld(worldConfig, bx, bz, currentWorld, chunkRng);
             return; // Skip Earth biome spawns
         }
 
         const biome = worldGen.getBiome(bx, bz);
-
-        // console.log(`Spawning attempt in chunk ${cx}, ${cz} (Biome: ${biome})`);
 
         // Spawn biome-specific animals
         const config = this.biomeSpawnConfig[biome];
@@ -488,6 +545,46 @@ export class SpawnManager {
 
         // Hostile mob spawns
         this.trySpawnHostile(bx, bz, chunkRng);
+    }
+
+    /**
+     * Spawn chunk for a specific world (used when player travels to other planets)
+     */
+    spawnChunkForWorld(cx, cz, world) {
+        const key = `${cx},${cz},${world}`;
+
+        if (this.spawnedChunks.has(key)) return;
+        this.spawnedChunks.add(key);
+
+        // Global toggle
+        if (!this.isSpawningEnabled) return;
+
+        // Skip chunk-based spawning if persisted entities were loaded
+        if (this.hasLoadedPersistedEntities) return;
+
+        // Cap max entities
+        if (this.game.animals.length > 200) return;
+
+        // Create deterministic RNG for this chunk + world combination
+        const worldSeed = world === 'EARTH' ? 1 :
+                          world === 'CRYSTAL_WORLD' ? 100 :
+                          world === 'LAVA_WORLD' ? 200 : 1;
+        const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, worldSeed);
+
+        // 60% chance per chunk to spawn something on alien worlds (higher density)
+        if (chunkRng.next() > 0.60) return;
+
+        const chunkSize = this.game.chunkSize;
+
+        // Pick a random block in this chunk (deterministic)
+        const bx = cx * chunkSize + Math.floor(chunkRng.next() * chunkSize);
+        const bz = cz * chunkSize + Math.floor(chunkRng.next() * chunkSize);
+
+        // Use world-specific spawn configs
+        if (this.worldSpawnConfig[world]) {
+            const worldConfig = this.worldSpawnConfig[world];
+            this.trySpawnFromConfigForWorld(worldConfig, bx, bz, world, chunkRng);
+        }
     }
 
     /**
@@ -560,6 +657,109 @@ export class SpawnManager {
                 break;
             }
         }
+    }
+
+    /**
+     * Spawn creatures from config for a specific alien world
+     * Handles Y positioning for non-Earth worlds
+     */
+    trySpawnFromConfigForWorld(config, bx, bz, world, rng) {
+        const roll = rng.next();
+        let cumulative = 0;
+
+        for (const entry of config) {
+            // Check allowed list
+            if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
+                continue;
+            }
+
+            cumulative += entry.weight;
+            if (roll < cumulative) {
+                const AnimalClass = AnimalClasses[entry.type];
+                if (AnimalClass) {
+                    this.spawnPackForWorld(AnimalClass, entry.packSize, bx, bz, world, rng);
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Spawn a pack of creatures for a specific world (alien planets)
+     * Calculates correct Y position based on world terrain
+     */
+    spawnPackForWorld(AnimalClass, packSizeRange, baseX, baseZ, world, rng) {
+        const [minSize, maxSize] = packSizeRange;
+        const count = minSize + Math.floor(rng.next() * (maxSize - minSize + 1));
+        const chunkSize = this.game.chunkSize || Config.WORLD.CHUNK_SIZE;
+
+        // Calculate Y range for this world
+        let worldYBase = 0;
+        if (world === 'CRYSTAL_WORLD') {
+            worldYBase = Config.WORLD.CRYSTAL_WORLD_Y_START * chunkSize;
+        } else if (world === 'LAVA_WORLD') {
+            worldYBase = Config.WORLD.LAVA_WORLD_Y_START * chunkSize;
+        } else if (world === 'MOON') {
+            worldYBase = Config.WORLD.MOON_CHUNK_Y_START * chunkSize;
+        }
+
+        console.log(`[SpawnManager] Spawning ${count} ${AnimalClass.name} for ${world} at base Y ${worldYBase}`);
+
+        for (let i = 0; i < count; i++) {
+            const childSeed = rng.next();
+            const x = baseX + (rng.next() - 0.5) * 10;
+            const z = baseZ + (rng.next() - 0.5) * 10;
+
+            // Find ground level at this position for the alien world
+            const spawnY = this.findGroundLevelForWorld(x, z, worldYBase, world);
+
+            if (spawnY !== null) {
+                this.createAnimal(AnimalClass, x, spawnY, z, false, childSeed);
+            }
+        }
+    }
+
+    /**
+     * Find ground level for alien worlds at a specific Y base
+     */
+    findGroundLevelForWorld(x, z, worldYBase, world) {
+        const checkX = Math.floor(x);
+        const checkZ = Math.floor(z);
+        const chunkSize = this.game.chunkSize || Config.WORLD.CHUNK_SIZE;
+
+        // Calculate the world's Y range
+        let worldHeight = 8 * chunkSize; // Default world thickness
+        if (world === 'CRYSTAL_WORLD') {
+            worldHeight = Config.WORLD.CRYSTAL_WORLD_HEIGHT * chunkSize;
+        } else if (world === 'LAVA_WORLD') {
+            worldHeight = Config.WORLD.LAVA_WORLD_HEIGHT * chunkSize;
+        } else if (world === 'MOON') {
+            worldHeight = Config.WORLD.MOON_CHUNK_HEIGHT * chunkSize;
+        }
+
+        const startY = worldYBase + worldHeight - 1;
+        const minY = worldYBase;
+
+        // Search downward from top of world to find solid ground
+        for (let checkY = startY; checkY >= minY; checkY--) {
+            const block = this.game.getBlock(checkX, checkY, checkZ);
+
+            if (block && block.type !== 'air' && block.type !== 'water' && block.type !== 'lava') {
+                // Found solid ground - check if there's air above
+                const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
+                const blockAbove2 = this.game.getBlock(checkX, checkY + 2, checkZ);
+
+                if (!blockAbove || blockAbove.type === 'air') {
+                    if (!blockAbove2 || blockAbove2.type === 'air') {
+                        return checkY + 1;
+                    }
+                }
+            }
+        }
+
+        // Fallback: use a reasonable default Y for this world
+        // This happens when chunks aren't fully loaded yet
+        return worldYBase + 30; // Spawn above the base
     }
 
     spawnPack(AnimalClass, packSizeRange, baseX, baseZ, rng) {

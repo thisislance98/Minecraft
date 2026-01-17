@@ -521,6 +521,181 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Auto-join: Join an existing game or create/start one automatically (no lobby)
+    socket.on('minigame:autoJoin', (data: { gameType: string, roomId: string, playerName: string }) => {
+        console.log(`[Minigame] ${socket.id} auto-joining ${data.gameType} in room ${data.roomId}`);
+
+        const sessionId = getMinigameSessionId(data.roomId, data.gameType);
+        let session = minigameSessions.get(sessionId);
+
+        // Check if player is already in another minigame session
+        const existingSession = findPlayerMinigameSession(socket.id);
+        if (existingSession && existingSession.sessionId !== sessionId) {
+            console.log(`[Minigame] Player ${socket.id} leaving previous session ${existingSession.sessionId}`);
+            existingSession.players.delete(socket.id);
+
+            // Notify others in the old session
+            for (const [playerId] of existingSession.players) {
+                io.to(playerId).emit('minigame:playerLeft', {
+                    sessionId: existingSession.sessionId,
+                    playerId: socket.id
+                });
+            }
+
+            // Clean up empty sessions
+            if (existingSession.players.size === 0) {
+                minigameSessions.delete(existingSession.sessionId);
+            } else if (existingSession.hostId === socket.id) {
+                // Transfer host to another player
+                const newHost = existingSession.players.values().next().value;
+                if (newHost) {
+                    existingSession.hostId = newHost.id;
+                    newHost.isHost = true;
+                    for (const [playerId] of existingSession.players) {
+                        io.to(playerId).emit('minigame:hostChanged', {
+                            sessionId: existingSession.sessionId,
+                            newHostId: newHost.id
+                        });
+                    }
+                }
+            }
+        }
+
+        // If session exists and is active, join mid-game
+        if (session && session.isActive) {
+            // Check max players
+            if (session.players.size >= 4) {
+                socket.emit('minigame:error', { message: 'Game is full' });
+                return;
+            }
+
+            // Add player to session
+            session.players.set(socket.id, {
+                id: socket.id,
+                name: data.playerName || `Player_${socket.id.substring(0, 4)}`,
+                isReady: true,
+                isHost: false
+            });
+
+            socket.join(`minigame:${sessionId}`);
+
+            // Assign spawn point and color for joining player
+            const spawnPoints = [
+                { x: 2, y: 4 },   // Top-left
+                { x: 12, y: 4 },  // Top-right
+                { x: 2, y: 2 },   // Bottom-left
+                { x: 12, y: 2 }   // Bottom-right
+            ];
+            const colors = ['#107c10', '#3366cc', '#cc9900', '#cc33cc'];
+            const playerIndex = session.players.size - 1;
+
+            const playersArray = Array.from(session.players.values()).map((player, index) => ({
+                ...player,
+                spawnPoint: spawnPoints[index % spawnPoints.length],
+                color: colors[index % colors.length],
+                playerIndex: index
+            }));
+
+            console.log(`[Minigame] Player ${socket.id} joining active game ${sessionId}`);
+
+            // Send game start to the joining player
+            socket.emit('minigame:gameStart', {
+                sessionId: session.sessionId,
+                gameType: session.gameType,
+                hostId: session.hostId,
+                players: playersArray
+            });
+
+            // Notify existing players about the new player
+            socket.to(`minigame:${sessionId}`).emit('minigame:playerJoined', {
+                sessionId,
+                player: {
+                    ...session.players.get(socket.id),
+                    spawnPoint: spawnPoints[playerIndex % spawnPoints.length],
+                    color: colors[playerIndex % colors.length],
+                    playerIndex: playerIndex
+                }
+            });
+            return;
+        }
+
+        // No active session - create or join waiting session
+        if (!session) {
+            session = {
+                gameType: data.gameType,
+                sessionId,
+                roomId: data.roomId,
+                hostId: socket.id,
+                players: new Map(),
+                isActive: false,
+                gameState: null
+            };
+            minigameSessions.set(sessionId, session);
+            console.log(`[Minigame] Created new session ${sessionId}, host: ${socket.id}`);
+        }
+
+        // Add player to session (auto-ready)
+        const isHost = session.players.size === 0 || session.hostId === socket.id;
+        session.players.set(socket.id, {
+            id: socket.id,
+            name: data.playerName || `Player_${socket.id.substring(0, 4)}`,
+            isReady: true, // Auto-ready for auto-join
+            isHost
+        });
+
+        if (isHost) {
+            session.hostId = socket.id;
+        }
+
+        socket.join(`minigame:${sessionId}`);
+
+        // Check if we have enough players to start (2+)
+        if (session.players.size >= 2) {
+            // Auto-start the game!
+            session.isActive = true;
+
+            const spawnPoints = [
+                { x: 2, y: 4 },
+                { x: 12, y: 4 },
+                { x: 2, y: 2 },
+                { x: 12, y: 2 }
+            ];
+            const colors = ['#107c10', '#3366cc', '#cc9900', '#cc33cc'];
+
+            const playersArray = Array.from(session.players.values()).map((player, index) => ({
+                ...player,
+                spawnPoint: spawnPoints[index % spawnPoints.length],
+                color: colors[index % colors.length],
+                playerIndex: index
+            }));
+
+            console.log(`[Minigame] Auto-starting game ${session.sessionId} with ${playersArray.length} players`);
+
+            // Broadcast game start to all players
+            io.to(`minigame:${session.sessionId}`).emit('minigame:gameStart', {
+                sessionId: session.sessionId,
+                gameType: session.gameType,
+                hostId: session.hostId,
+                players: playersArray
+            });
+        } else {
+            // Waiting for more players - notify this player they're waiting
+            console.log(`[Minigame] Session ${sessionId} waiting for players (${session.players.size}/2 minimum)`);
+            socket.emit('minigame:waiting', {
+                sessionId,
+                gameType: data.gameType,
+                playerCount: session.players.size,
+                message: 'Waiting for another player to join...'
+            });
+
+            // Notify others if any
+            socket.to(`minigame:${sessionId}`).emit('minigame:playerJoined', {
+                sessionId,
+                player: session.players.get(socket.id)
+            });
+        }
+    });
+
     // Host broadcasts authoritative game state (20Hz)
     socket.on('minigame:state', (data: { sessionId: string, state: any }) => {
         const session = minigameSessions.get(data.sessionId);

@@ -321,8 +321,9 @@ export class UIManager {
         if (closeBtn) closeBtn.onclick = closeHelp;
         if (okBtn) okBtn.onclick = closeHelp;
 
-        // Auto-show on first run
-        if (!localStorage.getItem('hasSeenHelp') && !this.game.isCLI) {
+        // Auto-show on first run (only if setting is enabled - default: disabled)
+        const showHelpEnabled = localStorage.getItem('settings_show_help') === 'true';
+        if (showHelpEnabled && !localStorage.getItem('hasSeenHelp') && !this.game.isCLI) {
             // Slight delay to ensure game loads
             setTimeout(() => {
                 this.helpModal.classList.remove('hidden');
@@ -586,6 +587,52 @@ export class UIManager {
                 if (useClaude) {
                     alert('🧙 Claude Code mode enabled!\n\nMerlin will now use Claude Code with custom skills.\n\nTo interact:\n1. Use the Claude Code terminal where you started the game\n2. Merlin has skills for creating creatures, items, and structures\n3. Example: "Create a bouncing slime creature"');
                 }
+            });
+        }
+
+        // Startup Settings - Show Name Prompt toggle
+        this.showNamePromptToggle = document.getElementById('settings-show-name-prompt-toggle');
+        if (this.showNamePromptToggle) {
+            // Default to FALSE (off by default - don't show name prompt)
+            const savedShowNamePrompt = localStorage.getItem('settings_show_name_prompt') === 'true';
+            this.showNamePromptToggle.checked = savedShowNamePrompt;
+
+            this.showNamePromptToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_show_name_prompt', enabled);
+                console.log('[UIManager] Show name prompt:', enabled ? 'enabled' : 'disabled');
+            });
+        }
+
+        // Startup Settings - Show Help toggle
+        this.showHelpToggle = document.getElementById('settings-show-help-toggle');
+        if (this.showHelpToggle) {
+            // Default to FALSE (off by default - don't show help on first visit)
+            const savedShowHelp = localStorage.getItem('settings_show_help') === 'true';
+            this.showHelpToggle.checked = savedShowHelp;
+
+            this.showHelpToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_show_help', enabled);
+                // If enabled and user hasn't seen help yet, reset the flag so it shows next time
+                if (enabled) {
+                    localStorage.removeItem('hasSeenHelp');
+                }
+                console.log('[UIManager] Show help on first visit:', enabled ? 'enabled' : 'disabled');
+            });
+        }
+
+        // Startup Settings - Show Announcements toggle
+        this.showAnnouncementsToggle = document.getElementById('settings-show-announcements-toggle');
+        if (this.showAnnouncementsToggle) {
+            // Default to FALSE (off by default - don't show announcements)
+            const savedShowAnnouncements = localStorage.getItem('settings_show_announcements') === 'true';
+            this.showAnnouncementsToggle.checked = savedShowAnnouncements;
+
+            this.showAnnouncementsToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_show_announcements', enabled);
+                console.log('[UIManager] Show announcements:', enabled ? 'enabled' : 'disabled');
             });
         }
 

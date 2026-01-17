@@ -1235,6 +1235,13 @@ export class CommunityUI {
     // ============ Announcement System ============
 
     async checkAnnouncements() {
+        // Check if announcements are enabled in settings (default: disabled)
+        const showAnnouncementsEnabled = localStorage.getItem('settings_show_announcements') === 'true';
+        if (!showAnnouncementsEnabled) {
+            console.log('[CommunityUI] Announcements disabled in settings, skipping check');
+            return;
+        }
+
         try {
             const res = await fetch('/api/announcements');
             if (!res.ok) return;

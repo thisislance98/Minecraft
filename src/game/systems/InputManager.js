@@ -139,12 +139,12 @@ export class InputManager {
                 this.game.toggleDebugPanel();
             }
 
-            // T for Chat - opens chat and switches to player tab
+            // T for Chat - opens chat and switches to Merlin (AI) tab by default
             if (e.code === 'KeyT') {
                 if (this.game.agent && !this.game.agent.isChatOpen) {
                     e.preventDefault();
                     if (this.game.uiManager) {
-                        this.game.uiManager.setChatMode('player');
+                        this.game.uiManager.setChatMode('ai');
                     }
                     this.game.agent.toggleChat();
                 }

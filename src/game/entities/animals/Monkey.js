@@ -257,18 +257,32 @@ export class Monkey extends Animal {
                 this.checkForTrees();
             }
 
-            // Random climbing up/down
+            // Get terrain height for relative height calculations
+            const terrainY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(this.position.x, this.position.z) : 0;
+            const heightAboveTerrain = this.position.y - terrainY;
+            const maxHeightAboveTerrain = 15; // Monkeys shouldn't climb more than 15 blocks above terrain
+
+            // Random climbing up/down (with height limit relative to terrain)
             if (!this.isJumping && Math.random() < 0.05 * dt && this.climbTimer <= 0) {
-                this.isClimbing = true;
-                // Randomly decide to climb up or down
-                if (this.position.y < this.preferredHeight) {
+                // Don't start climbing up if already too high above terrain
+                if (heightAboveTerrain >= maxHeightAboveTerrain) {
+                    this.climbDirection = -1; // Force climb down
+                } else if (heightAboveTerrain < this.preferredHeight) {
                     this.climbDirection = 1; // Climb up
-                } else if (this.position.y > this.preferredHeight + 5) {
+                } else if (heightAboveTerrain > this.preferredHeight + 5) {
                     this.climbDirection = -1; // Climb down
                 } else {
                     this.climbDirection = Math.random() > 0.5 ? 1 : -1;
                 }
-                this.climbTimer = 1 + Math.random() * 2;
+
+                // Only start climbing if direction makes sense
+                if (this.climbDirection === 1 && heightAboveTerrain < maxHeightAboveTerrain) {
+                    this.isClimbing = true;
+                    this.climbTimer = 1 + Math.random() * 2;
+                } else if (this.climbDirection === -1) {
+                    this.isClimbing = true;
+                    this.climbTimer = 1 + Math.random() * 2;
+                }
             }
         }
 
@@ -296,36 +310,62 @@ export class Monkey extends Animal {
 
     checkForTrees() {
         const pos = this.position;
+        const terrainY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(pos.x, pos.z) : 0;
+        const heightAboveTerrain = pos.y - terrainY;
+        const maxHeightAboveTerrain = 15; // Don't jump if already too high above terrain
+
+        // Don't attempt tree jumps if already flying too high above terrain
+        if (heightAboveTerrain > maxHeightAboveTerrain) {
+            return;
+        }
+
         const currentBlock = this.game.getBlock(Math.floor(pos.x), Math.floor(pos.y - 1), Math.floor(pos.z));
         const isSecure = this.isTreeBlock(currentBlock);
 
         // More likely to jump if securely in a tree
         if (isSecure || Math.random() < 0.3) {
             // Scan for another tree to jump to
-            const range = 12;
+            const range = 8; // Reduced range for more controlled jumps
             const attempts = 10;
 
             for (let i = 0; i < attempts; i++) {
                 const tx = pos.x + (Math.random() - 0.5) * range * 2;
                 const tz = pos.z + (Math.random() - 0.5) * range * 2;
-                // Prefer similar or higher heights
-                const ty = pos.y + (Math.random() * 6) - 2;
+                // Prefer similar or lower heights - bias towards staying at same level or going down
+                const ty = pos.y + (Math.random() * 3) - 2; // Range: -2 to +1
+
+                // Check target height relative to its terrain
+                const targetTerrainY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(tx, tz) : 0;
+                const targetHeightAboveTerrain = ty - targetTerrainY;
+
+                // Skip targets that are too high above their terrain
+                if (targetHeightAboveTerrain > maxHeightAboveTerrain) continue;
 
                 const targetBlock = this.game.getBlock(Math.floor(tx), Math.floor(ty), Math.floor(tz));
                 if (this.isTreeBlock(targetBlock)) {
-                    // Target found! Jump towards it
-                    const dir = new THREE.Vector3(tx - pos.x, ty - pos.y + 2, tz - pos.z);
-                    const dist = dir.length();
-                    dir.normalize();
+                    // Target found! Calculate jump trajectory
+                    const dx = tx - pos.x;
+                    const dz = tz - pos.z;
+                    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
-                    // Cap the jump velocity to prevent flying into the sky
-                    const jumpSpeed = Math.min(dist * 0.6 + 4, 12); // Max velocity of 12
-                    this.velocity.copy(dir.multiplyScalar(jumpSpeed));
+                    // Calculate Y velocity needed - more conservative arc
+                    const heightDiff = ty - pos.y;
+                    const arcHeight = Math.max(0.5, horizontalDist * 0.2); // Smaller arc
+                    const yVel = Math.min(heightDiff + arcHeight + 1.5, 5); // Cap upward velocity at 5
+
+                    // Horizontal velocity based on distance
+                    const horizontalSpeed = Math.min(horizontalDist * 0.5 + 2, 7); // Cap at 7
+
+                    const dir = new THREE.Vector3(dx, 0, dz).normalize();
+                    this.velocity.x = dir.x * horizontalSpeed;
+                    this.velocity.z = dir.z * horizontalSpeed;
+                    this.velocity.y = yVel;
+
                     this.isJumping = true;
                     this.jumpTimer = 0; // Reset jump timer
                     this.onGround = false;
-                    this.rotation = Math.atan2(tx - pos.x, tz - pos.z);
-                    this.jumpCooldown = 1.0;
+                    this.rotation = Math.atan2(dx, dz);
+                    this.jumpCooldown = 2.0; // Longer cooldown to prevent rapid jumping
                     return;
                 }
             }
@@ -333,20 +373,41 @@ export class Monkey extends Animal {
     }
 
     updatePhysics(dt) {
+        // Use terrain-relative height limits
+        const terrainY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(this.position.x, this.position.z) : 0;
+        const heightAboveTerrain = this.position.y - terrainY;
+        const maxHeightAboveTerrain = 15; // Maximum height above terrain monkeys can reach
+
         // If climbing, override gravity
         if (this.isClimbing) {
-            // Apply climbing movement directly to position to bypass some physics constraints
-            const climbMove = new THREE.Vector3(
-                this.moveDirection.x * this.speed * dt,
-                this.climbSpeed * this.climbDirection * dt,
-                this.moveDirection.z * this.speed * dt
-            );
-            this.position.add(climbMove);
-            this.velocity.y = 0; // Cancel gravity while climbing
+            // Stop climbing up if too high above terrain
+            if (heightAboveTerrain >= maxHeightAboveTerrain && this.climbDirection > 0) {
+                this.isClimbing = false;
+                this.climbDirection = -1; // Force downward next time
+            } else {
+                // Apply climbing movement directly to position to bypass some physics constraints
+                const climbMove = new THREE.Vector3(
+                    this.moveDirection.x * this.speed * dt,
+                    this.climbSpeed * this.climbDirection * dt,
+                    this.moveDirection.z * this.speed * dt
+                );
+                this.position.add(climbMove);
+                this.velocity.y = 0; // Cancel gravity while climbing
 
-            // Still sync mesh
-            this.mesh.position.copy(this.position);
-            return;
+                // Still sync mesh
+                this.mesh.position.copy(this.position);
+                return;
+            }
+        }
+
+        // Safety check: if too high above terrain, apply extra gravity to bring them down
+        if (heightAboveTerrain > maxHeightAboveTerrain) {
+            // Force downward if they're too high
+            if (this.velocity.y > -3) {
+                this.velocity.y = -3; // Gentle but consistent downward velocity
+            }
+            this.isClimbing = false;
+            this.isJumping = false;
         }
 
         super.updatePhysics(dt);

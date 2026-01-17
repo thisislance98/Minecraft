@@ -601,6 +601,16 @@ export class VoxelGame {
             return;
         }
 
+        // Check if name prompt is disabled in settings (default: disabled)
+        const showNamePrompt = localStorage.getItem('settings_show_name_prompt') === 'true';
+        if (!showNamePrompt) {
+            // Auto-generate a name silently
+            const autoName = `Player_${Date.now().toString(36).slice(-4)}`;
+            localStorage.setItem('communityUsername', autoName);
+            console.log('[Game] Name prompt disabled - auto-generated username:', autoName);
+            return;
+        }
+
         console.log('[Game] No username set, showing prompt...');
         return new Promise((resolve) => {
             // Create modal overlay
@@ -2374,6 +2384,10 @@ export class VoxelGame {
         // Periodic cleanup (every ~1s)
         if (this.frameCount % 60 === 0) {
             this.cleanupEntities();
+            // Check if player moved to a different planet and spawn creatures there
+            if (this.spawnManager) {
+                this.spawnManager.checkWorldChange();
+            }
         }
 
         // Update Dragon

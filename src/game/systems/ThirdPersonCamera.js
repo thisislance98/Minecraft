@@ -1,40 +1,40 @@
 import * as THREE from 'three';
 
 /**
- * Smooth third-person follow camera
- * Based on Simon Dev's implementation with improvements for Minecraft-style gameplay
+ * Minecraft-style third-person camera
  *
- * Features:
- * - Smooth position and rotation interpolation
- * - Frame-rate independent smoothing
- * - Configurable offset and look-ahead
- * - Collision avoidance (optional)
+ * Based on ClassiCube and Simon Dev implementations:
+ * - Camera orbits around player using spherical coordinates
+ * - Uses player's yaw for horizontal orbit, pitch for vertical
+ * - Smooth interpolation with frame-rate independent smoothing
+ * - Collision detection to prevent clipping through terrain
  */
 export class ThirdPersonCamera {
     constructor(game, params = {}) {
         this.game = game;
         this.camera = game.camera;
 
-        // Current interpolated values
+        // Current interpolated position
         this._currentPosition = new THREE.Vector3();
-        this._currentLookat = new THREE.Vector3();
 
-        // Configuration
-        // In Three.js, player faces -Z when rotation.y = 0
-        // So +Z is behind the player, -Z is in front
-        this.offset = params.offset || new THREE.Vector3(0, 3, 6); // Behind and above (+Z = behind)
-        this.lookAtOffset = params.lookAtOffset || new THREE.Vector3(0, 1.5, -4); // Look ahead of player (-Z = forward)
-        this.smoothing = params.smoothing || 0.05; // Lower = smoother (0.001 - 0.1)
+        // Configuration - Minecraft-like values
+        this.distance = params.distance || 4.0;        // Distance from player (Minecraft uses ~3-4)
+        this.heightOffset = params.heightOffset || 1.0; // How high above player's head to look
+        this.smoothing = params.smoothing || 0.01;     // Lower = smoother (0.001 very smooth, 0.1 responsive)
+        this.pivotHeight = params.pivotHeight !== undefined ? params.pivotHeight : 1.6; // Eye level
+
+        // Pitch constraints to prevent flipping
+        this.minPitch = params.minPitch || -Math.PI / 2 + 0.1; // Just above -90 degrees
+        this.maxPitch = params.maxPitch || Math.PI / 2 - 0.1;  // Just below 90 degrees
 
         // Collision detection
         this.enableCollision = params.enableCollision !== false;
-        this.minDistance = 1.5;
-        this.collisionPadding = 0.3;
+        this.minDistance = params.minDistance || 1.0;
+        this.collisionPadding = 0.2;
 
         // Reusable objects for performance
-        this._idealOffset = new THREE.Vector3();
-        this._idealLookat = new THREE.Vector3();
-        this._targetQuaternion = new THREE.Quaternion();
+        this._pivotPoint = new THREE.Vector3();
+        this._idealPosition = new THREE.Vector3();
         this._raycaster = new THREE.Raycaster();
         this._rayDirection = new THREE.Vector3();
 
@@ -42,72 +42,81 @@ export class ThirdPersonCamera {
     }
 
     /**
-     * Calculate ideal camera position based on player position and rotation
+     * Calculate ideal camera position using spherical coordinates around player
+     * This is the Minecraft approach: camera orbits at fixed distance
      */
-    _calculateIdealOffset(player) {
-        // Start with base offset
-        this._idealOffset.copy(this.offset);
-
-        // Apply player's pitch (X rotation) - camera pivots around player vertically
-        const pitchQuat = new THREE.Quaternion();
-        pitchQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -player.rotation.x);
-        this._idealOffset.applyQuaternion(pitchQuat);
-
-        // Apply player's yaw (Y rotation) - camera follows player's facing direction
-        this._targetQuaternion.setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            player.rotation.y
+    _calculateIdealPosition(player) {
+        // Pivot point is at player's eye level
+        this._pivotPoint.set(
+            player.position.x,
+            player.position.y + this.pivotHeight,
+            player.position.z
         );
-        this._idealOffset.applyQuaternion(this._targetQuaternion);
 
-        // Add player position (pivot point is at player's body)
-        this._idealOffset.add(player.position);
+        // Get player's look direction (pitch and yaw)
+        const pitch = THREE.MathUtils.clamp(player.rotation.x, this.minPitch, this.maxPitch);
+        const yaw = player.rotation.y;
 
-        return this._idealOffset;
+        // Calculate camera position using spherical coordinates
+        // Camera is BEHIND the player, so we add PI to yaw and negate pitch
+        // In Minecraft's coordinate system:
+        // - Player faces -Z when yaw = 0
+        // - Camera should be at +Z (behind) when yaw = 0
+
+        // Spherical to Cartesian:
+        // x = r * cos(pitch) * sin(yaw)
+        // y = r * sin(pitch)
+        // z = r * cos(pitch) * cos(yaw)
+
+        const cosPitch = Math.cos(-pitch); // Negate pitch so looking down moves camera up
+        const sinPitch = Math.sin(-pitch);
+
+        // Camera offset from pivot (behind player)
+        this._idealPosition.set(
+            this.distance * cosPitch * Math.sin(yaw + Math.PI),
+            this.distance * sinPitch + this.heightOffset,
+            this.distance * cosPitch * Math.cos(yaw + Math.PI)
+        );
+
+        // Add pivot point to get world position
+        this._idealPosition.add(this._pivotPoint);
+
+        return this._idealPosition;
     }
 
     /**
-     * Calculate ideal look-at point (ahead of player)
+     * Get the point the camera should look at (slightly above player's head)
      */
-    _calculateIdealLookat(player) {
-        // Start with base look-at offset
-        this._idealLookat.copy(this.lookAtOffset);
-
-        // Apply player's pitch (X rotation) - look up/down like first person
-        const pitchQuat = new THREE.Quaternion();
-        pitchQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), player.rotation.x);
-        this._idealLookat.applyQuaternion(pitchQuat);
-
-        // Apply player's yaw (Y rotation)
-        this._targetQuaternion.setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            player.rotation.y
+    _getLookAtPoint(player) {
+        return new THREE.Vector3(
+            player.position.x,
+            player.position.y + this.pivotHeight + 0.2, // Slightly above eyes
+            player.position.z
         );
-        this._idealLookat.applyQuaternion(this._targetQuaternion);
-
-        // Add player position
-        this._idealLookat.add(player.position);
-
-        return this._idealLookat;
     }
 
     /**
-     * Check for collisions between camera and player, adjust position if needed
+     * Check for collisions and pull camera closer if needed
+     * Like ClassiCube: raycast from player to camera, stop at first hit
      */
     _handleCollision(player, idealPosition) {
         if (!this.enableCollision || !this.game.chunks) return idealPosition;
 
-        // Ray from player to ideal camera position
-        const playerHead = player.position.clone();
-        playerHead.y += 1.6; // Eye height
+        // Ray from pivot point toward ideal camera position
+        const pivotPoint = new THREE.Vector3(
+            player.position.x,
+            player.position.y + this.pivotHeight,
+            player.position.z
+        );
 
-        this._rayDirection.subVectors(idealPosition, playerHead).normalize();
-        const distance = idealPosition.distanceTo(playerHead);
+        this._rayDirection.subVectors(idealPosition, pivotPoint);
+        const distance = this._rayDirection.length();
+        this._rayDirection.normalize();
 
-        this._raycaster.set(playerHead, this._rayDirection);
+        this._raycaster.set(pivotPoint, this._rayDirection);
         this._raycaster.far = distance;
 
-        // Check intersections with terrain chunks
+        // Collect terrain meshes
         const meshes = [];
         this.game.chunks.forEach(chunk => {
             if (chunk.mesh) meshes.push(chunk.mesh);
@@ -119,12 +128,11 @@ export class ThirdPersonCamera {
 
         if (intersects.length > 0) {
             const hit = intersects[0];
-            // Move camera closer, with padding
+            // Pull camera to hit point minus padding
             const newDist = Math.max(this.minDistance, hit.distance - this.collisionPadding);
-            const adjustedPosition = playerHead.clone().add(
-                this._rayDirection.multiplyScalar(newDist)
+            return pivotPoint.clone().add(
+                this._rayDirection.clone().multiplyScalar(newDist)
             );
-            return adjustedPosition;
         }
 
         return idealPosition;
@@ -134,20 +142,18 @@ export class ThirdPersonCamera {
      * Initialize camera position instantly (no interpolation)
      */
     initialize(player) {
-        const idealOffset = this._calculateIdealOffset(player);
-        const idealLookat = this._calculateIdealLookat(player);
+        const idealPosition = this._calculateIdealPosition(player);
+        const finalPosition = this._handleCollision(player, idealPosition);
 
-        this._currentPosition.copy(idealOffset);
-        this._currentLookat.copy(idealLookat);
-
+        this._currentPosition.copy(finalPosition);
         this.camera.position.copy(this._currentPosition);
-        this.camera.lookAt(this._currentLookat);
+        this.camera.lookAt(this._getLookAtPoint(player));
 
         this._initialized = true;
     }
 
     /**
-     * Update camera position with smooth interpolation
+     * Update camera with smooth interpolation
      * @param {number} deltaTime - Time since last frame in seconds
      * @param {Player} player - The player to follow
      */
@@ -160,27 +166,24 @@ export class ThirdPersonCamera {
             return;
         }
 
-        // Calculate ideal positions
-        let idealOffset = this._calculateIdealOffset(player);
-        const idealLookat = this._calculateIdealLookat(player);
+        // Calculate ideal position
+        const idealPosition = this._calculateIdealPosition(player);
 
-        // Handle collision
-        idealOffset = this._handleCollision(player, idealOffset);
+        // Handle collision - pull camera closer if needed
+        const finalPosition = this._handleCollision(player, idealPosition);
 
         // Frame-rate independent smoothing
-        // t approaches 1 as deltaTime increases, ensuring consistent feel
-        // The formula: 1 - (smoothing)^deltaTime
-        // With smoothing=0.05 and dt=0.016 (60fps): t ≈ 0.048
-        // With smoothing=0.05 and dt=0.033 (30fps): t ≈ 0.093
+        // Formula: t = 1 - smoothing^deltaTime
+        // With smoothing=0.01 and dt=0.016 (60fps): t ≈ 0.071
+        // This gives silky smooth camera movement
         const t = 1.0 - Math.pow(this.smoothing, deltaTime);
 
-        // Lerp position and look-at
-        this._currentPosition.lerp(idealOffset, t);
-        this._currentLookat.lerp(idealLookat, t);
+        // Lerp to target position
+        this._currentPosition.lerp(finalPosition, t);
 
-        // Apply to camera
+        // Apply position and look at player
         this.camera.position.copy(this._currentPosition);
-        this.camera.lookAt(this._currentLookat);
+        this.camera.lookAt(this._getLookAtPoint(player));
     }
 
     /**
@@ -194,23 +197,23 @@ export class ThirdPersonCamera {
     }
 
     /**
-     * Set camera offset
+     * Set camera distance from player
      */
-    setOffset(x, y, z) {
-        this.offset.set(x, y, z);
+    setDistance(distance) {
+        this.distance = Math.max(this.minDistance, distance);
     }
 
     /**
-     * Set look-at offset
+     * Set height offset above player's head
      */
-    setLookAtOffset(x, y, z) {
-        this.lookAtOffset.set(x, y, z);
+    setHeightOffset(offset) {
+        this.heightOffset = offset;
     }
 
     /**
      * Set smoothing factor (0.001 = very smooth, 0.1 = responsive)
      */
     setSmoothing(value) {
-        this.smoothing = Math.max(0.001, Math.min(0.5, value));
+        this.smoothing = THREE.MathUtils.clamp(value, 0.001, 0.5);
     }
 }

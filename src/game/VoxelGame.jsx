@@ -1532,6 +1532,31 @@ export class VoxelGame {
         }
     }
 
+    // Mark all 6 neighboring chunks as dirty (used when a new chunk is generated)
+    // This ensures neighboring chunks rebuild their meshes with correct face culling
+    markAllNeighboringChunksDirty(cx, cy, cz) {
+        const offsets = [
+            [1, 0, 0], [-1, 0, 0],
+            [0, 1, 0], [0, -1, 0],
+            [0, 0, 1], [0, 0, -1]
+        ];
+
+        let markedCount = 0;
+        for (const [dx, dy, dz] of offsets) {
+            const neighborKey = this.getChunkKey(cx + dx, cy + dy, cz + dz);
+            const neighbor = this.chunks.get(neighborKey);
+            if (neighbor && neighbor.isGenerated) {
+                neighbor.dirty = true;
+                markedCount++;
+            }
+        }
+
+        // Invalidate the dirty chunks cache so these are picked up immediately
+        if (markedCount > 0) {
+            this._dirtyChunksCacheInvalidated = true;
+        }
+    }
+
     // Get block type at world coordinates (for chunk neighbor checks)
     getBlockWorld(x, y, z) {
         const { cx, cy, cz, lx, ly, lz } = this.worldToChunk(x, y, z);
@@ -1550,24 +1575,35 @@ export class VoxelGame {
     updateChunks() {
         const maxChunksPerFrame = 3; // Adjust this for performance vs. speed trade-off
 
-        // Collect all dirty chunks with their distance from player
-        const dirtyChunks = [];
-        for (const chunk of this.chunks.values()) {
-            if (chunk.dirty) {
-                const dx = chunk.cx - Math.floor(this.player.position.x / this.chunkSize);
-                const dz = chunk.cz - Math.floor(this.player.position.z / this.chunkSize);
-                const distSq = dx * dx + dz * dz;
-                dirtyChunks.push({ chunk, distSq });
+        // PERFORMANCE: Use cached dirty chunks list, update periodically
+        if (!this._dirtyChunksCache || this.frameCount % 5 === 0 || this._dirtyChunksCacheInvalidated) {
+            const playerCX = Math.floor(this.player.position.x / this.chunkSize);
+            const playerCZ = Math.floor(this.player.position.z / this.chunkSize);
+
+            // Collect all dirty chunks with their distance from player
+            this._dirtyChunksCache = [];
+            for (const chunk of this.chunks.values()) {
+                if (chunk.dirty) {
+                    const dx = chunk.cx - playerCX;
+                    const dz = chunk.cz - playerCZ;
+                    const distSq = dx * dx + dz * dz;
+                    this._dirtyChunksCache.push({ chunk, distSq });
+                }
             }
+
+            // Sort by distance (closest first)
+            this._dirtyChunksCache.sort((a, b) => a.distSq - b.distSq);
+            this._dirtyChunksCacheInvalidated = false;
         }
 
-        // Sort by distance (closest first)
-        dirtyChunks.sort((a, b) => a.distSq - b.distSq);
-
         // Update only the first N chunks
-        const toUpdate = dirtyChunks.slice(0, maxChunksPerFrame);
-        for (const { chunk } of toUpdate) {
-            chunk.buildMesh();
+        let updated = 0;
+        while (updated < maxChunksPerFrame && this._dirtyChunksCache.length > 0) {
+            const item = this._dirtyChunksCache.shift();
+            if (item.chunk.dirty) { // Double-check still dirty
+                item.chunk.buildMesh();
+                updated++;
+            }
         }
     }
 
@@ -1748,16 +1784,24 @@ export class VoxelGame {
         if (this.chunkGenQueue.length === 0) return;
         if (this._idleCallbackScheduled) return; // Already scheduled
 
-        // Sort by distance (closest first)
-        const playerChunk = this.worldToChunk(this.player.position.x, this.player.position.y, this.player.position.z);
+        // PERFORMANCE: Only re-sort every 10 frames or when queue is small
+        const needsSort = !this._lastQueueSortFrame ||
+            (this.frameCount - this._lastQueueSortFrame) > 10 ||
+            this.chunkGenQueue.length < 10;
 
-        this.chunkGenQueue.forEach(req => {
-            const dx = req.cx - playerChunk.cx;
-            const dz = req.cz - playerChunk.cz;
-            req.distSq = dx * dx + dz * dz;
-        });
+        if (needsSort) {
+            // Sort by distance (closest first)
+            const playerChunk = this.worldToChunk(this.player.position.x, this.player.position.y, this.player.position.z);
 
-        this.chunkGenQueue.sort((a, b) => a.distSq - b.distSq);
+            this.chunkGenQueue.forEach(req => {
+                const dx = req.cx - playerChunk.cx;
+                const dz = req.cz - playerChunk.cz;
+                req.distSq = dx * dx + dz * dz;
+            });
+
+            this.chunkGenQueue.sort((a, b) => a.distSq - b.distSq);
+            this._lastQueueSortFrame = this.frameCount;
+        }
 
         const processInIdle = (deadline) => {
             this._idleCallbackScheduled = false;
@@ -1783,6 +1827,11 @@ export class VoxelGame {
                 // Generate
                 const chunk = this.worldGen.generateChunk(req.cx, req.cy, req.cz);
                 this.generatedChunks.add(req.cx + ',' + req.cy + ',' + req.cz);
+
+                // Mark all neighboring chunks as dirty so they rebuild with correct face culling
+                // This fixes visibility issues when flying up high and returning - neighboring
+                // chunks may have been built with incorrect culling because this chunk didn't exist yet
+                this.markAllNeighboringChunksDirty(req.cx, req.cy, req.cz);
 
                 // Apply persisted blocks to this newly generated chunk
                 const chunkKey = this.getChunkKey(req.cx, req.cy, req.cz);
@@ -1858,37 +1907,34 @@ export class VoxelGame {
 
         let visibleCount = 0;
         const grassEnabled = this.grassSystem ? this.grassSystem.visible : false;
+        const terrainVis = this.terrainVisible; // Cache for faster access
+        const frustum = this.frustum; // Cache reference
+        const renderDist = this.renderDistance;
+        const renderDistPlus2 = renderDist + 2; // Chunks beyond this are definitely out
 
         for (const chunk of this.chunks.values()) {
-            if (chunk.mesh) {
-                // Calculate horizontal distance from player
-                const hDist = Math.max(Math.abs(chunk.cx - playerCX), Math.abs(chunk.cz - playerCZ));
+            if (!chunk.mesh) continue; // Early exit for meshless chunks
 
-                // Keep ground-level chunks (cy <= 0) visible within render distance
-                // This prevents terrain from being culled under structures
-                const isGroundChunk = chunk.cy <= 0;
-                const withinRenderDistance = hDist <= this.renderDistance;
+            // Quick distance check - skip frustum test for far chunks
+            const dx = chunk.cx - playerCX;
+            const dz = chunk.cz - playerCZ;
+            const hDist = Math.max(Math.abs(dx), Math.abs(dz));
 
-                if (isGroundChunk && withinRenderDistance) {
-                    // Always show ground chunks within render distance
-                    // BUT only if terrain toggle is on!
-                    // chunk.mesh.visible = this.terrainVisible;
-
-                    // FIXED: Apply normal culling to ground chunks too
-                    const isVisible = this.terrainVisible && chunk.isInFrustum(this.frustum);
-                    chunk.mesh.visible = isVisible;
-                    if (chunk.grassMesh) chunk.grassMesh.visible = isVisible && grassEnabled;
-
-                } else {
-                    // Apply normal frustum culling for above-ground chunks
-                    const isVisible = this.terrainVisible && chunk.isInFrustum(this.frustum);
-                    chunk.mesh.visible = isVisible;
-                    if (chunk.grassMesh) chunk.grassMesh.visible = isVisible && grassEnabled;
-                    if (isVisible) visibleCount++;
-                }
+            // Chunks beyond render distance + 2 should already be unloaded, but hide them
+            if (hDist > renderDistPlus2) {
+                chunk.mesh.visible = false;
+                if (chunk.grassMesh) chunk.grassMesh.visible = false;
+                continue;
             }
-            this.visibleChunkCount = visibleCount;
+
+            // Frustum culling
+            const isVisible = terrainVis && chunk.isInFrustum(frustum);
+            chunk.mesh.visible = isVisible;
+            if (chunk.grassMesh) chunk.grassMesh.visible = isVisible && grassEnabled;
+            if (isVisible) visibleCount++;
         }
+
+        this.visibleChunkCount = visibleCount;
     }
 
     // Physics methods moved to PhysicsManager
@@ -2014,8 +2060,20 @@ export class VoxelGame {
         this.uiManager.updatePosition(this.player.position);
         this.uiManager.updateFPS();
 
-        // PERFORMANCE: Track scene object count every 30 seconds (was 5s)
+        // PERFORMANCE: Log slow frames for debugging
         const now = performance.now();
+        if (this._frameStartTime) {
+            const frameTime = now - this._frameStartTime;
+            if (frameTime > 33) { // > 30fps threshold
+                // Only log occasionally to avoid spam
+                if (!this._lastSlowFrameLog || now - this._lastSlowFrameLog > 2000) {
+                    console.warn(`[Perf] Slow frame: ${frameTime.toFixed(1)}ms (${(1000/frameTime).toFixed(0)} fps), chunks: ${this.chunks.size}, queue: ${this.chunkGenQueue.length}`);
+                    this._lastSlowFrameLog = now;
+                }
+            }
+        }
+
+        // PERFORMANCE: Track scene object count every 30 seconds (was 5s)
         if (!this._lastSceneCount || now - this._lastSceneCount > 30000) {
             this._lastSceneCount = now;
             let count = 0;
@@ -2044,7 +2102,8 @@ export class VoxelGame {
 
                 if (shouldSend) {
                     const isCrouching = this.inputManager.isActionActive('SNEAK');
-                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching);
+                    const isFlying = this.player.isFlying || false;
+                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching, isFlying);
                     this._lastSentPos.copy(currentPos);
                     this._lastSentRotY = currentRotY;
                     this._isCurrentlyMoving = isMoving;
@@ -2052,7 +2111,8 @@ export class VoxelGame {
                 } else if (this._isCurrentlyMoving || this._isCurrentlyRotating) {
                     // Send one last "stop" packet to ensure final position/rotation sync
                     const isCrouching = this.inputManager.isActionActive('SNEAK');
-                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching);
+                    const isFlying = this.player.isFlying || false;
+                    this.socketManager.sendPosition(currentPos, currentRotY, isCrouching, isFlying);
                     this._lastSentPos.copy(currentPos);
                     this._lastSentRotY = currentRotY;
                     this._isCurrentlyMoving = false;
@@ -2106,6 +2166,7 @@ export class VoxelGame {
     }
 
     animate() {
+        this._frameStartTime = performance.now(); // Track frame start for perf logging
         if (this.perf) this.perf.begin();
         this.stats.begin();
         // this.profiler.tick(); // DEPRECATED
@@ -2293,7 +2354,8 @@ export class VoxelGame {
 
             if (!keep) {
                 if (animal.dispose) animal.dispose();
-                this.scene.remove(animal.mesh);
+                if (animal.group) this.scene.remove(animal.group);
+                else if (animal.mesh) this.scene.remove(animal.mesh);
                 this.animals.splice(i, 1);
             }
             // --- OPTIMIZATION END ---
@@ -2418,8 +2480,11 @@ export class VoxelGame {
         // this.profiler.end('Entities');
 
         // Frustum culling for performance
-        // Frustum culling for performance
-        this.updateChunkVisibility();
+        // PERFORMANCE: Only update chunk visibility every 3 frames
+        // This reduces CPU overhead significantly with 100+ chunks
+        if (this.frameCount % 3 === 0) {
+            this.updateChunkVisibility();
+        }
 
         // Day/Night Cycle - use Environment module
         if (!this.gameState.debug || this.gameState.debug.environment) {
@@ -2488,7 +2553,8 @@ export class VoxelGame {
     killAllAnimals() {
         for (const animal of this.animals) {
             if (animal.dispose) animal.dispose();
-            if (animal.mesh) this.scene.remove(animal.mesh);
+            if (animal.group) this.scene.remove(animal.group);
+            else if (animal.mesh) this.scene.remove(animal.mesh);
         }
         this.animals = [];
 
@@ -2508,10 +2574,12 @@ export class VoxelGame {
     cleanupEntities() {
         const despawnDist = 128; // 8 chunks
         for (let i = this.animals.length - 1; i >= 0; i--) {
+            const animal = this.animals[i];
             // Distance check
-            if (this.animals[i].position.distanceTo(this.player.position) > despawnDist) {
-                this.animals[i].dispose(); // Clean up resources!
-                this.scene.remove(this.animals[i].mesh);
+            if (animal.position.distanceTo(this.player.position) > despawnDist) {
+                animal.dispose(); // Clean up resources!
+                if (animal.group) this.scene.remove(animal.group);
+                else if (animal.mesh) this.scene.remove(animal.mesh);
                 this.animals.splice(i, 1);
             }
         }

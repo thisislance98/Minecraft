@@ -1,9 +1,12 @@
 import { XboxPlatformer } from './XboxPlatformer.js';
 import { XboxJoust } from './XboxJoust.js';
+import { XboxTank } from './XboxTank.js';
+import { XboxPong } from './XboxPong.js';
 
 /**
  * MinigameManager handles the Xbox overlay and minigame lifecycle.
  * Extracted from UIManager.js.
+ * Now includes multiplayer lobby system for PvP/co-op minigames.
  */
 export class MinigameManager {
     constructor(game) {
@@ -16,9 +19,479 @@ export class MinigameManager {
         this.platformerState = null;
         this.xboxJoust = null;
         this.joustState = null;
+        this.xboxTank = null;
+        this.tankState = null;
+        this.xboxPong = null;
+        this.pongState = null;
         this.snakeState = null;
         this.bricksState = null;
         this.invadersState = null;
+
+        // Global escape key handler for Xbox UI
+        this.escapeHandler = null;
+
+        // Multiplayer lobby state
+        this.lobbyState = null;
+        this.isInLobby = false;
+        this.multiplayerEnabled = true; // Can be toggled for single-player mode
+        this.socketListenersSetup = false;
+    }
+
+    /**
+     * Get the socket manager from the game
+     */
+    get socketManager() {
+        return this.game.socketManager;
+    }
+
+    /**
+     * Get the current room ID from socket manager
+     */
+    get roomId() {
+        return this.socketManager?.roomId;
+    }
+
+    /**
+     * Get local player name
+     */
+    get playerName() {
+        return localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
+    }
+
+    /**
+     * Setup socket event listeners for minigame multiplayer
+     */
+    setupSocketListeners() {
+        if (this.socketListenersSetup || !this.socketManager?.socket) return;
+
+        const socket = this.socketManager.socket;
+        console.log('[MinigameManager] Setting up socket listeners for multiplayer');
+
+        // Lobby state received when joining
+        socket.on('minigame:lobbyState', (data) => {
+            console.log('[MinigameManager] Received lobby state:', data);
+            this.lobbyState = {
+                sessionId: data.sessionId,
+                gameType: data.gameType,
+                players: data.players,
+                hostId: data.hostId,
+                isActive: data.isActive
+            };
+            this.updateLobbyUI();
+        });
+
+        // Player joined the lobby
+        socket.on('minigame:playerJoined', (data) => {
+            console.log('[MinigameManager] Player joined:', data.player);
+            if (this.lobbyState) {
+                this.lobbyState.players.push(data.player);
+                this.updateLobbyUI();
+            }
+        });
+
+        // Player left the lobby
+        socket.on('minigame:playerLeft', (data) => {
+            console.log('[MinigameManager] Player left:', data.playerId);
+            if (this.lobbyState) {
+                this.lobbyState.players = this.lobbyState.players.filter(p => p.id !== data.playerId);
+                this.updateLobbyUI();
+            }
+        });
+
+        // Player ready state changed
+        socket.on('minigame:playerReady', (data) => {
+            console.log('[MinigameManager] Player ready state:', data);
+            if (this.lobbyState) {
+                const player = this.lobbyState.players.find(p => p.id === data.playerId);
+                if (player) {
+                    player.isReady = data.isReady;
+                    this.updateLobbyUI();
+                }
+            }
+        });
+
+        // Host changed
+        socket.on('minigame:hostChanged', (data) => {
+            console.log('[MinigameManager] Host changed to:', data.newHostId);
+            if (this.lobbyState) {
+                this.lobbyState.hostId = data.newHostId;
+                this.lobbyState.players.forEach(p => {
+                    p.isHost = (p.id === data.newHostId);
+                });
+                this.updateLobbyUI();
+            }
+        });
+
+        // Game start
+        socket.on('minigame:gameStart', (data) => {
+            console.log('[MinigameManager] Game starting!', data);
+            this.isInLobby = false;
+            this.startMultiplayerGame(data);
+        });
+
+        // Error handling
+        socket.on('minigame:error', (data) => {
+            console.error('[MinigameManager] Error:', data.message);
+            this.showLobbyError(data.message);
+        });
+
+        // Host migration - we need to take over as host
+        socket.on('minigame:becomeHost', (data) => {
+            console.log('[MinigameManager] Becoming host with state:', data);
+            if (this.xboxTank && this.xboxTank.isActive) {
+                this.xboxTank.becomeHost(data.gameState);
+            }
+        });
+
+        this.socketListenersSetup = true;
+    }
+
+    /**
+     * Show the minigame lobby for a specific game type
+     */
+    showMinigameLobby(gameType) {
+        if (!this.socketManager || !this.roomId) {
+            console.warn('[MinigameManager] No socket connection, starting single-player');
+            this.startSinglePlayerGame(gameType);
+            return;
+        }
+
+        this.setupSocketListeners();
+        this.isInLobby = true;
+
+        // Hide game menu, show lobby
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        // Show lobby UI
+        this.createLobbyUI(gameType);
+
+        // Join the lobby on the server
+        this.socketManager.socket.emit('minigame:join', {
+            gameType,
+            roomId: this.roomId,
+            playerName: this.playerName
+        });
+
+        console.log(`[MinigameManager] Joining ${gameType} lobby in room ${this.roomId}`);
+    }
+
+    /**
+     * Create the lobby UI elements
+     */
+    createLobbyUI(gameType) {
+        const gameScreen = document.getElementById('xbox-game-screen');
+        if (!gameScreen) return;
+
+        // Remove any existing lobby
+        const existingLobby = document.getElementById('xbox-lobby');
+        if (existingLobby) existingLobby.remove();
+
+        const gameNames = {
+            tank: 'TANK BATTLE',
+            joust: 'JOUST',
+            pong: 'PONG',
+            platformer: 'PLATFORMER',
+            snake: 'SNAKE',
+            invaders: 'INVADERS'
+        };
+
+        const lobbyDiv = document.createElement('div');
+        lobbyDiv.id = 'xbox-lobby';
+        lobbyDiv.style.cssText = `
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; flex-direction: column;
+            align-items: center; padding: 20px; box-sizing: border-box;
+            color: white; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        lobbyDiv.innerHTML = `
+            <div style="font-size: 24px; color: #107c10; margin-bottom: 15px; font-weight: bold;">
+                ${gameNames[gameType] || gameType.toUpperCase()} LOBBY
+            </div>
+            <div id="lobby-players" style="
+                width: 90%; flex: 1; background: #1a1a1a; border: 2px solid #333;
+                border-radius: 8px; padding: 15px; overflow-y: auto;
+            ">
+                <div style="color: #888; text-align: center;">Connecting...</div>
+            </div>
+            <div id="lobby-error" style="color: #ff4444; margin: 10px 0; display: none;"></div>
+            <div style="display: flex; gap: 15px; margin-top: 15px;">
+                <button id="lobby-ready-btn" style="
+                    background: #444; color: white; border: 2px solid #666;
+                    padding: 10px 25px; font-size: 16px; cursor: pointer;
+                    border-radius: 5px; transition: all 0.2s;
+                ">READY</button>
+                <button id="lobby-start-btn" style="
+                    background: #107c10; color: white; border: none;
+                    padding: 10px 25px; font-size: 16px; cursor: pointer;
+                    border-radius: 5px; opacity: 0.5; transition: all 0.2s;
+                " disabled>START GAME</button>
+                <button id="lobby-leave-btn" style="
+                    background: #333; color: white; border: 1px solid #555;
+                    padding: 10px 25px; font-size: 16px; cursor: pointer;
+                    border-radius: 5px; transition: all 0.2s;
+                ">LEAVE</button>
+            </div>
+            <div style="color: #666; font-size: 12px; margin-top: 10px;">
+                Waiting for players... (Min 2 to start)
+            </div>
+        `;
+
+        gameScreen.appendChild(lobbyDiv);
+
+        // Setup button handlers
+        const readyBtn = document.getElementById('lobby-ready-btn');
+        const startBtn = document.getElementById('lobby-start-btn');
+        const leaveBtn = document.getElementById('lobby-leave-btn');
+
+        let isReady = false;
+
+        readyBtn.onclick = () => {
+            isReady = !isReady;
+            readyBtn.textContent = isReady ? 'NOT READY' : 'READY';
+            readyBtn.style.background = isReady ? '#107c10' : '#444';
+            readyBtn.style.borderColor = isReady ? '#107c10' : '#666';
+            this.socketManager.socket.emit('minigame:ready', { isReady });
+        };
+
+        startBtn.onclick = () => {
+            if (!startBtn.disabled) {
+                this.socketManager.socket.emit('minigame:start');
+            }
+        };
+
+        leaveBtn.onclick = () => {
+            this.leaveMinigameLobby();
+        };
+
+        // Update controls hint
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                Waiting for players to join from the same game room
+                <span style="color:#666">(ESC to leave)</span>
+            `;
+        }
+    }
+
+    /**
+     * Update the lobby UI with current player list
+     */
+    updateLobbyUI() {
+        if (!this.lobbyState || !this.isInLobby) return;
+
+        const playersDiv = document.getElementById('lobby-players');
+        if (!playersDiv) return;
+
+        const localSocketId = this.socketManager?.socketId;
+        const isHost = this.lobbyState.hostId === localSocketId;
+
+        // Render player list
+        if (this.lobbyState.players.length === 0) {
+            playersDiv.innerHTML = '<div style="color: #888; text-align: center;">Connecting...</div>';
+        } else {
+            playersDiv.innerHTML = this.lobbyState.players.map((player, index) => {
+                const isLocal = player.id === localSocketId;
+                const colors = ['#107c10', '#3366cc', '#cc9900', '#cc33cc'];
+                const color = colors[index % colors.length];
+
+                return `
+                    <div style="
+                        display: flex; align-items: center; justify-content: space-between;
+                        padding: 10px; margin: 5px 0; background: ${isLocal ? '#252' : '#222'};
+                        border-radius: 5px; border-left: 4px solid ${color};
+                    ">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="
+                                width: 30px; height: 30px; background: ${color};
+                                border-radius: 5px; display: flex; align-items: center;
+                                justify-content: center; font-weight: bold;
+                            ">${index + 1}</div>
+                            <span style="font-weight: ${isLocal ? 'bold' : 'normal'};">
+                                ${player.name}${player.isHost ? ' (Host)' : ''}${isLocal ? ' (You)' : ''}
+                            </span>
+                        </div>
+                        <div style="
+                            padding: 5px 12px; border-radius: 3px;
+                            background: ${player.isReady ? '#107c10' : '#444'};
+                            color: ${player.isReady ? '#fff' : '#888'};
+                            font-size: 12px;
+                        ">
+                            ${player.isReady ? '✓ READY' : '⏳ Waiting'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add empty slots
+            for (let i = this.lobbyState.players.length; i < 4; i++) {
+                playersDiv.innerHTML += `
+                    <div style="
+                        display: flex; align-items: center; padding: 10px; margin: 5px 0;
+                        background: #1a1a1a; border-radius: 5px; border: 1px dashed #333;
+                        color: #555;
+                    ">
+                        <span style="margin-left: 45px;">Empty Slot</span>
+                    </div>
+                `;
+            }
+        }
+
+        // Update start button state
+        const startBtn = document.getElementById('lobby-start-btn');
+        if (startBtn) {
+            const allReady = this.lobbyState.players
+                .filter(p => p.id !== localSocketId)
+                .every(p => p.isReady);
+            const enoughPlayers = this.lobbyState.players.length >= 2;
+            const canStart = isHost && allReady && enoughPlayers;
+
+            startBtn.disabled = !canStart;
+            startBtn.style.opacity = canStart ? '1' : '0.5';
+            startBtn.style.cursor = canStart ? 'pointer' : 'not-allowed';
+            startBtn.style.display = isHost ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Show an error message in the lobby
+     */
+    showLobbyError(message) {
+        const errorDiv = document.getElementById('lobby-error');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    /**
+     * Leave the minigame lobby
+     */
+    leaveMinigameLobby() {
+        console.log('[MinigameManager] Leaving lobby');
+
+        if (this.socketManager?.socket) {
+            this.socketManager.socket.emit('minigame:leave');
+        }
+
+        this.lobbyState = null;
+        this.isInLobby = false;
+
+        // Remove lobby UI
+        const lobbyDiv = document.getElementById('xbox-lobby');
+        if (lobbyDiv) lobbyDiv.remove();
+
+        // Show menu again
+        this.showXboxMenu();
+    }
+
+    /**
+     * Start a multiplayer game with the received game data
+     */
+    startMultiplayerGame(data) {
+        console.log('[MinigameManager] Starting multiplayer game:', data);
+
+        // Remove lobby UI
+        const lobbyDiv = document.getElementById('xbox-lobby');
+        if (lobbyDiv) lobbyDiv.remove();
+
+        const localSocketId = this.socketManager?.socketId;
+        const isHost = data.hostId === localSocketId;
+
+        // Find local player's data
+        const localPlayer = data.players.find(p => p.id === localSocketId);
+
+        if (data.gameType === 'tank') {
+            this.currentXboxGame = 'tank';
+            this.startXboxTankMultiplayer(data, isHost, localPlayer);
+        } else {
+            // For other games, fall back to single-player for now
+            console.log(`[MinigameManager] ${data.gameType} multiplayer not yet implemented, starting single-player`);
+            this.startSinglePlayerGame(data.gameType);
+        }
+    }
+
+    /**
+     * Start a single-player game (fallback when no multiplayer)
+     */
+    startSinglePlayerGame(gameType) {
+        switch (gameType) {
+            case 'tank':
+                this.currentXboxGame = 'tank';
+                this.startXboxTank(0);
+                break;
+            case 'joust':
+                this.currentXboxGame = 'joust';
+                this.startXboxJoust();
+                break;
+            case 'pong':
+                this.currentXboxGame = 'pong';
+                this.startXboxPong();
+                break;
+            case 'platformer':
+                this.currentXboxGame = 'platformer';
+                this.startXboxPlatformer(0);
+                break;
+            case 'snake':
+                this.currentXboxGame = 'snake';
+                this.startXboxSnake();
+                break;
+            case 'invaders':
+                this.currentXboxGame = 'invaders';
+                this.startXboxInvaders();
+                break;
+            case 'bricks':
+                this.currentXboxGame = 'bricks';
+                this.startXboxBrickBreaker();
+                break;
+        }
+    }
+
+    /**
+     * Start multiplayer Tank Battle
+     */
+    startXboxTankMultiplayer(data, isHost, localPlayer) {
+        this.stopAllXboxGames();
+
+        const canvas = document.getElementById('xbox-canvas');
+        if (!canvas) return;
+
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                <b style="color: #fff;">WASD</b> Move | <b style="color: #fff;">Mouse</b> Aim |
+                <b style="color: #fff;">Click</b> Fire |
+                <span style="color: ${localPlayer?.color || '#107c10'};">●</span> You
+                <span style="color:#666">(ESC for menu)</span>
+            `;
+        }
+
+        canvas.style.display = 'block';
+        document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
+
+        const self = this;
+        this.xboxTank = new XboxTank(canvas, {
+            onGameOver: () => {
+                document.getElementById('xbox-game-over').style.display = 'flex';
+            },
+            onLevelComplete: (nextLevel) => {
+                setTimeout(() => self.startXboxTank(nextLevel), 2000);
+            },
+            onAllLevelsComplete: () => {
+                setTimeout(() => self.showXboxMenu(), 3000);
+            }
+        }, this.socketManager, true); // Pass socketManager and isMultiplayer=true
+
+        this.xboxTank.startMultiplayer(data, isHost, localPlayer);
+        this.tankState = this.xboxTank.state;
     }
 
     showXboxUI() {
@@ -81,6 +554,14 @@ export class MinigameManager {
                             <div style="font-size: 32px; margin-bottom: 5px;">👾</div>
                             <div style="font-weight: bold; color: #107c10; font-size: 14px;">Invaders</div>
                         </div>
+                        <div class="xbox-game-card" id="play-tank" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
+                            <div style="font-size: 32px; margin-bottom: 5px;">🎖️</div>
+                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Tank Battle</div>
+                        </div>
+                        <div class="xbox-game-card" id="play-pong" style="cursor: pointer; background: #222; border: 2px solid #333; padding: 12px; border-radius: 8px; transition: all 0.2s; text-align: center;">
+                            <div style="font-size: 32px; margin-bottom: 5px;">🏓</div>
+                            <div style="font-weight: bold; color: #107c10; font-size: 14px;">Pong</div>
+                        </div>
                     </div>
                 </div>
 
@@ -96,7 +577,10 @@ export class MinigameManager {
                 <div id="xbox-controls-hint" style="text-align: left; font-size: 14px; color: #888;">
                     Select a game to start!
                 </div>
-                <button id="xbox-close" style="background: #333; color: white; border: 1px solid #555; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 5px;">Turn Off</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="xbox-back-to-menu" style="background: #444; color: white; border: 1px solid #555; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 5px; display: none;">◀ Menu</button>
+                    <button id="xbox-close" style="background: #333; color: white; border: 1px solid #555; padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 5px;">Turn Off</button>
+                </div>
             </div>
             <style>
                 .xbox-game-card:hover { border-color: #107c10 !important; background: #333 !important; transform: translateY(-5px); }
@@ -114,6 +598,36 @@ export class MinigameManager {
             if (this.game.inputManager) this.game.inputManager.lock();
         };
 
+        // Escape key handler - returns to menu if in game, or closes Xbox UI if on menu
+        this.escapeHandler = (e) => {
+            if (e.code === 'Escape' && this.xboxModal && !this.xboxModal.classList.contains('hidden')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // If currently playing a game, go back to menu
+                if (this.currentXboxGame) {
+                    console.log('[Xbox] Escape pressed - returning to game menu');
+                    this.showXboxMenu();
+                } else {
+                    // If on the menu, close the Xbox UI entirely
+                    console.log('[Xbox] Escape pressed - closing Xbox UI');
+                    this.stopAllXboxGames();
+                    modal.classList.add('hidden');
+                    if (this.game.inputManager) this.game.inputManager.lock();
+                }
+            }
+        };
+        window.addEventListener('keydown', this.escapeHandler);
+
+        // Back to menu button (visible during gameplay)
+        const backToMenuBtn = document.getElementById('xbox-back-to-menu');
+        backToMenuBtn.onclick = () => {
+            if (this.currentXboxGame) {
+                console.log('[Xbox] Back button clicked - returning to game menu');
+                this.showXboxMenu();
+            }
+        };
+
         const restartBtn = document.getElementById('xbox-restart');
         restartBtn.onclick = () => {
             if (this.currentXboxGame === 'platformer') {
@@ -126,6 +640,10 @@ export class MinigameManager {
                 this.startXboxBrickBreaker();
             } else if (this.currentXboxGame === 'invaders') {
                 this.startXboxInvaders();
+            } else if (this.currentXboxGame === 'tank') {
+                this.startXboxTank(this.tankState ? this.tankState.levelIndex : 0);
+            } else if (this.currentXboxGame === 'pong') {
+                this.startXboxPong(this.pongState ? this.pongState.levelIndex : 0);
             }
         };
 
@@ -151,6 +669,19 @@ export class MinigameManager {
         document.getElementById('play-invaders').onclick = () => {
             this.currentXboxGame = 'invaders';
             this.startXboxInvaders();
+        };
+        document.getElementById('play-tank').onclick = () => {
+            // Show multiplayer lobby for Tank Battle
+            if (this.multiplayerEnabled && this.socketManager?.isConnected()) {
+                this.showMinigameLobby('tank');
+            } else {
+                this.currentXboxGame = 'tank';
+                this.startXboxTank();
+            }
+        };
+        document.getElementById('play-pong').onclick = () => {
+            this.currentXboxGame = 'pong';
+            this.startXboxPong();
         };
 
         this.startXboxBootSequence();
@@ -184,24 +715,45 @@ export class MinigameManager {
 
     showXboxMenu() {
         this.stopAllXboxGames();
+
+        // Leave any active lobby
+        if (this.isInLobby) {
+            if (this.socketManager?.socket) {
+                this.socketManager.socket.emit('minigame:leave');
+            }
+            this.lobbyState = null;
+            this.isInLobby = false;
+        }
+
         const bootDiv = document.getElementById('xbox-boot');
         const menuDiv = document.getElementById('xbox-menu');
         const canvas = document.getElementById('xbox-canvas');
         const gameOverDiv = document.getElementById('xbox-game-over');
         const hintDiv = document.getElementById('xbox-controls-hint');
+        const backToMenuBtn = document.getElementById('xbox-back-to-menu');
+        const lobbyDiv = document.getElementById('xbox-lobby');
 
         if (bootDiv) bootDiv.style.display = 'none';
         if (canvas) canvas.style.display = 'none';
         if (gameOverDiv) gameOverDiv.style.display = 'none';
+        if (lobbyDiv) lobbyDiv.remove();
         if (menuDiv) menuDiv.style.display = 'flex';
-        if (hintDiv) hintDiv.innerHTML = 'Select a game to start!';
+        if (hintDiv) hintDiv.innerHTML = 'Select a game to start! <span style="color:#666">(ESC to close)</span>';
+        if (backToMenuBtn) backToMenuBtn.style.display = 'none';
 
         this.currentXboxGame = null;
+    }
+
+    showBackToMenuButton() {
+        const backToMenuBtn = document.getElementById('xbox-back-to-menu');
+        if (backToMenuBtn) backToMenuBtn.style.display = 'block';
     }
 
     stopAllXboxGames() {
         this.stopXboxPlatformer();
         this.stopXboxJoust();
+        this.stopXboxTank();
+        this.stopXboxPong();
         this.stopXboxSnake();
         this.stopXboxBrickBreaker();
         this.stopXboxInvaders();
@@ -220,13 +772,15 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (hintDiv) {
             hintDiv.innerHTML = `
-                <b style="color: #fff;">W / Space</b> Jump, <b style="color: #fff;">A / D</b> Move | 
+                <b style="color: #fff;">W / Space</b> Jump, <b style="color: #fff;">A / D</b> Move |
                 Avoid <b style="color: #ff3333;">Red</b> enemies | Reach <b style="color: #ffff00;">Gold</b> goal
+                <span style="color:#666">(ESC for menu)</span>
             `;
         }
 
         canvas.style.display = 'block';
         document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
 
         const self = this;
         this.xboxPlatformer = new XboxPlatformer(canvas, {
@@ -266,13 +820,15 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (hintDiv) {
             hintDiv.innerHTML = `
-                <b style="color: #fff;">W / Space</b> Flap, <b style="color: #fff;">A / D</b> Move | 
+                <b style="color: #fff;">W / Space</b> Flap, <b style="color: #fff;">A / D</b> Move |
                 Hit <b style="color: #ff3333;">Enemies</b> from <b style="color: #fff;">Above</b>
+                <span style="color:#666">(ESC for menu)</span>
             `;
         }
 
         canvas.style.display = 'block';
         document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
 
         const self = this;
         this.xboxJoust = new XboxJoust(canvas, {
@@ -298,6 +854,102 @@ export class MinigameManager {
         this.joustState = null;
     }
 
+    // --- Tank Battle ---
+
+    startXboxTank(levelIndex = 0) {
+        this.stopAllXboxGames();
+
+        const canvas = document.getElementById('xbox-canvas');
+        if (!canvas) return;
+
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                <b style="color: #fff;">WASD</b> Move | <b style="color: #fff;">Mouse</b> Aim |
+                <b style="color: #fff;">Click</b> Fire
+                <span style="color:#666">(ESC for menu)</span>
+            `;
+        }
+
+        canvas.style.display = 'block';
+        document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
+
+        const self = this;
+        this.xboxTank = new XboxTank(canvas, {
+            onGameOver: () => {
+                document.getElementById('xbox-game-over').style.display = 'flex';
+            },
+            onLevelComplete: (nextLevel) => {
+                setTimeout(() => self.startXboxTank(nextLevel), 2000);
+            },
+            onAllLevelsComplete: () => {
+                setTimeout(() => self.showXboxMenu(), 3000);
+            }
+        });
+        this.xboxTank.start(levelIndex);
+        this.tankState = this.xboxTank.state;
+    }
+
+    stopXboxTank() {
+        if (this.xboxTank) {
+            this.xboxTank.stop();
+            this.xboxTank = null;
+        }
+        this.tankState = null;
+    }
+
+    // --- Pong ---
+
+    startXboxPong(levelIndex = 0) {
+        this.stopAllXboxGames();
+
+        const canvas = document.getElementById('xbox-canvas');
+        if (!canvas) return;
+
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                <b style="color: #fff;">W/S</b> Move paddle | <b style="color: #fff;">P</b> Pause |
+                Beat the <b style="color: #ff3333;">AI</b>
+                <span style="color:#666">(ESC for menu)</span>
+            `;
+        }
+
+        canvas.style.display = 'block';
+        document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
+
+        const self = this;
+        this.xboxPong = new XboxPong(canvas, {
+            onGameOver: () => {
+                document.getElementById('xbox-game-over').style.display = 'flex';
+            },
+            onLevelComplete: (nextLevel) => {
+                setTimeout(() => self.startXboxPong(nextLevel), 2000);
+            },
+            onAllLevelsComplete: () => {
+                setTimeout(() => self.showXboxMenu(), 3000);
+            }
+        });
+        this.xboxPong.start(levelIndex);
+        this.pongState = this.xboxPong.state;
+    }
+
+    stopXboxPong() {
+        if (this.xboxPong) {
+            this.xboxPong.stop();
+            this.xboxPong = null;
+        }
+        this.pongState = null;
+    }
+
     // --- Snake ---
 
     startXboxSnake() {
@@ -310,12 +962,13 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (menuDiv) menuDiv.style.display = 'none';
         if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">WASD / Arrows</b> Move | Eat <b style="color: #00ff00;">Green</b> Food`;
+            hintDiv.innerHTML = `<b style="color: #fff;">WASD / Arrows</b> Move | Eat <b style="color: #00ff00;">Green</b> Food <span style="color:#666">(ESC for menu)</span>`;
         }
 
         canvas.style.display = 'block';
         const gameOverDiv = document.getElementById('xbox-game-over');
         gameOverDiv.style.display = 'none';
+        this.showBackToMenuButton();
 
         const ctx = canvas.getContext('2d');
         const GRID_SIZE = 20;
@@ -452,12 +1105,13 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (menuDiv) menuDiv.style.display = 'none';
         if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move Paddle | Clear all <b style="color: #ffd700;">Bricks</b>`;
+            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move Paddle | Clear all <b style="color: #ffd700;">Bricks</b> <span style="color:#666">(ESC for menu)</span>`;
         }
 
         canvas.style.display = 'block';
         const gameOverDiv = document.getElementById('xbox-game-over');
         gameOverDiv.style.display = 'none';
+        this.showBackToMenuButton();
 
         const ctx = canvas.getContext('2d');
         const width = canvas.width;
@@ -616,12 +1270,13 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (menuDiv) menuDiv.style.display = 'none';
         if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move | <b style="color: #fff;">Space</b> Shoot | Repel the <b style="color: #ff3333;">Invaders</b>`;
+            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move | <b style="color: #fff;">Space</b> Shoot | Repel the <b style="color: #ff3333;">Invaders</b> <span style="color:#666">(ESC for menu)</span>`;
         }
 
         canvas.style.display = 'block';
         const gameOverDiv = document.getElementById('xbox-game-over');
         gameOverDiv.style.display = 'none';
+        this.showBackToMenuButton();
 
         const ctx = canvas.getContext('2d');
         const width = canvas.width;

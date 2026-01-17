@@ -180,17 +180,39 @@ export class SocketManager {
 
             // With PeerJS, we wait for 'peerjs:id' event to know they are ready and have their ID
             // So we don't call callPeer() here.
+            // However, if we already have voice chat active, we need to re-broadcast our peer ID
+            // so the new player knows about us and can initiate a call
+            if (this.voiceEnabled && this.peerJs && this.peerJs.open) {
+                const myPeerId = this.socketIdToPeerId(this.socketId);
+                console.log(`[SocketManager] Re-broadcasting our PeerJS ID ${myPeerId} to new player ${data.id}`);
+                this.socket.emit('peerjs:id', { peerId: myPeerId });
+            }
         });
 
         this.socket.on('player:left', (id) => {
             console.log('[SocketManager] Player left:', id);
             this.game.uiManager?.updateRemotePlayerStatus(id, null); // Remove from UI
 
-            // Close PeerJS call
+            // Close PeerJS call and cleanup audio
             const peerId = this.socketIdToPeerId(id);
             if (this.activeCalls.has(peerId)) {
+                console.log(`[SocketManager] Closing voice call with ${peerId}`);
                 this.activeCalls.get(peerId).close();
                 this.activeCalls.delete(peerId);
+            }
+
+            // Remove audio element for this peer
+            if (this.peerAudioElements && this.peerAudioElements.has(peerId)) {
+                console.log(`[SocketManager] Removing audio element for ${peerId}`);
+                const audio = this.peerAudioElements.get(peerId);
+                audio.pause();
+                audio.srcObject = null;
+                this.peerAudioElements.delete(peerId);
+            }
+
+            // Remove from pending peer IDs
+            if (this.pendingPeerIds && this.pendingPeerIds.has(id)) {
+                this.pendingPeerIds.delete(id);
             }
 
             // Remove 3D mesh
@@ -206,17 +228,27 @@ export class SocketManager {
         this.socket.on('peerjs:id', (data) => {
             // data: { socketId, peerId }
             console.log(`[SocketManager] Received PeerJS ID from ${data.socketId}: ${data.peerId}`);
+            console.log(`[SocketManager] Voice state: voiceEnabled=${this.voiceEnabled}, localStream=${!!this.localStream}, peerJs=${!!this.peerJs}`);
+
+            // If voice chat isn't initialized yet, store the peer info for later connection
+            if (!this.pendingPeerIds) {
+                this.pendingPeerIds = new Map();
+            }
+            this.pendingPeerIds.set(data.socketId, data.peerId);
+
             // If we have a stream and this is a new player, call them
             if (this.localStream && this.peerJs && data.socketId !== this.socketId) {
                 this.callPeer(data.peerId);
+            } else {
+                console.log(`[SocketManager] Cannot call peer yet - waiting for voice chat init. Stored peerId for later.`);
             }
         });
 
         this.socket.on('player:move', (data) => {
-            // data: { id, pos, rotY, name, isCrouching, health, maxHealth, shirtColor }
+            // data: { id, pos, rotY, name, isCrouching, isFlying, health, maxHealth, shirtColor }
             if (data && data.pos) {
                 this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY, data.name);
-                this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching, data.health, data.maxHealth, data.shirtColor);
+                this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching, data.health, data.maxHealth, data.shirtColor, data.isFlying);
             }
         });
 
@@ -535,35 +567,37 @@ export class SocketManager {
             // Original model has feet at y=0, so we need to compensate for scale center
             // Scale origin is at center, so lowering the body happens automatically
 
-            // 4. Handle Walking Animation
-            const distToTarget = meshInfo.group.position.distanceTo(meshInfo.targetPosition);
-            const isMoving = distToTarget > 0.05;
+            // 4. Handle Walking Animation (skip if flying - sitting pose is controlled by updateRemoteFlyingState)
+            if (!meshInfo.isFlying) {
+                const distToTarget = meshInfo.group.position.distanceTo(meshInfo.targetPosition);
+                const isMoving = distToTarget > 0.05;
 
-            // Smoothly transition walk amplitude
-            meshInfo.walkAmplitude = THREE.MathUtils.lerp(meshInfo.walkAmplitude, isMoving ? 1 : 0, 0.1);
+                // Smoothly transition walk amplitude
+                meshInfo.walkAmplitude = THREE.MathUtils.lerp(meshInfo.walkAmplitude, isMoving ? 1 : 0, 0.1);
 
-            if (meshInfo.walkAmplitude > 0.01) {
-                meshInfo.animationTime += deltaTime * 10; // Animation speed
-                const swing = Math.sin(meshInfo.animationTime) * 0.6 * meshInfo.walkAmplitude;
+                if (meshInfo.walkAmplitude > 0.01) {
+                    meshInfo.animationTime += deltaTime * 10; // Animation speed
+                    const swing = Math.sin(meshInfo.animationTime) * 0.6 * meshInfo.walkAmplitude;
 
-                if (meshInfo.leftArm) meshInfo.leftArm.rotation.x = swing;
-                // If swinging, don't overwrite right arm rotation with walk animation
-                if (!meshInfo.isSwinging) {
-                    if (meshInfo.rightArm) meshInfo.rightArm.rotation.x = -swing;
+                    if (meshInfo.leftArm) meshInfo.leftArm.rotation.x = swing;
+                    // If swinging, don't overwrite right arm rotation with walk animation
+                    if (!meshInfo.isSwinging) {
+                        if (meshInfo.rightArm) meshInfo.rightArm.rotation.x = -swing;
+                    }
+                    if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x = -swing;
+                    if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x = swing;
+                } else {
+                    // Return limbs to neutral
+                    if (meshInfo.leftArm) meshInfo.leftArm.rotation.x *= 0.9;
+
+                    // Only return right arm to neutral if not swinging
+                    if (!meshInfo.isSwinging) {
+                        if (meshInfo.rightArm) meshInfo.rightArm.rotation.x *= 0.9;
+                    }
+
+                    if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x *= 0.9;
+                    if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x *= 0.9;
                 }
-                if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x = -swing;
-                if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x = swing;
-            } else {
-                // Return limbs to neutral
-                if (meshInfo.leftArm) meshInfo.leftArm.rotation.x *= 0.9;
-
-                // Only return right arm to neutral if not swinging
-                if (!meshInfo.isSwinging) {
-                    if (meshInfo.rightArm) meshInfo.rightArm.rotation.x *= 0.9;
-                }
-
-                if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x *= 0.9;
-                if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x *= 0.9;
             }
 
             // Handle Swing Animation
@@ -729,14 +763,15 @@ export class SocketManager {
      * @param {Object} pos - {x, y, z}
      * @param {number} rotY - Rotation around Y axis
      * @param {boolean} isCrouching - Whether the player is crouching
+     * @param {boolean} isFlying - Whether the player is flying on a broom
      */
-    sendPosition(pos, rotY, isCrouching = false) {
+    sendPosition(pos, rotY, isCrouching = false, isFlying = false) {
         if (!this.isConnected()) return;
 
         // Convert THREE.Vector3 to plain object for socket transmission
         const posData = { x: pos.x, y: pos.y, z: pos.z };
 
-        this.socket.emit('player:move', { pos: posData, rotY, isCrouching, health: this.game.player.health, maxHealth: this.game.player.maxHealth });
+        this.socket.emit('player:move', { pos: posData, rotY, isCrouching, isFlying, health: this.game.player.health, maxHealth: this.game.player.maxHealth });
     }
 
     /**
@@ -748,8 +783,9 @@ export class SocketManager {
 
         const p = this.game.player;
         const isCrouching = this.game.inputManager ? this.game.inputManager.isActionActive('SNEAK') : false;
+        const isFlying = p.isFlying || false;
 
-        this.sendPosition(p.position, p.rotation.y, isCrouching);
+        this.sendPosition(p.position, p.rotation.y, isCrouching, isFlying);
     }
 
     /**
@@ -1115,6 +1151,17 @@ export class SocketManager {
                     console.log('[SocketManager] PeerJS connected with ID:', id);
                     if (this.socket && this.roomId) {
                         this.socket.emit('peerjs:id', { peerId: id });
+
+                        // Connect to any pending peers that joined before we initialized
+                        if (this.pendingPeerIds && this.pendingPeerIds.size > 0) {
+                            console.log(`[SocketManager] Connecting to ${this.pendingPeerIds.size} pending peers...`);
+                            for (const [pendingSocketId, pendingPeerId] of this.pendingPeerIds) {
+                                if (pendingSocketId !== this.socketId) {
+                                    console.log(`[SocketManager] Calling pending peer: ${pendingPeerId}`);
+                                    this.callPeer(pendingPeerId);
+                                }
+                            }
+                        }
                     }
                 });
 
@@ -1147,6 +1194,7 @@ export class SocketManager {
     callPeer(peerId) {
         if (!this.peerJs || !this.localStream) {
             console.warn('[SocketManager] Cannot call peer: PeerJS or stream not ready');
+            console.warn(`[SocketManager] peerJs=${!!this.peerJs}, localStream=${!!this.localStream}`);
             return;
         }
         if (this.activeCalls.has(peerId)) {
@@ -1155,23 +1203,37 @@ export class SocketManager {
         }
 
         console.log(`[SocketManager] Calling peer: ${peerId}`);
-        const call = this.peerJs.call(peerId, this.localStream);
+        console.log(`[SocketManager] PeerJS connection open: ${this.peerJs.open}, disconnected: ${this.peerJs.disconnected}`);
 
-        call.on('stream', (remoteStream) => {
-            console.log(`[SocketManager] Received stream from ${peerId}`);
-            this.setupSpatialAudioForPeer(peerId, remoteStream);
-        });
+        try {
+            const call = this.peerJs.call(peerId, this.localStream);
 
-        call.on('error', (err) => {
-            console.error(`[SocketManager] Call error with ${peerId}:`, err);
-        });
+            if (!call) {
+                console.error(`[SocketManager] Failed to create call to ${peerId} - call object is null`);
+                return;
+            }
 
-        call.on('close', () => {
-            console.log(`[SocketManager] Call with ${peerId} closed`);
-            this.activeCalls.delete(peerId);
-        });
+            call.on('stream', (remoteStream) => {
+                console.log(`[SocketManager] Received stream from ${peerId}`);
+                console.log(`[SocketManager] Stream tracks: ${remoteStream.getTracks().length}, audio: ${remoteStream.getAudioTracks().length}`);
+                this.setupSpatialAudioForPeer(peerId, remoteStream);
+            });
 
-        this.activeCalls.set(peerId, call);
+            call.on('error', (err) => {
+                console.error(`[SocketManager] Call error with ${peerId}:`, err);
+                this.activeCalls.delete(peerId);
+            });
+
+            call.on('close', () => {
+                console.log(`[SocketManager] Call with ${peerId} closed`);
+                this.activeCalls.delete(peerId);
+            });
+
+            this.activeCalls.set(peerId, call);
+            console.log(`[SocketManager] Call initiated to ${peerId}, active calls: ${this.activeCalls.size}`);
+        } catch (error) {
+            console.error(`[SocketManager] Exception calling peer ${peerId}:`, error);
+        }
     }
 
     setupSpatialAudioForPeer(peerId, stream) {
@@ -1179,23 +1241,54 @@ export class SocketManager {
         // We can add spatial audio later once basic audio works
         console.log(`[SocketManager] Setting up audio for ${peerId}`);
 
+        // Check if we already have an audio element for this peer
+        if (!this.peerAudioElements) {
+            this.peerAudioElements = new Map();
+        }
+        if (this.peerAudioElements.has(peerId)) {
+            console.log(`[SocketManager] Audio element already exists for ${peerId}, updating stream`);
+            const existingAudio = this.peerAudioElements.get(peerId);
+            existingAudio.srcObject = stream;
+            return;
+        }
+
         // Simple approach: create an audio element
         const audio = new Audio();
         audio.srcObject = stream;
         audio.autoplay = true;
         audio.volume = 1.0;
 
+        // Monitor audio for debugging
+        audio.onloadedmetadata = () => {
+            console.log(`[SocketManager] Audio metadata loaded for ${peerId}`);
+        };
+        audio.onplay = () => {
+            console.log(`[SocketManager] Audio started playing for ${peerId}`);
+        };
+        audio.onerror = (e) => {
+            console.error(`[SocketManager] Audio error for ${peerId}:`, e);
+        };
+
+        // Store the audio element
+        this.peerAudioElements.set(peerId, audio);
+
         // Play (may need user interaction)
-        audio.play().catch(e => {
-            console.warn('[SocketManager] Audio autoplay blocked, will play on interaction');
+        audio.play().then(() => {
+            console.log(`[SocketManager] Audio play() succeeded for ${peerId}`);
+        }).catch(e => {
+            console.warn('[SocketManager] Audio autoplay blocked, will play on interaction:', e.message);
             const playOnce = () => {
-                audio.play();
+                audio.play().then(() => {
+                    console.log(`[SocketManager] Audio play() succeeded after click for ${peerId}`);
+                }).catch(err => {
+                    console.error(`[SocketManager] Audio play() failed after click for ${peerId}:`, err);
+                });
                 window.removeEventListener('click', playOnce);
             };
             window.addEventListener('click', playOnce);
         });
 
-        console.log(`[SocketManager] Audio playing for ${peerId}`);
+        console.log(`[SocketManager] Audio element created for ${peerId}, active audio elements: ${this.peerAudioElements.size}`);
     }
 
     setupSpatialAudio(id, stream) {
@@ -1242,7 +1335,7 @@ export class SocketManager {
         console.log(`[SocketManager] Spatial audio setup for ${id}`);
     }
 
-    updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth, shirtColor) {
+    updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth, shirtColor, isFlying = false) {
         let meshInfo = this.playerMeshes.get(id);
 
         if (!meshInfo || meshInfo instanceof THREE.Object3D) {
@@ -1282,7 +1375,8 @@ export class SocketManager {
                 time: performance.now(),
                 pos: new THREE.Vector3(pos.x, pos.y, pos.z),
                 rotY: rotY !== undefined ? rotY : 0,
-                isCrouching: isCrouching
+                isCrouching: isCrouching,
+                isFlying: isFlying
             });
 
             // Check if we have a pending stream for this mesh
@@ -1295,6 +1389,10 @@ export class SocketManager {
             if (health !== undefined) {
                 this.updateHealthBar(meshInfo, health, maxHealth);
             }
+
+            // Apply initial flying state
+            meshInfo.isFlying = isFlying;
+            this.updateRemoteFlyingState(meshInfo, isFlying);
             return;
         }
 
@@ -1313,7 +1411,8 @@ export class SocketManager {
             time: performance.now(),
             pos: new THREE.Vector3(pos.x, pos.y, pos.z),
             rotY: rotY !== undefined ? rotY : meshInfo.group.rotation.y, // Fallback if undefined
-            isCrouching: isCrouching
+            isCrouching: isCrouching,
+            isFlying: isFlying
         };
 
         // If undefined rotation, try to infer header? Or usually it's sent.
@@ -1336,6 +1435,12 @@ export class SocketManager {
         if (rotY !== undefined) meshInfo.targetRotationY = rotY;
         meshInfo.isCrouching = isCrouching;
 
+        // Update flying state if changed
+        if (meshInfo.isFlying !== isFlying) {
+            meshInfo.isFlying = isFlying;
+            this.updateRemoteFlyingState(meshInfo, isFlying);
+        }
+
         if (health !== undefined) {
             this.updateHealthBar(meshInfo, health, maxHealth);
 
@@ -1344,6 +1449,36 @@ export class SocketManager {
                 console.log(`[SocketManager] Player ${id} died, starting death animation`);
                 this.handleRemoteDeath(id);
             }
+        }
+    }
+
+    /**
+     * Update remote player's flying state (show/hide broom and sitting pose)
+     */
+    updateRemoteFlyingState(meshInfo, isFlying) {
+        if (!meshInfo) return;
+
+        if (isFlying) {
+            // Show riding broom
+            if (meshInfo.ridingBroom) {
+                meshInfo.ridingBroom.visible = true;
+            }
+            // Hide held broom (if any)
+            if (meshInfo.heldBroom) {
+                meshInfo.heldBroom.visible = false;
+            }
+            // Set sitting pose - legs forward
+            if (meshInfo.leftLeg) meshInfo.leftLeg.rotation.x = Math.PI / 2;
+            if (meshInfo.rightLeg) meshInfo.rightLeg.rotation.x = Math.PI / 2;
+            // Arm position - holding broom handle
+            if (meshInfo.rightArm) meshInfo.rightArm.rotation.x = Math.PI / 3;
+        } else {
+            // Hide riding broom
+            if (meshInfo.ridingBroom) {
+                meshInfo.ridingBroom.visible = false;
+            }
+            // Reset pose (legs will be controlled by walk animation)
+            // Don't reset legs here - let the update() function handle walking animation
         }
     }
 
@@ -1460,6 +1595,13 @@ export class SocketManager {
         speechBubble.visible = false;
         group.add(speechBubble);
 
+        // Create riding broom (for flying state) - positioned at hip/seat level
+        const ridingBroom = this.createRidingBroom();
+        ridingBroom.position.set(0, 0.5, -0.3); // At seat level (torso is at y=1.05, legs at y=0.7)
+        ridingBroom.rotation.set(-Math.PI / 2, 0, 0); // Flat forward (90 deg)
+        ridingBroom.visible = false;
+        group.add(ridingBroom);
+
         console.log(`[SocketManager] Created character for ${id} (using cached assets)`);
 
         return {
@@ -1485,8 +1627,36 @@ export class SocketManager {
             healthBar: healthBar,
             isDying: false,
             deathTimer: 0,
-            shirtMaterial: materials.shirt
+            shirtMaterial: materials.shirt,
+            // Flying state
+            ridingBroom: ridingBroom,
+            isFlying: false
         };
+    }
+
+    /**
+     * Create a broom model for remote players when they are flying
+     */
+    createRidingBroom() {
+        const broomGroup = new THREE.Group();
+
+        // Handle (Stick)
+        const handleColor = 0x5C4033;
+        const handleGeo = new THREE.BoxGeometry(0.08, 2.0, 0.08);
+        const handleMat = new THREE.MeshLambertMaterial({ color: handleColor });
+        const handle = new THREE.Mesh(handleGeo, handleMat);
+        handle.position.y = -0.3;
+        broomGroup.add(handle);
+
+        // Brush (Straw)
+        const brushColor = 0xC19A6B; // Wheat/Tan
+        const brushGeo = new THREE.BoxGeometry(0.24, 0.8, 0.24);
+        const brushMat = new THREE.MeshLambertMaterial({ color: brushColor });
+        const brush = new THREE.Mesh(brushGeo, brushMat);
+        brush.position.y = -0.8; // Bottom
+        broomGroup.add(brush);
+
+        return broomGroup;
     }
 
     createHealthBarSprite() {

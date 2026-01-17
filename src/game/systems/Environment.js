@@ -74,6 +74,7 @@ export class Environment {
                 fogDensity: 0.002,
                 ambientTint: 0xDDAAFF,
                 alwaysShowStars: true,                    // Stars always visible
+                cloudColor: 0xAA66FF,                     // Purple clouds
                 moons: [
                     { color: 0xCC88FF, size: 30, position: { x: 800, y: 1200, z: 400 } },    // Large purple moon
                     { color: 0x8866DD, size: 15, position: { x: -600, y: 900, z: -300 } }    // Small distant moon
@@ -86,6 +87,7 @@ export class Environment {
                 fogDensity: 0.003,
                 ambientTint: 0xFFAA88,
                 alwaysShowStars: true,                    // Stars always visible
+                cloudColor: 0xFF6633,                     // Orange/red clouds
                 moons: [
                     { color: 0xFF6633, size: 40, position: { x: 500, y: 1000, z: 200 } },    // Large orange moon
                     { color: 0xDD4422, size: 20, position: { x: -400, y: 1100, z: -500 } },  // Medium red moon
@@ -144,9 +146,16 @@ export class Environment {
             if (this.moonMesh && this.moonEnabled) this.moonMesh.visible = true;
         }
 
-        // Hide clouds in alien worlds with black sky
+        // Update cloud visibility and color based on world
         if (this.clouds) {
-            this.clouds.visible = (worldName === 'earth');
+            // Show clouds on worlds that have cloudColor defined, or on Earth
+            const hasClouds = worldName === 'earth' || preset.cloudColor;
+            this.clouds.visible = hasClouds;
+
+            // Update cloud material color for alien worlds
+            if (this.cloudMaterial && preset.cloudColor) {
+                this.cloudMaterial.color.setHex(preset.cloudColor);
+            }
         }
     }
 
@@ -356,31 +365,31 @@ export class Environment {
             this.skyMesh.material.uniforms.bottomColor.value.copy(horizonColor);
             this.skyMesh.material.uniforms.offset.value = 33;
             this.skyMesh.material.uniforms.exponent.value = 0.6;
+        }
 
-            // Update star visibility based on night OR space OR alien world
-            if (this.starField) {
-                // Check if current world always shows stars (alien worlds)
-                const preset = this.worldPresets[this.currentWorld];
-                const alwaysShowStars = preset && preset.alwaysShowStars;
+        // Update star visibility based on night OR space OR alien world
+        if (this.starField) {
+            // Check if current world always shows stars (alien worlds)
+            const preset = this.worldPresets[this.currentWorld];
+            const alwaysShowStars = preset && preset.alwaysShowStars;
 
-                // Stars are visible at night (1.0) or in space (1.0) or in alien worlds (1.0)
-                const nightOpacity = this.isNight() ? 1.0 : 0.0;
+            // Stars are visible at night (1.0) or in space (1.0) or in alien worlds (1.0)
+            const nightOpacity = this.isNight() ? 1.0 : 0.0;
 
-                let targetOpacity = nightOpacity;
+            let targetOpacity = nightOpacity;
 
-                // In space, show stars even during day
-                if (spaceFactor > 0) {
-                    targetOpacity = Math.max(targetOpacity, spaceFactor);
-                }
-
-                // In alien worlds with black sky, always show stars
-                if (alwaysShowStars) {
-                    targetOpacity = 1.0;
-                }
-
-                this.starField.material.opacity = targetOpacity;
-                this.starField.visible = targetOpacity > 0.01;
+            // In space, show stars even during day
+            if (spaceFactor > 0) {
+                targetOpacity = Math.max(targetOpacity, spaceFactor);
             }
+
+            // In alien worlds with black sky, always show stars
+            if (alwaysShowStars) {
+                targetOpacity = 1.0;
+            }
+
+            this.starField.material.opacity = targetOpacity;
+            this.starField.visible = targetOpacity > 0.01;
         }
 
         // Update cloud positions
@@ -812,16 +821,29 @@ export class Environment {
     updateClouds(dt, playerPos) {
         if (!this.clouds) return;
 
-        // Update cloud color based on day/night cycle
+        // Update cloud color based on day/night cycle (only on Earth)
         if (this.cloudMaterial) {
-            const angle = this.time * Math.PI * 2;
-            const sunAboveHorizon = Math.max(0, Math.sin(angle));
-            const skyLerp = Math.max(0, Math.min(1, sunAboveHorizon * 2.0));
+            const preset = this.worldPresets[this.currentWorld];
 
-            // Clouds go from dark grey at night to white during day
-            const nightCloudColor = new THREE.Color(0x333344);
-            const dayCloudColor = new THREE.Color(0xffffff);
-            this.cloudMaterial.color.copy(nightCloudColor.clone().lerp(dayCloudColor, skyLerp));
+            if (preset.cloudColor) {
+                // Alien worlds use their preset cloud color with slight day/night variation
+                const angle = this.time * Math.PI * 2;
+                const sunAboveHorizon = Math.max(0, Math.sin(angle));
+                const skyLerp = Math.max(0, Math.min(1, sunAboveHorizon * 2.0));
+
+                const baseColor = new THREE.Color(preset.cloudColor);
+                const nightColor = baseColor.clone().multiplyScalar(0.4); // Darker at night
+                this.cloudMaterial.color.copy(nightColor.clone().lerp(baseColor, skyLerp));
+            } else {
+                // Earth clouds: white during day, grey at night
+                const angle = this.time * Math.PI * 2;
+                const sunAboveHorizon = Math.max(0, Math.sin(angle));
+                const skyLerp = Math.max(0, Math.min(1, sunAboveHorizon * 2.0));
+
+                const nightCloudColor = new THREE.Color(0x333344);
+                const dayCloudColor = new THREE.Color(0xffffff);
+                this.cloudMaterial.color.copy(nightCloudColor.clone().lerp(dayCloudColor, skyLerp));
+            }
         }
 
         // Drift clouds slowly in +X direction (like wind blowing)

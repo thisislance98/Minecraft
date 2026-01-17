@@ -31,7 +31,7 @@ export class XboxPlatformer {
                     { x: 50, y: 160, width: 80, height: 15 }
                 ],
                 enemies: [
-                    { x: 200, y: 80, width: 20, height: 20, vx: 2, range: [200, 330] }
+                    { x: 200, y: 80, width: 20, height: 20, vx: 1, range: [200, 330] }
                 ],
                 goal: { x: 60, y: 140, width: 25, height: 20 }
             },
@@ -46,8 +46,8 @@ export class XboxPlatformer {
                     { x: 550, y: 120, width: 50, height: 15 }
                 ],
                 enemies: [
-                    { x: 250, y: GAME_HEIGHT - 80, width: 20, height: 20, vx: 3, range: [250, 330] },
-                    { x: 350, y: 60, width: 20, height: 20, vx: -2, range: [350, 480] }
+                    { x: 250, y: GAME_HEIGHT - 80, width: 20, height: 20, vx: 1.5, range: [250, 330] },
+                    { x: 350, y: 60, width: 20, height: 20, vx: -1, range: [350, 480] }
                 ],
                 goal: { x: 560, y: 100, width: 25, height: 20 }
             },
@@ -62,9 +62,9 @@ export class XboxPlatformer {
                     { x: 0, y: 50, width: 100, height: 15 }
                 ],
                 enemies: [
-                    { x: 150, y: 260, width: 20, height: 20, vx: 2, range: [150, 230] },
-                    { x: 450, y: 180, width: 20, height: 20, vx: 4, range: [450, 530] },
-                    { x: 150, y: 70, width: 20, height: 20, vx: -3, range: [150, 230] }
+                    { x: 150, y: 260, width: 20, height: 20, vx: 1, range: [150, 230] },
+                    { x: 450, y: 180, width: 20, height: 20, vx: 2, range: [450, 530] },
+                    { x: 150, y: 70, width: 20, height: 20, vx: -1.5, range: [150, 230] }
                 ],
                 goal: { x: 10, y: 30, width: 25, height: 20 }
             }
@@ -85,8 +85,8 @@ export class XboxPlatformer {
                 height: 20,
                 vx: 0,
                 vy: 0,
-                speed: 4,
-                jumpPower: -10,
+                speed: 5,
+                jumpPower: -12,
                 grounded: false,
                 color: '#107c10'
             },
@@ -94,7 +94,7 @@ export class XboxPlatformer {
             enemies: currentLevel.enemies.map(e => ({ ...e })),
             goal: currentLevel.goal,
             keys: {},
-            gravity: 0.5,
+            gravity: 0.35,
             active: true
         };
 

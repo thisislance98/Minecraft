@@ -131,6 +131,7 @@ export class MerlinSession {
     private isInterrupted = false;
 
     private thinkingEnabled: boolean = false; // Default to false
+    private bypassTokens: boolean = false; // Bypass token requirements (for testing)
 
     private send(type: string, payload: any) {
         if (this.ws.readyState === WebSocket.OPEN) {
@@ -150,6 +151,12 @@ export class MerlinSession {
         if (settings && typeof settings.thinkingEnabled === 'boolean') {
             this.thinkingEnabled = settings.thinkingEnabled;
             console.log('[Antigravity] Thinking enabled:', this.thinkingEnabled);
+        }
+
+        // Update bypass tokens preference from client settings
+        if (settings && typeof settings.bypassTokens === 'boolean') {
+            this.bypassTokens = settings.bypassTokens;
+            console.log('[Antigravity] Bypass tokens enabled:', this.bypassTokens);
         }
 
         // ====== FORCED RAG INJECTION ======
@@ -199,13 +206,14 @@ export class MerlinSession {
 
         // 1. Check Auth & Balance
         const isCli = this.cliMode; // Trusted CLI mode (already verified secret in init)
+        const skipTokenChecks = isCli || this.bypassTokens; // Bypass token requirements if enabled
 
-        if (!this.userId && !isCli) {
+        if (!this.userId && !skipTokenChecks) {
             this.send('error', { message: 'Authentication required. Please sign in to use this feature.' });
             return;
         }
 
-        if (this.userId && !isCli) {
+        if (this.userId && !skipTokenChecks) {
             const currentBalance = await getUserTokens(this.userId);
             if (currentBalance < 5) { // Minimum threshold to start a request
                 this.send('error', { message: 'Insufficient tokens. Please purchase more to continue using AI.' });
@@ -335,9 +343,9 @@ export class MerlinSession {
             if (!this.isInterrupted) {
                 this.send('complete', {});
 
-                // Deduct cost if successful (and authenticated, and NOT CLI)
+                // Deduct cost if successful (and authenticated, and NOT bypass mode)
                 // Calculate Cost & Deduct Tokens
-                if (this.userId && !isCli && usageMetadata) {
+                if (this.userId && !skipTokenChecks && usageMetadata) {
                     try {
                         const usage = usageMetadata;
                         const thoughtTokens = Math.ceil(thoughtCharCount / 4);

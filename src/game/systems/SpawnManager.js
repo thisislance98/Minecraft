@@ -51,7 +51,7 @@ export class SpawnManager {
                 { type: 'Turkey', weight: 0.1, packSize: [2, 4] },
                 { type: 'Mouse', weight: 0.15, packSize: [2, 4] },
                 { type: 'Snake', weight: 0.1, packSize: [1, 3] },
-                { type: 'Kangaroo', weight: 0.15, packSize: [2, 5] },
+                { type: 'Kangaroo', weight: 0.05, packSize: [1, 2] },
                 { type: 'Cow', weight: 0.2, packSize: [2, 5] },
                 { type: 'Fox', weight: 0.1, packSize: [1, 2] },
                 { type: 'FireFox', weight: 0.05, packSize: [1, 1] },
@@ -128,7 +128,7 @@ export class SpawnManager {
             DESERT: [
                 { type: 'Bunny', weight: 0.3, packSize: [1, 3] },
                 { type: 'Snake', weight: 0.4, packSize: [1, 2] },
-                { type: 'Kangaroo', weight: 0.3, packSize: [2, 4] },
+                { type: 'Kangaroo', weight: 0.1, packSize: [1, 2] },
                 { type: 'Camel', weight: 0.35, packSize: [2, 4] },
                 { type: 'FennecFox', weight: 0.25, packSize: [2, 4] },
                 { type: 'Mouse', weight: 0.15, packSize: [1, 3] },
@@ -305,7 +305,7 @@ export class SpawnManager {
         if (this.entities.has(data.id)) {
             // Already exists, maybe update?
             const entity = this.entities.get(data.id);
-            entity.deserialize(data);
+            entity.deserialize(data, false); // false = initial sync, not a real-time remote update
             return;
         }
 
@@ -326,7 +326,7 @@ export class SpawnManager {
             // We can just call new AnimalClass and setup keys
             const animal = new AnimalClass(this.game, data.x, data.y, data.z, data.seed);
             animal.id = data.id; // FORCE ID
-            animal.deserialize(data); // Apply saved state (health, etc)
+            animal.deserialize(data, false); // Apply saved state (health, etc) - false = not a remote update, allow local AI
 
             this.game.animals.push(animal);
             this.game.scene.add(animal.mesh);
@@ -343,7 +343,7 @@ export class SpawnManager {
     handleRemoteUpdate(data) {
         const entity = this.entities.get(data.id);
         if (entity) {
-            entity.deserialize(data);
+            entity.deserialize(data, true); // true = this is a remote update from another player
         }
     }
 
@@ -650,15 +650,18 @@ export class SpawnManager {
             // This prevents spawning in mid-air when chunks aren't loaded yet
             const groundY = this.findGroundLevel(x, y, z);
 
-            // DEBUG: Log spawn diagnostics
+            // DEBUG: Log spawn diagnostics for land animals
             const terrainY = this.game.worldGen.getTerrainHeight(x, z);
-            const chunkKey = this.game.worldToChunk(x, y, z).cx + ',' + this.game.worldToChunk(x, y, z).cy + ',' + this.game.worldToChunk(x, y, z).cz;
-            const hasChunk = this.game.chunks.has(chunkKey);
 
             if (groundY === null) {
                 // No valid ground found, skip spawning this animal
-                console.warn(`[SpawnManager] Failed to find ground for ${AnimalClass.name} at ${x.toFixed(1)}, ${z.toFixed(1)}`);
+                console.warn(`[SpawnManager] Failed to find ground for ${AnimalClass.name} at ${x.toFixed(1)}, ${z.toFixed(1)} (terrainY: ${terrainY.toFixed(1)})`);
                 return;
+            }
+
+            // Log if there's a big difference between expected and actual ground
+            if (Math.abs(groundY - terrainY) > 3) {
+                console.log(`[SpawnManager] ${AnimalClass.name} ground adjusted: terrain=${terrainY.toFixed(1)} -> actual=${groundY}`);
             }
 
             // Only log significant ground/terrain deviations (debugging purposes)
@@ -691,18 +694,39 @@ export class SpawnManager {
         }
 
         // Set initial visibility based on game flags
-        const isVillager = AnimalClass.name === 'Villager';
-        const isSpaceship = AnimalClass.name === 'Spaceship';
+        const typeName = AnimalClass.name;
+        const isVillager = typeName === 'Villager';
+        const isSpaceship = typeName === 'Spaceship';
+
+        // Check category visibility
+        let categoryVisible = true;
         if (isVillager) {
-            animal.mesh.visible = this.game.villagersVisible !== undefined ? this.game.villagersVisible : true;
+            categoryVisible = this.game.villagersVisible !== undefined ? this.game.villagersVisible : true;
         } else if (isSpaceship) {
-            animal.mesh.visible = this.game.spaceshipsVisible !== undefined ? this.game.spaceshipsVisible : true;
+            categoryVisible = this.game.spaceshipsVisible !== undefined ? this.game.spaceshipsVisible : true;
         } else {
-            animal.mesh.visible = this.game.creaturesVisible !== undefined ? this.game.creaturesVisible : true;
+            categoryVisible = this.game.creaturesVisible !== undefined ? this.game.creaturesVisible : true;
+        }
+
+        // Check granular type visibility
+        const specificVisible = !this.game.allowedAnimalTypes || this.game.allowedAnimalTypes.has(typeName);
+        const visible = categoryVisible && specificVisible;
+
+        // Handle both mesh and group (some entities like Butterflies, Pixies use group)
+        if (animal.mesh) {
+            animal.mesh.visible = visible;
+        }
+        if (animal.group) {
+            animal.group.visible = visible;
         }
 
         this.game.animals.push(animal);
-        this.game.scene.add(animal.mesh);
+        // Add mesh or group to scene (some entities use group instead of mesh)
+        if (animal.group) {
+            this.game.scene.add(animal.group);
+        } else if (animal.mesh) {
+            this.game.scene.add(animal.mesh);
+        }
         this.entities.set(animal.id, animal);
 
         return animal; // Return the animal so callers can send entity:spawn for manual spawns
@@ -741,50 +765,36 @@ export class SpawnManager {
         const checkX = Math.floor(x);
         const checkZ = Math.floor(z);
 
-        // Start from expected Y (terrain surface)
-        const startY = Math.floor(y);
-        const searchRange = 10;
+        // Get terrain height as reference
+        const terrainY = Math.floor(this.game.worldGen.getTerrainHeight(x, z));
 
-        // Get terrain height to ensure we don't spawn underground
-        const terrainY = this.game.worldGen.getTerrainHeight(x, z);
+        // Start searching from well above expected ground to handle terrain mismatches
+        // Search from max(y+10, terrainY+10) down to a reasonable minimum
+        const startY = Math.max(Math.floor(y) + 10, terrainY + 10);
+        const minSearchY = Math.max(terrainY - 30, 1); // Don't go below bedrock area
 
-        // ONLY search downward a LIMITED amount (max 2 blocks below terrain)
-        // This prevents spawning in caves/underground spaces
-        const minSearchY = Math.max(startY - 2, Math.floor(terrainY) - 1);
-
-        // First, search downward for solid ground (but not too far down)
+        // Search downward from high up to find the first solid ground with air above
         for (let checkY = startY; checkY >= minSearchY; checkY--) {
             const block = this.game.getBlock(checkX, checkY, checkZ);
-            if (block && block.type !== 'water') {
-                // Ignore Leaves and Logs
-                if (block.type === Blocks.LEAVES || block.type === Blocks.PINE_LEAVES || block.type === Blocks.BIRCH_LEAVES ||
-                    block.type === Blocks.LOG || block.type === Blocks.PINE_LOG || block.type === Blocks.BIRCH_LOG ||
-                    block.type === Blocks.PINE_WOOD || block.type === Blocks.BIRCH_WOOD) { // Check log variants too
-                    continue;
-                }
 
-                // Found solid ground - spawn one block above it
-                // Also verify there's air above to stand in (NOT water - land animals shouldn't spawn on water)
-                const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
-                if (!blockAbove) {
-                    return checkY + 1;
-                }
-            }
-        }
-
-        // If nothing found below, search upward (might be in a valley or depression)
-        for (let checkY = startY + 1; checkY <= startY + searchRange; checkY++) {
-            const block = this.game.getBlock(checkX, checkY, checkZ);
             if (block && block.type !== 'water') {
-                // Ignore Leaves and Logs
+                // Ignore Leaves and Logs - don't spawn on trees
                 if (block.type === Blocks.LEAVES || block.type === Blocks.PINE_LEAVES || block.type === Blocks.BIRCH_LEAVES ||
                     block.type === Blocks.LOG || block.type === Blocks.PINE_LOG || block.type === Blocks.BIRCH_LOG ||
                     block.type === Blocks.PINE_WOOD || block.type === Blocks.BIRCH_WOOD) {
                     continue;
                 }
 
+                // Found solid ground - verify there's air above to stand in
                 const blockAbove = this.game.getBlock(checkX, checkY + 1, checkZ);
-                if (!blockAbove) {
+                const blockAbove2 = this.game.getBlock(checkX, checkY + 2, checkZ);
+
+                // Need at least 1 block of air above, and not water
+                if (!blockAbove || blockAbove.type === 'air') {
+                    // Also check that there's not water above
+                    if (blockAbove && blockAbove.type === 'water') continue;
+                    if (blockAbove2 && blockAbove2.type === 'water') continue;
+
                     return checkY + 1;
                 }
             }
@@ -814,7 +824,7 @@ export class SpawnManager {
 
         // Create deterministic RNG for initial spawns
         const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1001);
-        const count = 3 + Math.floor(rng.next() * 3); // 3-5 kangaroos
+        const count = 1 + Math.floor(rng.next() * 2); // 1-2 kangaroos
 
         console.log(`Spawning ${count} kangaroos near player spawn`);
 

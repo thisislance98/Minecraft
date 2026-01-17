@@ -214,7 +214,7 @@ export class Animal {
         this.mesh.frustumCulled = false;
         this.mesh.traverse(c => {
             c.frustumCulled = false;
-            c.visible = true;
+            // Don't override visibility - it's controlled by debug panel toggles
         });
 
         // Handle remote-controlled entities: smooth interpolation towards target position
@@ -383,19 +383,25 @@ export class Animal {
         };
     }
 
-    deserialize(data) {
+    deserialize(data, isRemoteUpdate = false) {
         if (data.x !== undefined) {
-            // Use interpolation for smooth movement instead of instant teleport
-            if (!this.targetPosition) {
-                this.targetPosition = new THREE.Vector3();
-            }
-            this.targetPosition.set(data.x, data.y, data.z);
-            this.isRemoteControlled = true;
+            if (isRemoteUpdate) {
+                // Use interpolation for smooth movement when receiving real-time updates from other players
+                if (!this.targetPosition) {
+                    this.targetPosition = new THREE.Vector3();
+                }
+                this.targetPosition.set(data.x, data.y, data.z);
+                this.isRemoteControlled = true;
 
-            // If this is the first position (very far away), snap to it
-            const dist = this.position.distanceTo(this.targetPosition);
-            if (dist > 20) {
-                this.position.copy(this.targetPosition);
+                // If this is the first position (very far away), snap to it
+                const dist = this.position.distanceTo(this.targetPosition);
+                if (dist > 20) {
+                    this.position.copy(this.targetPosition);
+                    this.mesh.position.copy(this.position);
+                }
+            } else {
+                // For initial load/persistence, set position directly without marking as remote controlled
+                this.position.set(data.x, data.y, data.z);
                 this.mesh.position.copy(this.position);
             }
         }
@@ -924,6 +930,9 @@ export class Animal {
         let highestGroundY = -Infinity;
         const checkBaseY = Math.floor(pos.y + 0.1);
 
+        // Get terrain height as reference - helps when blocks aren't loaded
+        const terrainY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(pos.x, pos.z) : 0;
+
         // Check each point
         for (const pt of checkPoints) {
             // Rotate local point
@@ -933,8 +942,10 @@ export class Animal {
             const checkX = pos.x + rx;
             const checkZ = pos.z + rz;
 
-            // Check downward for this point
-            for (let y = checkBaseY; y >= checkBaseY - 10; y--) {
+            // Check downward for this point - search further down to find actual ground
+            // Use terrain height as minimum to avoid falling through unloaded chunks
+            const minY = Math.max(Math.floor(terrainY) - 5, checkBaseY - 20, 0);
+            for (let y = checkBaseY; y >= minY; y--) {
                 if (this.checkSolid(checkX, y, checkZ)) {
                     const blockTop = y + 1;
                     if (blockTop > highestGroundY) {
@@ -945,7 +956,19 @@ export class Animal {
             }
         }
 
-        const groundY = highestGroundY; // Use the highest found ground
+        // Use block-based ground if found, otherwise fall back to terrain height
+        let groundY = highestGroundY;
+        if (groundY === -Infinity) {
+            // No blocks found - use terrain height as ground reference
+            // This prevents floating when chunks aren't loaded
+            groundY = terrainY;
+        }
+
+        // Safety: if groundY is still invalid, use a default
+        if (groundY === -Infinity || isNaN(groundY)) {
+            groundY = 0;
+        }
+
         const distToGround = pos.y - groundY;
 
         // Check for water immersion
@@ -987,48 +1010,6 @@ export class Animal {
             pos.y = groundY;
             this.velocity.y = 0;
             this.onGround = true;
-        } else if (groundY === -Infinity) {
-            // No ground detected from block checks - use terrain height as fallback
-            // This prevents entities from floating when chunks aren't fully loaded
-            if (this.game.worldGen) {
-                const terrainY = this.game.worldGen.getTerrainHeight(pos.x, pos.z);
-                const distToTerrain = pos.y - terrainY;
-
-                if (distToTerrain >= -0.1 && distToTerrain < 1.0) {
-                    // Snap to terrain
-                    pos.y = terrainY;
-                    this.velocity.y = 0;
-                    this.onGround = true;
-                } else if (distToTerrain >= 1.0) {
-                    // Above terrain - fall towards it
-                    this.onGround = false;
-                    this.velocity.y -= this.gravity * dt;
-                    this.velocity.y = Math.max(this.velocity.y, -40);
-                    pos.y += this.velocity.y * dt;
-
-                    if (pos.y < terrainY) {
-                        pos.y = terrainY;
-                        this.velocity.y = 0;
-                        this.onGround = true;
-                    }
-                } else {
-                    // Below terrain - push up
-                    pos.y = terrainY;
-                    this.velocity.y = 0;
-                    this.onGround = true;
-                }
-            } else {
-                // No worldGen available - just apply gravity with ground at y=0
-                this.onGround = false;
-                this.velocity.y -= this.gravity * dt;
-                this.velocity.y = Math.max(this.velocity.y, -40);
-                pos.y += this.velocity.y * dt;
-                if (pos.y < 0) {
-                    pos.y = 0;
-                    this.velocity.y = 0;
-                    this.onGround = true;
-                }
-            }
         } else {
             // FALLING
             // Either we are high in the air, or groundY is -Infinity (hole)

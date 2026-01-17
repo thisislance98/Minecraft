@@ -2,6 +2,7 @@ import { Villager } from '../game/entities/animals/Villager.js';
 // StaticLampost import removed
 import { Blocks } from '../game/core/Blocks.js';
 import { SeededRandom } from '../utils/SeededRandom.js';
+import { Config } from '../game/core/Config.js';
 import * as THREE from 'three';
 
 export class StructureGenerator {
@@ -27,15 +28,37 @@ export class StructureGenerator {
     }
 
     /**
-     * Check if a tree can be placed at the given position (not too close to other trees)
+     * Check if a tree can be placed at the given position (deterministic check)
+     * Uses hash-based lookup of nearby positions to ensure trees don't spawn too close
+     * This is deterministic so trees regenerate correctly when chunks reload
      */
     canPlaceTree(x, z) {
-        for (const pos of this.recentTreePositions) {
-            const dx = x - pos.x;
-            const dz = z - pos.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < this.minTreeDistance) {
-                return false;
+        // Check nearby positions in a grid pattern to see if any would generate a tree
+        // We need to check positions that could conflict (within minTreeDistance)
+        const checkDist = Math.ceil(this.minTreeDistance);
+
+        for (let dx = -checkDist; dx <= checkDist; dx++) {
+            for (let dz = -checkDist; dz <= checkDist; dz++) {
+                if (dx === 0 && dz === 0) continue; // Skip self
+
+                const nx = x + dx;
+                const nz = z + dz;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (dist >= this.minTreeDistance) continue; // Too far to conflict
+
+                // Check if position (nx, nz) would spawn a tree using the same deterministic logic
+                const neighborHash = this.hashPosition(nx, nz, 1);
+                const neighborRand = (neighborHash % 10000) / 10000;
+
+                if (neighborRand < 0.01) {
+                    // This neighbor position wants to spawn a tree
+                    // Use a tiebreaker: lower hash wins (deterministic priority)
+                    const myHash = this.hashPosition(x, z, 1);
+                    if (neighborHash < myHash) {
+                        return false; // Neighbor has priority, we can't place here
+                    }
+                }
             }
         }
         return true;
@@ -43,20 +66,19 @@ export class StructureGenerator {
 
     /**
      * Mark a tree as placed at the given position
+     * No longer needed with deterministic canPlaceTree, kept for compatibility
      */
     markTreePlaced(x, z) {
-        this.recentTreePositions.push({ x, z });
-        // Keep only the last 200 tree positions to prevent memory growth
-        if (this.recentTreePositions.length > 200) {
-            this.recentTreePositions.shift();
-        }
+        // No-op - deterministic placement doesn't need tracking
     }
 
     /**
-     * Get a random book block type for visual variety
+     * Get a deterministic book block type based on position for visual variety
      */
-    getRandomBookBlock() {
-        return StructureGenerator.BOOK_BLOCKS[Math.floor(Math.random() * StructureGenerator.BOOK_BLOCKS.length)];
+    getRandomBookBlock(x = 0, y = 0, z = 0) {
+        // Use position hash for deterministic book selection
+        const hash = this.hashPosition(x, z, 500 + y);
+        return StructureGenerator.BOOK_BLOCKS[hash % StructureGenerator.BOOK_BLOCKS.length];
     }
 
     setSeed(seed) {
@@ -108,9 +130,15 @@ export class StructureGenerator {
                         const blockBelow = this.game.getBlockWorld(wx, wy, wz);
 
                         if (blockBelow === Blocks.GRASS || (biome === 'SNOW' && blockBelow === Blocks.SNOW) || (biome === 'DESERT' && blockBelow === Blocks.SAND)) {
+                            // Check distance from spawn point - houses must be at least 100 blocks away
+                            const spawnX = Config.PLAYER.SPAWN_POINT.x;
+                            const spawnZ = Config.PLAYER.SPAWN_POINT.z;
+                            const distFromSpawn = Math.sqrt((wx - spawnX) ** 2 + (wz - spawnZ) ** 2);
+                            const minHouseDistanceFromSpawn = 100;
+
                             // Secondary roll for houses
                             const houseRand = ((hash >> 2) % 10000) / 10000;
-                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && houseRand < 0.1) {
+                            if ((biome === 'PLAINS' || biome === 'FOREST' || biome === 'SNOW') && houseRand < 0.1 && distFromSpawn >= minHouseDistanceFromSpawn) {
                                 let isFlat = true;
                                 const h0 = wy;
                                 const checkSize = 7;
@@ -235,8 +263,13 @@ export class StructureGenerator {
 
         setTimeout(() => {
             const v = new Villager(this.game);
-            v.position.set(x + width / 2, y + 1, z + depth / 2);
+            const vx = x + width / 2;
+            const vz = z + depth / 2;
+            const groundY = this.findGroundForVillager(vx, y + 1, vz);
+            v.position.set(vx, groundY, vz);
+            v.mesh.position.copy(v.position);
             this.game.animals.push(v);
+            this.game.scene.add(v.mesh);
         }, 500);
     }
 
@@ -331,11 +364,17 @@ export class StructureGenerator {
 
         // Add a few villagers as guests
         for (let i = 0; i < 3; i++) {
+            const guestIndex = i;
             setTimeout(() => {
                 const v = new Villager(this.game);
-                v.position.set(x + 2 + i * 3, y + 1, z + 2);
+                const vx = x + 2 + guestIndex * 3;
+                const vz = z + 2;
+                const groundY = this.findGroundForVillager(vx, y + 1, vz);
+                v.position.set(vx, groundY, vz);
+                v.mesh.position.copy(v.position);
                 this.game.animals.push(v);
-            }, 500 + i * 100);
+                this.game.scene.add(v.mesh);
+            }, 500 + guestIndex * 100);
         }
     }
 
@@ -370,7 +409,8 @@ export class StructureGenerator {
     }
 
     generatePineTree(x, y, z) {
-        const height = 7 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 100); // Seeded random for this tree
+        const height = 7 + Math.floor(rng.next() * 3);
         for (let i = 0; i < height; i++) this.game.setBlock(x, y + i, z, Blocks.PINE_WOOD, true, true);
         for (let dy = 2; dy < height + 2; dy++) {
             const radius = Math.floor((height + 2 - dy) / 2);
@@ -387,12 +427,14 @@ export class StructureGenerator {
     }
 
     generateCactus(x, y, z) {
-        const h = 2 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 101); // Seeded random for this cactus
+        const h = 2 + Math.floor(rng.next() * 3);
         for (let i = 0; i < h; i++) this.game.setBlock(x, y + i, z, Blocks.CACTUS, true, true);
     }
 
     generateJungleTree(x, y, z) {
-        const height = 12 + Math.floor(Math.random() * 8);
+        const rng = this.getPositionRng(x, z, 102); // Seeded random for this tree
+        const height = 12 + Math.floor(rng.next() * 8);
         for (let i = 0; i < height; i++) {
             this.game.setBlock(x, y + i, z, Blocks.LOG, true, true);
             this.game.setBlock(x + 1, y + i, z, Blocks.LOG, true, true);
@@ -413,7 +455,8 @@ export class StructureGenerator {
 
     generateAcaciaTree(x, y, z) {
         // Savanna tree: Diagonal branching trunk, flat top
-        const height = 6 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 103); // Seeded random for this tree
+        const height = 6 + Math.floor(rng.next() * 3);
 
         // Base trunk
         for (let i = 0; i < Math.floor(height / 2); i++) {
@@ -458,7 +501,8 @@ export class StructureGenerator {
 
     generatePalmTree(x, y, z) {
         // Desert/Tropical: Tall thin/curved trunk, top leaves only
-        const height = 8 + Math.floor(Math.random() * 5);
+        const rng = this.getPositionRng(x, z, 104); // Seeded random for this tree
+        const height = 8 + Math.floor(rng.next() * 5);
 
         // Trunk (Using Jungle Wood or similar if available, else Log)
         let cx = x;
@@ -466,8 +510,8 @@ export class StructureGenerator {
 
         for (let i = 0; i < height; i++) {
             this.game.setBlock(Math.floor(cx), y + i, Math.floor(cz), Blocks.LOG, true, true);
-            // Slight curve
-            if (i > 3 && i % 3 === 0) cx += (Math.random() > 0.5 ? 1 : -1) * 0.5;
+            // Slight curve (deterministic)
+            if (i > 3 && i % 3 === 0) cx += (rng.next() > 0.5 ? 1 : -1) * 0.5;
         }
 
         const topY = y + height;
@@ -494,7 +538,8 @@ export class StructureGenerator {
 
     generateWillowTree(x, y, z) {
         // Swamp/Forest: Wide canopy, hanging leaves
-        const height = 6 + Math.floor(Math.random() * 3);
+        const rng = this.getPositionRng(x, z, 105); // Seeded random for this tree
+        const height = 6 + Math.floor(rng.next() * 3);
 
         // Trunk
         for (let i = 0; i < height - 2; i++) {
@@ -514,10 +559,12 @@ export class StructureGenerator {
                     }
                 }
 
-                // Vines / Hanging Leaves
+                // Vines / Hanging Leaves (deterministic per position)
                 if (Math.abs(dx) === radius || Math.abs(dz) === radius) {
-                    if (Math.random() < 0.6) {
-                        const hangLen = 2 + Math.floor(Math.random() * 3);
+                    // Use position-based hash for vine placement
+                    const vineHash = this.hashPosition(x + dx, z + dz, 200);
+                    if ((vineHash % 100) / 100 < 0.6) {
+                        const hangLen = 2 + ((vineHash >> 8) % 3);
                         for (let h = 1; h <= hangLen; h++) {
                             // Don't replace log trunk
                             if (canopyY - h > y) {
@@ -537,7 +584,11 @@ export class StructureGenerator {
             if (i % 5 === 0) {
                 for (let dx = -1; dx <= 1; dx++) {
                     for (let dz = -1; dz <= 1; dz++) {
-                        if (Math.random() < 0.3) this.game.setBlock(wx + dx, wy + i, wz + dz, Blocks.LEAVES, true, true);
+                        // Deterministic leaf placement based on position
+                        const leafHash = this.hashPosition(wx + dx, wz + dz, 300 + i);
+                        if ((leafHash % 100) / 100 < 0.3) {
+                            this.game.setBlock(wx + dx, wy + i, wz + dz, Blocks.LEAVES, true, true);
+                        }
                     }
                 }
             }
@@ -546,7 +597,11 @@ export class StructureGenerator {
             for (let dz = -5; dz <= 5; dz++) {
                 if (dx * dx + dz * dz < 25) {
                     this.game.setBlock(wx + dx, wy + height, wz + dz, Blocks.GRASS, true, true);
-                    if (Math.random() < 0.1) this.generateHouse(wx + dx, wy + height + 1, wz + dz, 'PLAINS');
+                    // Deterministic house placement based on position
+                    const houseHash = this.hashPosition(wx + dx, wz + dz, 400);
+                    if ((houseHash % 100) / 100 < 0.1) {
+                        this.generateHouse(wx + dx, wy + height + 1, wz + dz, 'PLAINS');
+                    }
                 }
             }
         }
@@ -554,7 +609,8 @@ export class StructureGenerator {
 
     generateDarkOakTree(x, y, z) {
         // Dark Forest: 2x2 Trunk, large mushroom top
-        const height = 6 + Math.floor(Math.random() * 3); // 6-8 blocks tall
+        const rng = this.getPositionRng(x, z, 106); // Seeded random for this tree
+        const height = 6 + Math.floor(rng.next() * 3); // 6-8 blocks tall
 
         // 2x2 Trunk
         for (let i = 0; i < height - 1; i++) {
@@ -566,7 +622,7 @@ export class StructureGenerator {
 
         // Canopy
         const canopyY = y + height - 2;
-        const width = 4 + Math.floor(Math.random() * 2); // 4-5 radius
+        const width = 4 + Math.floor(rng.next() * 2); // 4-5 radius
 
         for (let dy = 0; dy <= 3; dy++) {
             const r = width - Math.floor(dy / 1.5);
@@ -590,15 +646,26 @@ export class StructureGenerator {
         console.log(`[StructureGenerator] Generating redesigned village at ${centerX}, ${centerY}, ${centerZ}`);
 
         const villageRng = this.getPositionRng(centerX, centerZ, 999);
+        const minDistanceFromSpawn = 100;
+        const spawnX = Config.PLAYER.SPAWN_POINT.x;
+        const spawnZ = Config.PLAYER.SPAWN_POINT.z;
 
-        // Generate Wizard Tower in the center (Replaces Plaza)
-        this.generateWizardTower(centerX, centerY, centerZ);
+        // Check if village center is too close to spawn
+        const centerDistFromSpawn = Math.sqrt((centerX - spawnX) ** 2 + (centerZ - spawnZ) ** 2);
+        if (centerDistFromSpawn < minDistanceFromSpawn) {
+            console.log(`[StructureGenerator] Village center too close to spawn, skipping wizard tower`);
+        } else {
+            // Generate Wizard Tower in the center (Replaces Plaza)
+            this.generateWizardTower(centerX, centerY, centerZ);
+        }
 
-
-
-        // Generate market stalls
-        this.generateMarketStall(centerX - 8, centerY, centerZ);
-        this.generateMarketStall(centerX + 8, centerY, centerZ);
+        // Generate market stalls (only if far enough from spawn)
+        if (Math.sqrt((centerX - 8 - spawnX) ** 2 + (centerZ - spawnZ) ** 2) >= minDistanceFromSpawn) {
+            this.generateMarketStall(centerX - 8, centerY, centerZ);
+        }
+        if (Math.sqrt((centerX + 8 - spawnX) ** 2 + (centerZ - spawnZ) ** 2) >= minDistanceFromSpawn) {
+            this.generateMarketStall(centerX + 8, centerY, centerZ);
+        }
 
         // House types to use
         const houseTypes = ['cottage', 'farmhouse', 'tudor', 'library'];
@@ -613,6 +680,12 @@ export class StructureGenerator {
             const hx = Math.floor(centerX + Math.cos(angle) * dist);
             const hz = Math.floor(centerZ + Math.sin(angle) * dist);
             const hy = this.worldGenerator.getTerrainHeight(hx, hz);
+
+            // Skip houses too close to spawn point
+            const distFromSpawn = Math.sqrt((hx - spawnX) ** 2 + (hz - spawnZ) ** 2);
+            if (distFromSpawn < minDistanceFromSpawn) {
+                continue;
+            }
 
             if (Math.abs(hy - centerY) < 6) {
                 const houseType = houseTypes[i % houseTypes.length];
@@ -639,25 +712,34 @@ export class StructureGenerator {
 
         // Add extra villagers wandering in plaza
         console.log(`[Village] Scheduling 6 plaza villagers at ${centerX}, ${centerY}, ${centerZ}`);
+        const structGen = this;
+        // Use deterministic villager placement based on village center
+        const villagerRng = this.getPositionRng(centerX, centerZ, 888);
+        const villagerDistances = [];
+        for (let i = 0; i < 6; i++) {
+            villagerDistances.push(9 + villagerRng.next() * 6);
+        }
         setTimeout(() => {
             console.log(`[Village] Spawning 6 plaza villagers now...`);
             for (let i = 0; i < 6; i++) {
                 try {
-                    const v = new Villager(this.game);
+                    const v = new Villager(structGen.game);
                     const angle = (i / 6) * Math.PI * 2;
                     // Move villagers further out so they don't spawn inside the wizard tower (radius 5)
-                    const dist = 9 + Math.random() * 6;
+                    const dist = villagerDistances[i];
                     const vx = centerX + Math.cos(angle) * dist;
                     const vz = centerZ + Math.sin(angle) * dist;
-                    v.position.set(vx, centerY + 1, vz);
-                    this.game.animals.push(v);
-                    this.game.scene.add(v.mesh);
-                    console.log(`[Village] Spawned plaza villager ${i + 1} at (${vx.toFixed(1)}, ${centerY + 1}, ${vz.toFixed(1)})`);
+                    const groundY = structGen.findGroundForVillager(vx, centerY + 1, vz);
+                    v.position.set(vx, groundY, vz);
+                    v.mesh.position.copy(v.position);
+                    structGen.game.animals.push(v);
+                    structGen.game.scene.add(v.mesh);
+                    console.log(`[Village] Spawned plaza villager ${i + 1} at (${vx.toFixed(1)}, ${groundY.toFixed(1)}, ${vz.toFixed(1)})`);
                 } catch (e) {
                     console.error(`[Village] ERROR spawning plaza villager ${i}:`, e);
                 }
             }
-            console.log(`[Village] Total animals in game: ${this.game.animals.length}`);
+            console.log(`[Village] Total animals in game: ${structGen.game.animals.length}`);
         }, 1500);
     }
 
@@ -801,12 +883,18 @@ export class StructureGenerator {
         }
 
         // 2 Villagers
+        const cottageStructGen = this;
+        const cottageY = y;
         setTimeout(() => {
             for (let i = 0; i < 2; i++) {
-                const v = new Villager(this.game);
-                v.position.set(x + w / 2 + i - 0.5, y + 1, z + d / 2);
-                this.game.animals.push(v);
-                this.game.scene.add(v.mesh);
+                const v = new Villager(cottageStructGen.game);
+                const vx = x + w / 2 + i - 0.5;
+                const vz = z + d / 2;
+                const groundY = cottageStructGen.findGroundForVillager(vx, cottageY + 1, vz);
+                v.position.set(vx, groundY, vz);
+                v.mesh.position.copy(v.position);
+                cottageStructGen.game.animals.push(v);
+                cottageStructGen.game.scene.add(v.mesh);
             }
         }, 600);
     }
@@ -885,11 +973,17 @@ export class StructureGenerator {
         }
 
         // 3 Villagers (farmers)
+        const farmStructGen = this;
+        const farmY = y;
         setTimeout(() => {
             for (let i = 0; i < 3; i++) {
-                const v = new Villager(this.game, x + 2 + i * 2, y + 1, z + d / 2, null, 'FARMER');
-                this.game.animals.push(v);
-                this.game.scene.add(v.mesh);
+                const vx = x + 2 + i * 2;
+                const vz = z + d / 2;
+                const groundY = farmStructGen.findGroundForVillager(vx, farmY + 1, vz);
+                const v = new Villager(farmStructGen.game, vx, groundY, vz, null, 'FARMER');
+                v.mesh.position.copy(v.position);
+                farmStructGen.game.animals.push(v);
+                farmStructGen.game.scene.add(v.mesh);
             }
         }, 600);
     }
@@ -954,12 +1048,18 @@ export class StructureGenerator {
         }
 
         // 2 Villagers
+        const tudorStructGen = this;
+        const tudorY = y;
         setTimeout(() => {
             for (let i = 0; i < 2; i++) {
-                const v = new Villager(this.game);
-                v.position.set(x + w / 2 + i - 0.5, y + 1, z + d / 2);
-                this.game.animals.push(v);
-                this.game.scene.add(v.mesh);
+                const v = new Villager(tudorStructGen.game);
+                const vx = x + w / 2 + i - 0.5;
+                const vz = z + d / 2;
+                const groundY = tudorStructGen.findGroundForVillager(vx, tudorY + 1, vz);
+                v.position.set(vx, groundY, vz);
+                v.mesh.position.copy(v.position);
+                tudorStructGen.game.animals.push(v);
+                tudorStructGen.game.scene.add(v.mesh);
             }
         }, 600);
     }
@@ -1006,10 +1106,10 @@ export class StructureGenerator {
 
         // Bookshelves inside - using varied book blocks
         for (let dz = 1; dz < d - 1; dz++) {
-            this.game.setBlock(x + 1, y + 1, z + dz, this.getRandomBookBlock(), true, true);
-            this.game.setBlock(x + 1, y + 2, z + dz, this.getRandomBookBlock(), true, true);
-            this.game.setBlock(x + w - 2, y + 1, z + dz, this.getRandomBookBlock(), true, true);
-            this.game.setBlock(x + w - 2, y + 2, z + dz, this.getRandomBookBlock(), true, true);
+            this.game.setBlock(x + 1, y + 1, z + dz, this.getRandomBookBlock(x + 1, y + 1, z + dz), true, true);
+            this.game.setBlock(x + 1, y + 2, z + dz, this.getRandomBookBlock(x + 1, y + 2, z + dz), true, true);
+            this.game.setBlock(x + w - 2, y + 1, z + dz, this.getRandomBookBlock(x + w - 2, y + 1, z + dz), true, true);
+            this.game.setBlock(x + w - 2, y + 2, z + dz, this.getRandomBookBlock(x + w - 2, y + 2, z + dz), true, true);
         }
 
         // Flat roof with parapet
@@ -1028,11 +1128,17 @@ export class StructureGenerator {
         }
 
         // 2 Librarian villagers
+        const libStructGen = this;
+        const libY = y;
         setTimeout(() => {
             for (let i = 0; i < 2; i++) {
-                const v = new Villager(this.game, x + w / 2 + i, y + 1, z + d / 2, null, 'LIBRARIAN');
-                this.game.animals.push(v);
-                this.game.scene.add(v.mesh);
+                const vx = x + w / 2 + i;
+                const vz = z + d / 2;
+                const groundY = libStructGen.findGroundForVillager(vx, libY + 1, vz);
+                const v = new Villager(libStructGen.game, vx, groundY, vz, null, 'LIBRARIAN');
+                v.mesh.position.copy(v.position);
+                libStructGen.game.animals.push(v);
+                libStructGen.game.scene.add(v.mesh);
             }
         }, 600);
     }
@@ -1139,8 +1245,9 @@ export class StructureGenerator {
             const shelfX = Math.round(3 * Math.cos(angle));
             const shelfZ = Math.round(3 * Math.sin(angle));
             if (Math.abs(shelfX) > 1 || Math.abs(shelfZ) > 1) {
-                this.game.setBlock(cx + shelfX, cy + alchemyFloorY + 1, cz + shelfZ, this.getRandomBookBlock(), true, true);
-                this.game.setBlock(cx + shelfX, cy + alchemyFloorY + 2, cz + shelfZ, this.getRandomBookBlock(), true, true);
+                const bx = cx + shelfX, by1 = cy + alchemyFloorY + 1, by2 = cy + alchemyFloorY + 2, bz = cz + shelfZ;
+                this.game.setBlock(bx, by1, bz, this.getRandomBookBlock(bx, by1, bz), true, true);
+                this.game.setBlock(bx, by2, bz, this.getRandomBookBlock(bx, by2, bz), true, true);
             }
         }
         // Glowstone lighting
@@ -1261,9 +1368,10 @@ export class StructureGenerator {
 
                 if (isNearWall) {
                     if (Math.abs(x) > 3 && Math.abs(z) > 3) {
-                        this.game.setBlock(cx + x, roomY + 1, cz + z, this.getRandomBookBlock(), true, true);
-                        this.game.setBlock(cx + x, roomY + 2, cz + z, this.getRandomBookBlock(), true, true);
-                        this.game.setBlock(cx + x, roomY + 3, cz + z, this.getRandomBookBlock(), true, true);
+                        const bx = cx + x, bz = cz + z;
+                        this.game.setBlock(bx, roomY + 1, bz, this.getRandomBookBlock(bx, roomY + 1, bz), true, true);
+                        this.game.setBlock(bx, roomY + 2, bz, this.getRandomBookBlock(bx, roomY + 2, bz), true, true);
+                        this.game.setBlock(bx, roomY + 3, bz, this.getRandomBookBlock(bx, roomY + 3, bz), true, true);
                     }
                 }
             }
@@ -1276,5 +1384,50 @@ export class StructureGenerator {
         // Bed
         this.game.setBlock(cx + 4, roomY + 1, cz, Blocks.BED, true, true);
 
+    }
+
+    /**
+     * Find valid ground level for spawning a villager
+     * Searches downward from the expected Y position to find solid ground
+     * @param {number} x - World X coordinate
+     * @param {number} expectedY - Expected Y position (typically y + 1 of structure floor)
+     * @param {number} z - World Z coordinate
+     * @returns {number} - Ground Y position to spawn at
+     */
+    findGroundForVillager(x, expectedY, z) {
+        const checkX = Math.floor(x);
+        const checkZ = Math.floor(z);
+        const startY = Math.floor(expectedY);
+
+        // Search downward from expected position to find solid ground
+        for (let y = startY; y >= startY - 10; y--) {
+            const block = this.game.getBlock(checkX, y, checkZ);
+            if (block && block.type !== 'water') {
+                // Found solid ground - spawn one block above
+                const blockAbove = this.game.getBlock(checkX, y + 1, checkZ);
+                if (!blockAbove || blockAbove.type === 'water') {
+                    return y + 1;
+                }
+            }
+        }
+
+        // If no ground found below, search upward (might be inside a structure)
+        for (let y = startY + 1; y <= startY + 5; y++) {
+            const block = this.game.getBlock(checkX, y, checkZ);
+            if (block && block.type !== 'water') {
+                const blockAbove = this.game.getBlock(checkX, y + 1, checkZ);
+                if (!blockAbove || blockAbove.type === 'water') {
+                    return y + 1;
+                }
+            }
+        }
+
+        // Fallback to terrain height if no blocks found
+        if (this.worldGenerator) {
+            return this.worldGenerator.getTerrainHeight(x, z) + 1;
+        }
+
+        // Ultimate fallback - use expected position
+        return expectedY;
     }
 }

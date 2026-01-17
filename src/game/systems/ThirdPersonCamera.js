@@ -73,7 +73,12 @@ export class ThirdPersonCamera {
         // Start with base look-at offset
         this._idealLookat.copy(this.lookAtOffset);
 
-        // Apply player's Y rotation only (yaw)
+        // Apply player's pitch (X rotation) - look up/down like first person
+        const pitchQuat = new THREE.Quaternion();
+        pitchQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), player.rotation.x);
+        this._idealLookat.applyQuaternion(pitchQuat);
+
+        // Apply player's yaw (Y rotation)
         this._targetQuaternion.setFromAxisAngle(
             new THREE.Vector3(0, 1, 0),
             player.rotation.y

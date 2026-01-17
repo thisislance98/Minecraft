@@ -2172,6 +2172,51 @@ export class UIManager {
         }
 
         // Command Handling (works in all modes)
+        if (text.toLowerCase() === '/voicedebug') {
+            // Debug voice chat status
+            const sm = this.game.socketManager;
+            if (sm) {
+                const status = {
+                    voiceEnabled: sm.voiceEnabled,
+                    localStream: !!sm.localStream,
+                    peerJs: !!sm.peerJs,
+                    peerJsOpen: sm.peerJs?.open ?? false,
+                    activeCalls: sm.activeCalls?.size ?? 0,
+                    pendingPeerIds: sm.pendingPeerIds?.size ?? 0,
+                    otherPlayers: sm.playerMeshes?.size ?? 0,
+                    socketId: sm.socketId,
+                    roomId: sm.roomId
+                };
+                console.log('[VoiceDebug] Status:', status);
+                this.addChatMessage('system', `🎤 Voice Debug:\n- Enabled: ${status.voiceEnabled}\n- LocalStream: ${status.localStream}\n- PeerJS: ${status.peerJs} (open: ${status.peerJsOpen})\n- Active Calls: ${status.activeCalls}\n- Pending Peers: ${status.pendingPeerIds}\n- Other Players: ${status.otherPlayers}`);
+
+                // Log active calls details
+                if (sm.activeCalls && sm.activeCalls.size > 0) {
+                    console.log('[VoiceDebug] Active calls:', Array.from(sm.activeCalls.keys()));
+                }
+                if (sm.pendingPeerIds && sm.pendingPeerIds.size > 0) {
+                    console.log('[VoiceDebug] Pending peer IDs:', Array.from(sm.pendingPeerIds.entries()));
+                }
+            } else {
+                this.addChatMessage('error', 'SocketManager not available');
+            }
+            this.chatInput.value = '';
+            return;
+        }
+
+        if (text.toLowerCase() === '/voicereinit') {
+            // Force reinitialize voice chat
+            const sm = this.game.socketManager;
+            if (sm) {
+                sm.voiceEnabled = true;
+                sm.localStream = null; // Reset to force reinit
+                sm.initVoiceChat();
+                this.addChatMessage('system', '🎤 Voice chat reinitializing...');
+            }
+            this.chatInput.value = '';
+            return;
+        }
+
         if (text.toLowerCase() === '/spaceship') {
             if (this.game.spaceShipManager && this.game.player) {
                 const pos = this.game.player.position.clone();

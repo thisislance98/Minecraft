@@ -159,6 +159,24 @@ export class SocketManager {
             }
         });
 
+        // Handle world settings changed by owner
+        this.socket.on('world:settings_changed', (data) => {
+            console.log('[SocketManager] World settings changed:', data);
+
+            // Update local world data
+            if (this.world && data.worldId === this.worldId) {
+                this.world.settings = { ...this.world.settings, ...data.settings };
+
+                // Apply time change if included
+                if (data.settings?.timeOfDay !== undefined && this.game.environment) {
+                    this.game.environment.setTimeOfDay(data.settings.timeOfDay);
+                }
+
+                // Dispatch event for UI updates
+                window.dispatchEvent(new CustomEvent('worldSettingsChanged', { detail: data }));
+            }
+        });
+
         this.socket.on('disconnect', () => {
             console.log('[SocketManager] Disconnected');
             this.roomId = null;

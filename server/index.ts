@@ -405,6 +405,13 @@ function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
             console.log(`[Socket] Soccer ball host released by ${socket.id}`);
         }
     });
+
+    // Handle world settings changes from owner
+    socket.on('world:settings_changed', (data: { worldId: string; settings: any }) => {
+        console.log(`[Socket] World settings changed for ${data.worldId} by ${socket.id}`);
+        // Broadcast to all other players in this world
+        socket.to(`world:${data.worldId}`).emit('world:settings_changed', data);
+    });
 }
 
 // Helper to send world-specific data to a socket
@@ -479,6 +486,14 @@ io.on('connection', (socket) => {
             if (key.startsWith(socket.id + ':')) {
                 conversationHistory.delete(key);
             }
+        }
+
+        // Track player leaving their world (for player count)
+        const worldId = socketToWorld.get(socket.id);
+        if (worldId) {
+            worldManagementService.playerLeft(worldId);
+            socketToWorld.delete(socket.id);
+            console.log(`[Socket] Player ${socket.id} left world ${worldId}`);
         }
     });
 

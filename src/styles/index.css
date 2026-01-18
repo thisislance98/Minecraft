@@ -131,7 +131,9 @@ canvas {
 #help-btn,
 #spawn-btn,
 #voice-btn,
-#mute-btn {
+#mute-btn,
+#world-btn,
+#world-settings-btn {
     width: 40px;
     height: 40px;
     background: rgba(0, 0, 0, 0.6);
@@ -150,7 +152,9 @@ canvas {
 #help-btn:hover,
 #spawn-btn:hover,
 #voice-btn:hover,
-#mute-btn:hover {
+#mute-btn:hover,
+#world-btn:hover,
+#world-settings-btn:hover {
     background: rgba(0, 0, 0, 0.8);
     border-color: #fff;
     transform: scale(1.1);

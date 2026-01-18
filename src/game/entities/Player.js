@@ -1625,11 +1625,11 @@ export class Player {
         let html = '';
         for (let i = 0; i < 10; i++) {
             if (i < fullHearts) {
-                html += '<span class="heart full">❤️</span>';
+                html += '<span class="heart full">🛡️</span>';
             } else if (i === fullHearts && halfHeart) {
-                html += '<span class="heart half">💔</span>';
+                html += '<span class="heart half">⚔️</span>';
             } else {
-                html += '<span class="heart empty">🖤</span>';
+                html += '<span class="heart empty">💀</span>';
             }
         }
         container.innerHTML = html;

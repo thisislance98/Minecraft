@@ -44,6 +44,7 @@ import { SocketManager } from './systems/SocketManager.js';
 import { AnimalClasses } from './AnimalRegistry.js';
 import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
+import { MillenniumFalcon } from './entities/animals/MillenniumFalcon.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
@@ -830,6 +831,23 @@ export class VoxelGame {
         }
 
         console.log('[Game] Merlin spawned near player');
+    }
+
+    /**
+     * Spawn the player's spaceship (Millennium Falcon) near spawn point
+     */
+    spawnPlayerShip() {
+        // Spawn to the right and slightly in front of player spawn
+        const x = this.player.position.x + 8;
+        const z = this.player.position.z + 5;
+        const y = this.worldGen.getTerrainHeight(x, z) + 2;
+
+        const seed = 12345; // Fixed seed for consistent appearance
+        this.playerShip = new MillenniumFalcon(this, x, y, z, seed);
+        this.scene.add(this.playerShip.mesh);
+        this.animals.push(this.playerShip);
+
+        console.log('[Game] Player spaceship (Millennium Falcon) spawned near player');
     }
 
     createHighlightBox() {
@@ -1874,6 +1892,7 @@ export class VoxelGame {
                     this.spawnManager.spawnSnowmenNearPlayer();
                     this.spawnDragon();
                     this.spawnMerlin();
+                    this.spawnPlayerShip();
                 }
             }
 

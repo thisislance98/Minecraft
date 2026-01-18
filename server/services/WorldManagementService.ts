@@ -15,6 +15,13 @@ export type WorldVisibility = 'public' | 'private' | 'unlisted';
 export type BuildPermission = 'all' | 'owner' | 'none';
 export type SpawnPermission = 'all' | 'owner' | 'none';
 
+export interface LandscapeSettings {
+    enableRivers: boolean;
+    seaLevel: number;        // 10-100, default 30
+    terrainScale: number;    // 0.5-2.0, multiplier
+    enableVillages: boolean;
+}
+
 export interface WorldSettings {
     spawnPoint: { x: number; y: number; z: number };
     timeOfDay: number; // 0.0 to 1.0 (0.25 = noon)
@@ -24,6 +31,7 @@ export interface WorldSettings {
     allowCreatureSpawn: SpawnPermission;
     maxVisitors: number;
     enabledWorlds: string[]; // ['earth', 'moon', 'crystal', 'lava', 'soccer']
+    allowedCreatures?: string[] | null;  // null = all, [] = none, [...] = whitelist
 }
 
 export interface WorldCustomizations {
@@ -31,6 +39,7 @@ export interface WorldCustomizations {
     fogDistance?: number;
     gravity?: number;
     welcomeMessage?: string;
+    landscapeSettings?: LandscapeSettings;
 }
 
 export interface World {
@@ -90,7 +99,13 @@ const DEFAULT_CUSTOMIZATIONS: WorldCustomizations = {
     skyColor: '#87CEEB',
     fogDistance: 100,
     gravity: 1.0,
-    welcomeMessage: 'Welcome to my world!'
+    welcomeMessage: 'Welcome to my world!',
+    landscapeSettings: {
+        enableRivers: true,
+        seaLevel: 30,
+        terrainScale: 1.0,
+        enableVillages: true
+    }
 };
 
 // ============ Service Class ============
@@ -261,12 +276,17 @@ class WorldManagementServiceClass {
         }
 
         try {
+            console.log(`[WorldManagement] Listing worlds for user: ${userId}`);
+
+            // Simple query without orderBy to avoid needing composite index
+            // Sort client-side instead
             const snapshot = await db.collection(WORLDS_COLLECTION)
                 .where('ownerId', '==', userId)
-                .orderBy('createdAt', 'desc')
                 .get();
 
-            return snapshot.docs.map(doc => {
+            console.log(`[WorldManagement] Found ${snapshot.docs.length} worlds for user ${userId}`);
+
+            const worlds = snapshot.docs.map(doc => {
                 const world = doc.data() as World;
                 return {
                     id: world.id,
@@ -276,9 +296,16 @@ class WorldManagementServiceClass {
                     visibility: world.visibility,
                     playerCount: this.worldPlayerCounts.get(world.id) || 0,
                     totalVisits: world.totalVisits,
-                    thumbnailUrl: world.thumbnailUrl
+                    thumbnailUrl: world.thumbnailUrl,
+                    createdAt: world.createdAt // Include for sorting
                 };
             });
+
+            // Sort by createdAt descending (newest first)
+            worlds.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            // Remove createdAt from response (not in WorldListItem type)
+            return worlds.map(({ createdAt, ...rest }) => rest);
         } catch (error) {
             console.error(`[WorldManagement] Failed to list user worlds:`, error);
             return [];

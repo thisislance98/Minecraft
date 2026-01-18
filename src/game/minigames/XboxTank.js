@@ -1374,7 +1374,7 @@ export class XboxTank {
         // Health indicators
         ctx.textAlign = 'left';
         ctx.fillStyle = '#107c10';
-        ctx.fillText(`Player: ${'❤'.repeat(p.health)}${'♡'.repeat(p.maxHealth - p.health)}`, 10, this.GAME_HEIGHT - 10);
+        ctx.fillText(`Player: ${'🛡️'.repeat(p.health)}${'💀'.repeat(p.maxHealth - p.health)}`, 10, this.GAME_HEIGHT - 10);
 
         const aliveEnemies = this.state.enemies.filter(e => e.health > 0);
         if (aliveEnemies.length > 0) {
@@ -1382,7 +1382,7 @@ export class XboxTank {
             ctx.textAlign = 'right';
             const enemyHealth = aliveEnemies.reduce((sum, e) => sum + e.health, 0);
             const enemyMaxHealth = aliveEnemies.reduce((sum, e) => sum + e.maxHealth, 0);
-            ctx.fillText(`Enemy: ${'❤'.repeat(enemyHealth)}${'♡'.repeat(enemyMaxHealth - enemyHealth)}`, this.GAME_WIDTH - 10, this.GAME_HEIGHT - 10);
+            ctx.fillText(`Enemy: ${'🛡️'.repeat(enemyHealth)}${'💀'.repeat(enemyMaxHealth - enemyHealth)}`, this.GAME_WIDTH - 10, this.GAME_HEIGHT - 10);
         }
 
         // Level banner

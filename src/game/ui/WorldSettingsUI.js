@@ -164,6 +164,69 @@ export class WorldSettingsUI {
                     </div>
 
                     <div class="settings-section">
+                        <h4>🎨 Sky Appearance</h4>
+                        <div class="permission-row">
+                            <label>Sky Color:</label>
+                            <input type="color" id="ws-sky-color" value="#87CEEB">
+                        </div>
+                        <div class="sky-presets">
+                            <button class="preset-btn sky-preset" data-color="#87CEEB" title="Earth Blue">🌍</button>
+                            <button class="preset-btn sky-preset" data-color="#FF6B35" title="Sunset Orange">🌅</button>
+                            <button class="preset-btn sky-preset" data-color="#050510" title="Space Black">🌌</button>
+                            <button class="preset-btn sky-preset" data-color="#1E90FF" title="Bright Blue">☀️</button>
+                            <button class="preset-btn sky-preset" data-color="#2D1B4E" title="Purple Night">🔮</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h4>⚖️ Physics</h4>
+                        <div class="permission-row">
+                            <label>Gravity:</label>
+                            <input type="range" id="ws-gravity" min="0.1" max="3.0" step="0.1" value="1.0">
+                            <span id="ws-gravity-display">Normal (1.0x)</span>
+                        </div>
+                        <div class="gravity-presets">
+                            <button class="preset-btn gravity-preset" data-value="0.3" title="Moon Gravity">🌙 Moon</button>
+                            <button class="preset-btn gravity-preset" data-value="1.0" title="Normal Gravity">🌍 Normal</button>
+                            <button class="preset-btn gravity-preset" data-value="2.0" title="Heavy Gravity">🪨 Heavy</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h4>🦁 Allowed Creatures</h4>
+                        <p class="section-desc">Select which creatures can spawn naturally</p>
+                        <div class="creature-controls">
+                            <button id="ws-creatures-all">Select All</button>
+                            <button id="ws-creatures-none">Clear All</button>
+                            <input type="text" id="ws-creature-search" placeholder="Search...">
+                        </div>
+                        <div class="creature-grid" id="ws-creature-grid">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h4>🏞️ Landscape</h4>
+                        <p class="warning-text">⚠️ Changes require world reset to apply</p>
+                        <div class="permission-row">
+                            <label><input type="checkbox" id="ws-enable-rivers" checked> Enable Rivers</label>
+                        </div>
+                        <div class="permission-row">
+                            <label><input type="checkbox" id="ws-enable-villages" checked> Generate Villages</label>
+                        </div>
+                        <div class="permission-row">
+                            <label>Sea Level:</label>
+                            <input type="range" id="ws-sea-level" min="10" max="60" value="30">
+                            <span id="ws-sea-level-display">30</span>
+                        </div>
+                        <div class="permission-row">
+                            <label>Terrain Height:</label>
+                            <input type="range" id="ws-terrain-scale" min="0.5" max="2.0" step="0.1" value="1.0">
+                            <span id="ws-terrain-scale-display">Normal (1.0x)</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
                         <h4>🔗 Share Link</h4>
                         <div class="share-link-row">
                             <input type="text" id="ws-share-link" readonly>
@@ -197,6 +260,65 @@ export class WorldSettingsUI {
         const timeSlider = document.getElementById('ws-time-of-day');
         timeSlider.addEventListener('input', (e) => {
             this.updateTimeDisplay(parseFloat(e.target.value));
+        });
+
+        // Gravity slider
+        const gravitySlider = document.getElementById('ws-gravity');
+        gravitySlider.addEventListener('input', (e) => {
+            this.updateGravityDisplay(parseFloat(e.target.value));
+        });
+
+        // Gravity presets
+        document.querySelectorAll('.gravity-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const value = parseFloat(e.target.dataset.value);
+                gravitySlider.value = value;
+                this.updateGravityDisplay(value);
+            });
+        });
+
+        // Sky color picker
+        const skyColorPicker = document.getElementById('ws-sky-color');
+        skyColorPicker.addEventListener('input', (e) => {
+            // Live preview
+            if (this.game.environment) {
+                this.game.environment.applySkyColor(e.target.value);
+            }
+        });
+
+        // Sky color presets
+        document.querySelectorAll('.sky-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const color = e.target.dataset.color;
+                skyColorPicker.value = color;
+                if (this.game.environment) {
+                    this.game.environment.applySkyColor(color);
+                }
+            });
+        });
+
+        // Sea level slider
+        const seaLevelSlider = document.getElementById('ws-sea-level');
+        seaLevelSlider.addEventListener('input', (e) => {
+            document.getElementById('ws-sea-level-display').textContent = e.target.value;
+        });
+
+        // Terrain scale slider
+        const terrainScaleSlider = document.getElementById('ws-terrain-scale');
+        terrainScaleSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            this.updateTerrainScaleDisplay(value);
+        });
+
+        // Creature selection controls
+        document.getElementById('ws-creatures-all').addEventListener('click', () => {
+            this.selectAllCreatures(true);
+        });
+        document.getElementById('ws-creatures-none').addEventListener('click', () => {
+            this.selectAllCreatures(false);
+        });
+        document.getElementById('ws-creature-search').addEventListener('input', (e) => {
+            this.filterCreatures(e.target.value);
         });
 
         // Copy link button
@@ -235,6 +357,111 @@ export class WorldSettingsUI {
                 this.hide();
             }
         });
+    }
+
+    updateGravityDisplay(value) {
+        const display = document.getElementById('ws-gravity-display');
+        let label = 'Normal';
+        if (value < 0.5) label = 'Very Low';
+        else if (value < 0.8) label = 'Low';
+        else if (value < 1.2) label = 'Normal';
+        else if (value < 1.8) label = 'High';
+        else label = 'Very High';
+        display.textContent = `${label} (${value.toFixed(1)}x)`;
+    }
+
+    updateTerrainScaleDisplay(value) {
+        const display = document.getElementById('ws-terrain-scale-display');
+        let label = 'Normal';
+        if (value < 0.7) label = 'Flat';
+        else if (value < 1.3) label = 'Normal';
+        else label = 'Mountainous';
+        display.textContent = `${label} (${value.toFixed(1)}x)`;
+    }
+
+    populateCreatureGrid() {
+        const grid = document.getElementById('ws-creature-grid');
+        if (!grid || !this.game.AnimalClasses) return;
+
+        grid.innerHTML = '';
+
+        // Get allowed creatures from world settings
+        const allowedCreatures = this.world?.settings?.allowedCreatures;
+        const allAllowed = allowedCreatures === null || allowedCreatures === undefined;
+        const allowedSet = allAllowed ? null : new Set(allowedCreatures);
+
+        // Sort creature names alphabetically
+        const creatureNames = Object.keys(this.game.AnimalClasses).sort();
+
+        for (const name of creatureNames) {
+            const item = document.createElement('div');
+            item.className = 'creature-item';
+            item.dataset.creature = name;
+
+            const isSelected = allAllowed || (allowedSet && allowedSet.has(name));
+            if (isSelected) item.classList.add('selected');
+
+            item.innerHTML = `
+                <input type="checkbox" ${isSelected ? 'checked' : ''}>
+                <span>${name}</span>
+            `;
+
+            item.addEventListener('click', () => {
+                const checkbox = item.querySelector('input');
+                checkbox.checked = !checkbox.checked;
+                item.classList.toggle('selected', checkbox.checked);
+            });
+
+            grid.appendChild(item);
+        }
+    }
+
+    selectAllCreatures(select) {
+        const grid = document.getElementById('ws-creature-grid');
+        if (!grid) return;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            checkbox.checked = select;
+            item.classList.toggle('selected', select);
+        });
+    }
+
+    filterCreatures(searchText) {
+        const grid = document.getElementById('ws-creature-grid');
+        if (!grid) return;
+
+        const search = searchText.toLowerCase();
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const name = item.dataset.creature.toLowerCase();
+            item.style.display = name.includes(search) ? '' : 'none';
+        });
+    }
+
+    getSelectedCreatures() {
+        const grid = document.getElementById('ws-creature-grid');
+        if (!grid) return null;
+
+        const selected = [];
+        let allSelected = true;
+        let noneSelected = true;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            if (checkbox.checked) {
+                selected.push(item.dataset.creature);
+                noneSelected = false;
+            } else {
+                allSelected = false;
+            }
+        });
+
+        // If all selected, return null (meaning "allow all")
+        if (allSelected) return null;
+        // If none selected, return empty array
+        if (noneSelected) return [];
+        // Otherwise return the specific list
+        return selected;
     }
 
     updateWorldIndicator() {
@@ -316,6 +543,31 @@ export class WorldSettingsUI {
         this.updateTimeDisplay(timeOfDay);
         document.getElementById('ws-time-frozen').checked = this.world.settings?.timeFrozen || false;
 
+        // Sky Color
+        const skyColor = this.world.customizations?.skyColor || '#87CEEB';
+        document.getElementById('ws-sky-color').value = skyColor;
+
+        // Gravity
+        const gravity = this.world.customizations?.gravity ?? 1.0;
+        document.getElementById('ws-gravity').value = gravity;
+        this.updateGravityDisplay(gravity);
+
+        // Landscape Settings
+        const landscape = this.world.customizations?.landscapeSettings || {};
+        document.getElementById('ws-enable-rivers').checked = landscape.enableRivers !== false;
+        document.getElementById('ws-enable-villages').checked = landscape.enableVillages !== false;
+
+        const seaLevel = landscape.seaLevel ?? 30;
+        document.getElementById('ws-sea-level').value = seaLevel;
+        document.getElementById('ws-sea-level-display').textContent = seaLevel;
+
+        const terrainScale = landscape.terrainScale ?? 1.0;
+        document.getElementById('ws-terrain-scale').value = terrainScale;
+        this.updateTerrainScaleDisplay(terrainScale);
+
+        // Populate creature grid
+        this.populateCreatureGrid();
+
         // Share link
         document.getElementById('ws-share-link').value = `${window.location.origin}/world/${this.world.id}`;
     }
@@ -364,6 +616,19 @@ export class WorldSettingsUI {
             const timeOfDay = parseFloat(document.getElementById('ws-time-of-day').value);
             const timeFrozen = document.getElementById('ws-time-frozen').checked;
 
+            // New settings
+            const skyColor = document.getElementById('ws-sky-color').value;
+            const gravity = parseFloat(document.getElementById('ws-gravity').value);
+            const allowedCreatures = this.getSelectedCreatures();
+
+            // Landscape settings
+            const landscapeSettings = {
+                enableRivers: document.getElementById('ws-enable-rivers').checked,
+                enableVillages: document.getElementById('ws-enable-villages').checked,
+                seaLevel: parseInt(document.getElementById('ws-sea-level').value),
+                terrainScale: parseFloat(document.getElementById('ws-terrain-scale').value)
+            };
+
             const serverUrl = this.getServerUrl();
             const token = await this.user.getIdToken();
 
@@ -382,7 +647,14 @@ export class WorldSettingsUI {
                         allowCreatureSpawn: allowSpawn,
                         allowPvP,
                         timeOfDay,
-                        timeFrozen
+                        timeFrozen,
+                        allowedCreatures
+                    },
+                    customizations: {
+                        ...this.world.customizations,
+                        skyColor,
+                        gravity,
+                        landscapeSettings
                     }
                 })
             });
@@ -400,11 +672,27 @@ export class WorldSettingsUI {
                 this.game.environment.setTimeOfDay(timeOfDay);
             }
 
+            // Apply sky color immediately
+            if (this.game.environment && skyColor) {
+                this.game.environment.applySkyColor(skyColor);
+            }
+
+            // Apply gravity multiplier
+            if (this.game && gravity !== undefined) {
+                this.game.gravityMultiplier = gravity;
+            }
+
+            // Apply creature filter
+            if (this.game.spawnManager && allowedCreatures !== undefined) {
+                this.game.spawnManager.setAllowedCreatures(allowedCreatures);
+            }
+
             // Broadcast settings change to other players
             if (this.game.socketManager?.socket) {
                 this.game.socketManager.socket.emit('world:settings_changed', {
                     worldId: this.world.id,
-                    settings: this.world.settings
+                    settings: this.world.settings,
+                    customizations: this.world.customizations
                 });
             }
 
@@ -805,6 +1093,121 @@ export class WorldSettingsUI {
                 padding: 2px 8px;
                 border-radius: 10px;
                 font-size: 12px;
+            }
+
+            /* Sky and Gravity Presets */
+            .sky-presets, .gravity-presets {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+                flex-wrap: wrap;
+            }
+
+            .preset-btn {
+                padding: 8px 12px;
+                background: #333;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                color: #fff;
+                transition: border-color 0.2s;
+            }
+
+            .preset-btn:hover {
+                border-color: #4CAF50;
+            }
+
+            /* Creature Grid */
+            .creature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                gap: 6px;
+                max-height: 200px;
+                overflow-y: auto;
+                padding: 10px;
+                background: #1a1a1a;
+                border: 2px solid #444;
+                border-radius: 4px;
+            }
+
+            .creature-item {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 6px;
+                background: #222;
+                border-radius: 4px;
+                font-size: 12px;
+                cursor: pointer;
+                border: 1px solid transparent;
+                color: #ccc;
+            }
+
+            .creature-item:hover {
+                background: #2a2a2a;
+            }
+
+            .creature-item.selected {
+                border-color: #4CAF50;
+                background: #1a2a1a;
+            }
+
+            .creature-item input[type="checkbox"] {
+                margin: 0;
+                pointer-events: none;
+            }
+
+            .creature-controls {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+
+            .creature-controls button {
+                padding: 6px 12px;
+                background: #333;
+                border: 2px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                cursor: pointer;
+                font-size: 12px;
+            }
+
+            .creature-controls button:hover {
+                border-color: #4CAF50;
+            }
+
+            .creature-controls input {
+                flex: 1;
+                padding: 8px;
+                background: #222;
+                border: 2px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                font-family: inherit;
+            }
+
+            .section-desc {
+                font-size: 12px;
+                color: #888;
+                margin: 0 0 10px;
+            }
+
+            .warning-text {
+                font-size: 12px;
+                color: #FFA726;
+                margin: 0 0 10px;
+            }
+
+            /* Sky Color Picker */
+            #ws-sky-color {
+                width: 50px;
+                height: 30px;
+                padding: 0;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
             }
         `;
         document.head.appendChild(style);

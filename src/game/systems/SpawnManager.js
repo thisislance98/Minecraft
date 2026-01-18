@@ -19,6 +19,7 @@ export class SpawnManager {
         this.waitingForInitialSync = !this.game.isOffline;
 
         this.allowedAnimals = null; // null = all allowed. Set = filter.
+        this.allowedCreatures = null; // From world settings - null = all, Set = whitelist
 
         // Deferred spawning - wait until world is ready
         this.isWorldReady = false;
@@ -622,8 +623,13 @@ export class SpawnManager {
         let cumulative = 0;
 
         for (const entry of this.hostileMobs) {
-            // Check allowed list
+            // Check allowed list (UI toggle)
             if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
+                continue;
+            }
+
+            // Check world settings creature filter
+            if (!this.isCreatureAllowed(entry.type)) {
                 continue;
             }
 
@@ -643,8 +649,13 @@ export class SpawnManager {
         let cumulative = 0;
 
         for (const entry of config) {
-            // Check allowed list
+            // Check allowed list (UI toggle)
             if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
+                continue;
+            }
+
+            // Check world settings creature filter
+            if (!this.isCreatureAllowed(entry.type)) {
                 continue;
             }
 
@@ -668,8 +679,13 @@ export class SpawnManager {
         let cumulative = 0;
 
         for (const entry of config) {
-            // Check allowed list
+            // Check allowed list (UI toggle)
             if (this.allowedAnimals && !this.allowedAnimals.has(entry.type)) {
+                continue;
+            }
+
+            // Check world settings creature filter
+            if (!this.isCreatureAllowed(entry.type)) {
                 continue;
             }
 
@@ -1243,5 +1259,35 @@ export class SpawnManager {
         console.log(`Debug spawned ${count} ${EntityClass.name} at ${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)}, ${targetPos.z.toFixed(1)}`);
 
         return createdAnimals;
+    }
+
+    /**
+     * Set the allowed creatures list from world settings
+     * @param {string[]|null} creatureList - Array of creature type names, or null for all allowed
+     */
+    setAllowedCreatures(creatureList) {
+        if (creatureList === null || creatureList === undefined) {
+            this.allowedCreatures = null; // All allowed
+            console.log('[SpawnManager] Allowed creatures: ALL');
+        } else if (Array.isArray(creatureList)) {
+            this.allowedCreatures = new Set(creatureList);
+            console.log(`[SpawnManager] Allowed creatures: ${creatureList.length} types`);
+        } else {
+            console.warn('[SpawnManager] Invalid creature list, using all');
+            this.allowedCreatures = null;
+        }
+    }
+
+    /**
+     * Check if a creature type is allowed to spawn
+     * @param {string} creatureType - The creature class name (e.g., 'Pig', 'Cow')
+     * @returns {boolean}
+     */
+    isCreatureAllowed(creatureType) {
+        // If no filter is set, all are allowed
+        if (this.allowedCreatures === null) return true;
+
+        // Check if this type is in the whitelist
+        return this.allowedCreatures.has(creatureType);
     }
 }

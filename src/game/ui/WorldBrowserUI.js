@@ -15,16 +15,38 @@ export class WorldBrowserUI {
         this.publicWorlds = [];
         this.isLoading = false;
 
+        // Current world state (for settings tab)
+        this.currentWorld = null;
+        this.isOwner = false;
+
         // Create the modal element
         this.createModal();
 
         // Listen for auth state changes
         auth.onAuthStateChanged((user) => {
             this.user = user;
+            this.checkOwnership();
+        });
+
+        // Listen for world join events
+        window.addEventListener('worldJoined', (e) => {
+            this.onWorldJoined(e.detail);
         });
 
         // Setup button to open world browser
         this.setupWorldButton();
+    }
+
+    onWorldJoined(data) {
+        this.currentWorld = data.world;
+        this.isOwner = data.permissions?.isOwner === true;
+        console.log(`[WorldBrowserUI] World joined: ${this.currentWorld?.name}, isOwner: ${this.isOwner}`);
+    }
+
+    checkOwnership() {
+        if (this.currentWorld && this.user) {
+            this.isOwner = this.currentWorld.ownerId === this.user.uid;
+        }
     }
 
     createModal() {
@@ -43,6 +65,7 @@ export class WorldBrowserUI {
                         <button class="world-tab active" data-tab="browse">🔍 Browse</button>
                         <button class="world-tab" data-tab="my-worlds">📁 My Worlds</button>
                         <button class="world-tab" data-tab="create">✨ Create</button>
+                        <button class="world-tab" data-tab="settings" id="world-tab-settings-btn">⚙️ Settings</button>
                     </div>
 
                     <div id="world-tab-browse" class="world-tab-content active">
@@ -87,6 +110,134 @@ export class WorldBrowserUI {
                             </div>
                             <button type="submit" class="create-world-submit">Create World</button>
                         </form>
+                    </div>
+
+                    <div id="world-tab-settings" class="world-tab-content">
+                        <div id="settings-not-in-world" class="no-worlds-message">
+                            <p>Join a world to view and edit its settings.</p>
+                        </div>
+                        <div id="settings-not-owner" class="no-worlds-message hidden">
+                            <p>🔒 Only the world owner can edit settings.</p>
+                            <p class="settings-world-name"></p>
+                        </div>
+                        <div id="settings-content" class="hidden">
+                            <div class="world-info-section">
+                                <div class="world-name-display">
+                                    <span id="wb-world-name">Loading...</span>
+                                    <button id="wb-edit-name-btn" title="Edit name">✏️</button>
+                                </div>
+                                <p id="wb-world-id" class="world-id-text"></p>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>📝 Description</h4>
+                                <textarea id="wb-description" placeholder="Describe your world..."></textarea>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>🔒 Visibility</h4>
+                                <div class="visibility-options">
+                                    <label class="visibility-option">
+                                        <input type="radio" name="wb-visibility" value="public">
+                                        <span class="visibility-label">🌍 Public</span>
+                                        <span class="visibility-desc">Anyone can find and join</span>
+                                    </label>
+                                    <label class="visibility-option">
+                                        <input type="radio" name="wb-visibility" value="unlisted">
+                                        <span class="visibility-label">🔗 Unlisted</span>
+                                        <span class="visibility-desc">Only accessible via link</span>
+                                    </label>
+                                    <label class="visibility-option">
+                                        <input type="radio" name="wb-visibility" value="private">
+                                        <span class="visibility-label">🔒 Private</span>
+                                        <span class="visibility-desc">Only you can access</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>🛠️ Permissions</h4>
+                                <div class="permission-row">
+                                    <label>Building:</label>
+                                    <select id="wb-allow-building">
+                                        <option value="all">Everyone</option>
+                                        <option value="owner">Owner Only</option>
+                                        <option value="none">Nobody</option>
+                                    </select>
+                                </div>
+                                <div class="permission-row">
+                                    <label>Creature Spawning:</label>
+                                    <select id="wb-allow-spawn">
+                                        <option value="all">Everyone</option>
+                                        <option value="owner">Owner Only</option>
+                                        <option value="none">Nobody</option>
+                                    </select>
+                                </div>
+                                <div class="permission-row">
+                                    <label>
+                                        <input type="checkbox" id="wb-allow-pvp">
+                                        Allow PvP Combat
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>🌅 Environment</h4>
+                                <div class="permission-row">
+                                    <label>Time of Day:</label>
+                                    <input type="range" id="wb-time-of-day" min="0" max="1" step="0.01" value="0.25">
+                                    <span id="wb-time-display">Noon</span>
+                                </div>
+                                <div class="permission-row">
+                                    <label>
+                                        <input type="checkbox" id="wb-time-frozen">
+                                        Freeze Time
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>🎨 Sky Appearance</h4>
+                                <div class="permission-row">
+                                    <label>Sky Color:</label>
+                                    <input type="color" id="wb-sky-color" value="#87CEEB">
+                                </div>
+                                <div class="sky-presets">
+                                    <button type="button" class="preset-btn wb-sky-preset" data-color="#87CEEB" title="Earth Blue">🌍</button>
+                                    <button type="button" class="preset-btn wb-sky-preset" data-color="#FF6B35" title="Sunset Orange">🌅</button>
+                                    <button type="button" class="preset-btn wb-sky-preset" data-color="#050510" title="Space Black">🌌</button>
+                                    <button type="button" class="preset-btn wb-sky-preset" data-color="#1E90FF" title="Bright Blue">☀️</button>
+                                    <button type="button" class="preset-btn wb-sky-preset" data-color="#2D1B4E" title="Purple Night">🔮</button>
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>⚖️ Physics</h4>
+                                <div class="permission-row">
+                                    <label>Gravity:</label>
+                                    <input type="range" id="wb-gravity" min="0.1" max="3.0" step="0.1" value="1.0">
+                                    <span id="wb-gravity-display">Normal (1.0x)</span>
+                                </div>
+                                <div class="gravity-presets">
+                                    <button type="button" class="preset-btn wb-gravity-preset" data-value="0.3" title="Moon Gravity">🌙 Moon</button>
+                                    <button type="button" class="preset-btn wb-gravity-preset" data-value="1.0" title="Normal Gravity">🌍 Normal</button>
+                                    <button type="button" class="preset-btn wb-gravity-preset" data-value="2.0" title="Heavy Gravity">🪨 Heavy</button>
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
+                                <h4>🔗 Share Link</h4>
+                                <div class="share-link-row">
+                                    <input type="text" id="wb-share-link" readonly>
+                                    <button type="button" id="wb-copy-link" title="Copy link">📋</button>
+                                </div>
+                            </div>
+
+                            <div class="settings-actions">
+                                <button type="button" id="wb-save-btn" class="save-btn">💾 Save Changes</button>
+                                <button type="button" id="wb-reset-world-btn" class="danger-btn">🗑️ Reset World</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -174,6 +325,8 @@ export class WorldBrowserUI {
             this.loadPublicWorlds();
         } else if (tabName === 'my-worlds') {
             this.loadMyWorlds();
+        } else if (tabName === 'settings') {
+            this.loadSettingsTab();
         }
     }
 
@@ -479,6 +632,378 @@ export class WorldBrowserUI {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // ========== Settings Tab Methods ==========
+
+    loadSettingsTab() {
+        const notInWorld = document.getElementById('settings-not-in-world');
+        const notOwner = document.getElementById('settings-not-owner');
+        const settingsContent = document.getElementById('settings-content');
+
+        // Check if we're in a world
+        if (!this.currentWorld) {
+            notInWorld.classList.remove('hidden');
+            notOwner.classList.add('hidden');
+            settingsContent.classList.add('hidden');
+            return;
+        }
+
+        // Check if user is the owner
+        if (!this.isOwner) {
+            notInWorld.classList.add('hidden');
+            notOwner.classList.remove('hidden');
+            notOwner.querySelector('.settings-world-name').textContent = `Currently in: ${this.currentWorld.name}`;
+            settingsContent.classList.add('hidden');
+            return;
+        }
+
+        // User is owner, show settings
+        notInWorld.classList.add('hidden');
+        notOwner.classList.add('hidden');
+        settingsContent.classList.remove('hidden');
+
+        this.populateSettings();
+        this.setupSettingsEventListeners();
+    }
+
+    setupSettingsEventListeners() {
+        // Only setup once
+        if (this._settingsListenersSetup) return;
+        this._settingsListenersSetup = true;
+
+        // Time slider
+        const timeSlider = document.getElementById('wb-time-of-day');
+        if (timeSlider) {
+            timeSlider.addEventListener('input', (e) => {
+                this.updateTimeDisplay(parseFloat(e.target.value));
+            });
+        }
+
+        // Gravity slider
+        const gravitySlider = document.getElementById('wb-gravity');
+        if (gravitySlider) {
+            gravitySlider.addEventListener('input', (e) => {
+                this.updateGravityDisplay(parseFloat(e.target.value));
+            });
+        }
+
+        // Gravity presets
+        document.querySelectorAll('.wb-gravity-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const value = parseFloat(e.target.dataset.value);
+                const slider = document.getElementById('wb-gravity');
+                if (slider) {
+                    slider.value = value;
+                    this.updateGravityDisplay(value);
+                }
+            });
+        });
+
+        // Sky color picker
+        const skyColorPicker = document.getElementById('wb-sky-color');
+        if (skyColorPicker) {
+            skyColorPicker.addEventListener('input', (e) => {
+                if (this.game.environment) {
+                    this.game.environment.applySkyColor(e.target.value);
+                }
+            });
+        }
+
+        // Sky color presets
+        document.querySelectorAll('.wb-sky-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const color = e.target.dataset.color;
+                const picker = document.getElementById('wb-sky-color');
+                if (picker) {
+                    picker.value = color;
+                    if (this.game.environment) {
+                        this.game.environment.applySkyColor(color);
+                    }
+                }
+            });
+        });
+
+        // Copy link button
+        const copyLinkBtn = document.getElementById('wb-copy-link');
+        if (copyLinkBtn) {
+            copyLinkBtn.addEventListener('click', () => {
+                const linkInput = document.getElementById('wb-share-link');
+                navigator.clipboard.writeText(linkInput.value).then(() => {
+                    this.showToast('Link copied!');
+                });
+            });
+        }
+
+        // Save button
+        const saveBtn = document.getElementById('wb-save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                this.saveWorldSettings();
+            });
+        }
+
+        // Reset world button
+        const resetBtn = document.getElementById('wb-reset-world-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                this.resetWorld();
+            });
+        }
+
+        // Edit name button
+        const editNameBtn = document.getElementById('wb-edit-name-btn');
+        if (editNameBtn) {
+            editNameBtn.addEventListener('click', () => {
+                this.editWorldName();
+            });
+        }
+    }
+
+    populateSettings() {
+        if (!this.currentWorld) return;
+
+        // World info
+        const nameEl = document.getElementById('wb-world-name');
+        if (nameEl) nameEl.textContent = this.currentWorld.name;
+
+        const idEl = document.getElementById('wb-world-id');
+        if (idEl) idEl.textContent = `ID: ${this.currentWorld.id}`;
+
+        const descEl = document.getElementById('wb-description');
+        if (descEl) descEl.value = this.currentWorld.description || '';
+
+        // Visibility
+        const visibilityRadio = document.querySelector(`input[name="wb-visibility"][value="${this.currentWorld.visibility}"]`);
+        if (visibilityRadio) {
+            visibilityRadio.checked = true;
+        }
+
+        // Permissions
+        const allowBuildingEl = document.getElementById('wb-allow-building');
+        if (allowBuildingEl) allowBuildingEl.value = this.currentWorld.settings?.allowBuilding || 'all';
+
+        const allowSpawnEl = document.getElementById('wb-allow-spawn');
+        if (allowSpawnEl) allowSpawnEl.value = this.currentWorld.settings?.allowCreatureSpawn || 'all';
+
+        const allowPvPEl = document.getElementById('wb-allow-pvp');
+        if (allowPvPEl) allowPvPEl.checked = this.currentWorld.settings?.allowPvP || false;
+
+        // Environment
+        const timeOfDay = this.currentWorld.settings?.timeOfDay ?? 0.25;
+        const timeSlider = document.getElementById('wb-time-of-day');
+        if (timeSlider) {
+            timeSlider.value = timeOfDay;
+            this.updateTimeDisplay(timeOfDay);
+        }
+
+        const timeFrozenEl = document.getElementById('wb-time-frozen');
+        if (timeFrozenEl) timeFrozenEl.checked = this.currentWorld.settings?.timeFrozen || false;
+
+        // Sky Color
+        const skyColor = this.currentWorld.customizations?.skyColor || '#87CEEB';
+        const skyColorEl = document.getElementById('wb-sky-color');
+        if (skyColorEl) skyColorEl.value = skyColor;
+
+        // Gravity
+        const gravity = this.currentWorld.customizations?.gravity ?? 1.0;
+        const gravitySlider = document.getElementById('wb-gravity');
+        if (gravitySlider) {
+            gravitySlider.value = gravity;
+            this.updateGravityDisplay(gravity);
+        }
+
+        // Share link
+        const shareLinkEl = document.getElementById('wb-share-link');
+        if (shareLinkEl) shareLinkEl.value = `${window.location.origin}/world/${this.currentWorld.id}`;
+    }
+
+    updateTimeDisplay(value) {
+        const display = document.getElementById('wb-time-display');
+        if (!display) return;
+
+        const hour = Math.floor(value * 24);
+        const minute = Math.floor((value * 24 - hour) * 60);
+
+        let timeStr;
+        if (value < 0.25) {
+            timeStr = 'Night';
+        } else if (value < 0.35) {
+            timeStr = 'Dawn';
+        } else if (value < 0.45) {
+            timeStr = 'Morning';
+        } else if (value < 0.55) {
+            timeStr = 'Noon';
+        } else if (value < 0.65) {
+            timeStr = 'Afternoon';
+        } else if (value < 0.75) {
+            timeStr = 'Evening';
+        } else if (value < 0.85) {
+            timeStr = 'Dusk';
+        } else {
+            timeStr = 'Night';
+        }
+
+        display.textContent = `${timeStr} (${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')})`;
+    }
+
+    updateGravityDisplay(value) {
+        const display = document.getElementById('wb-gravity-display');
+        if (!display) return;
+
+        let label = 'Normal';
+        if (value < 0.5) label = 'Very Low';
+        else if (value < 0.8) label = 'Low';
+        else if (value < 1.2) label = 'Normal';
+        else if (value < 1.8) label = 'High';
+        else label = 'Very High';
+        display.textContent = `${label} (${value.toFixed(1)}x)`;
+    }
+
+    async saveWorldSettings() {
+        if (!this.currentWorld || !this.user) return;
+
+        const saveBtn = document.getElementById('wb-save-btn');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        try {
+            const visibility = document.querySelector('input[name="wb-visibility"]:checked')?.value || 'unlisted';
+            const description = document.getElementById('wb-description').value.trim();
+            const allowBuilding = document.getElementById('wb-allow-building').value;
+            const allowSpawn = document.getElementById('wb-allow-spawn').value;
+            const allowPvP = document.getElementById('wb-allow-pvp').checked;
+            const timeOfDay = parseFloat(document.getElementById('wb-time-of-day').value);
+            const timeFrozen = document.getElementById('wb-time-frozen').checked;
+            const skyColor = document.getElementById('wb-sky-color').value;
+            const gravity = parseFloat(document.getElementById('wb-gravity').value);
+
+            const serverUrl = this.getServerUrl();
+            const token = await this.user.getIdToken();
+
+            const response = await fetch(`${serverUrl}/api/worlds/${this.currentWorld.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    description,
+                    visibility,
+                    settings: {
+                        ...this.currentWorld.settings,
+                        allowBuilding,
+                        allowCreatureSpawn: allowSpawn,
+                        allowPvP,
+                        timeOfDay,
+                        timeFrozen
+                    },
+                    customizations: {
+                        ...this.currentWorld.customizations,
+                        skyColor,
+                        gravity
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to save settings');
+            }
+
+            const data = await response.json();
+            this.currentWorld = data.world;
+
+            // Apply time change immediately
+            if (this.game.environment) {
+                this.game.environment.setTimeOfDay(timeOfDay);
+            }
+
+            // Apply sky color immediately
+            if (this.game.environment && skyColor) {
+                this.game.environment.applySkyColor(skyColor);
+            }
+
+            // Apply gravity multiplier
+            if (this.game && gravity !== undefined) {
+                this.game.gravityMultiplier = gravity;
+            }
+
+            // Broadcast settings change to other players
+            if (this.game.socketManager?.socket) {
+                this.game.socketManager.socket.emit('world:settings_changed', {
+                    worldId: this.currentWorld.id,
+                    settings: this.currentWorld.settings,
+                    customizations: this.currentWorld.customizations
+                });
+            }
+
+            this.showToast('Settings saved!');
+
+        } catch (error) {
+            console.error('[WorldBrowserUI] Failed to save settings:', error);
+            this.showToast(`Failed to save: ${error.message}`);
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Save Changes';
+        }
+    }
+
+    async editWorldName() {
+        const currentName = this.currentWorld?.name || '';
+        const newName = prompt('Enter new world name:', currentName);
+
+        if (!newName || newName.trim() === currentName) return;
+
+        try {
+            const serverUrl = this.getServerUrl();
+            const token = await this.user.getIdToken();
+
+            const response = await fetch(`${serverUrl}/api/worlds/${this.currentWorld.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: newName.trim() })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to update name');
+            }
+
+            const data = await response.json();
+            this.currentWorld = data.world;
+
+            document.getElementById('wb-world-name').textContent = this.currentWorld.name;
+            this.showToast('World name updated!');
+
+        } catch (error) {
+            console.error('[WorldBrowserUI] Failed to update name:', error);
+            this.showToast(`Failed to update: ${error.message}`);
+        }
+    }
+
+    async resetWorld() {
+        if (!confirm('Are you sure you want to reset this world?\n\nThis will delete all blocks, creatures, and signs. This cannot be undone!')) {
+            return;
+        }
+
+        if (!confirm('This is your FINAL WARNING.\n\nAll world content will be permanently deleted. Continue?')) {
+            return;
+        }
+
+        try {
+            if (this.game.socketManager?.socket) {
+                this.game.socketManager.socket.emit('world:reset');
+                this.showToast('World reset initiated...');
+                this.hide();
+            }
+        } catch (error) {
+            console.error('[WorldBrowserUI] Failed to reset world:', error);
+            this.showToast('Failed to reset world');
+        }
     }
 
     injectStyles() {
@@ -812,6 +1337,256 @@ export class WorldBrowserUI {
 
             .sign-in-btn:hover, .create-world-btn:hover {
                 background: #5CBF60;
+            }
+
+            /* ========== Settings Tab Styles ========== */
+
+            .world-info-section {
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #444;
+            }
+
+            .world-name-display {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+            }
+
+            #wb-world-name {
+                font-size: 24px;
+                color: #fff;
+            }
+
+            #wb-edit-name-btn {
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 16px;
+                opacity: 0.7;
+            }
+
+            #wb-edit-name-btn:hover {
+                opacity: 1;
+            }
+
+            .world-id-text {
+                font-size: 12px;
+                color: #666;
+                margin: 5px 0 0;
+            }
+
+            .settings-section {
+                margin-bottom: 20px;
+            }
+
+            .settings-section h4 {
+                margin: 0 0 10px;
+                font-size: 16px;
+                color: #4CAF50;
+            }
+
+            #wb-description {
+                width: 100%;
+                height: 60px;
+                padding: 10px;
+                background: #222;
+                border: 2px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                font-family: inherit;
+                font-size: 14px;
+                resize: vertical;
+            }
+
+            .visibility-options {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .visibility-option {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px;
+                background: #222;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+
+            .visibility-option:hover {
+                border-color: #555;
+            }
+
+            .visibility-option input:checked + .visibility-label {
+                color: #4CAF50;
+            }
+
+            .visibility-label {
+                font-size: 16px;
+                color: #fff;
+                min-width: 100px;
+            }
+
+            .visibility-desc {
+                font-size: 12px;
+                color: #888;
+            }
+
+            .permission-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+
+            .permission-row label {
+                color: #fff;
+                font-size: 14px;
+                flex: 1;
+            }
+
+            .permission-row select {
+                padding: 8px;
+                background: #222;
+                border: 2px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                font-family: inherit;
+            }
+
+            .permission-row input[type="range"] {
+                flex: 1;
+                margin: 0 10px;
+            }
+
+            #wb-time-display, #wb-gravity-display {
+                min-width: 100px;
+                text-align: right;
+                color: #888;
+                font-size: 12px;
+            }
+
+            .share-link-row {
+                display: flex;
+                gap: 8px;
+            }
+
+            #wb-share-link {
+                flex: 1;
+                padding: 10px;
+                background: #222;
+                border: 2px solid #444;
+                border-radius: 4px;
+                color: #888;
+                font-family: inherit;
+                font-size: 12px;
+            }
+
+            #wb-copy-link {
+                padding: 10px 15px;
+                background: #444;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+
+            #wb-copy-link:hover {
+                background: #555;
+            }
+
+            .settings-actions {
+                display: flex;
+                gap: 10px;
+                margin-top: 20px;
+                padding-top: 15px;
+                border-top: 1px solid #444;
+            }
+
+            .save-btn {
+                flex: 1;
+                padding: 12px;
+                background: #4CAF50;
+                border: none;
+                border-radius: 4px;
+                color: #fff;
+                font-size: 16px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            .save-btn:hover:not(:disabled) {
+                background: #5CBF60;
+            }
+
+            .save-btn:disabled {
+                background: #666;
+                cursor: not-allowed;
+            }
+
+            .danger-btn {
+                padding: 12px;
+                background: #D32F2F;
+                border: none;
+                border-radius: 4px;
+                color: #fff;
+                font-size: 16px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+
+            .danger-btn:hover {
+                background: #E53935;
+            }
+
+            /* Sky and Gravity Presets */
+            .sky-presets, .gravity-presets {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+                flex-wrap: wrap;
+            }
+
+            .preset-btn {
+                padding: 8px 12px;
+                background: #333;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+                color: #fff;
+                transition: border-color 0.2s;
+            }
+
+            .preset-btn:hover {
+                border-color: #4CAF50;
+            }
+
+            /* Sky Color Picker */
+            #wb-sky-color {
+                width: 50px;
+                height: 30px;
+                padding: 0;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+
+            /* Settings tab specific */
+            #settings-content {
+                max-width: 500px;
+                margin: 0 auto;
+            }
+
+            .settings-world-name {
+                font-size: 14px;
+                color: #aaa;
+                margin-top: 5px;
             }
         `;
         document.head.appendChild(style);

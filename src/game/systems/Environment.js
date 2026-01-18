@@ -109,6 +109,20 @@ export class Environment {
                 fogDensity: 0.001,                        // Light fog for stadium feel
                 ambientTint: 0xFFFFFF,                    // Bright stadium lights
                 cloudColor: 0xFFFFFF                      // White clouds
+            },
+            space: {
+                skyColor: new THREE.Color(0x000005),     // Deep black space
+                nightColor: new THREE.Color(0x000005),   // Always dark
+                fogColor: 0x000010,                       // Very subtle blue fog (distant nebula)
+                fogDensity: 0.00005,                      // Almost no fog - can see far
+                ambientTint: 0x8888AA,                    // Subtle blue ambient (starlight)
+                alwaysShowStars: true,                    // Stars always visible
+                showNebula: true,                         // Enable nebula effect
+                distantPlanets: [                         // Visible planets in the distance
+                    { color: 0x88AAFF, size: 80, position: { x: 2000, y: 500, z: 1500 }, name: 'Ice Giant' },
+                    { color: 0xFF6644, size: 50, position: { x: -1800, y: 300, z: -1200 }, name: 'Mars' },
+                    { color: 0xFFCC88, size: 120, position: { x: 0, y: -800, z: 2500 }, name: 'Gas Giant' }
+                ]
             }
         };
 
@@ -154,6 +168,25 @@ export class Environment {
             if (this.moonMesh && this.moonEnabled) this.moonMesh.visible = true;
         }
 
+        // Handle distant planets (space environment)
+        if (preset.distantPlanets) {
+            this.createDistantPlanets(preset.distantPlanets);
+            // Hide Earth's moon and sun in deep space
+            if (this.moonMesh) this.moonMesh.visible = false;
+            if (this.sunMesh) this.sunMesh.visible = false;
+        } else {
+            this.clearDistantPlanets();
+            // Restore sun visibility when leaving space
+            if (this.sunMesh) this.sunMesh.visible = true;
+        }
+
+        // Handle nebula effect
+        if (preset.showNebula) {
+            this.createNebula();
+        } else {
+            this.clearNebula();
+        }
+
         // Update cloud visibility and color based on world
         if (this.clouds) {
             // Show clouds on worlds that have cloudColor defined, or on Earth
@@ -174,27 +207,33 @@ export class Environment {
      * - Moon: Y 640-767 (chunk Y 40-47)
      * - Crystal: Y 800-927 (chunk Y 50-57)
      * - Lava: Y 960-1087 (chunk Y 60-67)
+     * - Soccer: Y 1120-1247 (chunk Y 70-77)
+     * - Space: Y 1280+ (chunk Y 80+)
      */
     detectWorldFromPosition(playerPos) {
         const chunkY = Math.floor(playerPos.y / 16);
         let detectedWorld = 'earth';
 
         // Check world boundaries based on Config values
-        // Moon: chunks 40-47
-        if (chunkY >= 40 && chunkY < 48) {
-            detectedWorld = 'moon';
+        // Space Zone: chunks 80+ (Y >= 1280)
+        if (chunkY >= 80) {
+            detectedWorld = 'space';
         }
-        // Crystal World: chunks 50-57
-        else if (chunkY >= 50 && chunkY < 58) {
-            detectedWorld = 'crystal';
+        // Soccer World: chunks 70-77
+        else if (chunkY >= 70 && chunkY < 78) {
+            detectedWorld = 'soccer';
         }
         // Lava World: chunks 60-67
         else if (chunkY >= 60 && chunkY < 68) {
             detectedWorld = 'lava';
         }
-        // Soccer World: chunks 70-77
-        else if (chunkY >= 70 && chunkY < 78) {
-            detectedWorld = 'soccer';
+        // Crystal World: chunks 50-57
+        else if (chunkY >= 50 && chunkY < 58) {
+            detectedWorld = 'crystal';
+        }
+        // Moon: chunks 40-47
+        else if (chunkY >= 40 && chunkY < 48) {
+            detectedWorld = 'moon';
         }
 
         // Only switch if different from current world
@@ -444,6 +483,46 @@ export class Environment {
 
     freezeTime(freeze) {
         this.timeFrozen = freeze;
+    }
+
+    /**
+     * Apply a custom sky color (from world settings)
+     * @param {string} hexColor - Hex color string like '#87CEEB'
+     */
+    applySkyColor(hexColor) {
+        if (!hexColor || typeof hexColor !== 'string') return;
+
+        try {
+            const color = new THREE.Color(hexColor);
+
+            // Store the custom color
+            this.customSkyColor = color.clone();
+
+            // Update skyColor (used in day/night blending)
+            this.skyColor.copy(color);
+
+            // Update sky gradient if it exists
+            if (this.skyMesh?.material?.uniforms) {
+                this.skyMesh.material.uniforms.topColor.value.copy(color);
+                // Horizon is slightly lighter/desaturated version
+                const horizonColor = color.clone().offsetHSL(0.0, -0.1, 0.2);
+                this.skyMesh.material.uniforms.bottomColor.value.copy(horizonColor);
+            }
+
+            // Update fog to match
+            if (this.scene.fog) {
+                this.scene.fog.color.copy(color);
+            }
+
+            // Update renderer clear color
+            if (this.game.renderer) {
+                this.game.renderer.setClearColor(color);
+            }
+
+            console.log(`[Environment] Applied sky color: ${hexColor}`);
+        } catch (error) {
+            console.error('[Environment] Failed to apply sky color:', error);
+        }
     }
 
     isPlayerInWater() {

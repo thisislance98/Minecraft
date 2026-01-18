@@ -44,6 +44,11 @@ export class SocketManager {
         this.socketId = null;
         this.playerMeshes = new Map(); // id -> THREE.Group
 
+        // Multi-World Support
+        this.worldId = null;           // Current world ID (e.g., 'global', 'abc123')
+        this.world = null;             // Full world data from server
+        this.permissions = null;       // Player's permissions in current world
+
         // Voice Chat (PeerJS)
         this.localStream = null;
         this.peerJs = null; // PeerJS instance
@@ -76,12 +81,81 @@ export class SocketManager {
             this.socketId = this.socket.id;
             this.game.uiManager?.updateNetworkStatus('Connected');
 
-            // Automatically join a game
-            this.joinGame();
+            // Check if URL specifies a world ID (e.g., /world/abc123)
+            const worldIdFromUrl = this.getWorldIdFromUrl();
+            if (worldIdFromUrl) {
+                console.log(`[SocketManager] Joining world from URL: ${worldIdFromUrl}`);
+                this.joinWorld(worldIdFromUrl);
+            } else {
+                // Fall back to legacy join_game for backward compatibility
+                this.joinGame();
+            }
 
             // Initialize voice chat
             if (this.voiceEnabled) {
                 this.initVoiceChat();
+            }
+        });
+
+        // Handle world:joined event (new multi-world system)
+        this.socket.on('world:joined', (data) => {
+            console.log('[SocketManager] Joined world:', data);
+            this.roomId = data.roomId;
+            this.worldId = data.worldId;
+            this.world = data.world;
+            this.permissions = data.permissions;
+
+            const role = data.isHost ? 'Host' : 'Client';
+            this.game.uiManager?.updateNetworkStatus('In World', role, data.worldId);
+
+            // Apply world settings
+            if (data.world?.seed && this.game.setWorldSeed) {
+                console.log(`[SocketManager] World Seed: ${data.world.seed}`);
+            }
+
+            if (data.time !== undefined && this.game.environment) {
+                this.game.environment.setTimeOfDay(data.time);
+                console.log(`[SocketManager] Initial World Time: ${data.time}`);
+            }
+
+            // Sync existing players
+            if (data.playerStates) {
+                console.log('[SocketManager] Syncing existing players:', Object.keys(data.playerStates).length);
+                for (const [pid, state] of Object.entries(data.playerStates)) {
+                    if (pid === this.socketId) continue;
+                    if (state.pos) {
+                        this.updatePlayerMesh(pid, state.pos, state.rotY);
+                        if (state.heldItem) {
+                            this.updateRemoteHeldItem(pid, state.heldItem);
+                        }
+                    }
+                }
+            }
+
+            // Send our initial position
+            if (this.game.player) {
+                this.sendPosition(this.game.player.position, this.game.player.rotation.y);
+                if (this.game.inventory) {
+                    const item = this.game.inventory.getSelectedItem();
+                    if (item && item.item) {
+                        this.sendHeldItem(item.item);
+                    }
+                }
+            }
+
+            // Dispatch custom event for UI to react to world join
+            window.dispatchEvent(new CustomEvent('worldJoined', { detail: data }));
+        });
+
+        // Handle world:error event
+        this.socket.on('world:error', (error) => {
+            console.error('[SocketManager] World error:', error);
+            this.game.uiManager?.showNotification(`Failed to join world: ${error.message}`, 'error');
+
+            // Fall back to global world on error
+            if (error.code === 'WORLD_NOT_FOUND' || error.code === 'ACCESS_DENIED') {
+                console.log('[SocketManager] Falling back to global world');
+                this.joinGame();
             }
         });
 
@@ -876,6 +950,74 @@ export class SocketManager {
                 shirtColor: shirtColor ? parseInt(shirtColor) : null
             });
         }
+    }
+
+    /**
+     * Join a specific world by ID
+     * @param {string} worldId - The world ID to join
+     */
+    joinWorld(worldId) {
+        if (this.socket && this.socket.connected) {
+            const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
+            const shirtColor = localStorage.getItem('settings_shirt_color');
+
+            console.log('[SocketManager] Requesting to join world:', worldId, 'as:', playerName);
+            this.socket.emit('join_world', {
+                worldId: worldId,
+                name: playerName,
+                shirtColor: shirtColor ? parseInt(shirtColor) : null
+            });
+        }
+    }
+
+    /**
+     * Extract world ID from URL path (e.g., /world/abc123 -> 'abc123')
+     * @returns {string|null} World ID or null if not in URL
+     */
+    getWorldIdFromUrl() {
+        const path = window.location.pathname;
+        const match = path.match(/^\/world\/([a-zA-Z0-9_-]+)/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * Get the current world ID
+     * @returns {string|null}
+     */
+    getCurrentWorldId() {
+        return this.worldId;
+    }
+
+    /**
+     * Get current world data
+     * @returns {Object|null}
+     */
+    getCurrentWorld() {
+        return this.world;
+    }
+
+    /**
+     * Get current permissions in the world
+     * @returns {Object|null}
+     */
+    getPermissions() {
+        return this.permissions;
+    }
+
+    /**
+     * Check if player has permission to build
+     * @returns {boolean}
+     */
+    canBuild() {
+        return this.permissions?.canBuild !== false;
+    }
+
+    /**
+     * Check if player is the world owner
+     * @returns {boolean}
+     */
+    isWorldOwner() {
+        return this.permissions?.isOwner === true;
     }
 
     /**

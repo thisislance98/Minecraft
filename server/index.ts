@@ -15,7 +15,9 @@ import { feedbackRoutes } from './routes/feedback';
 import { channelRoutes } from './routes/channels';
 import { destinationRoutes } from './routes/destinations';
 import { announcementRoutes } from './routes/announcements';
+import { worldRoutes } from './routes/worlds';
 import { auth } from './config'; // Initialize config
+import { worldManagementService } from './services/WorldManagementService';
 import { worldPersistence } from './services/WorldPersistence';
 import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature } from './services/DynamicCreatureService';
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
@@ -64,6 +66,7 @@ app.use('/api/feedback', feedbackRoutes); // Deprecated but kept for compatibili
 app.use('/api/channels', channelRoutes);
 app.use('/api/destinations', destinationRoutes);
 app.use('/api/announcements', announcementRoutes);
+app.use('/api/worlds', worldRoutes);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -155,6 +158,7 @@ interface PlayerState {
 
 interface Room {
     id: string;
+    worldId: string; // The world this room belongs to
     players: string[];
     playerStates: Record<string, PlayerState>;
     worldSeed: number;
@@ -164,6 +168,9 @@ interface Room {
 }
 
 const rooms = new Map<string, Room>();
+
+// Track which world each socket is in (for cleanup)
+const socketToWorld = new Map<string, string>();
 
 // Store conversation history: key = "socketId:villagerId", value = Array of message objects
 const conversationHistory = new Map<string, Array<{ role: string, parts: { text: string }[] }>>();
@@ -203,6 +210,264 @@ function findPlayerMinigameSession(socketId: string): MinigameSession | null {
         }
     }
     return null;
+}
+
+// Helper to setup room event handlers for a socket
+function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
+    // Handle player movement
+    socket.on('player:move', (data: any) => {
+        const room = rooms.get(roomId);
+        if (room && room.playerStates[socket.id]) {
+            room.playerStates[socket.id].pos = data.pos;
+            room.playerStates[socket.id].rotY = data.rotY;
+        }
+
+        const playerState = room?.playerStates[socket.id];
+        socket.to(roomId).emit('player:move', {
+            id: socket.id,
+            pos: data.pos,
+            rotY: data.rotY,
+            name: playerState?.name,
+            isCrouching: data.isCrouching,
+            isFlying: data.isFlying,
+            health: data.health,
+            maxHealth: data.maxHealth,
+            shirtColor: playerState?.shirtColor
+        });
+    });
+
+    // Handle player held item changes
+    socket.on('player:hold', (data: { itemType: string | null }) => {
+        const room = rooms.get(roomId);
+        if (room && room.playerStates[socket.id]) {
+            room.playerStates[socket.id].heldItem = data.itemType;
+        }
+        socket.to(roomId).emit('player:hold', {
+            id: socket.id,
+            itemType: data.itemType
+        });
+    });
+
+    // Handle player damage (PvP combat)
+    socket.on('player:damage', (data: { targetId: string, amount: number }) => {
+        console.log(`[Socket] Player ${socket.id} dealing ${data.amount} damage to ${data.targetId}`);
+        io.to(roomId).emit('player:damage', {
+            targetId: data.targetId,
+            amount: data.amount,
+            sourceId: socket.id
+        });
+    });
+
+    // Handle generic player actions
+    socket.on('player:action', (data: { action: string }) => {
+        socket.to(roomId).emit('player:action', {
+            id: socket.id,
+            action: data.action
+        });
+    });
+
+    // Handle projectile spawns
+    socket.on('projectile:spawn', (data: { type: string; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } }) => {
+        console.log(`[Socket] Projectile spawn from ${socket.id}: ${data.type}`);
+        socket.to(roomId).emit('projectile:spawn', {
+            id: socket.id,
+            type: data.type,
+            pos: data.pos,
+            vel: data.vel
+        });
+    });
+
+    // Handle block changes - now uses worldId for persistence
+    socket.on('block:change', async (data: { x: number; y: number; z: number; type: string | null }) => {
+        console.log(`[DEBUG] Received block:change from ${socket.id} in world ${worldId}:`, data);
+
+        // Broadcast to all other players in the room
+        socket.to(roomId).emit('block:change', {
+            id: socket.id,
+            x: data.x,
+            y: data.y,
+            z: data.z,
+            type: data.type
+        });
+
+        // Persist to Firebase using worldId
+        await worldPersistence.saveBlockChange(worldId, data.x, data.y, data.z, data.type);
+    });
+
+    // Handle entity updates - now uses worldId
+    socket.on('entity:spawn', async (data: any) => {
+        socket.to(roomId).emit('entity:spawn', { ...data, sourceId: socket.id });
+        if (data.id && data.persist !== false) {
+            await worldPersistence.saveEntity(worldId, data.id, data);
+        }
+    });
+
+    socket.on('entity:update', async (data: any) => {
+        socket.to(roomId).emit('entity:update', data);
+        if (data.id && data.persist !== false) {
+            await worldPersistence.saveEntity(worldId, data.id, data);
+        }
+    });
+
+    socket.on('entity:remove', async (data: { id: string }) => {
+        socket.to(roomId).emit('entity:remove', data);
+        await worldPersistence.saveEntity(worldId, data.id, null);
+    });
+
+    // Handle sign updates - now uses worldId
+    socket.on('sign:update', async (data: { x: number; y: number; z: number; text: string }) => {
+        socket.to(roomId).emit('sign:update', {
+            id: socket.id,
+            ...data
+        });
+        await worldPersistence.saveSignText(worldId, data.x, data.y, data.z, data.text);
+    });
+
+    // Handle player color change
+    socket.on('player:color', (data: { shirtColor: number }) => {
+        const room = rooms.get(roomId);
+        if (room && room.playerStates[socket.id]) {
+            room.playerStates[socket.id].shirtColor = data.shirtColor;
+        }
+        socket.to(roomId).emit('player:color', {
+            id: socket.id,
+            shirtColor: data.shirtColor
+        });
+    });
+
+    // Handle time changes
+    socket.on('world:set_time', (time: number) => {
+        const room = rooms.get(roomId);
+        if (room) {
+            room.time = time;
+            console.log(`[Socket] Room ${roomId} time set to ${time} by ${socket.id}`);
+        }
+    });
+
+    // Handle voice activity
+    socket.on('player:voice', (active: boolean) => {
+        socket.to(roomId).emit('player:voice', { id: socket.id, active });
+    });
+
+    // PeerJS ID sharing
+    socket.on('peerjs:id', (data: { peerId: string }) => {
+        socket.to(roomId).emit('peerjs:id', {
+            socketId: socket.id,
+            peerId: data.peerId
+        });
+        console.log(`[Socket] PeerJS ID shared: ${socket.id} -> ${data.peerId}`);
+    });
+
+    // Soccer events
+    socket.on('soccer:ball_state', (data: any) => {
+        socket.to(roomId).emit('soccer:ball_state', data);
+    });
+
+    socket.on('soccer:ball_kick', (data: { playerId: string }) => {
+        socket.to(roomId).emit('soccer:ball_kick', data);
+    });
+
+    socket.on('soccer:goal', (data: { scoringSide: string; scores: { blue: number; orange: number } }) => {
+        socket.to(roomId).emit('soccer:goal', data);
+    });
+
+    socket.on('soccer:game_over', (data: { winner: string; scores: { blue: number; orange: number } }) => {
+        socket.to(roomId).emit('soccer:game_over', data);
+        console.log(`[Socket] Soccer game over in room ${roomId}: ${data.winner} wins`);
+    });
+
+    socket.on('soccer:game_reset', (data: {}) => {
+        socket.to(roomId).emit('soccer:game_reset', data);
+    });
+
+    socket.on('soccer:ball_reset', (data: { pos: { x: number; y: number; z: number } }) => {
+        socket.to(roomId).emit('soccer:ball_reset', data);
+    });
+
+    socket.on('soccer:request_host', () => {
+        const room = rooms.get(roomId);
+        if (!room) return;
+
+        if (!room.soccerBallHost) {
+            room.soccerBallHost = socket.id;
+            socket.emit('soccer:request_host_response', { isHost: true });
+            socket.to(roomId).emit('soccer:host_assigned', { hostId: socket.id });
+            console.log(`[Socket] Soccer ball host assigned to ${socket.id}`);
+        } else {
+            socket.emit('soccer:request_host_response', { isHost: false });
+        }
+    });
+
+    socket.on('soccer:release_host', () => {
+        const room = rooms.get(roomId);
+        if (room && room.soccerBallHost === socket.id) {
+            room.soccerBallHost = null;
+            console.log(`[Socket] Soccer ball host released by ${socket.id}`);
+        }
+    });
+}
+
+// Helper to send world-specific data to a socket
+async function sendWorldDataToSocket(socket: any, worldId: string, roomId: string) {
+    // Send persisted entities
+    try {
+        const entities = await worldPersistence.getEntities(worldId);
+        const entityList: any[] = [];
+        for (const [id, data] of entities) {
+            entityList.push({ id, ...data });
+        }
+        socket.emit('entities:initial', entityList);
+        console.log(`[Socket] Sent ${entityList.length} persisted entities to ${socket.id} for world ${worldId}`);
+    } catch (e) {
+        console.error('Failed to load/send persisted entities', e);
+        socket.emit('entities:initial', []);
+    }
+
+    // Send dynamic creature definitions
+    sendCreaturesToSocket(socket);
+
+    // Send dynamic item definitions
+    sendItemsToSocket(socket);
+
+    // Send persisted block changes
+    try {
+        const blockChanges = await Promise.race([
+            worldPersistence.getBlockChanges(worldId),
+            new Promise<Map<string, string | null>>(resolve => setTimeout(() => resolve(new Map()), 1000))
+        ]) || new Map();
+
+        if (blockChanges.size > 0) {
+            const blocksArray: { x: number; y: number; z: number; type: string | null }[] = [];
+            for (const [key, type] of blockChanges) {
+                const [x, y, z] = key.split('_').map(Number);
+                blocksArray.push({ x, y, z, type });
+            }
+            socket.emit('blocks:initial', blocksArray);
+            console.log(`[Socket] Sent ${blocksArray.length} persisted blocks to ${socket.id} for world ${worldId}`);
+        }
+    } catch (e) {
+        console.error('Failed to load/send persisted blocks', e);
+    }
+
+    // Send persisted signs
+    try {
+        const signsMap = await Promise.race([
+            worldPersistence.getSignTexts(worldId),
+            new Promise<Map<string, string>>(resolve => setTimeout(() => resolve(new Map()), 1000))
+        ]) || new Map();
+
+        if (signsMap.size > 0) {
+            const signsArray: { x: number; y: number; z: number; text: string }[] = [];
+            for (const [key, text] of signsMap) {
+                const [x, y, z] = key.split('_').map(Number);
+                signsArray.push({ x, y, z, text });
+            }
+            socket.emit('signs:initial', signsArray);
+            console.log(`[Socket] Sent ${signsArray.length} persisted signs to ${socket.id} for world ${worldId}`);
+        }
+    } catch (e) {
+        console.error('Failed to load/send persisted signs', e);
+    }
 }
 
 io.on('connection', (socket) => {
@@ -786,12 +1051,129 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('join_game', async (payload?: { name?: string, shirtColor?: number }) => {
+    // New: Join a specific world by ID
+    socket.on('join_world', async (payload: { worldId: string; name?: string; shirtColor?: number }) => {
+        const { worldId, name, shirtColor } = payload;
+
+        console.log(`[Socket] Player ${socket.id} requesting to join world: ${worldId}`);
+
+        // Get world data
+        const world = await worldManagementService.getWorld(worldId);
+        if (!world) {
+            socket.emit('world:error', { code: 'WORLD_NOT_FOUND', message: 'World not found' });
+            return;
+        }
+
+        // Check if player has access to this world
+        // For now, public and unlisted worlds are accessible to anyone
+        // TODO: Add proper auth check for private worlds
+        const canAccess = await worldManagementService.canUserAccess(worldId, null);
+        if (!canAccess) {
+            socket.emit('world:error', { code: 'ACCESS_DENIED', message: 'You do not have access to this world' });
+            return;
+        }
+
+        // Find or create a room for this world
         let roomToJoin: Room | undefined;
 
-        // 1. Try to find an existing room with space
+        // Look for an existing room for this world with space
         for (const [id, room] of rooms) {
-            if (room.players.length < MAX_PLAYERS_PER_ROOM) {
+            if (room.worldId === worldId && room.players.length < MAX_PLAYERS_PER_ROOM) {
+                roomToJoin = room;
+                break;
+            }
+        }
+
+        // If no available room for this world, create one
+        if (!roomToJoin) {
+            const newRoomId = `${worldId}-${Math.random().toString(36).substring(2, 6)}`;
+
+            roomToJoin = {
+                id: newRoomId,
+                worldId: worldId,
+                players: [],
+                playerStates: {},
+                worldSeed: world.seed,
+                createdAt: Date.now(),
+                time: world.settings.timeOfDay
+            };
+            rooms.set(newRoomId, roomToJoin);
+            console.log(`[Socket] Created new room ${newRoomId} for world ${worldId} with seed: ${world.seed}`);
+        }
+
+        // Track which world this socket is in
+        socketToWorld.set(socket.id, worldId);
+
+        // Track player joined the world
+        worldManagementService.playerJoined(worldId);
+
+        // Get permissions for this player in this world
+        const permissions = {
+            canBuild: await worldManagementService.canUserPerformAction(worldId, null, 'build'),
+            canSpawnCreatures: await worldManagementService.canUserPerformAction(worldId, null, 'spawn'),
+            canPvP: await worldManagementService.canUserPerformAction(worldId, null, 'pvp'),
+            isOwner: false // TODO: Check actual ownership when auth is implemented
+        };
+
+        // Join the socket room
+        const roomId = roomToJoin.id;
+        socket.join(roomId);
+        socket.join(`world:${worldId}`); // Also join world-level room for broadcasts
+        roomToJoin.players.push(socket.id);
+
+        // Initialize player state
+        const playerName = name || `Player_${socket.id.substring(0, 4)}`;
+        const playerColor = shirtColor !== undefined ? shirtColor : null;
+        roomToJoin.playerStates[socket.id] = {
+            pos: world.settings.spawnPoint,
+            rotY: 0,
+            name: playerName,
+            heldItem: null,
+            shirtColor: playerColor
+        };
+
+        // Setup all socket event handlers for this room
+        setupRoomEventHandlers(socket, roomId, worldId);
+
+        console.log(`[Socket] Player ${socket.id} joined world ${worldId} room ${roomId} (${roomToJoin.players.length}/${MAX_PLAYERS_PER_ROOM})`);
+
+        // Send world:joined event with world-specific data
+        socket.emit('world:joined', {
+            roomId: roomId,
+            worldId: worldId,
+            world: world,
+            worldSeed: world.seed,
+            players: roomToJoin.players,
+            playerStates: roomToJoin.playerStates,
+            isHost: roomToJoin.players.length === 1,
+            time: roomToJoin.time,
+            permissions: permissions
+        });
+
+        // Notify other players in the world
+        socket.to(roomId).emit('player:joined', {
+            id: socket.id,
+            name: playerName,
+            shirtColor: playerColor
+        });
+
+        // Send persisted data for this world
+        await sendWorldDataToSocket(socket, worldId, roomId);
+    });
+
+    // Legacy: Join any available game (for backward compatibility)
+    socket.on('join_game', async (payload?: { name?: string, shirtColor?: number }) => {
+        // Default to the global world for backward compatibility
+        const defaultWorldId = 'global';
+
+        // Ensure the global world exists
+        await worldManagementService.getOrCreateDefaultWorld();
+
+        let roomToJoin: Room | undefined;
+
+        // 1. Try to find an existing room for the global world with space
+        for (const [id, room] of rooms) {
+            if (room.worldId === defaultWorldId && room.players.length < MAX_PLAYERS_PER_ROOM) {
                 roomToJoin = room;
                 break;
             }
@@ -810,10 +1192,11 @@ io.on('connection', (socket) => {
                 ]);
             } catch (e) { console.error('Failed to load room metadata', e); }
 
-            const worldSeed = existingMetadata?.worldSeed ?? Math.floor(Math.random() * 1000000);
+            const worldSeed = existingMetadata?.worldSeed ?? 1337; // Use original seed for global world
 
             roomToJoin = {
                 id: newRoomId,
+                worldId: defaultWorldId,
                 players: [],
                 playerStates: {},
                 worldSeed,
@@ -826,6 +1209,9 @@ io.on('connection', (socket) => {
             worldPersistence.saveRoomMetadata(newRoomId, worldSeed).catch(e => console.error('Failed to save room metadata', e));
             console.log(`[Socket] Created new room: ${newRoomId} with seed: ${worldSeed} (initialized to Noon)`);
         }
+
+        // Track which world this socket is in
+        socketToWorld.set(socket.id, defaultWorldId);
 
         // 3. Join the room
         const roomId = roomToJoin.id;

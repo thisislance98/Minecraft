@@ -1,33 +1,35 @@
 /**
  * WorldPersistence Service
- * 
+ *
  * Handles persistent storage of world block changes using Firebase Realtime Database.
  * Only stores diffs from the seed-generated terrain, not the entire world.
+ *
+ * Now supports per-world persistence by worldId.
  */
 
 import { realtimeDb } from '../config';
 
 // Batch writes to avoid Firebase rate limits
 interface PendingWrite {
-    roomId: string;
+    worldId: string;
     key: string;
     blockType: string | null;
 }
 
 interface PendingEntityWrite {
-    roomId: string;
+    worldId: string;
     entityId: string;
     data: any | null; // null for deletion
 }
 
 interface PendingSignWrite {
-    roomId: string;
+    worldId: string;
     key: string;
     text: string;
 }
 
-// Hardcode a global world ID so all rooms share the same persistent world
-const GLOBAL_WORLD_ID = 'global-world';
+// Default world ID for backward compatibility (legacy global world)
+const DEFAULT_WORLD_ID = 'global';
 
 class WorldPersistenceService {
     private writeQueue: PendingWrite[] = [];
@@ -37,36 +39,29 @@ class WorldPersistenceService {
     private readonly FLUSH_INTERVAL_MS = 500; // Batch writes every 500ms
 
     private flushPromise: Promise<void> | null = null;
-    private isResetting: boolean = false;
+    private isResetting: Map<string, boolean> = new Map(); // Per-world reset tracking
 
     /**
      * Save a block change to Firebase RTDB
-     * @param roomId - The room ID (IGNORED - using global world)
+     * @param worldId - The world ID for persistence
      * @param x - Block X coordinate
      * @param y - Block Y coordinate
      * @param z - Block Z coordinate
      * @param blockType - The block type (null for air/deleted)
      */
-    async saveBlockChange(roomId: string, x: number, y: number, z: number, blockType: string | null): Promise<void> {
-        // Use global ID
-        const targetId = GLOBAL_WORLD_ID;
+    async saveBlockChange(worldId: string, x: number, y: number, z: number, blockType: string | null): Promise<void> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
 
-        // If resetting, ignore new writes to prevent pollution
-        if (this.isResetting) return;
+        // If this world is resetting, ignore new writes
+        if (this.isResetting.get(targetId)) return;
 
-        // console.log(`[WorldPersistence DEBUG] saveBlockChange called for room ${roomId} (mapped to ${targetId}), block at (${x},${y},${z}) type:${blockType}`);
         if (!realtimeDb) {
-            // Silently skip when RTDB not configured (warning is logged once at startup)
-            // console.log(`[WorldPersistence DEBUG] realtimeDb is NULL - skipping save`);
             return;
         }
 
         const key = `${Math.floor(x)}_${Math.floor(y)}_${Math.floor(z)}`;
+        this.writeQueue.push({ worldId: targetId, key, blockType });
 
-        // Add to write queue using globally shared ID
-        this.writeQueue.push({ roomId: targetId, key, blockType });
-
-        // Schedule flush if not already scheduled
         if (!this.flushTimer) {
             this.flushTimer = setTimeout(() => this.flushWrites(), this.FLUSH_INTERVAL_MS);
         }
@@ -76,15 +71,6 @@ class WorldPersistenceService {
      * Flush pending writes to Firebase in a batch
      */
     private async flushWrites(): Promise<void> {
-        // If resetting, abort flush and clear queues
-        if (this.isResetting) {
-            this.writeQueue = [];
-            this.entityWriteQueue = [];
-            this.signWriteQueue = [];
-            this.flushTimer = null;
-            return;
-        }
-
         this.flushTimer = null;
 
         // Track this flush operation
@@ -107,66 +93,62 @@ class WorldPersistenceService {
         const writes = [...this.writeQueue];
         this.writeQueue = [];
 
-        // Group by room for efficient batching
-        const byRoom = new Map<string, Map<string, string | null>>();
-        for (const { roomId, key, blockType } of writes) {
-            if (!byRoom.has(roomId)) {
-                byRoom.set(roomId, new Map());
+        // Group by world for efficient batching
+        const byWorld = new Map<string, Map<string, string | null>>();
+        for (const { worldId, key, blockType } of writes) {
+            // Skip writes for worlds that are resetting
+            if (this.isResetting.get(worldId)) continue;
+
+            if (!byWorld.has(worldId)) {
+                byWorld.set(worldId, new Map());
             }
-            byRoom.get(roomId)!.set(key, blockType);
+            byWorld.get(worldId)!.set(key, blockType);
         }
 
-        // Execute batched writes per room
-        for (const [roomId, blocks] of byRoom) {
+        // Execute batched writes per world
+        for (const [worldId, blocks] of byWorld) {
             try {
                 const updates: Record<string, string | null> = {};
                 for (const [key, blockType] of blocks) {
-                    // Convert null (air/deletion) to explicit "AIR" string so we persist the removal
-                    // Otherwise Firebase just deletes the key, and we fall back to seed terrain
-                    updates[`rooms/${roomId}/blocks/${key}`] = blockType === null ? 'AIR' : blockType;
+                    // Use worlds/{worldId}/blocks path
+                    updates[`worlds/${worldId}/blocks/${key}`] = blockType === null ? 'AIR' : blockType;
                 }
 
                 await realtimeDb!.ref().update(updates);
-                // console.log(`[WorldPersistence] Saved ${blocks.size} block(s) for room ${roomId}`);
             } catch (error) {
-                console.error(`[WorldPersistence] Failed to save blocks for room ${roomId}:`, error);
+                console.error(`[WorldPersistence] Failed to save blocks for world ${worldId}:`, error);
             }
         }
     }
 
     /**
-     * Get all block changes for a room
-     * @param roomId - The room ID (IGNORED - using global world)
+     * Get all block changes for a world
+     * @param worldId - The world ID
      * @returns Map of "x_y_z" -> blockType
      */
-    async getBlockChanges(roomId: string): Promise<Map<string, string | null>> {
-        // Use global ID
-        const targetId = GLOBAL_WORLD_ID;
-
+    async getBlockChanges(worldId: string): Promise<Map<string, string | null>> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
         const result = new Map<string, string | null>();
 
         if (!realtimeDb) {
-            // Silently return empty when RTDB not configured (warning is logged once at startup)
             return result;
         }
 
         try {
-            const snapshot = await realtimeDb.ref(`rooms/${targetId}/blocks`).get();
+            const snapshot = await realtimeDb.ref(`worlds/${targetId}/blocks`).get();
 
             if (snapshot.exists()) {
                 const data = snapshot.val() as Record<string, string | null>;
                 for (const [key, blockType] of Object.entries(data)) {
-                    // Convert stored "AIR" back to null (what client expects)
                     if (blockType === 'AIR') {
                         result.set(key, null);
                     } else {
                         result.set(key, blockType);
                     }
                 }
-                // console.log(`[WorldPersistence] Loaded ${result.size} block change(s) for room ${roomId} (from ${targetId})`);
             }
         } catch (error) {
-            console.error(`[WorldPersistence] Failed to load blocks for room ${roomId} (target: ${targetId}):`, error);
+            console.error(`[WorldPersistence] Failed to load blocks for world ${targetId}:`, error);
         }
 
         return result;
@@ -176,11 +158,6 @@ class WorldPersistenceService {
      * Save room metadata (world seed, created time, etc.)
      */
     async saveRoomMetadata(roomId: string, worldSeed: number): Promise<void> {
-        // Metadata might still differ per room?
-        // User said "all room should have the same world".
-        // But players are distinct per room.
-        // Let's keep metadata per room for now as it tracks room creation, 
-        // but blocks are global.
         if (!realtimeDb) return;
 
         try {
@@ -188,7 +165,6 @@ class WorldPersistenceService {
                 worldSeed,
                 createdAt: Date.now()
             });
-            // console.log(`[WorldPersistence] Saved metadata for room ${roomId}`);
         } catch (error) {
             console.error(`[WorldPersistence] Failed to save room metadata:`, error);
         }
@@ -228,17 +204,17 @@ class WorldPersistenceService {
 
     /**
      * Save/Update an entity
+     * @param worldId - The world ID
+     * @param entityId - The entity's unique ID
+     * @param data - Entity data (null for deletion)
      */
-    async saveEntity(roomId: string, entityId: string, data: any): Promise<void> {
-        const targetId = GLOBAL_WORLD_ID;
+    async saveEntity(worldId: string, entityId: string, data: any): Promise<void> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
 
-        // If resetting, ignore new writes
-        if (this.isResetting) return;
-
-        // console.log(`[WorldPersistence] saveEntity called for ${entityId}`);
+        if (this.isResetting.get(targetId)) return;
         if (!realtimeDb) return;
 
-        this.entityWriteQueue.push({ roomId: targetId, entityId, data });
+        this.entityWriteQueue.push({ worldId: targetId, entityId, data });
 
         if (!this.flushTimer) {
             this.flushTimer = setTimeout(() => this.flushWrites(), this.FLUSH_INTERVAL_MS);
@@ -251,60 +227,64 @@ class WorldPersistenceService {
         const writes = [...this.entityWriteQueue];
         this.entityWriteQueue = [];
 
-        const byRoom = new Map<string, Map<string, any>>();
-        for (const { roomId, entityId, data } of writes) {
-            if (!byRoom.has(roomId)) {
-                byRoom.set(roomId, new Map());
+        const byWorld = new Map<string, Map<string, any>>();
+        for (const { worldId, entityId, data } of writes) {
+            if (this.isResetting.get(worldId)) continue;
+
+            if (!byWorld.has(worldId)) {
+                byWorld.set(worldId, new Map());
             }
-            byRoom.get(roomId)!.set(entityId, data);
+            byWorld.get(worldId)!.set(entityId, data);
         }
 
-        for (const [roomId, entities] of byRoom) {
+        for (const [worldId, entities] of byWorld) {
             try {
                 const updates: Record<string, any> = {};
                 for (const [entityId, data] of entities) {
-                    updates[`rooms/${roomId}/entities/${entityId}`] = data;
+                    updates[`worlds/${worldId}/entities/${entityId}`] = data;
                 }
                 await realtimeDb!.ref().update(updates);
-                // console.log(`[WorldPersistence] Saved ${entities.size} entity updates for room ${roomId}`);
             } catch (error) {
-                console.error(`[WorldPersistence] Failed to save entities for room ${roomId}:`, error);
+                console.error(`[WorldPersistence] Failed to save entities for world ${worldId}:`, error);
             }
         }
     }
 
     /**
-     * Get all entities for a room
+     * Get all entities for a world
+     * @param worldId - The world ID
      */
-    async getEntities(roomId: string): Promise<Map<string, any>> {
-        const targetId = GLOBAL_WORLD_ID;
+    async getEntities(worldId: string): Promise<Map<string, any>> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
         const result = new Map<string, any>();
         if (!realtimeDb) return result;
 
         try {
-            const snapshot = await realtimeDb.ref(`rooms/${targetId}/entities`).get();
+            const snapshot = await realtimeDb.ref(`worlds/${targetId}/entities`).get();
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 for (const [id, entityData] of Object.entries(data)) {
                     result.set(id, entityData);
                 }
-                // console.log(`[WorldPersistence] Loaded ${result.size} entities for room ${roomId}`);
             }
         } catch (error) {
-            console.error(`[WorldPersistence] Failed to load entities:`, error);
+            console.error(`[WorldPersistence] Failed to load entities for world ${targetId}:`, error);
         }
         return result;
     }
-    async saveSignText(roomId: string, x: number, y: number, z: number, text: string): Promise<void> {
-        const targetId = GLOBAL_WORLD_ID;
 
-        // If resetting, ignore new writes
-        if (this.isResetting) return;
+    /**
+     * Save sign text
+     * @param worldId - The world ID
+     */
+    async saveSignText(worldId: string, x: number, y: number, z: number, text: string): Promise<void> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
 
+        if (this.isResetting.get(targetId)) return;
         if (!realtimeDb) return;
 
         const key = `${Math.floor(x)}_${Math.floor(y)}_${Math.floor(z)}`;
-        this.signWriteQueue.push({ roomId: targetId, key, text });
+        this.signWriteQueue.push({ worldId: targetId, key, text });
 
         if (!this.flushTimer) {
             this.flushTimer = setTimeout(() => this.flushWrites(), this.FLUSH_INTERVAL_MS);
@@ -317,33 +297,38 @@ class WorldPersistenceService {
         const writes = [...this.signWriteQueue];
         this.signWriteQueue = [];
 
-        const byRoom = new Map<string, Map<string, string>>();
-        for (const { roomId, key, text } of writes) {
-            if (!byRoom.has(roomId)) byRoom.set(roomId, new Map());
-            byRoom.get(roomId)!.set(key, text);
+        const byWorld = new Map<string, Map<string, string>>();
+        for (const { worldId, key, text } of writes) {
+            if (this.isResetting.get(worldId)) continue;
+
+            if (!byWorld.has(worldId)) byWorld.set(worldId, new Map());
+            byWorld.get(worldId)!.set(key, text);
         }
 
-        for (const [roomId, signs] of byRoom) {
+        for (const [worldId, signs] of byWorld) {
             try {
                 const updates: Record<string, string> = {};
                 for (const [key, text] of signs) {
-                    updates[`rooms/${roomId}/signs/${key}`] = text;
+                    updates[`worlds/${worldId}/signs/${key}`] = text;
                 }
                 await realtimeDb!.ref().update(updates);
-                // console.log(`[WorldPersistence] Saved ${signs.size} signs for room ${roomId}`);
             } catch (error) {
-                console.error(`[WorldPersistence] Failed to save signs:`, error);
+                console.error(`[WorldPersistence] Failed to save signs for world ${worldId}:`, error);
             }
         }
     }
 
-    async getSignTexts(roomId: string): Promise<Map<string, string>> {
-        const targetId = GLOBAL_WORLD_ID;
+    /**
+     * Get all signs for a world
+     * @param worldId - The world ID
+     */
+    async getSignTexts(worldId: string): Promise<Map<string, string>> {
+        const targetId = worldId || DEFAULT_WORLD_ID;
         const result = new Map<string, string>();
         if (!realtimeDb) return result;
 
         try {
-            const snapshot = await realtimeDb.ref(`rooms/${targetId}/signs`).get();
+            const snapshot = await realtimeDb.ref(`worlds/${targetId}/signs`).get();
             if (snapshot.exists()) {
                 const data = snapshot.val();
                 for (const [key, text] of Object.entries(data)) {
@@ -351,59 +336,58 @@ class WorldPersistenceService {
                 }
             }
         } catch (error) {
-            console.error('Failed to get signs:', error);
+            console.error(`[WorldPersistence] Failed to get signs for world ${targetId}:`, error);
         }
         return result;
     }
 
     /**
-     * Reset the entire world - clears all blocks, entities, and signs
+     * Reset a specific world - clears all blocks, entities, and signs
+     * @param worldId - The world ID to reset (defaults to global)
      * @returns Promise that resolves when reset is complete
      */
-    async resetWorld(): Promise<void> {
+    async resetWorld(worldId: string = DEFAULT_WORLD_ID): Promise<void> {
         if (!realtimeDb) {
             console.log('[WorldPersistence] No database configured, skipping reset');
             return;
         }
 
-        // 1. Mark as resetting to block new writes
-        this.isResetting = true;
+        // Mark this world as resetting
+        this.isResetting.set(worldId, true);
 
         try {
-            // 2. Clear pending local API queues immediately
+            // Clear pending queues for this world
             if (this.flushTimer) {
                 clearTimeout(this.flushTimer);
                 this.flushTimer = null;
             }
-            this.writeQueue = [];
-            this.entityWriteQueue = [];
-            this.signWriteQueue = [];
+            this.writeQueue = this.writeQueue.filter(w => w.worldId !== worldId);
+            this.entityWriteQueue = this.entityWriteQueue.filter(w => w.worldId !== worldId);
+            this.signWriteQueue = this.signWriteQueue.filter(w => w.worldId !== worldId);
 
-            // 3. Wait for any active flush to complete
+            // Wait for any active flush to complete
             if (this.flushPromise) {
                 console.log('[WorldPersistence] Waiting for active flush before reset...');
                 await this.flushPromise;
             }
 
-            // 4. Clear the global world data (blocks, entities, signs)
-            console.log('[WorldPersistence] Executing world reset...');
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/blocks`).remove();
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/entities`).remove();
-            await realtimeDb.ref(`rooms/${GLOBAL_WORLD_ID}/signs`).remove();
+            // Clear world data
+            console.log(`[WorldPersistence] Executing world reset for ${worldId}...`);
+            await realtimeDb.ref(`worlds/${worldId}/blocks`).remove();
+            await realtimeDb.ref(`worlds/${worldId}/entities`).remove();
+            await realtimeDb.ref(`worlds/${worldId}/signs`).remove();
 
-            console.log('[WorldPersistence] World reset complete - cleared all blocks, entities, and signs');
+            console.log(`[WorldPersistence] World ${worldId} reset complete`);
 
-            // Keep the lock active for a grace period to prevent clients from 
-            // re-saving old entities before they reload
+            // Grace period before re-enabling writes
             setTimeout(() => {
-                this.isResetting = false;
-                console.log('[WorldPersistence] World reset grace period ended. Writes enabled.');
+                this.isResetting.delete(worldId);
+                console.log(`[WorldPersistence] World ${worldId} reset grace period ended`);
             }, 5000);
 
-            // Do NOT set isResetting = false here immediately
         } catch (error) {
-            console.error('[WorldPersistence] Failed to reset world:', error);
-            this.isResetting = false; // Release lock on error
+            console.error(`[WorldPersistence] Failed to reset world ${worldId}:`, error);
+            this.isResetting.delete(worldId);
             throw error;
         }
     }

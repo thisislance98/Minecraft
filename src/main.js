@@ -1,6 +1,7 @@
 import { generateHotbarIcons } from './textures/TextureGenerator.js';
 import { VoxelGame } from './game/VoxelGame.jsx';
 import { SpawnUI } from './game/ui/SpawnUI.js';
+import { WorldBrowserUI } from './game/ui/WorldBrowserUI.js';
 
 // Test auto-version: timestamp 18:56
 // HMR test change - 12:46
@@ -50,6 +51,10 @@ window.addEventListener('load', () => {
     // Initialize Spawn UI
     const spawnUI = new SpawnUI(game);
     window.spawnUI = spawnUI; // For debugging
+
+    // Initialize World Browser UI
+    const worldBrowserUI = new WorldBrowserUI(game);
+    window.worldBrowserUI = worldBrowserUI; // For debugging
 
     // Merlin Voice Introduction (One-time)
     const introKey = 'merlin_voice_intro_seen';

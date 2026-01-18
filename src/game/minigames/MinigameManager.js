@@ -155,6 +155,9 @@ export class MinigameManager {
             if (this.xboxTank && this.xboxTank.isActive) {
                 this.xboxTank.becomeHost(data.gameState);
             }
+            if (this.xboxPong && this.xboxPong.isActive) {
+                this.xboxPong.becomeHost(data.gameState);
+            }
         });
 
         this.socketListenersSetup = true;
@@ -542,6 +545,12 @@ export class MinigameManager {
         if (data.gameType === 'tank') {
             this.currentXboxGame = 'tank';
             this.startXboxTankMultiplayer(data, isHost, localPlayer);
+        } else if (data.gameType === 'pong') {
+            this.currentXboxGame = 'pong';
+            this.startXboxPongMultiplayer(data, isHost, localPlayer);
+        } else if (data.gameType === 'platformer') {
+            this.currentXboxGame = 'platformer';
+            this.startXboxPlatformerMultiplayer(data, isHost, localPlayer);
         } else {
             // For other games, fall back to single-player for now
             console.log(`[MinigameManager] ${data.gameType} multiplayer not yet implemented, starting single-player`);
@@ -626,6 +635,91 @@ export class MinigameManager {
 
         this.xboxTank.startMultiplayer(data, isHost, localPlayer);
         this.tankState = this.xboxTank.state;
+    }
+
+    /**
+     * Start multiplayer Pong
+     */
+    startXboxPongMultiplayer(data, isHost, localPlayer) {
+        this.stopAllXboxGames();
+
+        const canvas = document.getElementById('xbox-canvas');
+        if (!canvas) return;
+
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            const paddleSide = localPlayer?.playerIndex === 0 ? 'LEFT' : 'RIGHT';
+            hintDiv.innerHTML = `
+                <b style="color: #fff;">W/S</b> Move paddle |
+                <span style="color: ${localPlayer?.color || '#107c10'};">●</span> You (${paddleSide})
+                <span style="color:#666">(ESC for menu)</span>
+            `;
+        }
+
+        canvas.style.display = 'block';
+        document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
+
+        const self = this;
+        this.xboxPong = new XboxPong(canvas, {
+            onGameOver: () => {
+                document.getElementById('xbox-game-over').style.display = 'flex';
+            },
+            onLevelComplete: (nextLevel) => {
+                setTimeout(() => self.startXboxPong(nextLevel), 2000);
+            },
+            onAllLevelsComplete: () => {
+                setTimeout(() => self.showXboxMenu(), 3000);
+            }
+        }, this.socketManager, true); // Pass socketManager and isMultiplayer=true
+
+        this.xboxPong.startMultiplayer(data, isHost, localPlayer);
+        this.pongState = this.xboxPong.state;
+    }
+
+    /**
+     * Start multiplayer Platformer Race
+     */
+    startXboxPlatformerMultiplayer(data, isHost, localPlayer) {
+        this.stopAllXboxGames();
+
+        const canvas = document.getElementById('xbox-canvas');
+        if (!canvas) return;
+
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `
+                <b style="color: #fff;">A/D</b> Move | <b style="color: #fff;">W/Space</b> Jump |
+                <span style="color: ${localPlayer?.color || '#107c10'};">●</span> You
+                <span style="color:#666">(ESC for menu)</span>
+            `;
+        }
+
+        canvas.style.display = 'block';
+        document.getElementById('xbox-game-over').style.display = 'none';
+        this.showBackToMenuButton();
+
+        const self = this;
+        this.xboxPlatformer = new XboxPlatformer(canvas, {
+            onGameOver: () => {
+                document.getElementById('xbox-game-over').style.display = 'flex';
+            },
+            onLevelComplete: (nextLevel) => {
+                setTimeout(() => self.startXboxPlatformer(nextLevel), 500);
+            },
+            onAllLevelsComplete: () => {
+                setTimeout(() => self.showXboxMenu(), 3000);
+            }
+        }, this.socketManager, true); // Pass socketManager and isMultiplayer=true
+
+        this.xboxPlatformer.startMultiplayer(data, isHost, localPlayer);
+        this.platformerState = this.xboxPlatformer.state;
     }
 
     showXboxUI() {
@@ -785,8 +879,8 @@ export class MinigameManager {
         backMenuBtn.onclick = () => this.showXboxMenu();
 
         document.getElementById('play-platformer').onclick = () => {
-            this.currentXboxGame = 'platformer';
-            this.startXboxPlatformer(0);
+            // Show mode selection for Platformer
+            this.showPlatformerModeSelection();
         };
         document.getElementById('play-joust').onclick = () => {
             this.currentXboxGame = 'joust';
@@ -809,8 +903,8 @@ export class MinigameManager {
             this.showTankModeSelection();
         };
         document.getElementById('play-pong').onclick = () => {
-            this.currentXboxGame = 'pong';
-            this.startXboxPong();
+            // Show mode selection for Pong
+            this.showPongModeSelection();
         };
 
         this.startXboxBootSequence();
@@ -863,6 +957,8 @@ export class MinigameManager {
         const lobbyDiv = document.getElementById('xbox-lobby');
         const waitingDiv = document.getElementById('xbox-waiting');
         const modeSelectDiv = document.getElementById('xbox-tank-mode-select');
+        const pongModeSelectDiv = document.getElementById('xbox-pong-mode-select');
+        const platformerModeSelectDiv = document.getElementById('xbox-platformer-mode-select');
 
         if (bootDiv) bootDiv.style.display = 'none';
         if (canvas) canvas.style.display = 'none';
@@ -870,6 +966,8 @@ export class MinigameManager {
         if (lobbyDiv) lobbyDiv.remove();
         if (waitingDiv) waitingDiv.remove();
         if (modeSelectDiv) modeSelectDiv.remove();
+        if (pongModeSelectDiv) pongModeSelectDiv.remove();
+        if (platformerModeSelectDiv) platformerModeSelectDiv.remove();
         if (menuDiv) menuDiv.style.display = 'flex';
         if (hintDiv) hintDiv.innerHTML = 'Select a game to start! <span style="color:#666">(ESC to close)</span>';
         if (backToMenuBtn) backToMenuBtn.style.display = 'none';
@@ -1134,6 +1232,214 @@ export class MinigameManager {
         }
 
         document.getElementById('tank-mode-back').onclick = () => {
+            modeSelectDiv.remove();
+            this.showXboxMenu();
+        };
+    }
+
+    /**
+     * Show mode selection UI for Pong (Single Player vs Multiplayer)
+     */
+    showPongModeSelection() {
+        const gameScreen = document.getElementById('xbox-game-screen');
+        if (!gameScreen) return;
+
+        // Hide the main menu
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        // Remove any existing mode selection UI
+        const existingModeSelect = document.getElementById('xbox-pong-mode-select');
+        if (existingModeSelect) existingModeSelect.remove();
+
+        const modeSelectDiv = document.createElement('div');
+        modeSelectDiv.id = 'xbox-pong-mode-select';
+        modeSelectDiv.style.cssText = `
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 20px;
+            box-sizing: border-box; color: white; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        const multiplayerAvailable = this.multiplayerEnabled && this.socketManager?.isConnected();
+
+        modeSelectDiv.innerHTML = `
+            <div style="font-size: 32px; color: #107c10; margin-bottom: 10px; font-weight: bold;">
+                🏓 PONG
+            </div>
+            <div style="font-size: 14px; color: #888; margin-bottom: 30px;">
+                Select Game Mode
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 300px;">
+                <button id="pong-mode-single" style="
+                    background: linear-gradient(180deg, #1a5a1a 0%, #107c10 100%);
+                    color: white; border: 2px solid #2a8a2a;
+                    padding: 20px 30px; font-size: 18px; cursor: pointer;
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                ">
+                    <span style="font-size: 28px;">🤖</span>
+                    <div>
+                        <div style="font-weight: bold;">Single Player</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Play against the AI</div>
+                    </div>
+                </button>
+                <button id="pong-mode-multiplayer" style="
+                    background: ${multiplayerAvailable ? 'linear-gradient(180deg, #1a4a7a 0%, #3366cc 100%)' : '#333'};
+                    color: ${multiplayerAvailable ? 'white' : '#666'};
+                    border: 2px solid ${multiplayerAvailable ? '#4477dd' : '#444'};
+                    padding: 20px 30px; font-size: 18px;
+                    cursor: ${multiplayerAvailable ? 'pointer' : 'not-allowed'};
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                " ${multiplayerAvailable ? '' : 'disabled'}>
+                    <span style="font-size: 28px;">👥</span>
+                    <div>
+                        <div style="font-weight: bold;">Multiplayer</div>
+                        <div style="font-size: 12px; opacity: 0.8;">
+                            ${multiplayerAvailable ? 'Play against another player' : 'Not connected to server'}
+                        </div>
+                    </div>
+                </button>
+            </div>
+            <button id="pong-mode-back" style="
+                margin-top: 30px; background: #333; color: white; border: 1px solid #555;
+                padding: 10px 25px; font-size: 14px; cursor: pointer;
+                border-radius: 5px; transition: all 0.2s;
+            ">◀ Back to Menu</button>
+            <style>
+                #pong-mode-single:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(16, 124, 16, 0.5); }
+                #pong-mode-multiplayer:not([disabled]):hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(51, 102, 204, 0.5); }
+            </style>
+        `;
+
+        gameScreen.appendChild(modeSelectDiv);
+
+        // Update controls hint
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `Choose your game mode <span style="color:#666">(ESC to go back)</span>`;
+        }
+
+        // Button handlers
+        document.getElementById('pong-mode-single').onclick = () => {
+            modeSelectDiv.remove();
+            this.currentXboxGame = 'pong';
+            this.startXboxPong(0);
+        };
+
+        if (multiplayerAvailable) {
+            document.getElementById('pong-mode-multiplayer').onclick = () => {
+                modeSelectDiv.remove();
+                this.autoJoinMinigame('pong');
+            };
+        }
+
+        document.getElementById('pong-mode-back').onclick = () => {
+            modeSelectDiv.remove();
+            this.showXboxMenu();
+        };
+    }
+
+    /**
+     * Show mode selection UI for Platformer (Single Player vs Multiplayer Race)
+     */
+    showPlatformerModeSelection() {
+        const gameScreen = document.getElementById('xbox-game-screen');
+        if (!gameScreen) return;
+
+        // Hide the main menu
+        const menuDiv = document.getElementById('xbox-menu');
+        if (menuDiv) menuDiv.style.display = 'none';
+
+        // Remove any existing mode selection UI
+        const existingModeSelect = document.getElementById('xbox-platformer-mode-select');
+        if (existingModeSelect) existingModeSelect.remove();
+
+        const modeSelectDiv = document.createElement('div');
+        modeSelectDiv.id = 'xbox-platformer-mode-select';
+        modeSelectDiv.style.cssText = `
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0a0a0a; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 20px;
+            box-sizing: border-box; color: white; font-family: 'Segoe UI', sans-serif;
+        `;
+
+        const multiplayerAvailable = this.multiplayerEnabled && this.socketManager?.isConnected();
+
+        modeSelectDiv.innerHTML = `
+            <div style="font-size: 32px; color: #107c10; margin-bottom: 10px; font-weight: bold;">
+                🏃 PLATFORMER
+            </div>
+            <div style="font-size: 14px; color: #888; margin-bottom: 30px;">
+                Select Game Mode
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 15px; width: 80%; max-width: 300px;">
+                <button id="platformer-mode-single" style="
+                    background: linear-gradient(180deg, #1a5a1a 0%, #107c10 100%);
+                    color: white; border: 2px solid #2a8a2a;
+                    padding: 20px 30px; font-size: 18px; cursor: pointer;
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                ">
+                    <span style="font-size: 28px;">🎮</span>
+                    <div>
+                        <div style="font-weight: bold;">Single Player</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Complete all levels</div>
+                    </div>
+                </button>
+                <button id="platformer-mode-multiplayer" style="
+                    background: ${multiplayerAvailable ? 'linear-gradient(180deg, #1a4a7a 0%, #3366cc 100%)' : '#333'};
+                    color: ${multiplayerAvailable ? 'white' : '#666'};
+                    border: 2px solid ${multiplayerAvailable ? '#4477dd' : '#444'};
+                    padding: 20px 30px; font-size: 18px;
+                    cursor: ${multiplayerAvailable ? 'pointer' : 'not-allowed'};
+                    border-radius: 8px; transition: all 0.2s; text-align: left;
+                    display: flex; align-items: center; gap: 15px;
+                " ${multiplayerAvailable ? '' : 'disabled'}>
+                    <span style="font-size: 28px;">🏁</span>
+                    <div>
+                        <div style="font-weight: bold;">Multiplayer Race</div>
+                        <div style="font-size: 12px; opacity: 0.8;">
+                            ${multiplayerAvailable ? 'Race to the goal against others' : 'Not connected to server'}
+                        </div>
+                    </div>
+                </button>
+            </div>
+            <button id="platformer-mode-back" style="
+                margin-top: 30px; background: #333; color: white; border: 1px solid #555;
+                padding: 10px 25px; font-size: 14px; cursor: pointer;
+                border-radius: 5px; transition: all 0.2s;
+            ">◀ Back to Menu</button>
+            <style>
+                #platformer-mode-single:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(16, 124, 16, 0.5); }
+                #platformer-mode-multiplayer:not([disabled]):hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(51, 102, 204, 0.5); }
+            </style>
+        `;
+
+        gameScreen.appendChild(modeSelectDiv);
+
+        // Update controls hint
+        const hintDiv = document.getElementById('xbox-controls-hint');
+        if (hintDiv) {
+            hintDiv.innerHTML = `Choose your game mode <span style="color:#666">(ESC to go back)</span>`;
+        }
+
+        // Button handlers
+        document.getElementById('platformer-mode-single').onclick = () => {
+            modeSelectDiv.remove();
+            this.currentXboxGame = 'platformer';
+            this.startXboxPlatformer(0);
+        };
+
+        if (multiplayerAvailable) {
+            document.getElementById('platformer-mode-multiplayer').onclick = () => {
+                modeSelectDiv.remove();
+                this.autoJoinMinigame('platformer');
+            };
+        }
+
+        document.getElementById('platformer-mode-back').onclick = () => {
             modeSelectDiv.remove();
             this.showXboxMenu();
         };
@@ -1507,7 +1813,7 @@ export class MinigameManager {
         const hintDiv = document.getElementById('xbox-controls-hint');
         if (menuDiv) menuDiv.style.display = 'none';
         if (hintDiv) {
-            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move | <b style="color: #fff;">Space</b> Shoot | Repel the <b style="color: #ff3333;">Invaders</b> <span style="color:#666">(ESC for menu)</span>`;
+            hintDiv.innerHTML = `<b style="color: #fff;">A / D</b> Move | <b style="color: #fff;">Space</b> Shoot (max 3) | Repel the <b style="color: #ff3333;">Invaders</b> <span style="color:#666">(ESC for menu)</span>`;
         }
 
         canvas.style.display = 'block';
@@ -1527,7 +1833,11 @@ export class MinigameManager {
             enemyDir: 1,
             enemyStep: 0,
             score: 0,
-            keys: {}
+            keys: {},
+            // Shooting cooldown - can only shoot every 400ms
+            lastShotTime: 0,
+            shootCooldown: 400, // milliseconds between shots
+            maxBullets: 3 // Maximum bullets on screen at once
         };
 
         for (let r = 0; r < 4; r++) {
@@ -1539,9 +1849,7 @@ export class MinigameManager {
         const handleKeyDown = (e) => {
             if (!this.invadersState) return;
             this.invadersState.keys[e.code] = true;
-            if (e.code === 'Space') {
-                this.invadersState.bullets.push({ x: this.invadersState.player.x + 15, y: this.invadersState.player.y, r: 3 });
-            }
+            // Shooting is now handled in the update loop with cooldown
         };
         const handleKeyUp = (e) => { if (this.invadersState) this.invadersState.keys[e.code] = false; };
 
@@ -1564,6 +1872,15 @@ export class MinigameManager {
             if (s.keys['KeyD'] || s.keys['ArrowRight']) s.player.x += 5 * speedScale;
             if (s.player.x < 0) s.player.x = 0;
             if (s.player.x + s.player.w > width) s.player.x = width - s.player.w;
+
+            // Shooting with cooldown - no more holding space to win!
+            const now = performance.now();
+            if (s.keys['Space'] &&
+                (now - s.lastShotTime >= s.shootCooldown) &&
+                s.bullets.length < s.maxBullets) {
+                s.bullets.push({ x: s.player.x + 15, y: s.player.y, r: 3 });
+                s.lastShotTime = now;
+            }
 
             // Bullets
             for (let i = s.bullets.length - 1; i >= 0; i--) {

@@ -11,7 +11,7 @@ import { db } from '../config';
 
 export interface KnowledgeEntry {
     id?: string;
-    category: 'template' | 'gotcha' | 'howto' | 'error';
+    category: 'template' | 'gotcha' | 'howto' | 'error' | 'example';
     title: string;
     content: string;
     tags?: string[];

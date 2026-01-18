@@ -77,6 +77,11 @@ export class WorldGenerator {
             return this.generateLavaWorldChunk(chunk, cx, cy, cz);
         }
 
+        // Soccer World Generation
+        if (cy >= Config.WORLD.SOCCER_WORLD_Y_START && cy < Config.WORLD.SOCCER_WORLD_Y_START + Config.WORLD.SOCCER_WORLD_HEIGHT) {
+            return this.generateSoccerWorldChunk(chunk, cx, cy, cz);
+        }
+
         const startX = cx * this.game.chunkSize;
         const startY = cy * this.game.chunkSize;
         const startZ = cz * this.game.chunkSize;
@@ -344,6 +349,161 @@ export class WorldGenerator {
 
         chunk.isGenerated = true;
         return chunk;
+    }
+
+    /**
+     * Generate Soccer World - Rocket League style arena
+     * A flat green field with walls, goals, and field markings
+     */
+    generateSoccerWorldChunk(chunk, cx, cy, cz) {
+        const startX = cx * this.game.chunkSize;
+        const startY = cy * this.game.chunkSize;
+        const startZ = cz * this.game.chunkSize;
+
+        // Base height of Soccer World surface
+        const soccerBaseY = Config.WORLD.SOCCER_WORLD_Y_START * this.game.chunkSize + 32;
+
+        // Arena dimensions (Rocket League style - large!)
+        const arenaHalfLengthX = 80;  // 160 blocks long (X axis)
+        const arenaHalfWidthZ = 50;   // 100 blocks wide (Z axis)
+        const wallHeight = 15;         // Height of arena walls
+        const goalWidth = 20;          // Goal opening width
+        const goalDepth = 8;           // How far back the goal goes
+        const goalHeight = 10;         // Goal height
+
+        for (let x = 0; x < this.game.chunkSize; x++) {
+            for (let z = 0; z < this.game.chunkSize; z++) {
+                const wx = startX + x;
+                const wz = startZ + z;
+
+                // Check if we're within the arena bounds
+                const inArenaX = Math.abs(wx) <= arenaHalfLengthX + goalDepth;
+                const inArenaZ = Math.abs(wz) <= arenaHalfWidthZ;
+
+                // Check if we're in the goal area
+                const inGoalAreaX = Math.abs(wx) > arenaHalfLengthX && Math.abs(wx) <= arenaHalfLengthX + goalDepth;
+                const inGoalZ = Math.abs(wz) <= goalWidth / 2;
+                const inGoal = inGoalAreaX && inGoalZ;
+
+                // Check if we're on the main field
+                const onField = Math.abs(wx) <= arenaHalfLengthX && Math.abs(wz) <= arenaHalfWidthZ;
+
+                for (let y = 0; y < this.game.chunkSize; y++) {
+                    const wy = startY + y;
+
+                    // Floor layer
+                    if (wy === soccerBaseY) {
+                        if (onField || inGoal) {
+                            // Check for field markings
+                            const isLineBlock = this.isSoccerFieldLine(wx, wz, arenaHalfLengthX, arenaHalfWidthZ);
+                            if (isLineBlock) {
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_LINE, true, true);
+                            } else {
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_FIELD, true, true);
+                            }
+                        }
+                    }
+                    // Below floor - solid foundation
+                    else if (wy < soccerBaseY && wy > soccerBaseY - 3) {
+                        if (onField || inGoal) {
+                            this.game.setBlock(wx, wy, wz, Blocks.SOCCER_FIELD, true, true);
+                        }
+                    }
+                    // Walls
+                    else if (wy > soccerBaseY && wy <= soccerBaseY + wallHeight) {
+                        // Side walls (Z boundaries)
+                        if (Math.abs(wz) === arenaHalfWidthZ && Math.abs(wx) <= arenaHalfLengthX) {
+                            this.game.setBlock(wx, wy, wz, Blocks.SOCCER_WALL, true, true);
+                        }
+                        // End walls (X boundaries) - with goal openings
+                        if (Math.abs(wx) === arenaHalfLengthX && Math.abs(wz) < arenaHalfWidthZ) {
+                            // Check if this is the goal opening
+                            if (Math.abs(wz) <= goalWidth / 2 && wy <= soccerBaseY + goalHeight) {
+                                // Don't place wall here - goal opening
+                            } else {
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_WALL, true, true);
+                            }
+                        }
+                        // Corner pillars (rounded corners)
+                        const cornerDist = Math.sqrt(
+                            Math.pow(Math.abs(wx) - arenaHalfLengthX, 2) +
+                            Math.pow(Math.abs(wz) - arenaHalfWidthZ, 2)
+                        );
+                        if (cornerDist <= 8 && Math.abs(wx) >= arenaHalfLengthX - 8 && Math.abs(wz) >= arenaHalfWidthZ - 8) {
+                            if (Math.abs(wx) > arenaHalfLengthX || Math.abs(wz) > arenaHalfWidthZ) {
+                                // Outside the straight walls - fill corner
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_WALL, true, true);
+                            }
+                        }
+
+                        // Goal structures
+                        if (inGoal) {
+                            // Goal frame (posts and crossbar)
+                            const isGoalPost = Math.abs(wz) >= goalWidth / 2 - 1 && Math.abs(wz) <= goalWidth / 2;
+                            const isCrossbar = wy === soccerBaseY + goalHeight && Math.abs(wz) <= goalWidth / 2;
+                            const isBackWall = Math.abs(wx) === arenaHalfLengthX + goalDepth;
+
+                            if (isGoalPost || isCrossbar) {
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_GOAL_FRAME, true, true);
+                            } else if (isBackWall && wy <= soccerBaseY + goalHeight) {
+                                // Back of goal net
+                                this.game.setBlock(wx, wy, wz, Blocks.SOCCER_GOAL_NET, true, true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        chunk.isGenerated = true;
+        return chunk;
+    }
+
+    /**
+     * Check if a position should have a field line marking
+     */
+    isSoccerFieldLine(wx, wz, arenaHalfLengthX, arenaHalfWidthZ) {
+        // Center line
+        if (Math.abs(wx) <= 1) return true;
+
+        // Center circle (radius ~15 blocks)
+        const centerDist = Math.sqrt(wx * wx + wz * wz);
+        if (centerDist >= 14 && centerDist <= 16) return true;
+
+        // Center spot
+        if (Math.abs(wx) <= 1 && Math.abs(wz) <= 1) return true;
+
+        // Penalty areas (large boxes near goals)
+        const penaltyAreaLength = 25;
+        const penaltyAreaWidth = 35;
+        if (Math.abs(wx) >= arenaHalfLengthX - penaltyAreaLength && Math.abs(wx) <= arenaHalfLengthX - penaltyAreaLength + 1) {
+            if (Math.abs(wz) <= penaltyAreaWidth / 2) return true;
+        }
+        if (Math.abs(wx) >= arenaHalfLengthX - penaltyAreaLength && Math.abs(wz) >= penaltyAreaWidth / 2 - 1 && Math.abs(wz) <= penaltyAreaWidth / 2) {
+            return true;
+        }
+
+        // Goal area (smaller box)
+        const goalAreaLength = 10;
+        const goalAreaWidth = 18;
+        if (Math.abs(wx) >= arenaHalfLengthX - goalAreaLength && Math.abs(wx) <= arenaHalfLengthX - goalAreaLength + 1) {
+            if (Math.abs(wz) <= goalAreaWidth / 2) return true;
+        }
+        if (Math.abs(wx) >= arenaHalfLengthX - goalAreaLength && Math.abs(wz) >= goalAreaWidth / 2 - 1 && Math.abs(wz) <= goalAreaWidth / 2) {
+            return true;
+        }
+
+        // Penalty spots
+        const penaltySpotDist = 18;
+        if (Math.abs(Math.abs(wx) - (arenaHalfLengthX - penaltySpotDist)) <= 1 && Math.abs(wz) <= 1) {
+            return true;
+        }
+
+        // Field boundary lines
+        if (Math.abs(wx) >= arenaHalfLengthX - 1 && Math.abs(wz) <= arenaHalfWidthZ) return true;
+        if (Math.abs(wz) >= arenaHalfWidthZ - 1 && Math.abs(wx) <= arenaHalfLengthX) return true;
+
+        return false;
     }
 
     generateFeatures(cx, cy, cz) {

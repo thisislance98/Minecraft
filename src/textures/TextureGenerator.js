@@ -188,12 +188,19 @@ const palettes = {
     crystal_glow: ['#FF88FF', '#FFAAFF', '#FF66FF', '#FFCCFF'], // Bright glow
     crystal_plant: ['#AA55DD', '#BB66EE', '#9944CC', '#CC77FF'], // Crystal vegetation
 
-    // Lava World  
+    // Lava World
     obsidite_ground: ['#221100', '#331111', '#110800', '#442211'], // Dark volcanic ground
     magma_stone: ['#442211', '#553322', '#332211', '#554433'], // Hot stone
     cooled_lava: ['#111111', '#1a1a1a', '#0a0a0a', '#222222'], // Cooled lava rock
     ember_block: ['#FF4400', '#FF6600', '#FF2200', '#FF8800'], // Glowing ember
-    fire_plant: ['#FF6600', '#FF8800', '#FF4400', '#FFAA00'] // Fire vegetation
+    fire_plant: ['#FF6600', '#FF8800', '#FF4400', '#FFAA00'], // Fire vegetation
+
+    // Soccer World (Rocket League style arena)
+    soccer_field: ['#1E8449', '#27AE60', '#196F3D', '#2ECC71'], // Vibrant soccer grass
+    soccer_line: ['#FFFFFF', '#F8F8F8', '#F0F0F0', '#FFFFFF'], // White line markings
+    soccer_wall: ['#3498DB', '#5DADE2', '#2980B9', '#85C1E9'], // Blue transparent arena wall
+    soccer_goal_frame: ['#F1C40F', '#F4D03F', '#D4AC0D', '#F7DC6F'], // Yellow goal frame
+    soccer_goal_net: ['#FDFEFE', '#F8F9F9', '#F4F6F6', '#FFFFFF'] // White net
 };
 
 export function generateTexture(type, size = 16) {
@@ -2012,6 +2019,100 @@ export function generateTexture(type, size = 16) {
             ctx.fillRect(7, 1, 2, 2);
             ctx.fillRect(5, 3, 2, 2);
             ctx.fillRect(9, 3, 2, 2);
+            break;
+        }
+
+        // ===== SOCCER WORLD BLOCKS =====
+
+        case 'soccer_field': {
+            const colors = palettes.soccer_field;
+            // Striped grass pattern like real soccer fields
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const stripe = Math.floor(x / 4) % 2;
+                    const noise = seededRandom(seed++) * 0.3;
+                    const baseIdx = stripe === 0 ? 0 : 1;
+                    ctx.fillStyle = colors[baseIdx + (noise > 0.2 ? 1 : 0)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            break;
+        }
+
+        case 'soccer_line': {
+            const colors = palettes.soccer_line;
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(0, 0, size, size);
+            // Add slight texture
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (seededRandom(seed++) > 0.9) {
+                        ctx.fillStyle = colors[2];
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+            break;
+        }
+
+        case 'soccer_wall': {
+            const colors = palettes.soccer_wall;
+            // Translucent blue wall with panel effect
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const panel = ((x < 2 || x > 13) || (y < 2 || y > 13)) ? 2 : 0;
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[panel + (noise > 0.7 ? 1 : 0)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add highlight edge
+            ctx.fillStyle = '#FFFFFF';
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(0, 0, size, 1);
+            ctx.fillRect(0, 0, 1, size);
+            ctx.globalAlpha = 1.0;
+            break;
+        }
+
+        case 'soccer_goal_frame': {
+            const colors = palettes.soccer_goal_frame;
+            ctx.fillStyle = colors[0];
+            ctx.fillRect(0, 0, size, size);
+            // Metallic highlight
+            ctx.fillStyle = colors[3];
+            ctx.fillRect(2, 0, 4, size);
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(4, 0, 2, size);
+            // Add some depth texture
+            for (let y = 0; y < size; y++) {
+                if (seededRandom(seed++) > 0.8) {
+                    ctx.fillStyle = colors[2];
+                    ctx.fillRect(0, y, size, 1);
+                }
+            }
+            break;
+        }
+
+        case 'soccer_goal_net': {
+            ctx.clearRect(0, 0, size, size);
+            // Net mesh pattern
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 1;
+            // Horizontal lines
+            for (let y = 0; y < size; y += 3) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(size, y);
+                ctx.stroke();
+            }
+            // Vertical lines
+            for (let x = 0; x < size; x += 3) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, size);
+                ctx.stroke();
+            }
             break;
         }
 

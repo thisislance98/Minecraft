@@ -492,6 +492,22 @@ export class AssetManager {
         const firePlant = this.getOrCreateMat('fire_plant', true);
         this.registerBlockMaterials('fire_plant', firePlant);
 
+        // Soccer World Blocks
+        const soccerField = this.getOrCreateMat('soccer_field');
+        this.registerBlockMaterials('soccer_field', soccerField);
+
+        const soccerLine = this.getOrCreateMat('soccer_line');
+        this.registerBlockMaterials('soccer_line', soccerLine);
+
+        const soccerWall = this.getOrCreateMat('soccer_wall', true);
+        this.registerBlockMaterials('soccer_wall', soccerWall);
+
+        const soccerGoalFrame = this.getOrCreateMat('soccer_goal_frame');
+        this.registerBlockMaterials('soccer_goal_frame', soccerGoalFrame);
+
+        const soccerGoalNet = this.getOrCreateMat('soccer_goal_net', true);
+        this.registerBlockMaterials('soccer_goal_net', soccerGoalNet);
+
         // Break Stages
         this.breakMaterials = [];
         for (let i = 0; i <= 9; i++) {

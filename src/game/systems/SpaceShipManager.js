@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { Blocks } from '../core/Blocks.js';
 import { Chair } from '../entities/furniture/Chair.js';
 import { CrewMember } from '../entities/animals/CrewMember.js';
+import { SoccerBall } from '../entities/SoccerBall.js';
 
 // Header
 export class SpaceShipManager {
     constructor(game) {
         this.game = game;
         this.controlBlockPositions = [];
+        this.soccerBall = null;  // Soccer ball entity for Soccer World
         this.blockQueue = [];
 
         // Orbital movement state
@@ -490,6 +492,12 @@ export class SpaceShipManager {
                 // Moon is at chunks 40-48, so Y = 40 * 16 + 32 = 672
                 yBase: 700,
                 message: 'Warping to the Moon...'
+            },
+            soccer: {
+                name: 'Soccer World',
+                // Soccer World is at chunks 70-78, so Y = 70 * 16 + 32 = 1152
+                yBase: 1155,
+                message: 'Warping to Soccer World...'
             }
         };
 
@@ -541,24 +549,88 @@ export class SpaceShipManager {
                 this.game.environment.setWorld(worldName);
             }
 
+            // Remove old soccer ball if leaving Soccer World
+            if (this.soccerBall && worldName !== 'soccer') {
+                this.soccerBall.remove();
+                this.soccerBall = null;
+
+                // Release soccer host status
+                if (this.game.socketManager) {
+                    this.game.socketManager.releaseSoccerHost();
+                }
+
+                // Hide scoreboard UI
+                if (this.game.uiManager) {
+                    this.game.uiManager.hideSoccerScoreboard();
+                    this.game.uiManager.hideSoccerWinScreen();
+                }
+            }
+
             // Spawn the starship nearby in the new world (after a short delay for terrain)
             setTimeout(() => {
                 // Clear old ship blocks from tracking (they're in a different world now)
                 this.shipBlocks = [];
 
-                // Spawn ship near the player but offset
-                const shipPos = {
-                    x: x + 150,
-                    y: config.yBase + 80, // High above terrain
-                    z: z + 150
-                };
-                this.spawnShip(shipPos);
-                this.game.uiManager.addChatMessage('system', '🚀 Starship has warped in nearby.');
+                // Spawn ship near the player but offset (but not in Soccer World)
+                if (worldName !== 'soccer') {
+                    const shipPos = {
+                        x: x + 150,
+                        y: config.yBase + 80, // High above terrain
+                        z: z + 150
+                    };
+                    this.spawnShip(shipPos);
+                    this.game.uiManager.addChatMessage('system', '🚀 Starship has warped in nearby.');
+                } else {
+                    // Spawn soccer ball in Soccer World
+                    this.spawnSoccerBall(config.yBase);
+                }
             }, 2000);
 
             this.game.uiManager.addChatMessage('system', `Arrived at ${config.name}!`);
             this.game.soundManager.playSound('levelup');
         }, 1500);
+    }
+
+    /**
+     * Spawn a soccer ball in Soccer World
+     * @param {number} yBase - Base Y height of Soccer World
+     */
+    spawnSoccerBall(yBase) {
+        // Remove existing ball if any
+        if (this.soccerBall) {
+            this.soccerBall.remove();
+        }
+
+        // Request to become soccer ball host (first player becomes host)
+        if (this.game.socketManager) {
+            this.game.socketManager.requestSoccerHost();
+        }
+
+        // Spawn ball at center of field, slightly above ground
+        const ballX = 0;
+        const ballY = yBase + 5;  // A bit above the field
+        const ballZ = 0;
+
+        this.soccerBall = new SoccerBall(this.game, ballX, ballY, ballZ);
+
+        // Show the scoreboard UI
+        if (this.game.uiManager) {
+            this.game.uiManager.showSoccerScoreboard();
+        }
+
+        this.game.uiManager.addChatMessage('system', '⚽ Soccer ball spawned at center field!');
+
+        console.log(`[SpaceShipManager] Spawned soccer ball at ${ballX}, ${ballY}, ${ballZ}`);
+    }
+
+    /**
+     * Update soccer ball physics
+     * @param {number} dt - Delta time
+     */
+    updateSoccerBall(dt) {
+        if (this.soccerBall && !this.soccerBall.isDead) {
+            this.soccerBall.update(dt);
+        }
     }
 
     createEngineParticles() {
@@ -603,6 +675,9 @@ export class SpaceShipManager {
     }
 
     update(dt) {
+        // Update soccer ball physics (always, even when not orbiting)
+        this.updateSoccerBall(dt);
+
         if (!this.isOrbiting) return;
 
         // Update orbit angle

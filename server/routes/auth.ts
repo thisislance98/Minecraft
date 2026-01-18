@@ -85,4 +85,69 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 });
 
+// Debug endpoint to check user tokens (no auth required for debugging)
+router.get('/tokens/:userId', async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+
+        if (!db) {
+            return res.status(503).json({ error: 'Database unavailable' });
+        }
+
+        const userDoc = await db.collection('users').doc(userId).get();
+
+        if (!userDoc.exists) {
+            return res.json({
+                found: false,
+                tokens: 0,
+                message: 'User not found in database'
+            });
+        }
+
+        const userData = userDoc.data();
+        res.json({
+            found: true,
+            tokens: userData?.tokens || 0,
+            lastLogin: userData?.lastLogin?._seconds ? new Date(userData.lastLogin._seconds * 1000).toISOString() : null,
+            email: userData?.email
+        });
+    } catch (error: any) {
+        console.error('[Auth] Token lookup error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Debug endpoint to list recent transactions
+router.get('/transactions/:userId', async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.params;
+
+        if (!db) {
+            return res.status(503).json({ error: 'Database unavailable' });
+        }
+
+        const transactionsSnapshot = await db.collection('transactions')
+            .where('userId', '==', userId)
+            .orderBy('createdAt', 'desc')
+            .limit(10)
+            .get();
+
+        const transactions = transactionsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?._seconds
+                ? new Date(doc.data().createdAt._seconds * 1000).toISOString()
+                : null
+        }));
+
+        res.json({
+            count: transactions.length,
+            transactions
+        });
+    } catch (error: any) {
+        console.error('[Auth] Transactions lookup error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export const authRoutes = router;

@@ -17,9 +17,9 @@ export class ThirdPersonCamera {
         // Current interpolated position
         this._currentPosition = new THREE.Vector3();
 
-        // Configuration - Minecraft-like values
-        this.distance = params.distance || 4.0;        // Distance from player (Minecraft uses ~3-4)
-        this.heightOffset = params.heightOffset || 1.0; // How high above player's head to look
+        // Configuration - Over-the-shoulder style
+        this.distance = params.distance || 1.5;        // Close behind player
+        this.heightOffset = params.heightOffset || 2.0; // Above player's head
         this.smoothing = params.smoothing || 0.01;     // Lower = smoother (0.001 very smooth, 0.1 responsive)
         this.pivotHeight = params.pivotHeight !== undefined ? params.pivotHeight : 1.6; // Eye level
 
@@ -54,28 +54,23 @@ export class ThirdPersonCamera {
         );
 
         // Get player's look direction (pitch and yaw)
+        // Note: Player's rotation.x is OPPOSITE of camera pitch convention
+        // (positive rotation.x = looking UP in first-person)
         const pitch = THREE.MathUtils.clamp(player.rotation.x, this.minPitch, this.maxPitch);
         const yaw = player.rotation.y;
 
         // Calculate camera position using spherical coordinates
-        // Camera is BEHIND the player, so we add PI to yaw and negate pitch
-        // In Minecraft's coordinate system:
-        // - Player faces -Z when yaw = 0
-        // - Camera should be at +Z (behind) when yaw = 0
-
-        // Spherical to Cartesian:
-        // x = r * cos(pitch) * sin(yaw)
-        // y = r * sin(pitch)
-        // z = r * cos(pitch) * cos(yaw)
-
-        const cosPitch = Math.cos(-pitch); // Negate pitch so looking down moves camera up
-        const sinPitch = Math.sin(-pitch);
+        // Camera should be BEHIND and ABOVE the player
+        // When player looks up (positive pitch), camera should go up too
+        const cosPitch = Math.cos(pitch);
+        const sinPitch = Math.sin(pitch);
 
         // Camera offset from pivot (behind player)
+        // sin(0) = 0, cos(0) = 1, so camera is at (0, height, +distance) when yaw=0
         this._idealPosition.set(
-            this.distance * cosPitch * Math.sin(yaw + Math.PI),
+            this.distance * cosPitch * Math.sin(yaw),
             this.distance * sinPitch + this.heightOffset,
-            this.distance * cosPitch * Math.cos(yaw + Math.PI)
+            this.distance * cosPitch * Math.cos(yaw)
         );
 
         // Add pivot point to get world position
@@ -85,13 +80,21 @@ export class ThirdPersonCamera {
     }
 
     /**
-     * Get the point the camera should look at (slightly above player's head)
+     * Get the point the camera should look at
+     * Look far ahead of player so crosshair is in front
      */
     _getLookAtPoint(player) {
+        const yaw = player.rotation.y;
+        const pitch = player.rotation.x;
+
+        // Look far ahead of the player in their facing direction
+        // Player faces -Z when yaw = 0
+        const lookDistance = 20; // Far ahead for proper aiming
+
         return new THREE.Vector3(
-            player.position.x,
-            player.position.y + this.pivotHeight + 0.2, // Slightly above eyes
-            player.position.z
+            player.position.x - Math.sin(yaw) * lookDistance,
+            player.position.y + this.pivotHeight + Math.sin(pitch) * lookDistance,
+            player.position.z - Math.cos(yaw) * lookDistance
         );
     }
 

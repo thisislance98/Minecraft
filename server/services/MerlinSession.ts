@@ -384,7 +384,7 @@ export class MerlinSession {
 
         for (const call of toolCalls) {
             const { name, args } = call;
-            let result;
+            let result: any;
 
             // Notify client of tool usage
             this.send('tool_start', { name, args });
@@ -555,8 +555,8 @@ export class MerlinSession {
                     (Date.now() - this.lastKnowledgeSearch.timestamp) < 60000;
                 if (!recentSearch) {
                     console.warn(`[Knowledge Gap] create_creature '${name}' called without recent knowledge search`);
-                    if (this.socket) {
-                        this.socket.emit('knowledge_gap', {
+                    if (this.ws) {
+                        this.ws.emit('knowledge_gap', {
                             tool: 'create_creature',
                             name,
                             message: 'Creature created without searching knowledge first'
@@ -600,8 +600,8 @@ export class MerlinSession {
                     (Date.now() - this.lastKnowledgeSearch.timestamp) < 60000;
                 if (!recentSearch) {
                     console.warn(`[Knowledge Gap] create_item '${name}' called without recent knowledge search`);
-                    if (this.socket) {
-                        this.socket.emit('knowledge_gap', {
+                    if (this.ws) {
+                        this.ws.emit('knowledge_gap', {
                             tool: 'create_item',
                             name,
                             message: 'Item created without searching knowledge first'
@@ -647,8 +647,8 @@ export class MerlinSession {
                 });
 
                 // Emit knowledge_search event to client for CLI visibility
-                if (this.socket) {
-                    this.socket.emit('knowledge_search', {
+                if (this.ws) {
+                    this.ws.emit('knowledge_search', {
                         query,
                         category: category || 'any',
                         resultCount: results.length,

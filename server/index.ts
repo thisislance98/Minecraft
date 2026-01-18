@@ -160,6 +160,7 @@ interface Room {
     worldSeed: number;
     createdAt: number;
     time: number; // 0.0 to 1.0
+    soccerBallHost?: string | null; // Socket ID of the player controlling soccer ball physics
 }
 
 const rooms = new Map<string, Room>();
@@ -987,6 +988,78 @@ io.on('connection', (socket) => {
             await worldPersistence.saveEntity(roomId, data.id, data);
         });
 
+        // === Soccer Ball Sync Events ===
+
+        // Handle soccer ball state updates (from host)
+        socket.on('soccer:ball_state', (data: { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } }) => {
+            if (!roomId) return;
+            // Broadcast to all other players in the room
+            socket.to(roomId).emit('soccer:ball_state', data);
+        });
+
+        // Handle soccer ball kick event (for sound sync)
+        socket.on('soccer:ball_kick', (data: { playerId: string }) => {
+            if (!roomId) return;
+            socket.to(roomId).emit('soccer:ball_kick', data);
+        });
+
+        // Handle goal scored event (includes scores)
+        socket.on('soccer:goal', (data: { scoringSide: string; scores: { blue: number; orange: number } }) => {
+            if (!roomId) return;
+            socket.to(roomId).emit('soccer:goal', data);
+        });
+
+        // Handle game over event
+        socket.on('soccer:game_over', (data: { winner: string; scores: { blue: number; orange: number } }) => {
+            if (!roomId) return;
+            socket.to(roomId).emit('soccer:game_over', data);
+            console.log(`[Socket] Soccer game over in room ${roomId}: ${data.winner} wins (${data.scores.blue}-${data.scores.orange})`);
+        });
+
+        // Handle game reset event
+        socket.on('soccer:game_reset', (data: {}) => {
+            if (!roomId) return;
+            socket.to(roomId).emit('soccer:game_reset', data);
+            console.log(`[Socket] Soccer game reset in room ${roomId}`);
+        });
+
+        // Handle ball reset event
+        socket.on('soccer:ball_reset', (data: { pos: { x: number; y: number; z: number } }) => {
+            if (!roomId) return;
+            socket.to(roomId).emit('soccer:ball_reset', data);
+        });
+
+        // Handle soccer host request (first player in Soccer World becomes host)
+        socket.on('soccer:request_host', () => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            if (!room) return;
+
+            // If no current soccer host, this player becomes host
+            if (!room.soccerBallHost) {
+                room.soccerBallHost = socket.id;
+                socket.emit('soccer:request_host_response', { isHost: true });
+                console.log(`[Socket] Soccer ball host assigned to ${socket.id} in room ${roomId}`);
+
+                // Notify all other players
+                socket.to(roomId).emit('soccer:host_assigned', { hostId: socket.id });
+            } else {
+                socket.emit('soccer:request_host_response', { isHost: false });
+            }
+        });
+
+        // Handle soccer host release
+        socket.on('soccer:release_host', () => {
+            if (!roomId) return;
+            const room = rooms.get(roomId);
+            if (!room) return;
+
+            if (room.soccerBallHost === socket.id) {
+                room.soccerBallHost = null;
+                console.log(`[Socket] Soccer ball host released by ${socket.id} in room ${roomId}`);
+            }
+        });
+
         // Handle PeerJS ID sharing for voice chat
         socket.on('peerjs:id', (data: { peerId: string }) => {
             if (!roomId) return;
@@ -1420,6 +1493,14 @@ io.on('connection', (socket) => {
                 // Cleanup state
                 if (room.playerStates[socket.id]) {
                     delete room.playerStates[socket.id];
+                }
+
+                // If this player was the soccer ball host, release it
+                if (room.soccerBallHost === socket.id) {
+                    room.soccerBallHost = null;
+                    console.log(`[Socket] Soccer ball host released (player disconnected) in room ${id}`);
+                    // Notify remaining players so they can request host status
+                    io.to(id).emit('soccer:host_assigned', { hostId: null });
                 }
 
                 io.to(id).emit('player:left', socket.id);

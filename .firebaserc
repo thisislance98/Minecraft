@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "trackit-8b903"
+  },
+  "targets": {
+    "trackit-8b903": {
+      "hosting": {
+        "worldcraft": [
+          "worldcraft"
+        ]
+      }
+    }
+  }
+}

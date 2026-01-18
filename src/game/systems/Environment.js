@@ -101,6 +101,14 @@ export class Environment {
                 fogDensity: 0.0001,
                 ambientTint: 0xCCCCCC,
                 alwaysShowStars: true                     // Stars always visible in space
+            },
+            soccer: {
+                skyColor: new THREE.Color(0x1E90FF),     // Dodger blue - stadium sky
+                nightColor: new THREE.Color(0x0A1A3A),   // Dark blue night
+                fogColor: 0x87CEEB,                       // Light sky blue fog
+                fogDensity: 0.001,                        // Light fog for stadium feel
+                ambientTint: 0xFFFFFF,                    // Bright stadium lights
+                cloudColor: 0xFFFFFF                      // White clouds
             }
         };
 
@@ -183,6 +191,10 @@ export class Environment {
         // Lava World: chunks 60-67
         else if (chunkY >= 60 && chunkY < 68) {
             detectedWorld = 'lava';
+        }
+        // Soccer World: chunks 70-77
+        else if (chunkY >= 70 && chunkY < 78) {
+            detectedWorld = 'soccer';
         }
 
         // Only switch if different from current world

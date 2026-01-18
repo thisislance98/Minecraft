@@ -812,7 +812,8 @@ export class UIManager {
             { id: 'settings-warp-earth', world: 'earth' },
             { id: 'settings-warp-crystal', world: 'crystal' },
             { id: 'settings-warp-lava', world: 'lava' },
-            { id: 'settings-warp-moon', world: 'moon' }
+            { id: 'settings-warp-moon', world: 'moon' },
+            { id: 'settings-warp-soccer', world: 'soccer' }
         ];
 
         warpButtons.forEach(({ id, world }) => {
@@ -3990,6 +3991,9 @@ export class UIManager {
                 <button id="warp-moon" style="padding: 20px; background: linear-gradient(135deg, #3d3d3d 0%, #1d1d1d 100%); border: 2px solid #7d7d7d; color: #cccccc; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s;">
                     🌙 MOON<br><small style="opacity: 0.7;">Lunar Surface</small>
                 </button>
+                <button id="warp-soccer" style="padding: 20px; background: linear-gradient(135deg, #1E8449 0%, #145A32 100%); border: 2px solid #27AE60; color: #ABEBC6; cursor: pointer; font-size: 16px; border-radius: 8px; transition: all 0.3s; grid-column: span 2;">
+                    ⚽ SOCCER WORLD<br><small style="opacity: 0.7;">Rocket League Arena</small>
+                </button>
             </div>
             
             <h3 style="color: #88ccff; margin: 20px 0 15px 0;">🛸 SHIP CONTROLS</h3>
@@ -4048,6 +4052,11 @@ export class UIManager {
             if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('moon');
         };
 
+        document.getElementById('warp-soccer').onclick = () => {
+            this.showSpaceShipControls(false);
+            if (this.game.spaceShipManager) this.game.spaceShipManager.warpToWorld('soccer');
+        };
+
         // Ship control handlers
         document.getElementById('ship-launch').onclick = () => {
             this.showSpaceShipControls(false);
@@ -4059,6 +4068,200 @@ export class UIManager {
         };
 
         if (this.game.inputManager) this.game.inputManager.unlock();
+    }
+
+    // ============ SOCCER SCOREBOARD UI ============
+
+    /**
+     * Show the soccer scoreboard overlay
+     */
+    showSoccerScoreboard() {
+        if (this.soccerScoreboard) {
+            this.soccerScoreboard.style.display = 'flex';
+            return;
+        }
+
+        // Create scoreboard container
+        this.soccerScoreboard = document.createElement('div');
+        this.soccerScoreboard.id = 'soccer-scoreboard';
+        this.soccerScoreboard.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 15px;
+            border: 3px solid #FFD700;
+            font-family: 'Arial Black', sans-serif;
+            z-index: 1500;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        `;
+
+        this.soccerScoreboard.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 30px; height: 30px; background: #3498DB; border-radius: 5px; border: 2px solid #5DADE2;"></div>
+                <span style="color: #3498DB; font-size: 28px; text-shadow: 0 0 10px #3498DB;" id="soccer-score-blue">0</span>
+            </div>
+            <div style="color: #FFD700; font-size: 24px; text-shadow: 0 0 10px #FFD700;">VS</div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="color: #E67E22; font-size: 28px; text-shadow: 0 0 10px #E67E22;" id="soccer-score-orange">0</span>
+                <div style="width: 30px; height: 30px; background: #E67E22; border-radius: 5px; border: 2px solid #F39C12;"></div>
+            </div>
+            <div style="margin-left: 20px; border-left: 2px solid #FFD700; padding-left: 20px;">
+                <button id="soccer-reset-btn" style="
+                    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                ">RESET</button>
+            </div>
+        `;
+
+        document.body.appendChild(this.soccerScoreboard);
+
+        // Add hover effect and click handler for reset button
+        const resetBtn = document.getElementById('soccer-reset-btn');
+        resetBtn.onmouseover = () => {
+            resetBtn.style.transform = 'scale(1.05)';
+            resetBtn.style.boxShadow = '0 0 15px rgba(231, 76, 60, 0.5)';
+        };
+        resetBtn.onmouseout = () => {
+            resetBtn.style.transform = 'scale(1)';
+            resetBtn.style.boxShadow = 'none';
+        };
+        resetBtn.onclick = () => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball) {
+                ball.resetGame(true);
+            }
+        };
+
+        // Show first-to-10 message
+        this.addChatMessage('system', 'First to 10 goals wins!');
+    }
+
+    /**
+     * Hide the soccer scoreboard
+     */
+    hideSoccerScoreboard() {
+        if (this.soccerScoreboard) {
+            this.soccerScoreboard.style.display = 'none';
+        }
+        this.hideSoccerWinScreen();
+    }
+
+    /**
+     * Update the soccer scoreboard with new scores
+     * @param {number} blueScore - Blue team score
+     * @param {number} orangeScore - Orange team score
+     */
+    updateSoccerScoreboard(blueScore, orangeScore) {
+        const blueEl = document.getElementById('soccer-score-blue');
+        const orangeEl = document.getElementById('soccer-score-orange');
+
+        if (blueEl) blueEl.textContent = blueScore;
+        if (orangeEl) orangeEl.textContent = orangeScore;
+
+        // Add pulse animation on score change
+        if (blueEl) {
+            blueEl.style.animation = 'none';
+            blueEl.offsetHeight; // Trigger reflow
+            blueEl.style.animation = 'scorePulse 0.5s ease';
+        }
+        if (orangeEl) {
+            orangeEl.style.animation = 'none';
+            orangeEl.offsetHeight;
+            orangeEl.style.animation = 'scorePulse 0.5s ease';
+        }
+    }
+
+    /**
+     * Show the win screen when a team reaches 10 goals
+     * @param {string} winner - 'blue' or 'orange'
+     */
+    showSoccerWinScreen(winner) {
+        if (this.soccerWinScreen) {
+            this.soccerWinScreen.remove();
+        }
+
+        const winnerColor = winner === 'blue' ? '#3498DB' : '#E67E22';
+        const winnerName = winner.charAt(0).toUpperCase() + winner.slice(1);
+
+        this.soccerWinScreen = document.createElement('div');
+        this.soccerWinScreen.id = 'soccer-win-screen';
+        this.soccerWinScreen.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 50px 80px;
+            border-radius: 20px;
+            border: 5px solid ${winnerColor};
+            font-family: 'Arial Black', sans-serif;
+            z-index: 2000;
+            text-align: center;
+            box-shadow: 0 0 50px ${winnerColor}, 0 0 100px ${winnerColor}40;
+            animation: winScreenAppear 0.5s ease;
+        `;
+
+        this.soccerWinScreen.innerHTML = `
+            <div style="font-size: 24px; color: #FFD700; margin-bottom: 20px; text-shadow: 0 0 20px #FFD700;">
+                GAME OVER
+            </div>
+            <div style="font-size: 48px; color: ${winnerColor}; text-shadow: 0 0 30px ${winnerColor}; margin-bottom: 30px;">
+                ${winnerName} Team Wins!
+            </div>
+            <button id="soccer-play-again-btn" style="
+                background: linear-gradient(135deg, #27ae60 0%, #1e8449 100%);
+                color: white;
+                border: none;
+                padding: 15px 40px;
+                border-radius: 10px;
+                font-size: 20px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.2s;
+            ">PLAY AGAIN</button>
+        `;
+
+        document.body.appendChild(this.soccerWinScreen);
+
+        // Add click handler for play again
+        const playAgainBtn = document.getElementById('soccer-play-again-btn');
+        playAgainBtn.onmouseover = () => {
+            playAgainBtn.style.transform = 'scale(1.05)';
+            playAgainBtn.style.boxShadow = '0 0 20px rgba(39, 174, 96, 0.5)';
+        };
+        playAgainBtn.onmouseout = () => {
+            playAgainBtn.style.transform = 'scale(1)';
+            playAgainBtn.style.boxShadow = 'none';
+        };
+        playAgainBtn.onclick = () => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball) {
+                ball.resetGame(true);
+            }
+        };
+    }
+
+    /**
+     * Hide the win screen
+     */
+    hideSoccerWinScreen() {
+        if (this.soccerWinScreen) {
+            this.soccerWinScreen.remove();
+            this.soccerWinScreen = null;
+        }
     }
 
     /**

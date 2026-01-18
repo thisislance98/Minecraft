@@ -137,4 +137,11 @@ export const Blocks = {
     COOLED_LAVA: 'cooled_lava',
     EMBER_BLOCK: 'ember_block',
     FIRE_PLANT: 'fire_plant',
+
+    // Soccer World Blocks (Rocket League arena)
+    SOCCER_FIELD: 'soccer_field',           // Green grass field
+    SOCCER_LINE: 'soccer_line',             // White field markings
+    SOCCER_WALL: 'soccer_wall',             // Arena wall (transparent-ish)
+    SOCCER_GOAL_FRAME: 'soccer_goal_frame', // Goal post frame
+    SOCCER_GOAL_NET: 'soccer_goal_net',     // Goal net (transparent mesh)
 };

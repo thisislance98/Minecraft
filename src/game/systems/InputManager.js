@@ -353,7 +353,7 @@ export class InputManager {
         // Mouse Up
         document.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
-                this.game.player.stopEating();
+                // Note: stopEating() removed since hunger system is disabled
                 if (this.mouseDownInterval) {
                     clearInterval(this.mouseDownInterval);
                     this.mouseDownInterval = null;
@@ -489,15 +489,7 @@ export class InputManager {
             console.log('[InputManager] Item instance:', instance ? `Found (isTool: ${instance.isTool})` : 'Not Found');
         }
 
-        // 0. Food (Eat) - Check first as eating shouldn't be interrupted
-        if (item && item.type === 'food') {
-            this.game.player.startEating();
-            if (this.mouseDownInterval) {
-                clearInterval(this.mouseDownInterval);
-                this.mouseDownInterval = null;
-            }
-            return;
-        }
+        // Note: Food/eating system disabled - removed startEating() call
 
         // 1. Tool Items (Wands, Bow, etc.) - Check BEFORE attack so wands fire instead of attacking
         if (item && item.item) {

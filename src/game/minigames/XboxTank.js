@@ -1350,9 +1350,12 @@ export class XboxTank {
             ctx.fillRect(0, 0, this.GAME_WIDTH, this.GAME_HEIGHT);
         }
 
-        // UI
+        // UI - Background bar for better visibility
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, this.GAME_WIDTH, 30);
+
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'left';
         ctx.fillText(`Level ${this.state.levelIndex + 1}: ${this.state.levelName}`, 10, 20);
 
@@ -1360,9 +1363,11 @@ export class XboxTank {
         const mins = Math.floor(this.state.gameTime / 60);
         const secs = Math.floor(this.state.gameTime % 60);
         ctx.textAlign = 'center';
+        ctx.fillStyle = this.state.gameTime < 30 ? '#ff4444' : '#fff';
         ctx.fillText(`${mins}:${secs.toString().padStart(2, '0')}`, this.GAME_WIDTH / 2, 20);
 
         // Score
+        ctx.fillStyle = '#ffff00';
         ctx.textAlign = 'right';
         ctx.fillText(`Score: ${p.score}`, this.GAME_WIDTH - 10, 20);
 
@@ -1504,9 +1509,12 @@ export class XboxTank {
             ctx.fillRect(0, 0, this.GAME_WIDTH, this.GAME_HEIGHT);
         }
 
-        // Multiplayer UI
+        // Multiplayer UI - Background bar for better visibility
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, this.GAME_WIDTH, 30);
+
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px Arial';
+        ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'left';
         ctx.fillText('PvP Arena', 10, 20);
 
@@ -1518,14 +1526,19 @@ export class XboxTank {
         ctx.fillStyle = timerColor;
         ctx.fillText(`${mins}:${secs.toString().padStart(2, '0')}`, this.GAME_WIDTH / 2, 20);
 
-        // Scoreboard (sorted by score)
+        // Scoreboard (sorted by score) - positioned below the top bar
         const sortedPlayers = Array.from(this.multiplayerPlayers.values())
             .sort((a, b) => b.score - a.score);
 
+        // Draw scoreboard background
+        const scoreboardHeight = sortedPlayers.length * 22 + 10;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(this.GAME_WIDTH - 140, 35, 135, scoreboardHeight);
+
         ctx.textAlign = 'right';
-        ctx.font = '12px Arial';
+        ctx.font = 'bold 14px Arial';
         sortedPlayers.forEach((player, index) => {
-            const y = 15 + index * 15;
+            const y = 52 + index * 22;
             ctx.fillStyle = player.color;
             const indicator = player.id === this.localPlayerId ? '► ' : '';
             ctx.fillText(`${indicator}${player.name}: ${player.score}`, this.GAME_WIDTH - 10, y);

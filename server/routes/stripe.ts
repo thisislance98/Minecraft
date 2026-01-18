@@ -110,22 +110,81 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req: R
     }
 
     try {
+        console.log(`[Stripe Webhook] Event type: ${event.type}`);
+
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object as any;
             const { userId, packageId } = session.metadata || {};
 
+            console.log(`[Stripe Webhook] Checkout completed - userId: ${userId}, packageId: ${packageId}`);
+            console.log(`[Stripe Webhook] Session payment_status: ${session.payment_status}`);
+
             if (userId && packageId) {
                 const tokenPackage = TOKEN_PACKAGES[packageId];
+                const subscriptionTier = SUBSCRIPTION_TIERS[packageId];
+
                 if (tokenPackage) {
+                    // One-time token purchase
+                    console.log(`[Stripe Webhook] Adding ${tokenPackage.tokens} tokens to user ${userId}`);
                     await addTokens(userId, tokenPackage.tokens, 'purchase', `Purchased ${tokenPackage.name}`);
+                    console.log(`[Stripe Webhook] Tokens added successfully`);
+                } else if (subscriptionTier) {
+                    // Subscription - tokens are added on invoice.paid, but grant initial tokens on trial start
+                    console.log(`[Stripe Webhook] Subscription ${packageId} started for user ${userId}`);
+                    // If this is a trial, grant tokens immediately
+                    if (session.subscription) {
+                        console.log(`[Stripe Webhook] Subscription ID: ${session.subscription}`);
+                    }
+                }
+            } else {
+                console.warn(`[Stripe Webhook] Missing metadata - userId: ${userId}, packageId: ${packageId}`);
+            }
+        } else if (event.type === 'invoice.paid') {
+            // Handle subscription invoice payment (recurring billing)
+            const invoice = event.data.object as any;
+            console.log(`[Stripe Webhook] Invoice paid for customer: ${invoice.customer}`);
+
+            // Look up user by Stripe customer ID
+            if (db && invoice.customer) {
+                const usersSnapshot = await db.collection('users')
+                    .where('subscription.stripeCustomerId', '==', invoice.customer)
+                    .limit(1)
+                    .get();
+
+                if (!usersSnapshot.empty) {
+                    const userDoc = usersSnapshot.docs[0];
+                    const userId = userDoc.id;
+
+                    // Get subscription tier from line items or metadata
+                    const lineItem = invoice.lines?.data?.[0];
+                    const productName = lineItem?.description || '';
+
+                    // Match the product name to our tiers
+                    let tokensToAdd = 0;
+                    for (const [, tier] of Object.entries(SUBSCRIPTION_TIERS)) {
+                        if (productName.includes(tier.name.split(' - ')[0])) {
+                            tokensToAdd = tier.monthlyTokens;
+                            break;
+                        }
+                    }
+
+                    if (tokensToAdd > 0) {
+                        console.log(`[Stripe Webhook] Adding ${tokensToAdd} subscription tokens to user ${userId}`);
+                        await addTokens(userId, tokensToAdd, 'subscription', `Monthly subscription tokens`);
+                    }
+                } else {
+                    console.warn(`[Stripe Webhook] No user found for customer: ${invoice.customer}`);
                 }
             }
+        } else if (event.type === 'customer.subscription.trial_will_end') {
+            console.log(`[Stripe Webhook] Trial ending soon`);
+        } else if (event.type === 'customer.subscription.deleted') {
+            console.log(`[Stripe Webhook] Subscription cancelled`);
         }
-        // Add other event handlers (invoice.paid etc) as needed following the original file
 
         res.json({ received: true });
     } catch (error) {
-        console.error('Webhook handler error:', error);
+        console.error('[Stripe Webhook] Handler error:', error);
         logError('Stripe:Webhook', error);
         res.status(500).send('Webhook handler error');
     }

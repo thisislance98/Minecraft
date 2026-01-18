@@ -28,16 +28,10 @@ export class Player {
         this.jumpForce = Config.PLAYER.JUMP_FORCE;
         this.isDead = false;
 
-        // Health and Hunger
+        // Health (hunger system disabled)
         this.health = Config.PLAYER.MAX_HEALTH;       // Max 20 (displayed as 10 hearts)
         this.maxHealth = Config.PLAYER.MAX_HEALTH;
-        this.hunger = Config.PLAYER.MAX_HUNGER / 2;       // Start half hunger for testing? Or keep logic. 
-        // Original was: this.hunger = 10;
-        this.maxHunger = Config.PLAYER.MAX_HUNGER;
-        this.hungerTimer = 0;
         this.regenTimer = 0;
-        this.starvationTimer = 0;
-        this.distanceTraveled = 0;
         this.lastPosition = null;
         this.highestY = 0; // Track highest point for fall damage
         this.stepSmoothingY = 0; // Visual offset for smooth step-ups
@@ -61,11 +55,8 @@ export class Player {
         this.isFlying = false;
         this.flightTime = 0;
 
-        // Eating State
-        this.isEating = false;
-        this.eatingTimer = 0;
+        // Animation state
         this.swingCompleted = false; // Init flag
-        this.eatingDuration = 1.5; // Seconds to consume food
         this.mount = null;
 
         // Body parts
@@ -1331,44 +1322,8 @@ export class Player {
     // Duplicate toggleCameraView removed
 
     updateHungerAndHealth(deltaTime, input) {
-        // Eating Logic
-        if (this.isEating) {
-            this.eatingTimer += deltaTime;
-
-            // "Bob" animation or particles could go here
-
-            if (this.eatingTimer >= this.eatingDuration) {
-                // Consume food
-                const consumed = this.game.inventory.useSelectedItem();
-                if (consumed) {
-                    // Success sound?
-                    // Reset
-                    this.stopEating();
-                } else {
-                    // Failed (maybe ran out?)
-                    this.stopEating();
-                }
-            }
-        }
-
-        // Track distance traveled for hunger depletion
-        if (this.lastPosition) {
-            const dx = this.position.x - this.lastPosition.x;
-            const dz = this.position.z - this.lastPosition.z;
-            const distance = Math.sqrt(dx * dx + dz * dz);
-            this.distanceTraveled += distance;
-
-            // Deplete hunger based on movement
-            if (this.distanceTraveled >= 10) {
-                const hungerLoss = input.isActionActive('SPRINT') ? 0.3 : 0.1;
-                this.hunger = Math.max(0, this.hunger - hungerLoss);
-                this.distanceTraveled = 0;
-            }
-        }
-        this.lastPosition = this.position.clone();
-
-        // Health regeneration when hunger is high
-        if (this.hunger > 16 && this.health < this.maxHealth) {
+        // Health regeneration over time
+        if (this.health < this.maxHealth) {
             this.regenTimer += deltaTime;
             if (this.regenTimer >= 4) {
                 this.heal(1);
@@ -1377,19 +1332,6 @@ export class Player {
         } else {
             this.regenTimer = 0;
         }
-
-        // Starvation damage when hunger is empty (Disabled)
-        /*
-        if (this.hunger <= 0) {
-            this.starvationTimer += deltaTime;
-            if (this.starvationTimer >= 4) {
-                this.takeDamage(1, 'Starvation');
-                this.starvationTimer = 0;
-            }
-        } else {
-            this.starvationTimer = 0;
-        }
-        */
 
         // Update HUD
         this.updateStatusBars();
@@ -1508,9 +1450,7 @@ export class Player {
         }
     }
 
-    eat(amount) {
-        this.hunger = Math.min(this.maxHunger, this.hunger + amount);
-    }
+    // eat() method removed - hunger system disabled
 
 
 
@@ -1596,22 +1536,7 @@ export class Player {
         }
     }
 
-    startEating() {
-        if (this.isEating) return;
-        if (this.hunger >= this.maxHunger) return;
-
-        // Check if holding food
-        const item = this.game.inventory.getSelectedItem();
-        if (item && item.type === 'food') {
-            this.isEating = true;
-            this.eatingTimer = 0;
-        }
-    }
-
-    stopEating() {
-        this.isEating = false;
-        this.eatingTimer = 0;
-    }
+    // startEating() and stopEating() removed - hunger system disabled
 
     onDeath() {
         // Set player as dead (prevents movement/input)
@@ -1640,7 +1565,6 @@ export class Player {
         // Reset player state
         this.isDead = false;
         this.health = this.maxHealth;
-        this.hunger = this.maxHunger;
         this.highestY = -Infinity; // Reset fall damage tracker
 
         // Always respawn in the main Earth world (Y level 0-127)
@@ -1683,20 +1607,12 @@ export class Player {
             healthFill.style.width = healthPercent + '%';
         }
 
-        // Update hunger bar
-        const hungerFill = document.getElementById('hunger-fill');
-        if (hungerFill) {
-            const hungerPercent = (this.hunger / this.maxHunger) * 100;
-            hungerFill.style.width = hungerPercent + '%';
-        }
-
         // Crosshair targeting initialization
         this.crosshairTimer = 0;
         this.lastCrosshairTarget = null;
         this.tooltipElement = document.getElementById('creature-tooltip');
 
         this.updateHearts();
-        this.updateDrumsticks();
     }
 
     updateHearts() {
@@ -1714,26 +1630,6 @@ export class Player {
                 html += '<span class="heart half">💔</span>';
             } else {
                 html += '<span class="heart empty">🖤</span>';
-            }
-        }
-        container.innerHTML = html;
-    }
-
-    updateDrumsticks() {
-        const container = document.getElementById('hunger-drumsticks');
-        if (!container) return;
-
-        const fullDrumsticks = Math.floor(this.hunger / 2);
-        const halfDrumstick = this.hunger % 2 >= 1;
-
-        let html = '';
-        for (let i = 0; i < 10; i++) {
-            if (i < fullDrumsticks) {
-                html += '<span class="drumstick full">🍖</span>';
-            } else if (i === fullDrumsticks && halfDrumstick) {
-                html += '<span class="drumstick half">🦴</span>';
-            } else {
-                html += '<span class="drumstick empty">🦴</span>';
             }
         }
         container.innerHTML = html;
@@ -1776,21 +1672,6 @@ export class Player {
             }
         }
 
-        // Eating Animation Logic
-        if (this.isEating && this.rightArmPivot) {
-            // Raise arm to center/mouth (adjusted for visibility)
-            const eatBob = Math.sin(this.eatingTimer * 20) * 0.1;
-            const targetX = -1.1 + eatBob; // Less upward rotation so we see the item
-            const targetY = 0.4; // Angle inwards
-            const targetZ = -0.5; // Rotate arm to bring hand to center
-
-            // Smoothly interpolate
-            const dt = deltaTime * 10;
-            this.rightArmPivot.rotation.x += (targetX - this.rightArmPivot.rotation.x) * dt;
-            this.rightArmPivot.rotation.y += (targetY - this.rightArmPivot.rotation.y) * dt;
-            this.rightArmPivot.rotation.z += (targetZ - this.rightArmPivot.rotation.z) * dt;
-        }
-
         // Check if player is moving
         const isMoving = moveX !== 0 || moveZ !== 0;
 
@@ -1808,7 +1689,7 @@ export class Player {
             if (this.rightLegPivot) this.rightLegPivot.rotation.x = -Math.PI / 2.5;
 
             // Arms holding reins (slightly forward)
-            if (this.rightArmPivot && !this.isMining && !isBowVisible && !this.isEating) {
+            if (this.rightArmPivot && !this.isMining && !isBowVisible) {
                 this.rightArmPivot.rotation.x = -Math.PI / 6;
             }
             if (this.leftArmPivot) {
@@ -1843,8 +1724,8 @@ export class Player {
 
             if (this.leftArmPivot) this.leftArmPivot.rotation.x = swingAmount;
 
-            // Only swing right arm if NOT mining AND NOT holding bow AND NOT eating
-            if (this.rightArmPivot && !this.isMining && !isBowVisible && !this.isEating) {
+            // Only swing right arm if NOT mining AND NOT holding bow
+            if (this.rightArmPivot && !this.isMining && !isBowVisible) {
                 this.rightArmPivot.rotation.x = basePitch - swingAmount;
             }
 
@@ -1855,8 +1736,8 @@ export class Player {
             const returnSpeed = 5;
             if (this.leftArmPivot) this.leftArmPivot.rotation.x *= Math.max(0, 1 - deltaTime * returnSpeed);
 
-            // Only return right arm if NOT mining AND NOT holding bow AND NOT eating
-            if (this.rightArmPivot && !this.isMining && !isBowVisible && !this.isEating) {
+            // Only return right arm if NOT mining AND NOT holding bow
+            if (this.rightArmPivot && !this.isMining && !isBowVisible) {
                 // Return to basePitch
                 // Interpolate current rotation towards basePitch
                 const currentDiff = this.rightArmPivot.rotation.x - basePitch;

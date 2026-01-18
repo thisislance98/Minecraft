@@ -23,7 +23,11 @@ export const Config = {
 
         // Alien World 2: Lava World (volcanic terrain)
         LAVA_WORLD_Y_START: 60,     // Y chunks 60-68
-        LAVA_WORLD_HEIGHT: 8
+        LAVA_WORLD_HEIGHT: 8,
+
+        // Soccer World (Rocket League style arena)
+        SOCCER_WORLD_Y_START: 70,   // Y chunks 70-78
+        SOCCER_WORLD_HEIGHT: 8
     },
 
     // Player

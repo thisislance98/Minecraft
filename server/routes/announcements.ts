@@ -32,11 +32,14 @@ router.get('/', async (req: Request, res: Response) => {
 
         const now = Date.now();
         const announcements = snapshot.docs
-            .map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                createdAt: (doc.data().createdAt as admin.firestore.Timestamp)?.toMillis() || Date.now()
-            }))
+            .map(doc => {
+                const data = doc.data() as Partial<Announcement>;
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: (data.createdAt as admin.firestore.Timestamp)?.toMillis?.() || Date.now()
+                };
+            })
             .filter(ann => {
                 // Only active announcements
                 if (!ann.active) return false;

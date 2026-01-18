@@ -32,6 +32,82 @@ export class StoreUI {
                 if (authBtn) authBtn.textContent = '👤 Sign In';
             }
         });
+
+        // Handle payment success/cancel URL parameters
+        this.handlePaymentCallback();
+    }
+
+    handlePaymentCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentStatus = urlParams.get('payment');
+
+        if (paymentStatus === 'success') {
+            console.log('[StoreUI] Payment success detected, refreshing tokens...');
+
+            // Show success message
+            this.showPaymentNotification('Payment successful! Refreshing your balance...', 'success');
+
+            // Wait a moment for webhook to process, then sync
+            setTimeout(() => {
+                if (this.user) {
+                    this.syncWithBackend().then(() => {
+                        this.showPaymentNotification(`Tokens updated! Balance: ${this.tokens.toLocaleString()}`, 'success');
+                    });
+                }
+            }, 2000);
+
+            // Clean up URL
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+
+        } else if (paymentStatus === 'cancel') {
+            console.log('[StoreUI] Payment cancelled');
+            this.showPaymentNotification('Payment cancelled', 'info');
+
+            // Clean up URL
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+    }
+
+    showPaymentNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'payment-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-family: 'VT323', monospace;
+            font-size: 18px;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            ${type === 'success' ? 'background: rgba(0, 255, 100, 0.9); color: #000;' : 'background: rgba(100, 100, 100, 0.9); color: #fff;'}
+        `;
+        notification.textContent = message;
+
+        // Add animation styles
+        if (!document.getElementById('payment-notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'payment-notification-styles';
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(notification);
+
+        // Remove after 5 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideIn 0.3s ease reverse';
+            setTimeout(() => notification.remove(), 300);
+        }, 5000);
     }
 
     setupAuthModal() {

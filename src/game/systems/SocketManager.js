@@ -52,6 +52,11 @@ export class SocketManager {
         this.voiceEnabled = localStorage.getItem('settings_voice') === 'true';
         this.lastVoiceState = false;
 
+        // Soccer Ball Multiplayer State
+        this.isSoccerBallHost = false;  // First player in Soccer World becomes host
+        this.lastSoccerBallUpdate = 0;
+        this.soccerBallSyncRate = 50;   // ms between updates (20Hz)
+
         this.connect();
     }
 
@@ -331,6 +336,115 @@ export class SocketManager {
             if (this.game.spawnManager) {
                 this.game.spawnManager.handleRemoteUpdate(data);
             }
+        });
+
+        // === Soccer Ball Sync Events ===
+
+        // Receive soccer ball state from host
+        this.socket.on('soccer:ball_state', (data) => {
+            // Only non-hosts receive and apply ball state
+            if (this.isSoccerBallHost) return;
+
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball && !ball.isDead) {
+                // Apply position and velocity from host
+                ball.position.set(data.pos.x, data.pos.y, data.pos.z);
+                ball.velocity.set(data.vel.x, data.vel.y, data.vel.z);
+
+                // Update mesh position
+                if (ball.mesh) {
+                    ball.mesh.position.copy(ball.position);
+                }
+            }
+        });
+
+        // Receive soccer ball kick event (for sound/visual feedback)
+        this.socket.on('soccer:ball_kick', (data) => {
+            // Play kick sound on all clients
+            if (this.game.soundManager) {
+                this.game.soundManager.playSound('hit');
+            }
+
+            // Show kick direction indicator if desired
+            console.log(`[SocketManager] Ball kicked by ${data.playerId}`);
+        });
+
+        // Receive goal scored event (with updated scores)
+        this.socket.on('soccer:goal', (data) => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball && data.scores) {
+                ball.applyScoreUpdate(data.scores);
+            }
+
+            const sideName = data.scoringSide.charAt(0).toUpperCase() + data.scoringSide.slice(1);
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', `GOAL! ${sideName} team scores! (${data.scores?.blue || 0} - ${data.scores?.orange || 0})`);
+            }
+            if (this.game.soundManager) {
+                this.game.soundManager.playSound('levelup');
+            }
+        });
+
+        // Receive game over event
+        this.socket.on('soccer:game_over', (data) => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball) {
+                ball.applyGameOver(data.winner, data.scores);
+            }
+
+            const winnerName = data.winner.charAt(0).toUpperCase() + data.winner.slice(1);
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', `GAME OVER! ${winnerName} team wins!`);
+            }
+            if (this.game.soundManager) {
+                this.game.soundManager.playSound('levelup');
+            }
+        });
+
+        // Receive game reset event
+        this.socket.on('soccer:game_reset', (data) => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball) {
+                ball.resetGame(false);  // Don't broadcast again
+            }
+        });
+
+        // Receive ball reset event
+        this.socket.on('soccer:ball_reset', (data) => {
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball) {
+                ball.position.set(data.pos.x, data.pos.y, data.pos.z);
+                ball.velocity.set(0, 0, 0);
+                if (ball.mesh) {
+                    ball.mesh.position.copy(ball.position);
+                }
+            }
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', 'Ball reset to center!');
+            }
+        });
+
+        // Handle host assignment for soccer ball
+        this.socket.on('soccer:host_assigned', (data) => {
+            const wasHost = this.isSoccerBallHost;
+            this.isSoccerBallHost = (data.hostId === this.socketId);
+            console.log(`[SocketManager] Soccer ball host: ${data.hostId}, I am host: ${this.isSoccerBallHost}`);
+
+            if (this.isSoccerBallHost && this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', 'You are the soccer ball host (controlling physics)');
+            }
+
+            // If host was released (null), and we're in Soccer World, try to become the new host
+            if (data.hostId === null && this.game.spaceShipManager?.soccerBall) {
+                console.log('[SocketManager] Soccer host disconnected, requesting to become new host');
+                this.requestSoccerHost();
+            }
+        });
+
+        // Request to become soccer host when entering Soccer World
+        this.socket.on('soccer:request_host_response', (data) => {
+            this.isSoccerBallHost = data.isHost;
+            console.log(`[SocketManager] Soccer host request response: ${data.isHost}`);
         });
 
         // Handle world reset (triggered by settings menu)
@@ -918,6 +1032,88 @@ export class SocketManager {
         if (!this.isConnected()) return;
         console.log('[SocketManager] Sending shirt color update:', shirtColor);
         this.socket.emit('player:color', { shirtColor });
+    }
+
+    // === Soccer Ball Sync Methods ===
+
+    /**
+     * Send soccer ball state to other players (called by host only)
+     * @param {Object} ball - The soccer ball entity
+     */
+    sendSoccerBallState(ball) {
+        if (!this.isConnected() || !this.isSoccerBallHost) return;
+
+        const now = Date.now();
+        if (now - this.lastSoccerBallUpdate < this.soccerBallSyncRate) return;
+        this.lastSoccerBallUpdate = now;
+
+        this.socket.emit('soccer:ball_state', {
+            pos: { x: ball.position.x, y: ball.position.y, z: ball.position.z },
+            vel: { x: ball.velocity.x, y: ball.velocity.y, z: ball.velocity.z }
+        });
+    }
+
+    /**
+     * Send soccer ball kick event
+     */
+    sendSoccerBallKick() {
+        if (!this.isConnected()) return;
+        this.socket.emit('soccer:ball_kick', { playerId: this.socketId });
+    }
+
+    /**
+     * Send goal scored event
+     * @param {string} scoringSide - 'blue' or 'orange'
+     * @param {Object} scores - Current scores { blue, orange }
+     */
+    sendSoccerGoal(scoringSide, scores) {
+        if (!this.isConnected() || !this.isSoccerBallHost) return;
+        this.socket.emit('soccer:goal', { scoringSide, scores });
+    }
+
+    /**
+     * Send game over event
+     * @param {string} winner - 'blue' or 'orange'
+     * @param {Object} scores - Final scores { blue, orange }
+     */
+    sendSoccerGameOver(winner, scores) {
+        if (!this.isConnected() || !this.isSoccerBallHost) return;
+        this.socket.emit('soccer:game_over', { winner, scores });
+    }
+
+    /**
+     * Send game reset event
+     */
+    sendSoccerGameReset() {
+        if (!this.isConnected() || !this.isSoccerBallHost) return;
+        this.socket.emit('soccer:game_reset', {});
+    }
+
+    /**
+     * Send ball reset event
+     * @param {Object} pos - Reset position {x, y, z}
+     */
+    sendSoccerBallReset(pos) {
+        if (!this.isConnected() || !this.isSoccerBallHost) return;
+        this.socket.emit('soccer:ball_reset', { pos });
+    }
+
+    /**
+     * Request to become soccer ball host (called when entering Soccer World)
+     */
+    requestSoccerHost() {
+        if (!this.isConnected()) return;
+        console.log('[SocketManager] Requesting soccer ball host status');
+        this.socket.emit('soccer:request_host');
+    }
+
+    /**
+     * Release soccer ball host status (called when leaving Soccer World)
+     */
+    releaseSoccerHost() {
+        if (!this.isConnected()) return;
+        this.isSoccerBallHost = false;
+        this.socket.emit('soccer:release_host');
     }
 
     /**

@@ -143,9 +143,18 @@ export class MerlinSession {
         this.send('error', { message });
     }
 
+    // Track current world context for world-scoped creature/item creation
+    private currentWorldId: string = 'global';
+
     private async handleInput(text: string, context: any, settings?: any) {
         // Wait for auth to be verified before processing
         await this.authReady;
+
+        // Update world context for world-scoped creations
+        if (context && context.worldId) {
+            this.currentWorldId = context.worldId;
+            console.log('[Antigravity] World context:', this.currentWorldId);
+        }
 
         // Update thinking preference from client settings
         if (settings && typeof settings.thinkingEnabled === 'boolean') {
@@ -566,23 +575,29 @@ export class MerlinSession {
                     console.log(`[Knowledge] Using knowledge from search: "${this.lastKnowledgeSearch!.query}" (${this.lastKnowledgeSearch!.resultsCount} results)`);
                 }
 
+                // Use world-scoped saving - creature will only be available in the current world
                 const result = await saveCreature({
                     name,
                     code,
                     description: description || '',
                     createdBy: this.userId || 'anonymous',
                     createdAt: Date.now()
-                });
+                }, this.currentWorldId);
 
                 if (result.success) {
                     // NOTE: Auto-save to knowledge removed - should only save after
                     // user verifies the creature actually works as expected.
                     // Consider adding "save_to_knowledge" tool that user can trigger.
 
+                    const scopeMessage = this.currentWorldId === 'global'
+                        ? 'It is now available for all players in all worlds to spawn!'
+                        : `It is now available for players in this world (${this.currentWorldId}) to spawn!`;
+
                     return {
                         success: true,
-                        message: `Created creature '${name}'. It is now available for all players to spawn!`,
-                        creatureName: name
+                        message: `Created creature '${name}'. ${scopeMessage}`,
+                        creatureName: name,
+                        worldId: this.currentWorldId
                     };
                 } else {
                     return { error: result.error };
@@ -611,18 +626,24 @@ export class MerlinSession {
                     console.log(`[Knowledge] Using knowledge from search: "${this.lastKnowledgeSearch!.query}" (${this.lastKnowledgeSearch!.resultsCount} results)`);
                 }
 
+                // Use world-scoped saving - item will only be available in the current world
                 const result = await saveItem({
                     name,
                     code,
                     icon,
                     description: description || ''
-                });
+                }, this.currentWorldId);
 
                 if (result.success) {
+                    const scopeMessage = this.currentWorldId === 'global'
+                        ? 'It is now available for all players in all worlds to use!'
+                        : `It is now available for players in this world (${this.currentWorldId}) to use!`;
+
                     return {
                         success: true,
-                        message: `Created item '${name}'. It is now available for all players to use!`,
-                        itemName: name
+                        message: `Created item '${name}'. ${scopeMessage}`,
+                        itemName: name,
+                        worldId: this.currentWorldId
                     };
                 } else {
                     return { error: result.error };

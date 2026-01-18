@@ -125,7 +125,8 @@ export class Agent {
                 ...context,
                 position: this.game.player ? this.game.player.position : null,
                 rotation: (this.game.player && this.game.player.mesh) ? this.game.player.mesh.rotation : null,
-                scene: this.getSceneInfo()
+                scene: this.getSceneInfo(),
+                worldId: this.game.socketManager?.worldId || 'global'
             }
         });
 

@@ -430,11 +430,11 @@ async function sendWorldDataToSocket(socket: any, worldId: string, roomId: strin
         socket.emit('entities:initial', []);
     }
 
-    // Send dynamic creature definitions
-    sendCreaturesToSocket(socket);
+    // Send dynamic creature definitions (world-scoped + global)
+    await sendCreaturesToSocket(socket, worldId);
 
-    // Send dynamic item definitions
-    sendItemsToSocket(socket);
+    // Send dynamic item definitions (world-scoped + global)
+    await sendItemsToSocket(socket, worldId);
 
     // Send persisted block changes
     try {
@@ -1566,11 +1566,11 @@ io.on('connection', (socket) => {
             socket.emit('entities:initial', []);
         }
 
-        // Send dynamic creature definitions to the new player
-        sendCreaturesToSocket(socket);
+        // Send dynamic creature definitions to the new player (global for legacy join)
+        await sendCreaturesToSocket(socket, 'global');
 
-        // Send dynamic item definitions to the new player
-        sendItemsToSocket(socket);
+        // Send dynamic item definitions to the new player (global for legacy join)
+        await sendItemsToSocket(socket, 'global');
 
         // Send persisted block changes to the new player
         try {

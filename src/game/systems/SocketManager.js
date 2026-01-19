@@ -553,6 +553,18 @@ export class SocketManager {
         this.socket.on('world:reset', (data) => {
             console.log('[SocketManager] World reset received:', data);
 
+            // Apply world customizations BEFORE regenerating terrain
+            // This ensures landscape settings (rivers, sea level) are applied
+            if (data.world) {
+                this.world = data.world;
+                this.applyWorldCustomizations(data.world);
+            }
+
+            // Clear terrain cache to ensure new landscape settings take effect
+            if (this.game.worldGen) {
+                this.game.worldGen.clearTerrainCache();
+            }
+
             // Check if this client initiated the reset (only initiator should respawn)
             if (data.isInitiator) {
                 // Show a brief message then reload the page with the new world
@@ -1009,6 +1021,30 @@ export class SocketManager {
             this.game.environment.freezeTime(settings.timeFrozen);
             console.log(`[SocketManager] Time frozen: ${settings.timeFrozen}`);
         }
+
+        // Apply landscape settings (rivers, oceans, sea level, etc.)
+        // These affect terrain generation
+        if (customizations?.landscapeSettings && this.game.worldGen) {
+            const landscape = customizations.landscapeSettings;
+
+            // Apply rivers setting
+            if (landscape.enableRivers !== undefined) {
+                this.game.worldGen.setRiversEnabled(landscape.enableRivers);
+                console.log(`[SocketManager] Applied rivers enabled: ${landscape.enableRivers}`);
+            }
+
+            // Apply oceans setting
+            if (landscape.enableOceans !== undefined) {
+                this.game.worldGen.setOceansEnabled(landscape.enableOceans);
+                console.log(`[SocketManager] Applied oceans enabled: ${landscape.enableOceans}`);
+            }
+
+            // Apply sea level setting
+            if (landscape.seaLevel !== undefined) {
+                this.game.worldGen.setSeaLevel(landscape.seaLevel);
+                console.log(`[SocketManager] Applied sea level: ${landscape.seaLevel}`);
+            }
+        }
     }
 
     joinGame() {
@@ -1048,12 +1084,25 @@ export class SocketManager {
 
     /**
      * Extract world ID from URL path (e.g., /world/abc123 -> 'abc123')
+     * or from query parameter (e.g., ?world=abc123)
      * @returns {string|null} World ID or null if not in URL
      */
     getWorldIdFromUrl() {
+        // First check pathname (e.g., /world/abc123)
         const path = window.location.pathname;
-        const match = path.match(/^\/world\/([a-zA-Z0-9_-]+)/);
-        return match ? match[1] : null;
+        const pathMatch = path.match(/^\/world\/([a-zA-Z0-9_-]+)/);
+        if (pathMatch) {
+            return pathMatch[1];
+        }
+
+        // Also check query parameter (e.g., ?world=abc123)
+        const params = new URLSearchParams(window.location.search);
+        const worldParam = params.get('world');
+        if (worldParam) {
+            return worldParam;
+        }
+
+        return null;
     }
 
     /**

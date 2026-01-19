@@ -92,9 +92,6 @@ export class UIManager {
         if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
             this.initTouchControls();
         }
-        if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
-            this.initTouchControls();
-        }
 
         // Listen for world join events to show/hide reset button based on ownership
         window.addEventListener('worldJoined', (e) => {

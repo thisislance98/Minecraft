@@ -285,8 +285,36 @@ export async function spawnCreature(browser, creatureType, count = 1) {
             return { error: `Creature '${type}' not found`, available: Object.keys(AnimalClasses).slice(0, 20) };
         }
 
-        const spawned = game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, cnt);
-        return { success: true, count: spawned?.length || 0, type };
+        // Spawn directly near player position (more reliable than spawnEntitiesInFrontOfPlayer in CLI)
+        const player = game.player;
+        if (!player) return { error: 'No player' };
+
+        const spawned = [];
+        for (let i = 0; i < cnt; i++) {
+            const offsetX = (Math.random() - 0.5) * 10;
+            const offsetZ = (Math.random() - 0.5) * 10;
+            const x = player.position.x + 5 + offsetX;
+            const z = player.position.z + 5 + offsetZ;
+            const y = player.position.y + 2;
+
+            try {
+                const animal = new CreatureClass(game, x, y, z, Math.random());
+                game.animals.push(animal);
+                game.scene.add(animal.mesh);
+                if (game.spawnManager?.entityRegistry) {
+                    game.spawnManager.entityRegistry.register(animal.id, animal);
+                }
+                spawned.push({
+                    type: animal.constructor.name,
+                    position: { x, y, z },
+                    isRideable: animal.isRideable || false
+                });
+            } catch (e) {
+                return { error: `Failed to spawn ${type}: ${e.message}` };
+            }
+        }
+
+        return { success: true, count: spawned.length, type, spawned };
     }, creatureType, count);
 }
 
@@ -961,6 +989,17 @@ export async function getCreatureStats(browser) {
         stats.allowAll = allowed === null;
         stats.allowedCreatures = allowed ? Array.from(allowed) : null;
 
+        // Get ambient manager stats
+        if (game.entityManager) {
+            stats.ambientManagers = {
+                birdManager: game.entityManager.birdManager?.count || 0,
+                butterflyManager: game.entityManager.butterflyManager?.count || 0,
+                pixieManager: game.entityManager.pixieManager?.count || 0,
+                batManager: game.entityManager.batManager?.count || 0,
+                mosquitoManager: game.entityManager.mosquitoManager?.count || 0
+            };
+        }
+
         return stats;
     });
 }
@@ -1159,4 +1198,1334 @@ export async function getWorldBrowserSettings(browser) {
             allowPvP
         };
     });
+}
+
+// ========== PLAYER PHYSICS COMMANDS ==========
+
+/**
+ * Get detailed player physics state
+ */
+export async function getPlayerPhysics(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        return {
+            position: {
+                x: game.player.position.x,
+                y: game.player.position.y,
+                z: game.player.position.z
+            },
+            velocity: {
+                x: game.player.velocity.x,
+                y: game.player.velocity.y,
+                z: game.player.velocity.z
+            },
+            onGround: game.player.onGround,
+            isFlying: game.player.isFlying,
+            isMoving: game.player.isMoving,
+            jumpForce: game.player.jumpForce
+        };
+    });
+}
+
+/**
+ * Monitor player ground state over time
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {number} durationMs - How long to monitor in milliseconds
+ * @param {number} intervalMs - Sampling interval
+ */
+export async function monitorGroundState(browser, durationMs = 3000, intervalMs = 50) {
+    const samples = [];
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < durationMs) {
+        const state = await executeInBrowser(browser, () => {
+            const game = window.__VOXEL_GAME__;
+            if (!game?.player) return null;
+            return {
+                onGround: game.player.onGround,
+                y: game.player.position.y,
+                velY: game.player.velocity.y,
+                timestamp: Date.now()
+            };
+        });
+        if (state) samples.push(state);
+        await new Promise(r => setTimeout(r, intervalMs));
+    }
+
+    // Analyze samples
+    const onGroundCount = samples.filter(s => s.onGround).length;
+    const offGroundCount = samples.filter(s => !s.onGround).length;
+
+    // Find transitions (ground state changes)
+    const transitions = [];
+    for (let i = 1; i < samples.length; i++) {
+        if (samples[i].onGround !== samples[i-1].onGround) {
+            transitions.push({
+                from: samples[i-1].onGround,
+                to: samples[i].onGround,
+                y: samples[i].y,
+                velY: samples[i].velY
+            });
+        }
+    }
+
+    return {
+        totalSamples: samples.length,
+        onGroundCount,
+        offGroundCount,
+        onGroundPercent: (onGroundCount / samples.length * 100).toFixed(1),
+        transitions,
+        transitionCount: transitions.length,
+        samples: samples.slice(-20) // Last 20 samples for debugging
+    };
+}
+
+/**
+ * Simulate player walking and jumping for testing
+ */
+export async function testJumpWhileWalking(browser) {
+    // Start walking forward
+    await browser.page.keyboard.down('KeyW');
+
+    const results = [];
+
+    // Try to jump multiple times while walking
+    for (let i = 0; i < 10; i++) {
+        // Check onGround before jump
+        const beforeJump = await executeInBrowser(browser, () => {
+            const game = window.__VOXEL_GAME__;
+            return {
+                onGround: game?.player?.onGround,
+                y: game?.player?.position?.y,
+                velY: game?.player?.velocity?.y
+            };
+        });
+
+        // Press space to jump
+        await browser.page.keyboard.press('Space');
+
+        // Wait a frame
+        await new Promise(r => setTimeout(r, 16));
+
+        // Check onGround after jump attempt
+        const afterJump = await executeInBrowser(browser, () => {
+            const game = window.__VOXEL_GAME__;
+            return {
+                onGround: game?.player?.onGround,
+                y: game?.player?.position?.y,
+                velY: game?.player?.velocity?.y
+            };
+        });
+
+        const jumped = afterJump.velY > 0;
+        results.push({
+            attempt: i + 1,
+            wasOnGround: beforeJump.onGround,
+            jumped,
+            velYBefore: beforeJump.velY,
+            velYAfter: afterJump.velY
+        });
+
+        // Wait for landing
+        await new Promise(r => setTimeout(r, 800));
+    }
+
+    // Stop walking
+    await browser.page.keyboard.up('KeyW');
+
+    // Analyze results
+    const attemptedOnGround = results.filter(r => r.wasOnGround);
+    const successfulJumps = results.filter(r => r.jumped);
+    const failedJumps = attemptedOnGround.filter(r => !r.jumped);
+
+    return {
+        totalAttempts: results.length,
+        attemptedWhileOnGround: attemptedOnGround.length,
+        successfulJumps: successfulJumps.length,
+        failedJumps: failedJumps.length,
+        failureRate: failedJumps.length > 0 ?
+            (failedJumps.length / attemptedOnGround.length * 100).toFixed(1) + '%' : '0%',
+        details: results
+    };
+}
+
+// ========== ADVANCED WARP/TELEPORT COMMANDS ==========
+
+/**
+ * Named locations for warping - common biomes and points of interest
+ */
+const WARP_LOCATIONS = {
+    spawn: { x: 0, y: 50, z: 0 },
+    origin: { x: 0, y: 50, z: 0 },
+    ocean: { x: 500, y: 40, z: 500 },
+    desert: { x: -300, y: 60, z: 200 },
+    forest: { x: 150, y: 55, z: -200 },
+    jungle: { x: -400, y: 60, z: -400 },
+    mountain: { x: 200, y: 120, z: 300 },
+    snow: { x: -500, y: 70, z: -200 },
+    plains: { x: 100, y: 52, z: 100 },
+    cave: { x: 50, y: 20, z: 50 },
+    sky: { x: 0, y: 200, z: 0 },
+    space: { x: 0, y: 500, z: 0 },
+    underground: { x: 0, y: 10, z: 0 }
+};
+
+/**
+ * Warp player to a named location or coordinates
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string|Object} destination - Named location string or {x, y, z} coordinates
+ * @returns {Object} Warp result with position
+ */
+export async function warp(browser, destination) {
+    let targetPos;
+    let locationName = null;
+
+    if (typeof destination === 'string') {
+        // Check if it's a named location
+        const lowerDest = destination.toLowerCase();
+        if (WARP_LOCATIONS[lowerDest]) {
+            targetPos = WARP_LOCATIONS[lowerDest];
+            locationName = lowerDest;
+        } else if (destination.includes(',')) {
+            // Parse coordinate string like "100, 50, 200"
+            const parts = destination.split(',').map(s => parseFloat(s.trim()));
+            if (parts.length >= 3 && parts.every(n => !isNaN(n))) {
+                targetPos = { x: parts[0], y: parts[1], z: parts[2] };
+            } else {
+                return { error: `Invalid coordinates: ${destination}` };
+            }
+        } else {
+            return {
+                error: `Unknown location: ${destination}`,
+                availableLocations: Object.keys(WARP_LOCATIONS)
+            };
+        }
+    } else if (typeof destination === 'object' && destination.x !== undefined) {
+        targetPos = destination;
+    } else {
+        return { error: 'Invalid destination format' };
+    }
+
+    // Execute the warp
+    const result = await executeInBrowser(browser, (x, y, z) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        // Store old position for logging
+        const oldPos = {
+            x: game.player.position.x,
+            y: game.player.position.y,
+            z: game.player.position.z
+        };
+
+        // Teleport
+        game.player.position.set(x, y, z);
+
+        // Reset velocity to prevent falling momentum
+        if (game.player.velocity) {
+            game.player.velocity.set(0, 0, 0);
+        }
+
+        return {
+            success: true,
+            from: oldPos,
+            to: { x, y, z }
+        };
+    }, targetPos.x, targetPos.y, targetPos.z);
+
+    if (result.success) {
+        result.locationName = locationName;
+    }
+
+    return result;
+}
+
+/**
+ * Get list of all available warp locations
+ */
+export function getWarpLocations() {
+    return {
+        locations: Object.entries(WARP_LOCATIONS).map(([name, pos]) => ({
+            name,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z
+        })),
+        count: Object.keys(WARP_LOCATIONS).length
+    };
+}
+
+/**
+ * Warp player relative to current position
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {number} dx - Delta X
+ * @param {number} dy - Delta Y
+ * @param {number} dz - Delta Z
+ */
+export async function warpRelative(browser, dx, dy, dz) {
+    return await executeInBrowser(browser, (deltaX, deltaY, deltaZ) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        const oldPos = {
+            x: game.player.position.x,
+            y: game.player.position.y,
+            z: game.player.position.z
+        };
+
+        game.player.position.x += deltaX;
+        game.player.position.y += deltaY;
+        game.player.position.z += deltaZ;
+
+        return {
+            success: true,
+            from: oldPos,
+            to: {
+                x: game.player.position.x,
+                y: game.player.position.y,
+                z: game.player.position.z
+            },
+            delta: { x: deltaX, y: deltaY, z: deltaZ }
+        };
+    }, dx, dy, dz);
+}
+
+/**
+ * Warp to a specific entity by type or ID
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} entityType - Type of entity to warp to (e.g., 'Pig', 'Wolf')
+ * @param {number} offset - Distance offset from entity (default: 5 blocks)
+ */
+export async function warpToEntity(browser, entityType, offset = 5) {
+    return await executeInBrowser(browser, (type, dist) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player || !game.animals) return { error: 'Game not ready' };
+
+        // Find entity of matching type
+        const entity = game.animals.find(a =>
+            a.constructor.name.toLowerCase() === type.toLowerCase()
+        );
+
+        if (!entity || !entity.position) {
+            return {
+                error: `No ${type} found`,
+                availableTypes: [...new Set(game.animals.map(a => a.constructor.name))]
+            };
+        }
+
+        const targetPos = {
+            x: entity.position.x + dist,
+            y: entity.position.y + 2,
+            z: entity.position.z
+        };
+
+        game.player.position.set(targetPos.x, targetPos.y, targetPos.z);
+
+        return {
+            success: true,
+            entityType: entity.constructor.name,
+            entityPosition: { x: entity.position.x, y: entity.position.y, z: entity.position.z },
+            playerPosition: targetPos
+        };
+    }, entityType, offset);
+}
+
+// ========== VIDEO RECORDING COMMANDS ==========
+
+/**
+ * Start video recording using Puppeteer's screencast
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} outputPath - Path for output video file
+ * @param {Object} options - Recording options
+ */
+export async function startRecording(browser, outputPath = 'recording.webm', options = {}) {
+    const {
+        width = 1280,
+        height = 720,
+        fps = 30
+    } = options;
+
+    // Store recorder on the browser object for later access
+    try {
+        const client = await browser.page.target().createCDPSession();
+
+        // Start screencast
+        await client.send('Page.startScreencast', {
+            format: 'png',
+            quality: 100,
+            maxWidth: width,
+            maxHeight: height,
+            everyNthFrame: Math.round(60 / fps) // Adjust for target FPS
+        });
+
+        // Store frames
+        browser._recordingFrames = [];
+        browser._recordingClient = client;
+        browser._recordingPath = outputPath;
+        browser._recordingStartTime = Date.now();
+
+        client.on('Page.screencastFrame', async (frame) => {
+            browser._recordingFrames.push({
+                data: frame.data,
+                timestamp: Date.now()
+            });
+            // Acknowledge the frame
+            await client.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
+        });
+
+        console.log(`🎬 Recording started: ${outputPath}`);
+        return {
+            success: true,
+            outputPath,
+            width,
+            height,
+            fps,
+            message: 'Recording started. Call stopRecording() when done.'
+        };
+    } catch (error) {
+        return { error: `Failed to start recording: ${error.message}` };
+    }
+}
+
+/**
+ * Stop video recording and save to file
+ * @param {Object} browser - Puppeteer browser instance
+ */
+export async function stopRecording(browser) {
+    if (!browser._recordingClient) {
+        return { error: 'No recording in progress' };
+    }
+
+    try {
+        // Stop the screencast
+        await browser._recordingClient.send('Page.stopScreencast');
+
+        const duration = Date.now() - browser._recordingStartTime;
+        const frameCount = browser._recordingFrames.length;
+        const outputPath = browser._recordingPath;
+
+        // Save frames as a GIF or individual PNGs (simpler approach)
+        // For WebM, we'd need ffmpeg. Let's save as a sequence for now.
+        const fs = await import('fs');
+        const pathModule = await import('path');
+
+        // Create output directory with absolute path
+        const basePath = process.cwd();
+        const dirName = outputPath.replace(/\.[^/.]+$/, '_frames');
+        const absoluteDirPath = pathModule.default.isAbsolute(dirName) ? dirName : pathModule.default.join(basePath, dirName);
+
+        console.log(`🎬 Saving frames to: ${absoluteDirPath}`);
+
+        if (!fs.existsSync(absoluteDirPath)) {
+            fs.mkdirSync(absoluteDirPath, { recursive: true });
+        }
+
+        // Save each frame
+        for (let i = 0; i < browser._recordingFrames.length; i++) {
+            const frame = browser._recordingFrames[i];
+            const framePath = pathModule.default.join(absoluteDirPath, `frame_${String(i).padStart(5, '0')}.png`);
+            fs.writeFileSync(framePath, Buffer.from(frame.data, 'base64'));
+        }
+
+        // Clean up browser state
+        const savedFrameCount = browser._recordingFrames.length;
+        browser._recordingFrames = [];
+        browser._recordingClient = null;
+        browser._recordingPath = null;
+        browser._recordingStartTime = null;
+
+        console.log(`🎬 Recording stopped: ${savedFrameCount} frames saved to ${absoluteDirPath}/`);
+        return {
+            success: true,
+            frameCount: savedFrameCount,
+            duration: duration,
+            durationSeconds: (duration / 1000).toFixed(2),
+            framesDirectory: absoluteDirPath,
+            fps: (savedFrameCount / (duration / 1000)).toFixed(1),
+            message: `Saved ${savedFrameCount} frames. Use ffmpeg to convert: ffmpeg -framerate 30 -i ${absoluteDirPath}/frame_%05d.png -c:v libx264 -pix_fmt yuv420p ${outputPath.replace('.webm', '.mp4')}`
+        };
+    } catch (error) {
+        return { error: `Failed to stop recording: ${error.message}` };
+    }
+}
+
+/**
+ * Take a burst of screenshots over a duration
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {number} durationMs - Duration in milliseconds
+ * @param {number} intervalMs - Interval between shots
+ * @param {string} prefix - Filename prefix
+ */
+export async function screenshotBurst(browser, durationMs = 3000, intervalMs = 100, prefix = 'burst') {
+    const screenshots = [];
+    const startTime = Date.now();
+    let frameNum = 0;
+
+    while (Date.now() - startTime < durationMs) {
+        const path = `${prefix}_${String(frameNum).padStart(4, '0')}.png`;
+        await browser.page.screenshot({ path });
+        screenshots.push(path);
+        frameNum++;
+        await new Promise(r => setTimeout(r, intervalMs));
+    }
+
+    return {
+        success: true,
+        frameCount: screenshots.length,
+        duration: durationMs,
+        interval: intervalMs,
+        files: screenshots
+    };
+}
+
+// ========== OBJECT INTERACTION COMMANDS ==========
+
+/**
+ * Interact with the nearest entity or object (press F key)
+ */
+export async function interact(browser) {
+    await browser.page.keyboard.press('KeyF');
+
+    // Give time for interaction to process
+    await new Promise(r => setTimeout(r, 100));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game) return { error: 'Game not ready' };
+
+        // Get what player is looking at
+        const targetBlock = game.physicsManager?.targetBlock;
+
+        return {
+            success: true,
+            action: 'interact',
+            targetBlock: targetBlock ? {
+                x: targetBlock.x,
+                y: targetBlock.y,
+                z: targetBlock.z,
+                type: targetBlock.type
+            } : null
+        };
+    });
+}
+
+/**
+ * Use the currently held item (right-click action)
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {Object} target - Optional target {x, y, z} for directional use
+ */
+export async function useItem(browser, target = null) {
+    // If target specified, look at it first
+    if (target) {
+        await executeInBrowser(browser, (tx, ty, tz) => {
+            const game = window.__VOXEL_GAME__;
+            if (game?.camera) {
+                game.camera.lookAt(tx, ty, tz);
+            }
+        }, target.x, target.y, target.z);
+    }
+
+    // Right-click to use
+    await browser.page.mouse.click(640, 360, { button: 'right' });
+    await new Promise(r => setTimeout(r, 100));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.inventoryManager) return { error: 'Game not ready' };
+
+        const slot = game.inventoryManager.getSelectedItem();
+        return {
+            success: true,
+            action: 'use',
+            item: slot?.item || null,
+            remaining: slot?.count || 0
+        };
+    });
+}
+
+/**
+ * Pick up the nearest dropped item
+ */
+export async function pickupItem(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player || !game.drops) return { error: 'Game not ready' };
+
+        // Find nearest drop
+        let nearestDrop = null;
+        let nearestDist = Infinity;
+        const playerPos = game.player.position;
+
+        for (const drop of game.drops) {
+            if (!drop.position) continue;
+            const dist = playerPos.distanceTo(drop.position);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestDrop = drop;
+            }
+        }
+
+        if (!nearestDrop) {
+            return { error: 'No drops nearby', dropsCount: game.drops.length };
+        }
+
+        if (nearestDist > 5) {
+            return {
+                error: 'Drop too far',
+                distance: nearestDist.toFixed(2),
+                dropPosition: {
+                    x: nearestDrop.position.x,
+                    y: nearestDrop.position.y,
+                    z: nearestDrop.position.z
+                }
+            };
+        }
+
+        // Move player to pickup position
+        game.player.position.set(
+            nearestDrop.position.x,
+            nearestDrop.position.y + 1,
+            nearestDrop.position.z
+        );
+
+        return {
+            success: true,
+            action: 'pickup',
+            item: nearestDrop.blockType || 'unknown',
+            distance: nearestDist.toFixed(2)
+        };
+    });
+}
+
+/**
+ * Get information about the object the player is looking at
+ */
+export async function lookAt(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game) return { error: 'Game not ready' };
+
+        const result = {
+            block: null,
+            entity: null,
+            drop: null
+        };
+
+        // Check target block
+        if (game.physicsManager?.targetBlock) {
+            const tb = game.physicsManager.targetBlock;
+            result.block = {
+                x: tb.x,
+                y: tb.y,
+                z: tb.z,
+                type: tb.type,
+                face: game.physicsManager.targetFace
+            };
+        }
+
+        // Check for nearby entities in view
+        if (game.animals && game.camera) {
+            const camPos = game.camera.position;
+            const camDir = new window.THREE.Vector3();
+            game.camera.getWorldDirection(camDir);
+
+            for (const animal of game.animals) {
+                if (!animal.position) continue;
+
+                // Simple ray check - is entity roughly in front?
+                const toEntity = animal.position.clone().sub(camPos);
+                const dist = toEntity.length();
+                if (dist > 50) continue; // Too far
+
+                toEntity.normalize();
+                const dot = camDir.dot(toEntity);
+                if (dot > 0.9) { // Looking at it (within ~25 degrees)
+                    result.entity = {
+                        type: animal.constructor.name,
+                        position: { x: animal.position.x, y: animal.position.y, z: animal.position.z },
+                        distance: dist.toFixed(2),
+                        health: animal.health
+                    };
+                    break;
+                }
+            }
+        }
+
+        // Check for drops
+        if (game.drops) {
+            const camPos = game.camera?.position;
+            const camDir = new window.THREE.Vector3();
+            game.camera?.getWorldDirection(camDir);
+
+            for (const drop of game.drops) {
+                if (!drop.position) continue;
+                const toEntity = drop.position.clone().sub(camPos);
+                const dist = toEntity.length();
+                if (dist > 10) continue;
+
+                toEntity.normalize();
+                const dot = camDir.dot(toEntity);
+                if (dot > 0.8) {
+                    result.drop = {
+                        type: drop.blockType,
+                        position: { x: drop.position.x, y: drop.position.y, z: drop.position.z },
+                        distance: dist.toFixed(2)
+                    };
+                    break;
+                }
+            }
+        }
+
+        return result;
+    });
+}
+
+/**
+ * Attack the nearest entity (left-click action)
+ */
+export async function attack(browser) {
+    await browser.page.mouse.click(640, 360, { button: 'left' });
+    await new Promise(r => setTimeout(r, 100));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        return {
+            success: true,
+            action: 'attack'
+        };
+    });
+}
+
+/**
+ * Drop the currently held item
+ */
+export async function dropItem(browser) {
+    await browser.page.keyboard.press('KeyQ');
+    await new Promise(r => setTimeout(r, 100));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.inventoryManager) return { error: 'Game not ready' };
+
+        const slot = game.inventoryManager.getSelectedItem();
+        return {
+            success: true,
+            action: 'drop',
+            remainingItem: slot?.item || null,
+            remainingCount: slot?.count || 0
+        };
+    });
+}
+
+/**
+ * Place a block at the target location
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} blockType - Optional block type to place (selects from inventory first)
+ */
+export async function placeBlock(browser, blockType = null) {
+    // If block type specified, try to equip it first
+    if (blockType) {
+        const equipResult = await equipItem(browser, blockType);
+        if (equipResult.error) {
+            return { error: `Cannot equip ${blockType}: ${equipResult.error}` };
+        }
+    }
+
+    // Right-click to place
+    await browser.page.mouse.click(640, 360, { button: 'right' });
+    await new Promise(r => setTimeout(r, 100));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game) return { error: 'Game not ready' };
+
+        const slot = game.inventoryManager?.getSelectedItem();
+        return {
+            success: true,
+            action: 'place',
+            item: slot?.item || null,
+            remaining: slot?.count || 0
+        };
+    });
+}
+
+/**
+ * Mine/break the block the player is looking at
+ */
+export async function mineBlock(browser) {
+    // Hold left click for mining
+    await browser.page.mouse.down();
+    await new Promise(r => setTimeout(r, 500)); // Hold for half a second
+    await browser.page.mouse.up();
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game) return { error: 'Game not ready' };
+
+        const targetBlock = game.physicsManager?.targetBlock;
+        return {
+            success: true,
+            action: 'mine',
+            targetBlock: targetBlock ? {
+                x: targetBlock.x,
+                y: targetBlock.y,
+                z: targetBlock.z,
+                type: targetBlock.type
+            } : null
+        };
+    });
+}
+
+/**
+ * Open inventory UI
+ */
+export async function openInventory(browser) {
+    await browser.page.keyboard.press('KeyE');
+    await new Promise(r => setTimeout(r, 200));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        const isOpen = game?.inventory?.isInventoryOpen ||
+                       !document.getElementById('inventory-screen')?.classList.contains('hidden');
+        return { success: true, inventoryOpen: isOpen };
+    });
+}
+
+/**
+ * Close inventory UI
+ */
+export async function closeInventory(browser) {
+    await browser.page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 200));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        const isOpen = game?.inventory?.isInventoryOpen ||
+                       !document.getElementById('inventory-screen')?.classList.contains('hidden');
+        return { success: true, inventoryClosed: !isOpen };
+    });
+}
+
+/**
+ * Enter/exit a vehicle or mount (spaceship, horse, etc.)
+ */
+export async function mount(browser) {
+    // Press F to interact (mount/dismount)
+    await browser.page.keyboard.press('KeyF');
+    await new Promise(r => setTimeout(r, 200));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        return {
+            success: true,
+            action: 'mount/dismount',
+            isMounted: game.player.isInVehicle || game.player.mountedEntity != null
+        };
+    });
+}
+
+/**
+ * Look in a specific direction (set camera rotation)
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string|Object} direction - 'north', 'south', 'east', 'west', 'up', 'down' or {pitch, yaw}
+ */
+export async function lookDirection(browser, direction) {
+    const directions = {
+        north: { pitch: 0, yaw: Math.PI },
+        south: { pitch: 0, yaw: 0 },
+        east: { pitch: 0, yaw: -Math.PI / 2 },
+        west: { pitch: 0, yaw: Math.PI / 2 },
+        up: { pitch: -Math.PI / 2, yaw: 0 },
+        down: { pitch: Math.PI / 2, yaw: 0 }
+    };
+
+    let rotation;
+    if (typeof direction === 'string') {
+        rotation = directions[direction.toLowerCase()];
+        if (!rotation) {
+            return { error: `Unknown direction: ${direction}`, available: Object.keys(directions) };
+        }
+    } else {
+        rotation = direction;
+    }
+
+    return await executeInBrowser(browser, (pitch, yaw) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.camera) return { error: 'Game not ready' };
+
+        game.camera.rotation.x = pitch;
+        game.camera.rotation.y = yaw;
+
+        return {
+            success: true,
+            pitch: pitch,
+            yaw: yaw
+        };
+    }, rotation.pitch, rotation.yaw);
+}
+
+/**
+ * Move player in a direction for a specified duration
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} direction - 'forward', 'backward', 'left', 'right'
+ * @param {number} durationMs - How long to move
+ */
+export async function moveDirection(browser, direction, durationMs = 1000) {
+    const keyMap = {
+        forward: 'KeyW',
+        backward: 'KeyS',
+        left: 'KeyA',
+        right: 'KeyD',
+        up: 'Space',
+        jump: 'Space'
+    };
+
+    const key = keyMap[direction.toLowerCase()];
+    if (!key) {
+        return { error: `Unknown direction: ${direction}`, available: Object.keys(keyMap) };
+    }
+
+    const startPos = await getPlayerPosition(browser);
+
+    await browser.page.keyboard.down(key);
+    await new Promise(r => setTimeout(r, durationMs));
+    await browser.page.keyboard.up(key);
+
+    const endPos = await getPlayerPosition(browser);
+
+    return {
+        success: true,
+        direction,
+        duration: durationMs,
+        startPosition: startPos,
+        endPosition: endPos,
+        distance: startPos && endPos ? Math.sqrt(
+            Math.pow(endPos.x - startPos.x, 2) +
+            Math.pow(endPos.y - startPos.y, 2) +
+            Math.pow(endPos.z - startPos.z, 2)
+        ).toFixed(2) : null
+    };
+}
+
+/**
+ * Sprint in a direction
+ */
+export async function sprint(browser, direction = 'forward', durationMs = 2000) {
+    const keyMap = {
+        forward: 'KeyW',
+        backward: 'KeyS',
+        left: 'KeyA',
+        right: 'KeyD'
+    };
+
+    const key = keyMap[direction.toLowerCase()];
+    if (!key) {
+        return { error: `Unknown direction: ${direction}` };
+    }
+
+    const startPos = await getPlayerPosition(browser);
+
+    // Hold shift for sprint
+    await browser.page.keyboard.down('ShiftLeft');
+    await browser.page.keyboard.down(key);
+    await new Promise(r => setTimeout(r, durationMs));
+    await browser.page.keyboard.up(key);
+    await browser.page.keyboard.up('ShiftLeft');
+
+    const endPos = await getPlayerPosition(browser);
+
+    return {
+        success: true,
+        action: 'sprint',
+        direction,
+        duration: durationMs,
+        startPosition: startPos,
+        endPosition: endPos
+    };
+}
+
+/**
+ * Toggle flying mode
+ */
+export async function toggleFlight(browser) {
+    // Double-tap space for creative flight
+    await browser.page.keyboard.press('Space');
+    await new Promise(r => setTimeout(r, 100));
+    await browser.page.keyboard.press('Space');
+    await new Promise(r => setTimeout(r, 200));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        return {
+            success: true,
+            isFlying: game.player.isFlying
+        };
+    });
+}
+
+/**
+ * Fly up/down in creative mode
+ */
+export async function flyVertical(browser, direction = 'up', durationMs = 1000) {
+    const key = direction === 'up' ? 'Space' : 'ShiftLeft';
+
+    const startPos = await getPlayerPosition(browser);
+
+    await browser.page.keyboard.down(key);
+    await new Promise(r => setTimeout(r, durationMs));
+    await browser.page.keyboard.up(key);
+
+    const endPos = await getPlayerPosition(browser);
+
+    return {
+        success: true,
+        direction,
+        duration: durationMs,
+        startY: startPos?.y,
+        endY: endPos?.y,
+        deltaY: endPos && startPos ? (endPos.y - startPos.y).toFixed(2) : null
+    };
+}
+
+// Print helper for warp locations
+export function printWarpLocations() {
+    console.log(chalk.blue('\n═══ Available Warp Locations ═══'));
+    for (const [name, pos] of Object.entries(WARP_LOCATIONS)) {
+        console.log(`  ${chalk.cyan(name.padEnd(12))} → (${pos.x}, ${pos.y}, ${pos.z})`);
+    }
+}
+
+// ========== VEHICLE / AIRPLANE FLIGHT COMMANDS ==========
+
+/**
+ * Get the player's current mount/vehicle info
+ */
+export async function getMountInfo(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        const mount = game.player.mount;
+        if (!mount) {
+            return { mounted: false, mount: null };
+        }
+
+        return {
+            mounted: true,
+            mountType: mount.constructor.name,
+            position: mount.position ? {
+                x: mount.position.x,
+                y: mount.position.y,
+                z: mount.position.z
+            } : null,
+            // Flight-specific properties
+            throttle: mount.throttle ?? null,
+            airspeed: mount.airspeed ?? null,
+            pitch: mount.pitch ?? null,
+            roll: mount.roll ?? null,
+            yaw: mount.yaw ?? null,
+            isStalling: mount.isStalling ?? null,
+            angleOfAttack: mount.angleOfAttack ?? null
+        };
+    });
+}
+
+/**
+ * Find and mount the nearest rideable entity (like MillenniumFalcon)
+ */
+export async function findAndMountShip(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player || !game.animals) return { error: 'Game not ready' };
+
+        // Find nearest rideable entity
+        let nearestRideable = null;
+        let nearestDist = Infinity;
+        const playerPos = game.player.position;
+
+        for (const animal of game.animals) {
+            if (!animal.isRideable || !animal.position) continue;
+            const dist = playerPos.distanceTo(animal.position);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestRideable = animal;
+            }
+        }
+
+        if (!nearestRideable) {
+            // List what we found
+            const rideables = game.animals.filter(a => a.isRideable).map(a => a.constructor.name);
+            return { error: 'No rideable entity found', availableRideables: rideables };
+        }
+
+        // Teleport player to the entity and mount it
+        game.player.position.set(
+            nearestRideable.position.x,
+            nearestRideable.position.y + 2,
+            nearestRideable.position.z
+        );
+
+        // Try to mount
+        if (nearestRideable.interact) {
+            nearestRideable.interact();
+        } else if (game.player.mountEntity) {
+            game.player.mountEntity(nearestRideable);
+        }
+
+        return {
+            success: true,
+            mountType: nearestRideable.constructor.name,
+            distance: nearestDist.toFixed(2),
+            mounted: game.player.mount === nearestRideable
+        };
+    });
+}
+
+/**
+ * Dismount from current vehicle
+ */
+export async function dismount(browser) {
+    await browser.page.keyboard.press('KeyF');
+    await new Promise(r => setTimeout(r, 200));
+
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player) return { error: 'Game not ready' };
+
+        return {
+            success: true,
+            mounted: game.player.mount != null
+        };
+    });
+}
+
+/**
+ * Test airplane controls - apply control inputs and measure response
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {Object} controls - Control inputs: { throttle, pitch, roll, duration }
+ */
+export async function testFlightControls(browser, controls = {}) {
+    const {
+        throttle = false,     // Hold space for throttle up
+        throttleDown = false, // Hold shift for throttle down
+        pitchUp = false,      // Hold W for pitch up
+        pitchDown = false,    // Hold S for pitch down
+        rollLeft = false,     // Hold A for roll left
+        rollRight = false,    // Hold D for roll right
+        duration = 2000       // How long to hold controls
+    } = controls;
+
+    // Get initial state
+    const initialState = await getMountInfo(browser);
+    if (!initialState.mounted) {
+        return { error: 'Not mounted on a vehicle', initialState };
+    }
+
+    // Press the control keys
+    const keysHeld = [];
+    if (throttle) { await browser.page.keyboard.down('Space'); keysHeld.push('Space'); }
+    if (throttleDown) { await browser.page.keyboard.down('ShiftLeft'); keysHeld.push('ShiftLeft'); }
+    if (pitchUp) { await browser.page.keyboard.down('KeyW'); keysHeld.push('KeyW'); }
+    if (pitchDown) { await browser.page.keyboard.down('KeyS'); keysHeld.push('KeyS'); }
+    if (rollLeft) { await browser.page.keyboard.down('KeyA'); keysHeld.push('KeyA'); }
+    if (rollRight) { await browser.page.keyboard.down('KeyD'); keysHeld.push('KeyD'); }
+
+    // Sample state during flight
+    const samples = [];
+    const startTime = Date.now();
+    const sampleInterval = 200; // Sample every 200ms
+
+    while (Date.now() - startTime < duration) {
+        const state = await getMountInfo(browser);
+        if (state.mounted) {
+            samples.push({
+                time: Date.now() - startTime,
+                throttle: state.throttle,
+                airspeed: state.airspeed,
+                pitch: state.pitch,
+                roll: state.roll,
+                altitude: state.position?.y,
+                isStalling: state.isStalling
+            });
+        }
+        await new Promise(r => setTimeout(r, sampleInterval));
+    }
+
+    // Release keys
+    for (const key of keysHeld) {
+        await browser.page.keyboard.up(key);
+    }
+
+    // Get final state
+    const finalState = await getMountInfo(browser);
+
+    // Analyze results
+    const analysis = {
+        initialAltitude: initialState.position?.y,
+        finalAltitude: finalState.position?.y,
+        altitudeChange: finalState.position?.y - initialState.position?.y,
+        initialAirspeed: initialState.airspeed,
+        finalAirspeed: finalState.airspeed,
+        airspeedChange: finalState.airspeed - initialState.airspeed,
+        initialThrottle: initialState.throttle,
+        finalThrottle: finalState.throttle,
+        maxPitch: Math.max(...samples.map(s => s.pitch || 0)),
+        minPitch: Math.min(...samples.map(s => s.pitch || 0)),
+        maxRoll: Math.max(...samples.map(s => s.roll || 0)),
+        minRoll: Math.min(...samples.map(s => s.roll || 0)),
+        stalledAtAnyPoint: samples.some(s => s.isStalling)
+    };
+
+    return {
+        success: true,
+        keysHeld,
+        duration,
+        sampleCount: samples.length,
+        initialState,
+        finalState,
+        analysis,
+        samples: samples.slice(-10) // Last 10 samples
+    };
+}
+
+/**
+ * Run a full airplane flight test sequence
+ */
+export async function runAirplaneFlightTest(browser) {
+    const results = {
+        mounted: false,
+        tests: []
+    };
+
+    console.log(chalk.blue('\n═══ Airplane Flight Test ═══'));
+
+    // Step 1: Find and mount a ship
+    console.log(chalk.cyan('\n1. Finding and mounting ship...'));
+    const mountResult = await findAndMountShip(browser);
+    if (mountResult.error) {
+        console.log(chalk.red(`   ✗ ${mountResult.error}`));
+        return { error: mountResult.error, results };
+    }
+    console.log(chalk.green(`   ✓ Mounted ${mountResult.mountType}`));
+    results.mounted = true;
+
+    await new Promise(r => setTimeout(r, 500)); // Let it settle
+
+    // Step 2: Test throttle up (Space)
+    console.log(chalk.cyan('\n2. Testing throttle up (Space)...'));
+    const throttleTest = await testFlightControls(browser, { throttle: true, duration: 3000 });
+    results.tests.push({ name: 'throttle_up', result: throttleTest });
+    if (throttleTest.analysis) {
+        const passed = throttleTest.analysis.finalThrottle > throttleTest.analysis.initialThrottle;
+        console.log(passed ? chalk.green('   ✓ Throttle increased') : chalk.red('   ✗ Throttle did not increase'));
+        console.log(`     Throttle: ${throttleTest.analysis.initialThrottle?.toFixed(2)} → ${throttleTest.analysis.finalThrottle?.toFixed(2)}`);
+        console.log(`     Airspeed: ${throttleTest.analysis.initialAirspeed?.toFixed(1)} → ${throttleTest.analysis.finalAirspeed?.toFixed(1)}`);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Step 3: Test pitch up (W)
+    console.log(chalk.cyan('\n3. Testing pitch up (W) - should climb...'));
+    const pitchUpTest = await testFlightControls(browser, { pitchUp: true, throttle: true, duration: 3000 });
+    results.tests.push({ name: 'pitch_up', result: pitchUpTest });
+    if (pitchUpTest.analysis) {
+        const pitchIncreased = pitchUpTest.analysis.maxPitch > 0.1;
+        const altitudeIncreased = pitchUpTest.analysis.altitudeChange > 0;
+        console.log(pitchIncreased ? chalk.green('   ✓ Pitch increased (nose up)') : chalk.red('   ✗ Pitch did not increase'));
+        console.log(altitudeIncreased ? chalk.green('   ✓ Altitude increased (climbing)') : chalk.yellow('   ~ Altitude did not increase much'));
+        console.log(`     Pitch: ${pitchUpTest.analysis.maxPitch?.toFixed(2)} rad`);
+        console.log(`     Altitude change: ${pitchUpTest.analysis.altitudeChange?.toFixed(1)} blocks`);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Step 4: Test pitch down (S)
+    console.log(chalk.cyan('\n4. Testing pitch down (S) - should descend...'));
+    const pitchDownTest = await testFlightControls(browser, { pitchDown: true, duration: 2000 });
+    results.tests.push({ name: 'pitch_down', result: pitchDownTest });
+    if (pitchDownTest.analysis) {
+        const pitchDecreased = pitchDownTest.analysis.minPitch < -0.1;
+        console.log(pitchDecreased ? chalk.green('   ✓ Pitch decreased (nose down)') : chalk.red('   ✗ Pitch did not decrease'));
+        console.log(`     Pitch: ${pitchDownTest.analysis.minPitch?.toFixed(2)} rad`);
+        console.log(`     Altitude change: ${pitchDownTest.analysis.altitudeChange?.toFixed(1)} blocks`);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Step 5: Test roll left (A)
+    console.log(chalk.cyan('\n5. Testing roll left (A)...'));
+    const rollLeftTest = await testFlightControls(browser, { rollLeft: true, throttle: true, duration: 2000 });
+    results.tests.push({ name: 'roll_left', result: rollLeftTest });
+    if (rollLeftTest.analysis) {
+        const rolled = Math.abs(rollLeftTest.analysis.minRoll) > 0.1 || Math.abs(rollLeftTest.analysis.maxRoll) > 0.1;
+        console.log(rolled ? chalk.green('   ✓ Roll applied') : chalk.red('   ✗ Roll did not change'));
+        console.log(`     Roll range: ${rollLeftTest.analysis.minRoll?.toFixed(2)} to ${rollLeftTest.analysis.maxRoll?.toFixed(2)} rad`);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Step 6: Test roll right (D)
+    console.log(chalk.cyan('\n6. Testing roll right (D)...'));
+    const rollRightTest = await testFlightControls(browser, { rollRight: true, throttle: true, duration: 2000 });
+    results.tests.push({ name: 'roll_right', result: rollRightTest });
+    if (rollRightTest.analysis) {
+        const rolled = Math.abs(rollRightTest.analysis.minRoll) > 0.1 || Math.abs(rollRightTest.analysis.maxRoll) > 0.1;
+        console.log(rolled ? chalk.green('   ✓ Roll applied') : chalk.red('   ✗ Roll did not change'));
+        console.log(`     Roll range: ${rollRightTest.analysis.minRoll?.toFixed(2)} to ${rollRightTest.analysis.maxRoll?.toFixed(2)} rad`);
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+
+    // Step 7: Test throttle down (Shift)
+    console.log(chalk.cyan('\n7. Testing throttle down (Shift)...'));
+    const throttleDownTest = await testFlightControls(browser, { throttleDown: true, duration: 2000 });
+    results.tests.push({ name: 'throttle_down', result: throttleDownTest });
+    if (throttleDownTest.analysis) {
+        const throttleDecreased = throttleDownTest.analysis.finalThrottle < throttleDownTest.analysis.initialThrottle;
+        console.log(throttleDecreased ? chalk.green('   ✓ Throttle decreased') : chalk.red('   ✗ Throttle did not decrease'));
+        console.log(`     Throttle: ${throttleDownTest.analysis.initialThrottle?.toFixed(2)} → ${throttleDownTest.analysis.finalThrottle?.toFixed(2)}`);
+    }
+
+    // Step 8: Test stall behavior (throttle down, then try to pitch up)
+    console.log(chalk.cyan('\n8. Testing stall behavior (low speed + high pitch)...'));
+    // First reduce throttle
+    await testFlightControls(browser, { throttleDown: true, duration: 3000 });
+    // Then try to pitch up with no throttle - should stall
+    const stallTest = await testFlightControls(browser, { pitchUp: true, duration: 2000 });
+    results.tests.push({ name: 'stall_test', result: stallTest });
+    if (stallTest.analysis) {
+        console.log(stallTest.analysis.stalledAtAnyPoint ?
+            chalk.green('   ✓ Stall detected (working as expected)') :
+            chalk.yellow('   ~ Did not stall (may need more time at low speed)'));
+        console.log(`     Final airspeed: ${stallTest.analysis.finalAirspeed?.toFixed(1)}`);
+    }
+
+    // Summary
+    console.log(chalk.blue('\n═══ Test Summary ═══'));
+    const passedTests = results.tests.filter(t => {
+        const a = t.result.analysis;
+        if (!a) return false;
+        switch (t.name) {
+            case 'throttle_up': return a.finalThrottle > a.initialThrottle;
+            case 'pitch_up': return a.maxPitch > 0.1;
+            case 'pitch_down': return a.minPitch < -0.1;
+            case 'roll_left': return Math.abs(a.minRoll) > 0.1 || Math.abs(a.maxRoll) > 0.1;
+            case 'roll_right': return Math.abs(a.minRoll) > 0.1 || Math.abs(a.maxRoll) > 0.1;
+            case 'throttle_down': return a.finalThrottle < a.initialThrottle;
+            default: return true;
+        }
+    }).length;
+
+    console.log(`Passed: ${passedTests}/${results.tests.length} tests`);
+
+    // Dismount
+    await dismount(browser);
+
+    return results;
 }

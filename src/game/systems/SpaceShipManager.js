@@ -489,8 +489,9 @@ export class SpaceShipManager {
             },
             moon: {
                 name: 'Moon',
-                // Moon is at chunks 40-48, so Y = 40 * 16 + 32 = 672
-                yBase: 700,
+                // Moon is spherical: center at Y=704, radius=56, so top is ~760
+                // Spawn slightly above the top of the sphere
+                yBase: 765,
                 message: 'Warping to the Moon...'
             },
             soccer: {

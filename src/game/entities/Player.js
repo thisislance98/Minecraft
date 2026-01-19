@@ -28,6 +28,10 @@ export class Player {
         this.jumpForce = Config.PLAYER.JUMP_FORCE;
         this.isDead = false;
 
+        // Double jump
+        this.maxJumps = 2; // Allow double jump
+        this.jumpsRemaining = this.maxJumps;
+
         // Health (hunger system disabled)
         this.health = Config.PLAYER.MAX_HEALTH;       // Max 20 (displayed as 10 hearts)
         this.maxHealth = Config.PLAYER.MAX_HEALTH;
@@ -1284,9 +1288,10 @@ export class Player {
                     if (Math.abs(this.velocity.x) < 0.1) this.velocity.x = 0;
                     if (Math.abs(this.velocity.z) < 0.1) this.velocity.z = 0;
 
-                    // Jump (only when input is allowed)
-                    if (allowInput && input.isActionActive('JUMP') && !this.wasSpacePressed && this.onGround) {
+                    // Jump (only when input is allowed) - supports double jump
+                    if (allowInput && input.isActionActive('JUMP') && !this.wasSpacePressed && this.jumpsRemaining > 0) {
                         this.velocity.y = this.jumpForce * REF_FPS;
+                        this.jumpsRemaining--;
                         this.onGround = false;
                         this.game.soundManager.playSound('jump');
                     }
@@ -1932,6 +1937,7 @@ export class Player {
 
                         this.velocity.y = 0;
                         this.onGround = true;
+                        this.jumpsRemaining = this.maxJumps; // Reset double jump
                     } else {
                         // Check for cloud collision (walkable clouds!)
                         const cloudCheck = this.isOnCloud(pos.x + dx, newY, pos.z + dz);
@@ -1939,6 +1945,7 @@ export class Player {
                             canMoveY = false;
                             this.velocity.y = 0;
                             this.onGround = true;
+                            this.jumpsRemaining = this.maxJumps; // Reset double jump
                             // Soft landing on clouds - no fall damage, snap to cloud top
                             pos.y = cloudCheck.cloudTop;
                             this.highestY = pos.y; // Reset fall tracking
@@ -1956,7 +1963,38 @@ export class Player {
 
         if (canMoveY) {
             pos.y = newY;
-            if (velY < 0) this.onGround = false;
+            if (velY < 0) {
+                // Additional ground proximity check to prevent false negatives
+                // Check if there's a solid block very close below the player's feet
+                let nearGround = false;
+                const groundCheckDistance = 0.15; // Small distance to check below feet
+                for (let dx = -hw; dx <= hw; dx += hw) {
+                    for (let dz = -hw; dz <= hw; dz += hw) {
+                        if (isSolid(pos.x + dx, newY - groundCheckDistance, pos.z + dz)) {
+                            nearGround = true;
+                            break;
+                        }
+                    }
+                    if (nearGround) break;
+                }
+                // Also check for clouds
+                if (!nearGround) {
+                    for (let dx = -hw; dx <= hw; dx += hw) {
+                        for (let dz = -hw; dz <= hw; dz += hw) {
+                            const cloudCheck = this.isOnCloud(pos.x + dx, newY - groundCheckDistance, pos.z + dz);
+                            if (cloudCheck.isOnCloud) {
+                                nearGround = true;
+                                break;
+                            }
+                        }
+                        if (nearGround) break;
+                    }
+                }
+                this.onGround = nearGround;
+                if (nearGround) {
+                    this.jumpsRemaining = this.maxJumps; // Reset double jump
+                }
+            }
         }
 
         // Check X movement
@@ -2001,6 +2039,7 @@ export class Player {
                             canMoveX = true; // Re-enable movement
                             // Don't set vertical velocity, just snap
                             this.onGround = true; // Still on "ground"
+                            this.jumpsRemaining = this.maxJumps; // Reset double jump
                             return; // Stop checking other collision points for this axis, we moved up
                         }
                     }
@@ -2038,6 +2077,7 @@ export class Player {
                             this.stepSmoothingY -= stepHeight;
                             canMoveZ = true;
                             this.onGround = true;
+                            this.jumpsRemaining = this.maxJumps; // Reset double jump
                             return;
                         }
                     }

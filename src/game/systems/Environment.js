@@ -360,14 +360,16 @@ export class Environment {
         }
 
         // Calculate space transition factor
-        // Only apply space transition on Earth - alien worlds have their own sky colors
+        // Space transition happens at high altitude on Earth (before reaching Moon at Y=640)
         const playerY = playerPos.y;
         const spaceStart = 500;   // Start transitioning to space at Y=500
-        const spaceFull = 800;    // Full space environment at Y=800
+        const spaceFull = 620;    // Full space environment at Y=620 (before Moon at 640)
         let spaceFactor = 0;
 
-        // Space transition only applies on Earth world
-        if (this.currentWorld === 'earth' && playerY > spaceStart) {
+        // Space transition only applies on Earth world AND when in Earth's Y range
+        // Earth chunks are Y < 640 (chunk Y < 40)
+        const isInEarthYRange = playerY < 640;
+        if (this.currentWorld === 'earth' && isInEarthYRange && playerY > spaceStart) {
             spaceFactor = Math.min(1, Math.max(0, (playerY - spaceStart) / (spaceFull - spaceStart)));
         }
 
@@ -456,9 +458,12 @@ export class Environment {
         this.updateDistantPlanets(playerPos, dt);
         this.updateNebula(playerPos);
 
-        // Update asteroids for space transition (on Earth only)
-        if (this.currentWorld === 'earth') {
+        // Update asteroids for space transition (on Earth only, in Earth Y range)
+        if (this.currentWorld === 'earth' && isInEarthYRange) {
             this.updateAsteroids(playerPos, spaceFactor, dt);
+        } else if (this.asteroidGroup) {
+            // Hide asteroids when not in Earth space transition zone
+            this.asteroidGroup.visible = false;
         }
     }
 

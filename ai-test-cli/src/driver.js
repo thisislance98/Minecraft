@@ -5,11 +5,35 @@ import chalk from 'chalk';
 /**
  * GameDriver - The "MCP Server" for game testing
  * Receives high-level JSON commands and orchestrates browser sessions.
+ *
+ * ADVANCED FEATURES:
+ * - Warp to any location (named or coordinates)
+ * - Video recording with screencast
+ * - Full object interaction (use, pickup, place, mine, etc.)
+ * - Movement controls (walk, sprint, fly)
  */
 export class GameDriver {
     constructor() {
         this.sessionManager = new SessionManager();
         this.keepAlive = false;
+    }
+
+    /**
+     * Get all available tools/commands
+     */
+    getAvailableTools() {
+        return {
+            session: ['browser_launch', 'browser_close', 'list_sessions'],
+            navigation: ['warp', 'warp_relative', 'warp_to_entity', 'teleport', 'warp_locations'],
+            movement: ['move', 'sprint', 'fly', 'fly_vertical', 'look_direction'],
+            interaction: ['interact', 'use_item', 'pickup', 'attack', 'drop_item', 'place_block', 'mine_block', 'mount'],
+            inventory: ['give_item', 'equip_item', 'get_inventory', 'select_slot', 'open_inventory', 'close_inventory'],
+            recording: ['start_recording', 'stop_recording', 'screenshot', 'screenshot_burst'],
+            spawning: ['spawn_creature', 'spawn_creature_at'],
+            observation: ['get_game_state', 'get_position', 'look_at', 'get_entities', 'get_drops'],
+            debug: ['debug_creatures', 'creature_errors', 'execute_script'],
+            utility: ['wait', 'input_inject']
+        };
     }
 
     /**
@@ -60,63 +84,190 @@ export class GameDriver {
             return this.sessionManager.getActiveSessions();
         }
 
+        if (tool === 'help' || tool === 'list_tools') {
+            return this.getAvailableTools();
+        }
+
+        if (tool === 'warp_locations') {
+            return GameCommands.getWarpLocations();
+        }
+
         // --- GAME TOOLS ---
         // tools below require a valid session_id
         if (!session_id && this.sessionManager.getActiveSessions().length === 1) {
             // Auto-target the only session if not specified
             const singleSession = this.sessionManager.getActiveSessions()[0];
-            // We can optionally auto-assign, but strict mode is better for now.
-            // throw new Error('Session ID required');
-            // Let's implement auto-target for convenience
             cmd.session_id = singleSession;
         }
 
         const browser = this.sessionManager.getSession(cmd.session_id);
 
         switch (tool) {
+            // ==================== SCREENSHOTS & RECORDING ====================
             case 'screenshot':
                 await browser.screenshot(args.path || `${cmd.session_id}_screenshot.png`);
                 return { path: args.path || `${cmd.session_id}_screenshot.png` };
 
-            case 'get_game_state':
-                return await GameCommands.getGameState(browser);
+            case 'screenshot_burst':
+                return await GameCommands.screenshotBurst(
+                    browser,
+                    args.duration || 3000,
+                    args.interval || 100,
+                    args.prefix || 'burst'
+                );
 
-            case 'spawn_creature':
-                return await GameCommands.spawnCreature(browser, args.type, args.count);
+            case 'start_recording':
+                return await GameCommands.startRecording(browser, args.path || 'recording.webm', {
+                    width: args.width || 1280,
+                    height: args.height || 720,
+                    fps: args.fps || 30
+                });
 
-            case 'give_item':
-                return await GameCommands.giveItem(browser, args.item, args.count);
+            case 'stop_recording':
+                return await GameCommands.stopRecording(browser);
+
+            // ==================== WARP / TELEPORT ====================
+            case 'warp':
+                // Warp to named location or coordinates
+                // Usage: warp destination="desert" OR warp destination="100,50,200"
+                return await GameCommands.warp(browser, args.destination || args.location || args.to);
+
+            case 'warp_relative':
+                return await GameCommands.warpRelative(
+                    browser,
+                    args.dx || args.x || 0,
+                    args.dy || args.y || 0,
+                    args.dz || args.z || 0
+                );
+
+            case 'warp_to_entity':
+                return await GameCommands.warpToEntity(browser, args.type || args.entity, args.offset || 5);
 
             case 'teleport':
+                // Backward compatible: exact coordinates
                 return await GameCommands.teleportPlayer(browser, args.x, args.y, args.z);
 
+            // ==================== MOVEMENT ====================
+            case 'move':
+                return await GameCommands.moveDirection(browser, args.direction, args.duration || 1000);
+
+            case 'sprint':
+                return await GameCommands.sprint(browser, args.direction || 'forward', args.duration || 2000);
+
+            case 'fly':
+            case 'toggle_flight':
+                return await GameCommands.toggleFlight(browser);
+
+            case 'fly_vertical':
+                return await GameCommands.flyVertical(browser, args.direction || 'up', args.duration || 1000);
+
+            case 'look_direction':
+                return await GameCommands.lookDirection(browser, args.direction);
+
             case 'look_at':
-                // New tool: Rotate player to look at a point
+                // Rotate player to look at a point
                 return await browser.evaluate((x, y, z) => {
                     const game = window.__VOXEL_GAME__;
-                    if (game && game.player) {
-                        game.player.controls.lookAt(new window.THREE.Vector3(x, y, z));
-                        return { success: true };
+                    if (game && game.camera) {
+                        game.camera.lookAt(x, y, z);
+                        return { success: true, target: { x, y, z } };
                     }
-                    return { error: 'Player not found' };
+                    return { error: 'Camera not found' };
                 }, args.x, args.y, args.z);
 
             case 'move_to':
-                // New tool: Simple teleport for now, can be pathfinding later
                 return await GameCommands.teleportPlayer(browser, args.x, args.y, args.z);
 
+            // ==================== OBJECT INTERACTION ====================
+            case 'interact':
+                return await GameCommands.interact(browser);
+
+            case 'use_item':
+            case 'use':
+                return await GameCommands.useItem(browser, args.target ? { x: args.x, y: args.y, z: args.z } : null);
+
+            case 'pickup':
+            case 'pickup_item':
+                return await GameCommands.pickupItem(browser);
+
+            case 'attack':
+                return await GameCommands.attack(browser);
+
+            case 'drop_item':
+            case 'drop':
+                return await GameCommands.dropItem(browser);
+
+            case 'place_block':
+            case 'place':
+                return await GameCommands.placeBlock(browser, args.block || args.type);
+
+            case 'mine_block':
+            case 'mine':
+            case 'break_block':
+                return await GameCommands.mineBlock(browser);
+
+            case 'mount':
+            case 'dismount':
+                return await GameCommands.mount(browser);
+
+            // ==================== INVENTORY ====================
+            case 'give_item':
+                return await GameCommands.giveItem(browser, args.item, args.count || 1);
+
+            case 'equip_item':
+            case 'equip':
+                return await GameCommands.equipItem(browser, args.item);
+
+            case 'get_inventory':
+                return await GameCommands.getInventory(browser);
+
+            case 'select_slot':
+                return await GameCommands.selectSlot(browser, args.slot || args.index || 0);
+
+            case 'open_inventory':
+                return await GameCommands.openInventory(browser);
+
+            case 'close_inventory':
+                return await GameCommands.closeInventory(browser);
+
+            // ==================== SPAWNING ====================
+            case 'spawn_creature':
+            case 'spawn':
+                return await GameCommands.spawnCreature(browser, args.type || args.creature, args.count || 1);
+
+            case 'spawn_creature_at':
+            case 'spawn_at':
+                return await GameCommands.spawnCreatureAt(browser, args.type || args.creature, args.x, args.y, args.z);
+
+            // ==================== OBSERVATION ====================
+            case 'get_game_state':
+            case 'state':
+                return await GameCommands.getGameState(browser);
+
+            case 'get_position':
+            case 'position':
+            case 'pos':
+                return await GameCommands.getPlayerPosition(browser);
+
+            case 'get_entities':
+            case 'entities':
+                return await GameCommands.getEntities(browser);
+
+            case 'get_drops':
+            case 'drops':
+                return await GameCommands.getDrops(browser);
+
+            case 'what_am_i_looking_at':
+            case 'target':
+                return await GameCommands.lookAt(browser);
+
+            // ==================== UTILITY ====================
             case 'wait':
                 await new Promise(r => setTimeout(r, args.ms || 1000));
-                return { waited: args.ms };
-
-            case 'wait_for_log':
-                // Block until specific log message
-                // Implementation requires enhanced browser.js hooking
-                // For now, simpler timeout-based check
-                return { error: 'Not implemented yet' };
+                return { waited: args.ms || 1000 };
 
             case 'input_inject':
-                // Generic input: { type: 'click'|'key', code: 'KeyW' }
+            case 'input':
                 if (args.type === 'click') {
                     if (args.button === 'right') return await GameCommands.rightClick(browser, args.x, args.y);
                     return await GameCommands.leftClick(browser, args.x, args.y);
@@ -124,16 +275,13 @@ export class GameDriver {
                 if (args.type === 'key') {
                     return await GameCommands.pressKey(browser, args.key);
                 }
-                return { error: 'Unknown input type' };
+                return { error: 'Unknown input type. Use type="click" or type="key"' };
 
             case 'execute_script':
-                // Dangerous but powerful: execute arbitrary JS
+            case 'exec':
                 const script = args.code;
                 return await browser.evaluate((code) => {
-                    // Wrap in localized scope
                     try {
-                        // Limited usage: we just use Function constructor or simple eval
-                        // It's a test tool, so security is less critical (local only)
                         const fn = new Function('game', 'window', `return (${code})`);
                         return fn(window.__VOXEL_GAME__, window);
                     } catch (e) {
@@ -141,16 +289,19 @@ export class GameDriver {
                     }
                 }, script);
 
+            // ==================== DEBUG ====================
             case 'debug_creatures':
-                // Show all dynamic creatures and their status
                 return await GameCommands.getDynamicCreatureInfo(browser);
 
             case 'creature_errors':
-                // Show any creature registration/runtime errors
                 return await GameCommands.getCreatureErrors(browser);
 
             default:
-                throw new Error(`Unknown tool: ${tool}`);
+                return {
+                    error: `Unknown tool: ${tool}`,
+                    hint: 'Use tool="help" to list all available tools',
+                    availableTools: Object.keys(this.getAvailableTools()).flatMap(cat => this.getAvailableTools()[cat])
+                };
         }
     }
 

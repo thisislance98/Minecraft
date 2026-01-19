@@ -8,6 +8,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://www.googletagmanager.com;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data: blob: https:;
+        connect-src 'self' ws: wss: http://localhost:* https://generativelanguage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net https://www.google-analytics.com;
+        media-src 'self' blob:;
+        worker-src 'self' blob:;
+        frame-src https://accounts.google.com;
+    ">
     <title>Voxel World - Minecraft Clone</title>
     <link rel="stylesheet" href="/src/styles/index.css">
     <link rel="icon" href="/favicon.ico" />
@@ -358,7 +370,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1240</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1244</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>

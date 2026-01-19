@@ -17,6 +17,7 @@ export type SpawnPermission = 'all' | 'owner' | 'none';
 
 export interface LandscapeSettings {
     enableRivers: boolean;
+    enableOceans: boolean;   // Whether to generate ocean water at sea level
     seaLevel: number;        // 10-100, default 30
     terrainScale: number;    // 0.5-2.0, multiplier
     enableVillages: boolean;
@@ -102,6 +103,7 @@ const DEFAULT_CUSTOMIZATIONS: WorldCustomizations = {
     welcomeMessage: 'Welcome to my world!',
     landscapeSettings: {
         enableRivers: true,
+        enableOceans: true,
         seaLevel: 30,
         terrainScale: 1.0,
         enableVillages: true

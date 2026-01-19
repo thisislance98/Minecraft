@@ -212,6 +212,9 @@ export class WorldSettingsUI {
                             <label><input type="checkbox" id="ws-enable-rivers" checked> Enable Rivers</label>
                         </div>
                         <div class="permission-row">
+                            <label><input type="checkbox" id="ws-enable-oceans" checked> Enable Oceans</label>
+                        </div>
+                        <div class="permission-row">
                             <label><input type="checkbox" id="ws-enable-villages" checked> Generate Villages</label>
                         </div>
                         <div class="permission-row">
@@ -555,6 +558,7 @@ export class WorldSettingsUI {
         // Landscape Settings
         const landscape = this.world.customizations?.landscapeSettings || {};
         document.getElementById('ws-enable-rivers').checked = landscape.enableRivers !== false;
+        document.getElementById('ws-enable-oceans').checked = landscape.enableOceans !== false;
         document.getElementById('ws-enable-villages').checked = landscape.enableVillages !== false;
 
         const seaLevel = landscape.seaLevel ?? 30;
@@ -624,6 +628,7 @@ export class WorldSettingsUI {
             // Landscape settings
             const landscapeSettings = {
                 enableRivers: document.getElementById('ws-enable-rivers').checked,
+                enableOceans: document.getElementById('ws-enable-oceans').checked,
                 enableVillages: document.getElementById('ws-enable-villages').checked,
                 seaLevel: parseInt(document.getElementById('ws-sea-level').value),
                 terrainScale: parseFloat(document.getElementById('ws-terrain-scale').value)

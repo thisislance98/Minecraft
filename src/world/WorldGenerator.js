@@ -11,6 +11,7 @@ export class WorldGenerator {
         // Keep noise for structure generation (trees, etc)
         this.noise = new NoiseGenerator();
         this.seaLevel = Config.WORLD.SEA_LEVEL; // Global water level
+        this.oceansEnabled = true; // Whether to generate ocean water at sea level
 
         // Components
         this.biomeManager = new BiomeManager();
@@ -82,6 +83,14 @@ export class WorldGenerator {
             return this.generateSoccerWorldChunk(chunk, cx, cy, cz);
         }
 
+        // Space between worlds - generate empty chunks (no terrain)
+        // This prevents Earth terrain from appearing between Moon and Crystal World, etc.
+        if (cy >= Config.WORLD.MOON_CHUNK_Y_START) {
+            // Any chunk above moon level that isn't assigned to a specific world is empty space
+            chunk.isGenerated = true;
+            return chunk;
+        }
+
         const startX = cx * this.game.chunkSize;
         const startY = cy * this.game.chunkSize;
         const startZ = cz * this.game.chunkSize;
@@ -139,8 +148,8 @@ export class WorldGenerator {
                         }
 
                         this.game.setBlock(wx, wy, wz, type, true, true);
-                    } else if (wy <= this.seaLevel) {
-                        // Water
+                    } else if (wy <= this.seaLevel && this.oceansEnabled) {
+                        // Water (only if oceans are enabled)
                         this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
                     }
                 }
@@ -175,39 +184,71 @@ export class WorldGenerator {
         const startY = cy * this.game.chunkSize;
         const startZ = cz * this.game.chunkSize;
 
-        // Base height of Moon surface relative to global Y=0
-        const moonBaseY = Config.WORLD.MOON_CHUNK_Y_START * this.game.chunkSize + 32;
+        // Moon sphere parameters
+        // Center of the moon sphere - centered at X=0, Z=0
+        const moonCenterX = 0;
+        const moonCenterZ = 0;
+        // Moon center Y is in the middle of the moon chunk range
+        const moonCenterY = Config.WORLD.MOON_CHUNK_Y_START * this.game.chunkSize + (Config.WORLD.MOON_CHUNK_HEIGHT * this.game.chunkSize) / 2;
+
+        // Moon radius - fits within the chunk range with some margin
+        // 8 chunks tall = 128 blocks, so radius of ~56 blocks gives good spherical shape
+        const moonRadius = 56;
+        const moonRadiusSq = moonRadius * moonRadius;
 
         for (let x = 0; x < this.game.chunkSize; x++) {
             for (let z = 0; z < this.game.chunkSize; z++) {
                 const wx = startX + x;
                 const wz = startZ + z;
 
-                // Moon Terrain Noise
-                // Craters and dunes
-                const baseNoise = this.noise.get2D(wx, wz, 0.02, 1);
-                const detailNoise = this.noise.get2D(wx, wz, 0.05, 1);
-
-                let height = moonBaseY + baseNoise * 15 + detailNoise * 3;
-
-                // Crater Logic (Simple)
-                // Use a different noise freq to dig "craters"
-                const craterNoise = this.noise.get2D(wx + 1000, wz + 1000, 0.01, 1);
-                if (craterNoise > 0.6) {
-                    const depth = (craterNoise - 0.6) * 40; // Dig deep
-                    height -= depth;
-
-                    // Rim
-                    if (craterNoise < 0.65) {
-                        height += 2;
-                    }
-                }
-
                 for (let y = 0; y < this.game.chunkSize; y++) {
                     const wy = startY + y;
 
-                    if (wy <= height) {
-                        this.game.setBlock(wx, wy, wz, Blocks.STONE, true, true);
+                    // Calculate distance from moon center
+                    const dx = wx - moonCenterX;
+                    const dy = wy - moonCenterY;
+                    const dz = wz - moonCenterZ;
+                    const distSq = dx * dx + dy * dy + dz * dz;
+                    const dist = Math.sqrt(distSq);
+
+                    // Only place blocks inside the sphere
+                    if (dist <= moonRadius) {
+                        // Calculate surface variation using 3D noise for crater-like surface
+                        // Use spherical coordinates for better crater distribution
+                        const theta = Math.atan2(dz, dx);
+                        const phi = Math.acos(dy / (dist + 0.001)); // +0.001 to avoid division by zero
+
+                        // Map to 2D coordinates for noise sampling
+                        const noiseX = theta * 50;  // Scale for noise frequency
+                        const noiseZ = phi * 50;
+
+                        const baseNoise = this.noise.get2D(noiseX, noiseZ, 0.02, 1);
+                        const detailNoise = this.noise.get2D(noiseX, noiseZ, 0.05, 1);
+
+                        // Surface variation - craters dig into the sphere
+                        let surfaceOffset = baseNoise * 8 + detailNoise * 2;
+
+                        // Crater Logic - dig deeper craters
+                        const craterNoise = this.noise.get2D(noiseX + 1000, noiseZ + 1000, 0.01, 1);
+                        if (craterNoise > 0.6) {
+                            const depth = (craterNoise - 0.6) * 25; // Crater depth
+                            surfaceOffset -= depth;
+
+                            // Crater rim
+                            if (craterNoise < 0.65) {
+                                surfaceOffset += 2;
+                            }
+                        }
+
+                        // Check if this voxel is inside the moon surface (with variation)
+                        const effectiveRadius = moonRadius + surfaceOffset;
+                        if (dist <= effectiveRadius) {
+                            // Surface detection for different block types (if desired)
+                            const depthFromSurface = effectiveRadius - dist;
+
+                            // All moon blocks are stone (moon rock)
+                            this.game.setBlock(wx, wy, wz, Blocks.STONE, true, true);
+                        }
                     }
                 }
             }
@@ -518,6 +559,42 @@ export class WorldGenerator {
         this.biomeManager.setSeed(seed);
         this.terrainGenerator.setSeed(seed);
         this.structureGenerator.setSeed(seed);
+    }
+
+    /**
+     * Enable or disable rivers in terrain generation
+     * @param {boolean} enabled - Whether rivers should be generated
+     */
+    setRiversEnabled(enabled) {
+        console.log('WorldGenerator: Setting rivers enabled to', enabled);
+        this.terrainGenerator.setRiversEnabled(enabled);
+    }
+
+    /**
+     * Enable or disable ocean water generation at sea level
+     * @param {boolean} enabled - Whether oceans should be generated
+     */
+    setOceansEnabled(enabled) {
+        console.log('WorldGenerator: Setting oceans enabled to', enabled);
+        this.oceansEnabled = enabled;
+    }
+
+    /**
+     * Set the sea level for terrain generation
+     * @param {number} level - The sea level (affects ocean/water generation)
+     */
+    setSeaLevel(level) {
+        console.log('WorldGenerator: Setting sea level to', level);
+        this.seaLevel = level;
+        this.terrainGenerator.seaLevel = level;
+    }
+
+    /**
+     * Clear all terrain caches (needed when landscape settings change)
+     */
+    clearTerrainCache() {
+        console.log('WorldGenerator: Clearing terrain cache');
+        this.terrainGenerator.clearCache();
     }
 
     /**

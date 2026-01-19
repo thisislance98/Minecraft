@@ -10,12 +10,16 @@ import { worldManagementService, CreateWorldOptions, WorldVisibility } from '../
 
 const router = Router();
 
+// CLI secret for testing (should be set in production env)
+// Default to 'asdf123' for local development when no explicit CLI_SECRET is set
+const CLI_SECRET = process.env.CLI_SECRET || 'asdf123';
+
 // Middleware to verify Firebase auth token (with CLI bypass)
 async function verifyAuth(req: Request, res: Response, next: Function) {
-    // CLI bypass for testing
+    // CLI bypass for testing (only if CLI_SECRET is configured)
     const cliSecret = req.headers['x-antigravity-secret'];
     const cliClient = req.headers['x-antigravity-client'];
-    if (cliSecret === 'asdf123' && cliClient === 'cli') {
+    if (CLI_SECRET && cliSecret === CLI_SECRET && cliClient === 'cli') {
         (req as any).userId = 'cli-test-user';
         (req as any).userName = 'CLI Tester';
         return next();
@@ -275,7 +279,21 @@ router.patch('/:worldId', verifyAuth, async (req: Request, res: Response) => {
             if (customError) {
                 return res.status(400).json({ error: customError });
             }
-            updates.customizations = customizations;
+            // Get current world to merge customizations
+            const currentWorld = await worldManagementService.getWorld(worldId);
+            if (currentWorld) {
+                updates.customizations = {
+                    ...currentWorld.customizations,
+                    ...customizations,
+                    // Deep merge landscapeSettings if provided
+                    landscapeSettings: customizations.landscapeSettings ? {
+                        ...(currentWorld.customizations?.landscapeSettings || {}),
+                        ...customizations.landscapeSettings
+                    } : currentWorld.customizations?.landscapeSettings
+                };
+            } else {
+                updates.customizations = customizations;
+            }
         }
 
         const world = await worldManagementService.updateWorld(worldId, userId, updates);

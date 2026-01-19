@@ -64,10 +64,10 @@ export class MerlinSession {
     private async init(token: string | null, cliMode: boolean = false, secretParam: string | null = null) {
         // Validate CLI Mode - Require Secret Code
         const headerSecret = this.headers['x-antigravity-secret'];
-        const validSecret = 'asdf123';
+        const validSecret = process.env.CLI_SECRET || (process.env.NODE_ENV === 'development' ? 'asdf123' : '');
 
         // Only enable CLI mode if the secret is correct (either from header or URL param)
-        if (cliMode || this.headers['x-antigravity-client'] === 'cli') {
+        if (validSecret && (cliMode || this.headers['x-antigravity-client'] === 'cli')) {
             if (headerSecret === validSecret || secretParam === validSecret) {
                 this.cliMode = true;
                 console.log('[Antigravity] CLI Mode enabled (Valid Secret)');

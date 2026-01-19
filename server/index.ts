@@ -25,6 +25,15 @@ import { initKnowledgeService } from './services/KnowledgeService';
 import { WebSocketServer } from 'ws';
 import { MerlinSession } from './services/MerlinSession';
 import { logError } from './utils/logger';
+import {
+    validateBlockChange,
+    validateSignUpdate,
+    validatePlayerColor,
+    validateEntityRemove,
+    validateJoinWorld,
+    BlockChangeData,
+    SignUpdateData
+} from './utils/validation';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -51,12 +60,6 @@ app.use((req, res, next) => {
 // Request logging
 app.use((req, res, next) => {
     console.log(`[Express] ${req.method} ${req.url}`);
-    console.error('!!! DEBUG ACCESS LOG HIT !!! ' + req.url);
-    try {
-        const logPath = '/tmp/debug_access.log';
-        const entry = `[${new Date().toISOString()}] ${req.method} ${req.url}\n`;
-        fs.appendFileSync(logPath, entry);
-    } catch (e) { console.error('Failed to write access log', e); }
     next();
 });
 
@@ -133,6 +136,12 @@ wss.on('connection', (ws, req) => {
 const MAX_PLAYERS_PER_ROOM = 4;
 const DAY_DURATION_SECONDS = 1800; // 30 minutes per day
 const TIME_INCREMENT_PER_SEC = 0; // Frozen at 0 to keep the game bright per user request
+
+// Admin configuration
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
+
+// CLI secret for testing (should be set in production env)
+const CLI_SECRET = process.env.CLI_SECRET || (process.env.NODE_ENV === 'development' ? 'asdf123' : '');
 
 // Global Game Loop (Low frequency for sync)
 // We tick time for all rooms here
@@ -281,20 +290,20 @@ function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
     });
 
     // Handle block changes - now uses worldId for persistence
-    socket.on('block:change', async (data: { x: number; y: number; z: number; type: string | null }) => {
-        console.log(`[DEBUG] Received block:change from ${socket.id} in world ${worldId}:`, data);
+    socket.on('block:change', async (data: unknown) => {
+        const result = validateBlockChange(data);
+        if (!result.success) {
+            console.warn(`[Validation] block:change rejected from ${socket.id}: ${result.error}`);
+            return;
+        }
+        const { x, y, z, type } = result.data;
+        console.log(`[DEBUG] Received block:change from ${socket.id} in world ${worldId}:`, { x, y, z, type });
 
         // Broadcast to all other players in the room
-        socket.to(roomId).emit('block:change', {
-            id: socket.id,
-            x: data.x,
-            y: data.y,
-            z: data.z,
-            type: data.type
-        });
+        socket.to(roomId).emit('block:change', { id: socket.id, x, y, z, type });
 
         // Persist to Firebase using worldId
-        await worldPersistence.saveBlockChange(worldId, data.x, data.y, data.z, data.type);
+        await worldPersistence.saveBlockChange(worldId, x, y, z, type);
     });
 
     // Handle entity updates - now uses worldId
@@ -312,30 +321,41 @@ function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
         }
     });
 
-    socket.on('entity:remove', async (data: { id: string }) => {
-        socket.to(roomId).emit('entity:remove', data);
-        await worldPersistence.saveEntity(worldId, data.id, null);
+    socket.on('entity:remove', async (data: unknown) => {
+        const result = validateEntityRemove(data);
+        if (!result.success) {
+            console.warn(`[Validation] entity:remove rejected from ${socket.id}: ${result.error}`);
+            return;
+        }
+        socket.to(roomId).emit('entity:remove', result.data);
+        await worldPersistence.saveEntity(worldId, result.data.id, null);
     });
 
     // Handle sign updates - now uses worldId
-    socket.on('sign:update', async (data: { x: number; y: number; z: number; text: string }) => {
-        socket.to(roomId).emit('sign:update', {
-            id: socket.id,
-            ...data
-        });
-        await worldPersistence.saveSignText(worldId, data.x, data.y, data.z, data.text);
+    socket.on('sign:update', async (data: unknown) => {
+        const result = validateSignUpdate(data);
+        if (!result.success) {
+            console.warn(`[Validation] sign:update rejected from ${socket.id}: ${result.error}`);
+            return;
+        }
+        const { x, y, z, text } = result.data;
+        socket.to(roomId).emit('sign:update', { id: socket.id, x, y, z, text });
+        await worldPersistence.saveSignText(worldId, x, y, z, text);
     });
 
     // Handle player color change
-    socket.on('player:color', (data: { shirtColor: number }) => {
+    socket.on('player:color', (data: unknown) => {
+        const result = validatePlayerColor(data);
+        if (!result.success) {
+            console.warn(`[Validation] player:color rejected from ${socket.id}: ${result.error}`);
+            return;
+        }
+        const { shirtColor } = result.data;
         const room = rooms.get(roomId);
         if (room && room.playerStates[socket.id]) {
-            room.playerStates[socket.id].shirtColor = data.shirtColor;
+            room.playerStates[socket.id].shirtColor = shirtColor;
         }
-        socket.to(roomId).emit('player:color', {
-            id: socket.id,
-            shirtColor: data.shirtColor
-        });
+        socket.to(roomId).emit('player:color', { id: socket.id, shirtColor });
     });
 
     // Handle time changes
@@ -414,6 +434,67 @@ function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
         console.log(`[Socket] World settings changed for ${data.worldId} by ${socket.id}`);
         // Broadcast to all other players in this world
         socket.to(`world:${data.worldId}`).emit('world:settings_changed', data);
+    });
+
+    // Handle world reset request - only allowed for world owners
+    socket.on('world:reset', async () => {
+        // IMPORTANT: Use socketToWorld to get the CURRENT world, not the captured worldId from when handler was registered
+        const currentWorldId = socketToWorld.get(socket.id) || worldId;
+        const userId = socketToUser.get(socket.id);
+        console.log(`[Socket] World reset requested by ${socket.id} for world ${currentWorldId} (userId: ${userId || 'anonymous'})`);
+
+        try {
+            // Verify ownership - get the world and check if user owns it
+            const world = await worldManagementService.getWorld(currentWorldId);
+            if (!world) {
+                console.log(`[Socket] World reset denied - world ${currentWorldId} not found`);
+                socket.emit('world:reset:error', { message: 'World not found' });
+                return;
+            }
+
+            const isOwner = userId && world.ownerId === userId;
+            if (!isOwner) {
+                console.log(`[Socket] World reset denied - user ${userId} is not owner of world ${currentWorldId} (owner: ${world.ownerId})`);
+                socket.emit('world:reset:error', { message: 'Only the world owner can reset the world' });
+                return;
+            }
+
+            // Clear all persisted data for THIS world specifically
+            await worldPersistence.resetWorld(currentWorldId);
+
+            // Get the room for the current world
+            // The roomId might be stale if player changed worlds, so find the correct room
+            const currentRoomId = `world:${currentWorldId}:room:1`;
+            const room = rooms.get(currentRoomId) || rooms.get(roomId);
+            const currentSeed = room?.worldSeed;
+            if (room) {
+                room.time = 0.25; // Reset time to noon
+            }
+
+            // Send reset to the initiator (they will respawn)
+            // Include world data so landscape settings can be applied
+            socket.emit('world:reset', {
+                worldSeed: currentSeed,
+                time: 0.25,
+                isInitiator: true,
+                world: world
+            });
+
+            // Broadcast reset to all OTHER clients in the same world (they should NOT respawn)
+            // Use the world-level room for broadcasting to all players in this world
+            // Include world data so landscape settings can be applied
+            socket.to(`world:${currentWorldId}`).emit('world:reset', {
+                worldSeed: currentSeed,
+                time: 0.25,
+                isInitiator: false,
+                world: world
+            });
+
+            console.log(`[Socket] World ${currentWorldId} reset complete - keeping seed: ${currentSeed}`);
+        } catch (error) {
+            console.error('[Socket] Failed to reset world:', error);
+            socket.emit('world:reset:error', { message: 'Failed to reset world' });
+        }
     });
 }
 
@@ -504,8 +585,6 @@ io.on('connection', (socket) => {
     });
 
     // ============ Admin Events (registered immediately on connection) ============
-
-    const ADMIN_EMAIL = 'thisislance98@gmail.com';
 
     socket.on('admin:delete_creature', async (data: { name: string, token: string }) => {
         console.log(`[Admin] Received admin:delete_creature event from ${socket.id}:`, { name: data.name, tokenLength: data.token?.length });
@@ -1551,18 +1630,22 @@ io.on('connection', (socket) => {
                 }
 
                 // Send reset to the initiator (they will respawn)
+                // Include world data so landscape settings can be applied
                 socket.emit('world:reset', {
                     worldSeed: currentSeed,
                     time: 0.25,
-                    isInitiator: true
+                    isInitiator: true,
+                    world: world
                 });
 
                 // Broadcast reset to all OTHER clients in the same world (they should NOT respawn)
                 // Use the world-level room for broadcasting to all players in this world
+                // Include world data so landscape settings can be applied
                 socket.to(`world:${currentWorldId}`).emit('world:reset', {
                     worldSeed: currentSeed,
                     time: 0.25,
-                    isInitiator: false
+                    isInitiator: false,
+                    world: world
                 });
 
                 console.log(`[Socket] World ${currentWorldId} reset complete - keeping seed: ${currentSeed}`);
@@ -1888,18 +1971,22 @@ io.on('connection', (socket) => {
                 }
 
                 // Send reset to the initiator (they will respawn)
+                // Include world data so landscape settings can be applied
                 socket.emit('world:reset', {
                     worldSeed: currentSeed,
                     time: 0.25,
-                    isInitiator: true
+                    isInitiator: true,
+                    world: world
                 });
 
                 // Broadcast reset to all OTHER clients in the same world (they should NOT respawn)
                 // Use the world-level room for broadcasting to all players in this world
+                // Include world data so landscape settings can be applied
                 socket.to(`world:${currentWorldId}`).emit('world:reset', {
                     worldSeed: currentSeed,
                     time: 0.25,
-                    isInitiator: false
+                    isInitiator: false,
+                    world: world
                 });
 
                 console.log(`[Socket] World ${currentWorldId} reset complete - keeping seed: ${currentSeed}`);

@@ -138,9 +138,6 @@ export class DuneWorm extends Animal {
         pos.y += dy;
         pos.z += dz;
 
-        // TUNNELING: Destroy blocks at head position
-        // this.boreTunnel(pos.x, pos.y, pos.z);
-
         // Gravity?
         // If we are in air (no blocks around), apply gravity to pitch?
         // Or just let the AI steer down.
@@ -159,37 +156,6 @@ export class DuneWorm extends Animal {
             // Force surface
             this.verticalAngle += 2.0 * dt;
         }
-    }
-
-    boreTunnel(x, y, z) {
-        const radius = 2; // Radius of tunnel
-        const r2 = radius * radius;
-
-        const bx = Math.floor(x);
-        const by = Math.floor(y);
-        const bz = Math.floor(z);
-
-        for (let ix = -radius; ix <= radius; ix++) {
-            for (let iy = -radius; iy <= radius; iy++) {
-                for (let iz = -radius; iz <= radius; iz++) {
-                    if (ix * ix + iy * iy + iz * iz <= r2) {
-                        const targetX = bx + ix;
-                        const targetY = by + iy;
-                        const targetZ = bz + iz;
-
-                        // Don't break Bedrock
-                        // Don't break Air
-                        const block = this.game.getBlock(targetX, targetY, targetZ);
-                        if (block && block !== 'bedrock') { // Assuming logic
-                            // setBlock(x, y, z, type) -> null for air
-                            this.game.setBlock(targetX, targetY, targetZ, null);
-                            // Visual effects? Particles?
-                        }
-                    }
-                }
-            }
-        }
-        this.game.updateBlockCount(); // Batched update?
     }
 
     updateAI(dt) {

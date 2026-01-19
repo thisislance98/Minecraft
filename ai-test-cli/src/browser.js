@@ -162,9 +162,94 @@ export class GameBrowser {
     }
 
     /**
+     * Start screen recording using CDP
+     * @param {string} path - Path to save the recording
+     */
+    async startRecording(path = 'recording.webm') {
+        if (this.recordingPath) {
+            console.log('  ⚠️ Recording already in progress');
+            return;
+        }
+
+        this.recordingPath = path;
+        this.recordingFrames = [];
+
+        // Use CDP to enable screencast
+        const client = await this.page.target().createCDPSession();
+        this.cdpClient = client;
+
+        await client.send('Page.startScreencast', {
+            format: 'png',
+            quality: 80,
+            maxWidth: 1280,
+            maxHeight: 720,
+            everyNthFrame: 2 // Every 2nd frame for ~30fps
+        });
+
+        client.on('Page.screencastFrame', async (frame) => {
+            this.recordingFrames.push(frame.data);
+            await client.send('Page.screencastFrameAck', { sessionId: frame.sessionId });
+        });
+
+        console.log(`  🎬 Recording started: ${path}`);
+    }
+
+    /**
+     * Stop recording and save to file
+     * Note: This saves individual PNG frames. For a proper video,
+     * you'd need to use ffmpeg to combine them.
+     */
+    async stopRecording() {
+        if (!this.cdpClient) {
+            console.log('  ⚠️ No recording in progress');
+            return null;
+        }
+
+        await this.cdpClient.send('Page.stopScreencast');
+
+        const frameCount = this.recordingFrames.length;
+        console.log(`  🎬 Recording stopped: ${frameCount} frames captured`);
+
+        // Save frames as individual PNGs in a folder
+        const fs = await import('fs');
+        const path = await import('path');
+
+        const basePath = this.recordingPath.replace(/\.\w+$/, '');
+        const framesDir = `${basePath}_frames`;
+
+        // Create frames directory
+        if (!fs.existsSync(framesDir)) {
+            fs.mkdirSync(framesDir, { recursive: true });
+        }
+
+        // Save each frame
+        for (let i = 0; i < this.recordingFrames.length; i++) {
+            const framePath = path.join(framesDir, `frame_${i.toString().padStart(5, '0')}.png`);
+            fs.writeFileSync(framePath, Buffer.from(this.recordingFrames[i], 'base64'));
+        }
+
+        console.log(`  📁 Frames saved to: ${framesDir}/`);
+        console.log(`  💡 To create video: ffmpeg -framerate 15 -i ${framesDir}/frame_%05d.png -c:v libx264 -pix_fmt yuv420p ${basePath}.mp4`);
+
+        // Cleanup
+        this.recordingPath = null;
+        this.recordingFrames = [];
+        this.cdpClient = null;
+
+        return framesDir;
+    }
+
+    /**
      * Close the browser
      */
     async close() {
+        if (this.cdpClient) {
+            try {
+                await this.cdpClient.send('Page.stopScreencast');
+            } catch (e) {
+                // Ignore
+            }
+        }
         if (this.browser) {
             await this.browser.close();
             this.browser = null;

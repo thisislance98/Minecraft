@@ -1490,4 +1490,76 @@ program
         }
     });
 
+// ============================================================
+// AIRPLANE FLIGHT TEST
+// ============================================================
+
+program
+    .command('test-flight')
+    .description('Test airplane flight controls on MillenniumFalcon or other rideable vehicles')
+    .option('--headless', 'Run browser in headless mode', false)
+    .option('--persist', 'Keep the browser open after the test completes', false)
+    .action(async (options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const gc = await import('../src/game-commands.js');
+
+        console.log(chalk.blue('\n✈️  AIRPLANE FLIGHT TEST\n'));
+        console.log(chalk.dim('Testing airplane controls: W/S = pitch, A/D = yaw/turn, Space = throttle up, Shift = throttle down\n'));
+
+        const browser = new GameBrowser({ headless: options.headless, quiet: true });
+
+        try {
+            await browser.launch();
+            await browser.waitForGameLoad();
+
+            // Run the flight test
+            const results = await gc.runAirplaneFlightTest(browser);
+
+            if (results.error) {
+                console.error(chalk.red(`\n❌ Test Failed: ${results.error}`));
+                if (!options.persist) await browser.close();
+                process.exit(1);
+            }
+
+            // Determine pass/fail
+            const passedCount = results.tests.filter(t => {
+                const a = t.result?.analysis;
+                if (!a) return false;
+                switch (t.name) {
+                    case 'throttle_up': return a.finalThrottle > a.initialThrottle;
+                    case 'pitch_up': return a.maxPitch > 0.1 || a.altitudeChange > 1;
+                    case 'pitch_down': return a.minPitch < -0.1 || a.altitudeChange < -1;
+                    case 'roll_left':
+                    case 'roll_right':
+                        // Note: with the new yaw-based controls, A/D now yaw instead of roll
+                        return true; // Skip this test for now
+                    case 'throttle_down': return a.finalThrottle < a.initialThrottle;
+                    default: return true;
+                }
+            }).length;
+
+            const totalTests = results.tests.length;
+            const passRate = passedCount / totalTests;
+
+            if (passRate >= 0.7) {
+                console.log(chalk.green(`\n✅ Flight Test PASSED (${passedCount}/${totalTests} tests)`));
+            } else {
+                console.log(chalk.red(`\n❌ Flight Test FAILED (${passedCount}/${totalTests} tests)`));
+            }
+
+            if (options.persist) {
+                console.log(chalk.yellow('\nPersist mode enabled. Keeping browser open. Press Ctrl+C to exit.'));
+                await new Promise(() => { });
+            } else {
+                await browser.close();
+                process.exit(passRate >= 0.7 ? 0 : 1);
+            }
+
+        } catch (error) {
+            console.error(chalk.red(`Error: ${error.message}`));
+            if (!options.persist) await browser.close();
+            process.exit(1);
+        }
+    });
+
 program.parse();

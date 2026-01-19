@@ -154,4 +154,7 @@ export const Blocks = {
     SPACE_PLATFORM: 'space_platform',       // Buildable platform in space
     WARP_GATE_FRAME: 'warp_gate_frame',     // Warp gate structure
     WARP_GATE_CORE: 'warp_gate_core',       // Active warp gate portal
+
+    // Vehicle / Controllable Blocks
+    CONTROL_BLOCK: 'control_block',         // A block that can be controlled with WASD
 };

@@ -215,6 +215,12 @@ export class InputManager {
                         return;
                     }
 
+                    // E releases control of controllable block
+                    if (this.game.player.controlledBlock) {
+                        this.game.player.controlledBlock.releaseControl();
+                        return;
+                    }
+
                     // If inventory is open, E closes it
                     if (this.game.gameState.flags.inventoryOpen) {
                         this.game.toggleInventory();
@@ -607,7 +613,15 @@ export class InputManager {
 
     handleSecondaryAction() {
         if (!this.game.physicsManager) return;
-        // 0. Interact (Entity Click)
+
+        // 0a. Check for controllable block interaction first
+        const hitControllableBlock = this.game.physicsManager.getHitControllableBlock();
+        if (hitControllableBlock && hitControllableBlock.interact) {
+            hitControllableBlock.interact(this.game.player);
+            return;
+        }
+
+        // 0b. Interact (Entity Click)
         const hitAnimal = this.game.physicsManager.getHitAnimal();
         if (hitAnimal && hitAnimal.interact) {
             hitAnimal.interact(this.game.player);

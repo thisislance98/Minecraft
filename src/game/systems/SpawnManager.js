@@ -588,6 +588,30 @@ export class SpawnManager {
 
     // ============ Debug Functions ============
 
+    /**
+     * Spawn a controllable block in front of the player
+     * @param {string} blockType - Block type for visual (default: 'control_block')
+     * @returns {ControllableBlock} The spawned block
+     */
+    spawnControllableBlockInFrontOfPlayer(blockType = 'control_block') {
+        const player = this.game.player;
+        if (!player) return null;
+
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+        forward.y = 0;
+        forward.normalize();
+
+        const distance = 5;
+        const x = Math.floor(player.position.x + forward.x * distance);
+        const y = Math.floor(player.position.y);
+        const z = Math.floor(player.position.z + forward.z * distance);
+
+        const cb = this.game.spawnControllableBlock(x, y, z, blockType);
+        console.log(`[SpawnManager] Spawned controllable block at (${x}, ${y}, ${z})`);
+        return cb;
+    }
+
     spawnEntitiesInFrontOfPlayer(typeName, count = 3, spread = 5, distance = 8) {
         const player = this.game.player;
         if (!player) return [];

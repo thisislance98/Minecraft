@@ -100,7 +100,8 @@ export class AssetManager {
             'playground_block': { hardness: -1 }, // Unbreakable
             'slide_block': { hardness: -1 }, // Unbreakable
             'mob_waves_block': { hardness: -1 }, // Unbreakable
-            'slime': { hardness: 0.5 }
+            'slime': { hardness: 0.5 },
+            'control_block': { hardness: 2.0 } // Controllable block
         };
     }
 
@@ -142,10 +143,14 @@ export class AssetManager {
         this.registerBlockMaterials('obsidian', obsidian);
 
         const diamondBlock = this.getOrCreateMat('diamond_block'); // Note: generateTexture might fallback to diamond_ore or similar, but let's check. 
-        // Wait, diamond_block wasn't in TextureGenerator palettes as a block. 
+        // Wait, diamond_block wasn't in TextureGenerator palettes as a block.
         // Let's check TextureGenerator again for diamond_block.
         // It's not there. I should add diamond_block texture too or use gold_block pattern.
         this.registerBlockMaterials('diamond_block', diamondBlock);
+
+        // Control Block (WASD controllable block)
+        const controlBlock = this.getOrCreateMat('control_block');
+        this.registerBlockMaterials('control_block', controlBlock);
 
         const xboxFront = this.getOrCreateMat('xbox_front');
         const xboxTop = this.getOrCreateMat('xbox_top');

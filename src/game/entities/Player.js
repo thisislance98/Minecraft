@@ -375,7 +375,7 @@ export class Player {
         this.velocity.set(0, 0, 0);
 
         // Switch to far follow camera for vehicles/aircraft
-        if (entity.constructor.name === 'Spaceship' || entity.constructor.name === 'MillenniumFalcon' || entity.preferFarCamera) {
+        if (entity.constructor.name === 'Spaceship' || entity.constructor.name === 'Starfighter' || entity.preferFarCamera) {
             // Save current camera state before changing it
             this._preMountCameraMode = this.cameraMode;
             this._preMountCameraDistance = this.thirdPersonCamera.distance;
@@ -399,7 +399,7 @@ export class Player {
     dismount() {
         if (this.mount) {
             const wasVehicleWithCamera = this.mount.constructor.name === 'Spaceship' ||
-                               this.mount.constructor.name === 'MillenniumFalcon' ||
+                               this.mount.constructor.name === 'Starfighter' ||
                                this.mount.preferFarCamera;
             this.mount.rider = null;
             this.mount = null;
@@ -1126,6 +1126,11 @@ export class Player {
                 this.velocity.set(0, 0, 0);
             }
             this.wasShiftPressed = input.isActionActive('SNEAK');
+        } else if (this.controlledBlock) {
+            // CONTROLLING A BLOCK - player stays in place, block moves
+            // The ControllableBlock.update() handles its own input
+            // Player just needs to not move, but can still look around
+            // Don't return - allow camera updates below
         } else {
             // NORMAL PHYSICS OR FLYING
             if (this.isFlying) {

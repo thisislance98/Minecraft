@@ -19,6 +19,7 @@ import { GiantTreeProjectile } from './entities/projectiles/GiantTreeProjectile.
 
 import { GrowthProjectile } from './entities/projectiles/GrowthProjectile.js';
 import { FloatingBlock } from './entities/FloatingBlock.js';
+import { ControllableBlock } from './entities/ControllableBlock.js';
 import { EntityManager } from './systems/EntityManager.js';
 import { InputManager } from './systems/InputManager.js';
 import { PhysicsManager } from './systems/PhysicsManager.js';
@@ -44,7 +45,7 @@ import { SocketManager } from './systems/SocketManager.js';
 import { AnimalClasses } from './AnimalRegistry.js';
 import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
-import { MillenniumFalcon } from './entities/animals/MillenniumFalcon.js';
+import { Starfighter } from './entities/animals/Starfighter.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
@@ -385,6 +386,9 @@ export class VoxelGame {
         // Floating Blocks
         this.floatingBlocks = [];
         this.targetedFloatingBlocks = [];
+
+        // Controllable Blocks
+        this.controllableBlocks = [];
 
 
         // Tornadoes
@@ -843,11 +847,11 @@ export class VoxelGame {
         const y = this.worldGen.getTerrainHeight(x, z) + 2;
 
         const seed = 12345; // Fixed seed for consistent appearance
-        this.playerShip = new MillenniumFalcon(this, x, y, z, seed);
+        this.playerShip = new Starfighter(this, x, y, z, seed);
         this.scene.add(this.playerShip.mesh);
         this.animals.push(this.playerShip);
 
-        console.log('[Game] Player spaceship (Millennium Falcon) spawned near player');
+        console.log('[Game] Player spaceship (Starfighter) spawned near player');
     }
 
     createHighlightBox() {
@@ -1057,26 +1061,46 @@ export class VoxelGame {
             const bx = target.x + target.normal.x;
             const by = target.y + target.normal.y;
             const bz = target.z + target.normal.z;
-            // Check for player collision before placing
-            this.setBlock(bx, by, bz, selectedItem.item);
-            this.analyticsManager.logBlockPlace(selectedItem.item, bx, by, bz);
-            this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
 
-            // Handle Destination Block Placement
-            if (selectedItem.item === Blocks.DESTINATION_BLOCK) {
-                this.destinationManager.createDestination(bx, by, bz).then(id => {
-                    if (id) {
-                        const url = window.location.origin + '?warp=' + id;
-                        this.uiManager.addChatMessage('system', 'Destination created!');
-                        this.uiManager.addChatMessage('system', 'Share this URL: ' + url);
-                        // Also copy to clipboard if possible
-                        navigator.clipboard.writeText(url).then(() => {
-                            this.uiManager.addChatMessage('system', '(Copied to clipboard)');
-                        }).catch(() => { });
-                    } else {
-                        this.uiManager.addChatMessage('system', 'Failed to create destination.');
+            // Check if we're placing adjacent to a controllable block - attach it instead
+            let attachedToVehicle = false;
+            if (this.controllableBlocks) {
+                for (const cb of this.controllableBlocks) {
+                    if (cb.isDead) continue;
+
+                    const attachOffset = cb.getAttachmentOffset(bx, by, bz);
+                    if (attachOffset) {
+                        // Attach to the controllable block instead of placing in world
+                        cb.attachBlock(attachOffset, selectedItem.item);
+                        this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
+                        attachedToVehicle = true;
+                        break;
                     }
-                });
+                }
+            }
+
+            if (!attachedToVehicle) {
+                // Normal block placement
+                this.setBlock(bx, by, bz, selectedItem.item);
+                this.analyticsManager.logBlockPlace(selectedItem.item, bx, by, bz);
+                this.inventoryManager.removeItem(this.inventoryManager.selectedSlot, 1);
+
+                // Handle Destination Block Placement
+                if (selectedItem.item === Blocks.DESTINATION_BLOCK) {
+                    this.destinationManager.createDestination(bx, by, bz).then(id => {
+                        if (id) {
+                            const url = window.location.origin + '?warp=' + id;
+                            this.uiManager.addChatMessage('system', 'Destination created!');
+                            this.uiManager.addChatMessage('system', 'Share this URL: ' + url);
+                            // Also copy to clipboard if possible
+                            navigator.clipboard.writeText(url).then(() => {
+                                this.uiManager.addChatMessage('system', '(Copied to clipboard)');
+                            }).catch(() => { });
+                        } else {
+                            this.uiManager.addChatMessage('system', 'Failed to create destination.');
+                        }
+                    });
+                }
             }
         }
     }
@@ -1179,6 +1203,20 @@ export class VoxelGame {
         const tornado = new Tornado(this, pos);
         this.tornadoes.push(tornado);
         console.log('Tornado spawned!');
+    }
+
+    /**
+     * Spawn a controllable block at the given position
+     * @param {number} x - World X position
+     * @param {number} y - World Y position
+     * @param {number} z - World Z position
+     * @param {string} blockType - Block type for visual appearance
+     * @returns {ControllableBlock} The spawned block
+     */
+    spawnControllableBlock(x, y, z, blockType = 'iron_block') {
+        const cb = new ControllableBlock(this, x, y, z, blockType);
+        console.log(`[VoxelGame] Spawned controllable block at (${x}, ${y}, ${z})`);
+        return cb;
     }
 
     spawnDrop(x, y, z, blockType) {
@@ -2483,6 +2521,18 @@ export class VoxelGame {
                 if (!keep) {
                     this.scene.remove(fb.mesh);
                     this.floatingBlocks.splice(i, 1);
+                }
+            }
+        }
+
+        // Update Controllable Blocks
+        if (this.controllableBlocks) {
+            for (let i = this.controllableBlocks.length - 1; i >= 0; i--) {
+                const cb = this.controllableBlocks[i];
+                const keep = this.safelyUpdateEntity(cb, deltaTime);
+                if (!keep) {
+                    cb.destroy();
+                    this.controllableBlocks.splice(i, 1);
                 }
             }
         }

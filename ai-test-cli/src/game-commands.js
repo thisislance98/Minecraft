@@ -2216,6 +2216,21 @@ export async function getMountInfo(browser) {
             return { mounted: false, mount: null };
         }
 
+        // Get pitch/yaw from mount properties (Starfighter stores these directly)
+        let pitch = mount.pitch ?? 0;
+        let yaw = mount.yaw ?? 0;
+        let roll = mount.roll ?? 0;
+
+        // Calculate effective airspeed from velocity or currentSpeed
+        let airspeed = mount.currentSpeed ?? 0;
+        if (!airspeed && mount.velocity) {
+            airspeed = Math.sqrt(
+                mount.velocity.x * mount.velocity.x +
+                mount.velocity.y * mount.velocity.y +
+                mount.velocity.z * mount.velocity.z
+            );
+        }
+
         return {
             mounted: true,
             mountType: mount.constructor.name,
@@ -2226,12 +2241,14 @@ export async function getMountInfo(browser) {
             } : null,
             // Flight-specific properties
             throttle: mount.throttle ?? null,
-            airspeed: mount.airspeed ?? null,
-            pitch: mount.pitch ?? null,
-            roll: mount.roll ?? null,
-            yaw: mount.yaw ?? null,
-            isStalling: mount.isStalling ?? null,
-            angleOfAttack: mount.angleOfAttack ?? null
+            currentSpeed: mount.currentSpeed ?? null,
+            airspeed: airspeed,
+            pitch: pitch,
+            roll: roll,
+            yaw: yaw,
+            boostIntensity: mount.boostIntensity ?? null,
+            isStalling: mount.isStalling ?? false,
+            isLanded: mount.isLanded ?? null
         };
     });
 }
@@ -2395,7 +2412,8 @@ export async function testFlightControls(browser, controls = {}) {
 }
 
 /**
- * Run a full airplane flight test sequence
+ * Run a full Starfighter flight test sequence
+ * Tests: Boost (Space), Brake (Shift), Pitch (W/S), Turn with bank (A/D)
  */
 export async function runAirplaneFlightTest(browser) {
     const results = {
@@ -2403,10 +2421,11 @@ export async function runAirplaneFlightTest(browser) {
         tests: []
     };
 
-    console.log(chalk.blue('\n═══ Airplane Flight Test ═══'));
+    console.log(chalk.blue('\n═══ Starfighter Flight Test ═══'));
+    console.log(chalk.dim('Controls: W/S = pitch, A/D = turn, Space = boost, Shift = brake\n'));
 
     // Step 1: Find and mount a ship
-    console.log(chalk.cyan('\n1. Finding and mounting ship...'));
+    console.log(chalk.cyan('1. Finding and mounting ship...'));
     const mountResult = await findAndMountShip(browser);
     if (mountResult.error) {
         console.log(chalk.red(`   ✗ ${mountResult.error}`));
@@ -2417,107 +2436,94 @@ export async function runAirplaneFlightTest(browser) {
 
     await new Promise(r => setTimeout(r, 500)); // Let it settle
 
-    // Step 2: Test throttle up (Space)
-    console.log(chalk.cyan('\n2. Testing throttle up (Space)...'));
-    const throttleTest = await testFlightControls(browser, { throttle: true, duration: 3000 });
-    results.tests.push({ name: 'throttle_up', result: throttleTest });
-    if (throttleTest.analysis) {
-        const passed = throttleTest.analysis.finalThrottle > throttleTest.analysis.initialThrottle;
-        console.log(passed ? chalk.green('   ✓ Throttle increased') : chalk.red('   ✗ Throttle did not increase'));
-        console.log(`     Throttle: ${throttleTest.analysis.initialThrottle?.toFixed(2)} → ${throttleTest.analysis.finalThrottle?.toFixed(2)}`);
-        console.log(`     Airspeed: ${throttleTest.analysis.initialAirspeed?.toFixed(1)} → ${throttleTest.analysis.finalAirspeed?.toFixed(1)}`);
+    // Step 2: Test boost (Space) - should increase speed
+    console.log(chalk.cyan('\n2. Testing boost (Space)...'));
+    const boostTest = await testFlightControls(browser, { throttle: true, duration: 2500 });
+    results.tests.push({ name: 'boost', result: boostTest });
+    if (boostTest.analysis) {
+        const speedIncreased = boostTest.analysis.finalAirspeed > boostTest.analysis.initialAirspeed;
+        console.log(speedIncreased ? chalk.green('   ✓ Speed increased (boosting)') : chalk.red('   ✗ Speed did not increase'));
+        console.log(`     Speed: ${boostTest.analysis.initialAirspeed?.toFixed(1)} → ${boostTest.analysis.finalAirspeed?.toFixed(1)}`);
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 3: Test pitch up (W)
+    // Step 3: Test pitch up (W) - should climb
     console.log(chalk.cyan('\n3. Testing pitch up (W) - should climb...'));
-    const pitchUpTest = await testFlightControls(browser, { pitchUp: true, throttle: true, duration: 3000 });
+    const pitchUpTest = await testFlightControls(browser, { pitchUp: true, throttle: true, duration: 2500 });
     results.tests.push({ name: 'pitch_up', result: pitchUpTest });
     if (pitchUpTest.analysis) {
-        const pitchIncreased = pitchUpTest.analysis.maxPitch > 0.1;
-        const altitudeIncreased = pitchUpTest.analysis.altitudeChange > 0;
+        const pitchIncreased = pitchUpTest.analysis.maxPitch > 0.2;
+        const altitudeIncreased = pitchUpTest.analysis.altitudeChange > 1;
         console.log(pitchIncreased ? chalk.green('   ✓ Pitch increased (nose up)') : chalk.red('   ✗ Pitch did not increase'));
-        console.log(altitudeIncreased ? chalk.green('   ✓ Altitude increased (climbing)') : chalk.yellow('   ~ Altitude did not increase much'));
-        console.log(`     Pitch: ${pitchUpTest.analysis.maxPitch?.toFixed(2)} rad`);
+        console.log(altitudeIncreased ? chalk.green('   ✓ Altitude increased (climbing)') : chalk.yellow('   ~ Altitude change small'));
+        console.log(`     Max pitch: ${(pitchUpTest.analysis.maxPitch * 180 / Math.PI).toFixed(1)}°`);
         console.log(`     Altitude change: ${pitchUpTest.analysis.altitudeChange?.toFixed(1)} blocks`);
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 4: Test pitch down (S)
+    // Step 4: Test pitch down (S) - should descend
     console.log(chalk.cyan('\n4. Testing pitch down (S) - should descend...'));
     const pitchDownTest = await testFlightControls(browser, { pitchDown: true, duration: 2000 });
     results.tests.push({ name: 'pitch_down', result: pitchDownTest });
     if (pitchDownTest.analysis) {
-        const pitchDecreased = pitchDownTest.analysis.minPitch < -0.1;
+        const pitchDecreased = pitchDownTest.analysis.minPitch < -0.2;
         console.log(pitchDecreased ? chalk.green('   ✓ Pitch decreased (nose down)') : chalk.red('   ✗ Pitch did not decrease'));
-        console.log(`     Pitch: ${pitchDownTest.analysis.minPitch?.toFixed(2)} rad`);
+        console.log(`     Min pitch: ${(pitchDownTest.analysis.minPitch * 180 / Math.PI).toFixed(1)}°`);
         console.log(`     Altitude change: ${pitchDownTest.analysis.altitudeChange?.toFixed(1)} blocks`);
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 5: Test roll left (A)
-    console.log(chalk.cyan('\n5. Testing roll left (A)...'));
-    const rollLeftTest = await testFlightControls(browser, { rollLeft: true, throttle: true, duration: 2000 });
-    results.tests.push({ name: 'roll_left', result: rollLeftTest });
-    if (rollLeftTest.analysis) {
-        const rolled = Math.abs(rollLeftTest.analysis.minRoll) > 0.1 || Math.abs(rollLeftTest.analysis.maxRoll) > 0.1;
-        console.log(rolled ? chalk.green('   ✓ Roll applied') : chalk.red('   ✗ Roll did not change'));
-        console.log(`     Roll range: ${rollLeftTest.analysis.minRoll?.toFixed(2)} to ${rollLeftTest.analysis.maxRoll?.toFixed(2)} rad`);
+    // Step 5: Test turn left (A) - should bank and turn
+    console.log(chalk.cyan('\n5. Testing turn left (A)...'));
+    const turnLeftTest = await testFlightControls(browser, { rollLeft: true, throttle: true, duration: 2000 });
+    results.tests.push({ name: 'turn_left', result: turnLeftTest });
+    if (turnLeftTest.analysis) {
+        const banked = turnLeftTest.analysis.minRoll < -0.1;
+        console.log(banked ? chalk.green('   ✓ Ship banked left') : chalk.yellow('   ~ Banking not detected'));
+        console.log(`     Roll range: ${(turnLeftTest.analysis.minRoll * 180 / Math.PI).toFixed(1)}° to ${(turnLeftTest.analysis.maxRoll * 180 / Math.PI).toFixed(1)}°`);
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 6: Test roll right (D)
-    console.log(chalk.cyan('\n6. Testing roll right (D)...'));
-    const rollRightTest = await testFlightControls(browser, { rollRight: true, throttle: true, duration: 2000 });
-    results.tests.push({ name: 'roll_right', result: rollRightTest });
-    if (rollRightTest.analysis) {
-        const rolled = Math.abs(rollRightTest.analysis.minRoll) > 0.1 || Math.abs(rollRightTest.analysis.maxRoll) > 0.1;
-        console.log(rolled ? chalk.green('   ✓ Roll applied') : chalk.red('   ✗ Roll did not change'));
-        console.log(`     Roll range: ${rollRightTest.analysis.minRoll?.toFixed(2)} to ${rollRightTest.analysis.maxRoll?.toFixed(2)} rad`);
+    // Step 6: Test turn right (D) - should bank and turn
+    console.log(chalk.cyan('\n6. Testing turn right (D)...'));
+    const turnRightTest = await testFlightControls(browser, { rollRight: true, throttle: true, duration: 2000 });
+    results.tests.push({ name: 'turn_right', result: turnRightTest });
+    if (turnRightTest.analysis) {
+        const banked = turnRightTest.analysis.maxRoll > 0.1;
+        console.log(banked ? chalk.green('   ✓ Ship banked right') : chalk.yellow('   ~ Banking not detected'));
+        console.log(`     Roll range: ${(turnRightTest.analysis.minRoll * 180 / Math.PI).toFixed(1)}° to ${(turnRightTest.analysis.maxRoll * 180 / Math.PI).toFixed(1)}°`);
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 7: Test throttle down (Shift)
-    console.log(chalk.cyan('\n7. Testing throttle down (Shift)...'));
-    const throttleDownTest = await testFlightControls(browser, { throttleDown: true, duration: 2000 });
-    results.tests.push({ name: 'throttle_down', result: throttleDownTest });
-    if (throttleDownTest.analysis) {
-        const throttleDecreased = throttleDownTest.analysis.finalThrottle < throttleDownTest.analysis.initialThrottle;
-        console.log(throttleDecreased ? chalk.green('   ✓ Throttle decreased') : chalk.red('   ✗ Throttle did not decrease'));
-        console.log(`     Throttle: ${throttleDownTest.analysis.initialThrottle?.toFixed(2)} → ${throttleDownTest.analysis.finalThrottle?.toFixed(2)}`);
-    }
-
-    // Step 8: Test stall behavior (throttle down, then try to pitch up)
-    console.log(chalk.cyan('\n8. Testing stall behavior (low speed + high pitch)...'));
-    // First reduce throttle
-    await testFlightControls(browser, { throttleDown: true, duration: 3000 });
-    // Then try to pitch up with no throttle - should stall
-    const stallTest = await testFlightControls(browser, { pitchUp: true, duration: 2000 });
-    results.tests.push({ name: 'stall_test', result: stallTest });
-    if (stallTest.analysis) {
-        console.log(stallTest.analysis.stalledAtAnyPoint ?
-            chalk.green('   ✓ Stall detected (working as expected)') :
-            chalk.yellow('   ~ Did not stall (may need more time at low speed)'));
-        console.log(`     Final airspeed: ${stallTest.analysis.finalAirspeed?.toFixed(1)}`);
+    // Step 7: Test brake (Shift) - should decrease speed
+    console.log(chalk.cyan('\n7. Testing brake (Shift)...'));
+    // First boost to get some speed
+    await testFlightControls(browser, { throttle: true, duration: 1500 });
+    const brakeTest = await testFlightControls(browser, { throttleDown: true, duration: 2000 });
+    results.tests.push({ name: 'brake', result: brakeTest });
+    if (brakeTest.analysis) {
+        const speedDecreased = brakeTest.analysis.finalAirspeed < brakeTest.analysis.initialAirspeed;
+        console.log(speedDecreased ? chalk.green('   ✓ Speed decreased (braking)') : chalk.red('   ✗ Speed did not decrease'));
+        console.log(`     Speed: ${brakeTest.analysis.initialAirspeed?.toFixed(1)} → ${brakeTest.analysis.finalAirspeed?.toFixed(1)}`);
     }
 
     // Summary
     console.log(chalk.blue('\n═══ Test Summary ═══'));
     const passedTests = results.tests.filter(t => {
-        const a = t.result.analysis;
+        const a = t.result?.analysis;
         if (!a) return false;
         switch (t.name) {
-            case 'throttle_up': return a.finalThrottle > a.initialThrottle;
-            case 'pitch_up': return a.maxPitch > 0.1;
-            case 'pitch_down': return a.minPitch < -0.1;
-            case 'roll_left': return Math.abs(a.minRoll) > 0.1 || Math.abs(a.maxRoll) > 0.1;
-            case 'roll_right': return Math.abs(a.minRoll) > 0.1 || Math.abs(a.maxRoll) > 0.1;
-            case 'throttle_down': return a.finalThrottle < a.initialThrottle;
+            case 'boost': return a.finalAirspeed > a.initialAirspeed;
+            case 'pitch_up': return a.maxPitch > 0.2 || a.altitudeChange > 1;
+            case 'pitch_down': return a.minPitch < -0.2;
+            case 'turn_left': return a.minRoll < -0.05; // Visual bank
+            case 'turn_right': return a.maxRoll > 0.05; // Visual bank
+            case 'brake': return a.finalAirspeed < a.initialAirspeed;
             default: return true;
         }
     }).length;

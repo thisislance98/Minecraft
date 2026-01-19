@@ -42,8 +42,8 @@ export class InventoryManager {
         this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
         // 8. Parkour Block
         this.addItemToSlot(7, 'parkour_block', 64, 'block');
-        // 9. Merlin Guide
-        this.addItemToSlot(8, 'merlin_guide', 1, 'item');
+        // 9. Control Block (WASD controllable flying block)
+        this.addItemToSlot(8, 'control_block', 64, 'item');
 
 
         // Add some materials for testing

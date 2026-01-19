@@ -190,6 +190,12 @@ export class MerlinClient {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             // Include settings for input messages
             if (data.type === 'input') {
+                // Clear any muted state when user sends a new message
+                // This prevents silenced persona init from blocking user messages
+                if (this.isMutedResponse) {
+                    console.log('[MerlinClient] Clearing muted state for new user input');
+                    this.isMutedResponse = false;
+                }
                 data.settings = {
                     thinkingEnabled: this.thinkingEnabled,
                     bypassTokens: this.bypassTokens

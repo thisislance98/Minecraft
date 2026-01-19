@@ -229,6 +229,45 @@ export class PhysicsManager {
     }
 
     /**
+     * Check if ray hits a controllable block
+     * @returns {ControllableBlock|null} The hit controllable block or null
+     */
+    getHitControllableBlock() {
+        if (!this.game.controllableBlocks || this.game.controllableBlocks.length === 0) {
+            return null;
+        }
+
+        this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
+        const originalFar = this.raycaster.far;
+        this.raycaster.far = 5.0; // Interaction range
+
+        const blockMeshes = this.game.controllableBlocks
+            .filter(cb => !cb.isDead)
+            .map(cb => cb.mesh);
+
+        const intersects = this.raycaster.intersectObjects(blockMeshes, true);
+
+        this.raycaster.far = originalFar;
+
+        if (intersects.length > 0) {
+            const hitObject = intersects[0].object;
+            // Find which controllable block owns this mesh
+            let curr = hitObject;
+            while (curr) {
+                if (curr.userData && curr.userData.entity) {
+                    return curr.userData.entity;
+                }
+                if (blockMeshes.includes(curr)) {
+                    return this.game.controllableBlocks.find(cb => cb.mesh === curr);
+                }
+                curr = curr.parent;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Handle Left Click (Trigger Animation)
      */
     breakBlock() {

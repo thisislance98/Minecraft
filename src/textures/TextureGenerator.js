@@ -150,6 +150,7 @@ const palettes = {
     obsidian: ['#1a101f', '#20122e', '#24143a', '#15091a'], // Very dark purple/black
 
     diamond_block: ['#00FFFF', '#00CED1', '#40E0D0', '#E0FFFF'],
+    control_block: { base: ['#4169E1', '#1E90FF', '#0000CD'], glow: ['#00FFFF', '#7FFFD4'], arrows: '#FFFFFF' }, // Royal blue with cyan glow and white arrows
     xbox: { base: ['#0e0e0e', '#1a1a1a', '#222222'], logo: ['#107c10', '#107c10', '#107c10'], light: ['#ffffff', '#aaffaa'] },
     parkour_block: { base: ['#ff00ff', '#800080', '#4b0082'], glow: ['#00ffff', '#00ffcc'], trim: ['#ffffff'] },
     parkour_platform: ['#444444', '#555555', '#333333', '#666666'], // Grey stone look
@@ -471,6 +472,40 @@ export function generateTexture(type, size = 16) {
             ctx.fillStyle = palettes.diamond_block[3];
             ctx.fillRect(4, 4, 8, 8);
             break;
+
+        case 'control_block': {
+            // Base gradient fill
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, palettes.control_block.base[0]);
+            gradient.addColorStop(0.5, palettes.control_block.base[1]);
+            gradient.addColorStop(1, palettes.control_block.base[2]);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+
+            // Glowing border
+            ctx.fillStyle = palettes.control_block.glow[0];
+            ctx.fillRect(0, 0, size, 2);
+            ctx.fillRect(0, 0, 2, size);
+            ctx.fillRect(0, size - 2, size, 2);
+            ctx.fillRect(size - 2, 0, 2, size);
+
+            // Arrow indicators (showing all directions)
+            ctx.fillStyle = palettes.control_block.arrows;
+            const center = size / 2;
+            // Up arrow
+            ctx.fillRect(center - 1, 2, 2, 3);
+            // Down arrow
+            ctx.fillRect(center - 1, size - 5, 2, 3);
+            // Left arrow
+            ctx.fillRect(2, center - 1, 3, 2);
+            // Right arrow
+            ctx.fillRect(size - 5, center - 1, 3, 2);
+
+            // Center glow dot
+            ctx.fillStyle = palettes.control_block.glow[1];
+            ctx.fillRect(center - 2, center - 2, 4, 4);
+            break;
+        }
 
         case 'wood_side':
             for (let y = 0; y < size; y++) {
@@ -2136,7 +2171,7 @@ export function generateTexture(type, size = 16) {
 }
 
 export function generateHotbarIcons() {
-    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf', 'door_closed', 'playground_block', 'disco_room_block'];
+    const blocks = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'water', 'brick', 'glass', 'stone_brick', 'bookshelf', 'door_closed', 'playground_block', 'disco_room_block', 'control_block'];
     blocks.forEach(block => {
         const canvas = document.getElementById(`slot-${block}`);
         if (canvas) {

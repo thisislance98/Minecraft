@@ -328,6 +328,21 @@ export class DuneWorm extends Animal {
 
     checkPlayerCollision() {
         const player = this.game.player;
+
+        // Only attack if player is on or very close to the ground
+        // The worm attacks from below, so airborne players should be safe
+        if (!player.isOnGround && player.velocity && player.velocity.y > 0.5) {
+            // Player is jumping/flying upward - don't attack
+            return;
+        }
+
+        // Check vertical distance - worm shouldn't hit players that are high above it
+        const verticalDist = player.position.y - this.position.y;
+        if (verticalDist > 4.0) {
+            // Player is too high above the worm
+            return;
+        }
+
         const dist = this.position.distanceTo(player.position);
         if (dist < 3.0) { // Mouth radius
             player.takeDamage(this.damage, 'Dune Worm');

@@ -151,13 +151,13 @@ export class Spaceship extends Animal {
         }
 
         // === PITCH CONTROL (elevator) ===
-        // Space = pull back (nose up), Shift = push forward (nose down)
+        // Space = pull back (nose up → climb), Shift = push forward (nose down → descend)
         const isCrouching = input && (input.keys['ShiftLeft'] || input.keys['KeyX']);
         const pitchInput = jump ? 1 : (isCrouching ? -1 : 0);
 
         if (pitchInput !== 0) {
-            // Apply pitch rate based on airspeed (more authority at higher speeds)
-            const speedAuthority = Math.min(1.0, this.airspeed / this.cruiseSpeed);
+            // Pitch works even at low speeds (minimum 30% authority)
+            const speedAuthority = Math.max(0.3, Math.min(1.0, this.airspeed / this.cruiseSpeed));
             this.pitch += pitchInput * this.pitchRate * speedAuthority * dt;
             this.pitch = THREE.MathUtils.clamp(this.pitch, -this.stallAngle * 0.8, this.stallAngle);
         } else {
@@ -196,7 +196,8 @@ export class Spaceship extends Animal {
 
         // Calculate how much the plane should climb/descend based on pitch
         // At level pitch (0), vertical speed tends toward 0 (level flight)
-        const targetVerticalSpeed = Math.sin(this.pitch) * this.airspeed * 1.2;
+        // Higher multiplier = more responsive climb/descend
+        const targetVerticalSpeed = Math.sin(this.pitch) * this.airspeed * 1.8;
 
         // When banking, the plane loses some lift and descends slightly
         // This encourages pulling back during turns (realistic behavior)

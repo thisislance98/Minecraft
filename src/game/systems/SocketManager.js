@@ -622,6 +622,14 @@ export class SocketManager {
             }
         });
 
+        // Handle world reset errors
+        this.socket.on('world:reset:error', (data) => {
+            console.log('[SocketManager] World reset error:', data);
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', `⚠️ ${data.message || 'Failed to reset world'}`);
+            }
+        });
+
         // Handle dynamic creature definitions
         // Initial batch when joining
         this.socket.on('creatures_initial', (creatures) => {
@@ -1183,6 +1191,11 @@ export class SocketManager {
     sendEntitySpawn(data) {
         if (!this.isConnected()) return;
         this.socket.emit('entity:spawn', data);
+    }
+
+    sendEntityRemove(id) {
+        if (!this.isConnected()) return;
+        this.socket.emit('entity:remove', { id });
     }
 
     /**

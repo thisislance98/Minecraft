@@ -1263,9 +1263,12 @@ export class SpawnManager {
 
     /**
      * Set the allowed creatures list from world settings
+     * Also despawns existing creatures that are no longer allowed
      * @param {string[]|null} creatureList - Array of creature type names, or null for all allowed
      */
     setAllowedCreatures(creatureList) {
+        const previousFilter = this.allowedCreatures;
+
         if (creatureList === null || creatureList === undefined) {
             this.allowedCreatures = null; // All allowed
             console.log('[SpawnManager] Allowed creatures: ALL');
@@ -1276,6 +1279,73 @@ export class SpawnManager {
             console.warn('[SpawnManager] Invalid creature list, using all');
             this.allowedCreatures = null;
         }
+
+        // Despawn creatures that are no longer allowed
+        // Only do this if the filter has become more restrictive
+        if (this.allowedCreatures !== null) {
+            this.despawnDisallowedCreatures();
+        }
+    }
+
+    /**
+     * Remove all creatures from the world that are not in the allowed list
+     */
+    despawnDisallowedCreatures() {
+        if (this.allowedCreatures === null) {
+            // All creatures allowed, nothing to despawn
+            return;
+        }
+
+        const toRemove = [];
+
+        // Find all creatures that should be removed
+        for (const [id, entity] of this.entities) {
+            const typeName = entity.constructor.name;
+            if (!this.allowedCreatures.has(typeName)) {
+                toRemove.push({ id, entity, typeName });
+            }
+        }
+
+        if (toRemove.length === 0) {
+            console.log('[SpawnManager] No creatures to despawn');
+            return;
+        }
+
+        console.log(`[SpawnManager] Despawning ${toRemove.length} creatures that are no longer allowed`);
+
+        // Remove each disallowed creature
+        for (const { id, entity, typeName } of toRemove) {
+            console.log(`[SpawnManager] Despawning ${typeName} (${id})`);
+
+            // Remove from scene
+            if (entity.mesh) {
+                this.game.scene.remove(entity.mesh);
+            }
+            if (entity.group) {
+                this.game.scene.remove(entity.group);
+            }
+
+            // Call dispose if available
+            if (entity.dispose) {
+                entity.dispose();
+            }
+
+            // Remove from entities map
+            this.entities.delete(id);
+
+            // Remove from game.animals array
+            const index = this.game.animals.indexOf(entity);
+            if (index > -1) {
+                this.game.animals.splice(index, 1);
+            }
+
+            // Notify server to remove entity (for persistence)
+            if (this.game.socketManager) {
+                this.game.socketManager.sendEntityRemove(id);
+            }
+        }
+
+        console.log(`[SpawnManager] Despawned ${toRemove.length} creatures. Remaining: ${this.entities.size}`);
     }
 
     /**

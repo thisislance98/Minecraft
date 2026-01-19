@@ -935,6 +935,37 @@ export async function getAllowedCreatures(browser) {
 }
 
 /**
+ * Get creature statistics and counts
+ */
+export async function getCreatureStats(browser) {
+    return await executeInBrowser(browser, () => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.spawnManager) return { error: 'Game not ready' };
+
+        const stats = {
+            totalCreatures: game.animals?.length || 0,
+            entitiesTracked: game.spawnManager.entities.size,
+            creaturesByType: {}
+        };
+
+        // Count creatures by type
+        if (game.animals) {
+            for (const animal of game.animals) {
+                const typeName = animal.constructor.name;
+                stats.creaturesByType[typeName] = (stats.creaturesByType[typeName] || 0) + 1;
+            }
+        }
+
+        // Get allowed creatures filter info
+        const allowed = game.spawnManager.allowedCreatures;
+        stats.allowAll = allowed === null;
+        stats.allowedCreatures = allowed ? Array.from(allowed) : null;
+
+        return stats;
+    });
+}
+
+/**
  * Get world customizations from current world
  */
 export async function getWorldCustomizations(browser) {

@@ -1282,6 +1282,112 @@ export class WorldBrowserUI {
         display.textContent = `${label} (${value.toFixed(1)}x)`;
     }
 
+    /**
+     * Populate the creature grid in the Settings tab
+     */
+    populateSettingsCreatureGrid() {
+        const grid = document.getElementById('wb-creature-grid');
+        if (!grid) return;
+
+        // Clear existing content
+        grid.innerHTML = '';
+
+        // Get creature list from game's AnimalClasses
+        const creatureNames = this.game.AnimalClasses ?
+            Object.keys(this.game.AnimalClasses).sort() :
+            ['Bear', 'Bunny', 'Cat', 'Chicken', 'Cow', 'Deer', 'Dog', 'Duck', 'Eagle',
+             'Elephant', 'Fish', 'Fox', 'Frog', 'Giraffe', 'Goat', 'Horse', 'Kangaroo',
+             'Lion', 'Monkey', 'Owl', 'Penguin', 'Pig', 'Sheep', 'Snake', 'Tiger',
+             'Turtle', 'Wolf', 'Zebra'].sort();
+
+        // Get currently allowed creatures from world settings
+        const allowedCreatures = this.currentWorld?.settings?.allowedCreatures;
+        const allowAll = allowedCreatures === null || allowedCreatures === undefined;
+        const allowedSet = allowAll ? null : new Set(allowedCreatures);
+
+        for (const name of creatureNames) {
+            // Skip non-creature types
+            if (['Animal', 'Vehicle', 'Agent'].includes(name)) continue;
+
+            const isSelected = allowAll || (allowedSet && allowedSet.has(name));
+
+            const item = document.createElement('div');
+            item.className = `creature-item${isSelected ? ' selected' : ''}`;
+            item.dataset.creature = name;
+
+            item.innerHTML = `
+                <input type="checkbox" ${isSelected ? 'checked' : ''}>
+                <span>${name}</span>
+            `;
+
+            item.addEventListener('click', () => {
+                const checkbox = item.querySelector('input');
+                checkbox.checked = !checkbox.checked;
+                item.classList.toggle('selected', checkbox.checked);
+            });
+
+            grid.appendChild(item);
+        }
+    }
+
+    /**
+     * Select or deselect all creatures in the Settings tab
+     */
+    selectAllSettingsCreatures(select) {
+        const grid = document.getElementById('wb-creature-grid');
+        if (!grid) return;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            checkbox.checked = select;
+            item.classList.toggle('selected', select);
+        });
+    }
+
+    /**
+     * Filter creatures by search text in the Settings tab
+     */
+    filterSettingsCreatures(searchText) {
+        const grid = document.getElementById('wb-creature-grid');
+        if (!grid) return;
+
+        const search = searchText.toLowerCase();
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const name = item.dataset.creature.toLowerCase();
+            item.style.display = name.includes(search) ? '' : 'none';
+        });
+    }
+
+    /**
+     * Get the list of selected creatures in the Settings tab
+     * @returns {string[]|null} - Array of selected creature names, or null if all selected
+     */
+    getSelectedSettingsCreatures() {
+        const grid = document.getElementById('wb-creature-grid');
+        if (!grid) return null;
+
+        const selected = [];
+        let allSelected = true;
+        let noneSelected = true;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            if (checkbox.checked) {
+                selected.push(item.dataset.creature);
+                noneSelected = false;
+            } else {
+                allSelected = false;
+            }
+        });
+
+        // If all selected, return null (meaning "allow all")
+        if (allSelected) return null;
+        // If none selected, return empty array
+        if (noneSelected) return [];
+        // Otherwise return the specific list
+        return selected;
+    }
+
     async saveWorldSettings() {
         if (!this.currentWorld || !this.user) return;
 
@@ -1299,6 +1405,7 @@ export class WorldBrowserUI {
             const timeFrozen = document.getElementById('wb-time-frozen').checked;
             const skyColor = document.getElementById('wb-sky-color').value;
             const gravity = parseFloat(document.getElementById('wb-gravity').value);
+            const allowedCreatures = this.getSelectedSettingsCreatures();
 
             const serverUrl = this.getServerUrl();
             const token = await this.user.getIdToken();
@@ -1318,7 +1425,8 @@ export class WorldBrowserUI {
                         allowCreatureSpawn: allowSpawn,
                         allowPvP,
                         timeOfDay,
-                        timeFrozen
+                        timeFrozen,
+                        allowedCreatures
                     },
                     customizations: {
                         ...this.currentWorld.customizations,
@@ -1349,6 +1457,12 @@ export class WorldBrowserUI {
             // Apply gravity multiplier
             if (this.game && gravity !== undefined) {
                 this.game.gravityMultiplier = gravity;
+            }
+
+            // Apply creature filter and despawn disallowed creatures
+            if (this.game.spawnManager) {
+                this.game.spawnManager.setAllowedCreatures(allowedCreatures);
+                console.log(`[WorldBrowserUI] Applied creature filter:`, allowedCreatures);
             }
 
             // Broadcast settings change to other players
@@ -2221,6 +2335,48 @@ export class WorldBrowserUI {
                 font-size: 12px;
                 color: #888;
                 margin: 0 0 10px;
+            }
+
+            /* Creature Grid for Settings Tab */
+            #wb-creature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                gap: 6px;
+                max-height: 200px;
+                overflow-y: auto;
+                padding: 8px;
+                background: #1a1a1a;
+                border: 1px solid #333;
+                border-radius: 4px;
+            }
+
+            #wb-creature-grid .creature-item {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 5px 8px;
+                background: #222;
+                border-radius: 4px;
+                font-size: 11px;
+                cursor: pointer;
+                border: 1px solid transparent;
+                color: #ccc;
+            }
+
+            #wb-creature-grid .creature-item:hover {
+                background: #2a2a2a;
+            }
+
+            #wb-creature-grid .creature-item.selected {
+                border-color: #4CAF50;
+                background: #1a2a1a;
+            }
+
+            #wb-creature-grid .creature-item input[type="checkbox"] {
+                margin: 0;
+                pointer-events: none;
+                width: 12px;
+                height: 12px;
             }
 
             /* Create form scroll styling */

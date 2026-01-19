@@ -1851,15 +1851,34 @@ io.on('connection', (socket) => {
             }
         });
 
-        // Handle world reset request
+        // Handle world reset request - only allowed for world owners
         socket.on('world:reset', async () => {
             if (!roomId) return;
 
-            console.log(`[Socket] World reset requested by ${socket.id} in room ${roomId}`);
+            // Get the world this socket is currently in
+            const currentWorldId = socketToWorld.get(socket.id) || defaultWorldId;
+            const userId = socketToUser.get(socket.id);
+
+            console.log(`[Socket] World reset requested by ${socket.id} for world ${currentWorldId} (userId: ${userId || 'anonymous'})`);
 
             try {
-                // Clear all persisted data (blocks, entities, signs)
-                await worldPersistence.resetWorld();
+                // Verify ownership - get the world and check if user owns it
+                const world = await worldManagementService.getWorld(currentWorldId);
+                if (!world) {
+                    console.log(`[Socket] World reset denied - world ${currentWorldId} not found`);
+                    socket.emit('world:reset:error', { message: 'World not found' });
+                    return;
+                }
+
+                const isOwner = userId && world.ownerId === userId;
+                if (!isOwner) {
+                    console.log(`[Socket] World reset denied - user ${userId} is not owner of world ${currentWorldId} (owner: ${world.ownerId})`);
+                    socket.emit('world:reset:error', { message: 'Only the world owner can reset the world' });
+                    return;
+                }
+
+                // Clear all persisted data for THIS world specifically
+                await worldPersistence.resetWorld(currentWorldId);
 
                 // Keep the same world seed - only clear added content
                 const room = rooms.get(roomId);
@@ -1875,14 +1894,15 @@ io.on('connection', (socket) => {
                     isInitiator: true
                 });
 
-                // Broadcast reset to all OTHER clients in the room (they should NOT respawn)
-                socket.to(roomId).emit('world:reset', {
+                // Broadcast reset to all OTHER clients in the same world (they should NOT respawn)
+                // Use the world-level room for broadcasting to all players in this world
+                socket.to(`world:${currentWorldId}`).emit('world:reset', {
                     worldSeed: currentSeed,
                     time: 0.25,
                     isInitiator: false
                 });
 
-                console.log(`[Socket] World reset complete - keeping seed: ${currentSeed}`);
+                console.log(`[Socket] World ${currentWorldId} reset complete - keeping seed: ${currentSeed}`);
             } catch (error) {
                 console.error('[Socket] Failed to reset world:', error);
                 socket.emit('world:reset:error', { message: 'Failed to reset world' });

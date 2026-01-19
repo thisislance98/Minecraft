@@ -95,6 +95,23 @@ export class UIManager {
         if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
             this.initTouchControls();
         }
+
+        // Listen for world join events to show/hide reset button based on ownership
+        window.addEventListener('worldJoined', (e) => {
+            this.onWorldJoined(e.detail);
+        });
+    }
+
+    /**
+     * Handle world join event - show/hide reset button based on ownership
+     */
+    onWorldJoined(data) {
+        const isOwner = data.permissions?.isOwner === true;
+        const resetBtn = document.getElementById('reset-world-btn');
+        if (resetBtn) {
+            resetBtn.style.display = isOwner ? 'block' : 'none';
+        }
+        console.log(`[UIManager] World joined: ${data.world?.name}, isOwner: ${isOwner}`);
     }
 
     closeAllMenus(exclude = null) {

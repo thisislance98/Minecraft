@@ -4,6 +4,7 @@ import { Peer } from 'peerjs';
 import { registerDynamicCreature, registerMultipleCreatures } from '../DynamicCreatureRegistry.js';
 import { registerDynamicItem, registerMultipleItems } from '../DynamicItemRegistry.js';
 import { ItemFactory } from '../entities/ItemFactory.js';
+import { auth } from '../../config/firebase-client.js';
 
 export class SocketManager {
     // Static shared geometry/material cache for remote player models
@@ -118,6 +119,9 @@ export class SocketManager {
                 console.log(`[SocketManager] Initial World Time: ${data.time}`);
             }
 
+            // Apply world customizations (sky color, gravity, creature filter)
+            this.applyWorldCustomizations(data.world);
+
             // Sync existing players
             if (data.playerStates) {
                 console.log('[SocketManager] Syncing existing players:', Object.keys(data.playerStates).length);
@@ -166,11 +170,17 @@ export class SocketManager {
             // Update local world data
             if (this.world && data.worldId === this.worldId) {
                 this.world.settings = { ...this.world.settings, ...data.settings };
+                if (data.customizations) {
+                    this.world.customizations = { ...this.world.customizations, ...data.customizations };
+                }
 
                 // Apply time change if included
                 if (data.settings?.timeOfDay !== undefined && this.game.environment) {
                     this.game.environment.setTimeOfDay(data.settings.timeOfDay);
                 }
+
+                // Apply customizations (sky color, gravity, creature filter)
+                this.applyWorldCustomizations(this.world);
 
                 // Dispatch event for UI updates
                 window.dispatchEvent(new CustomEvent('worldSettingsChanged', { detail: data }));
@@ -957,6 +967,42 @@ export class SocketManager {
         }
     }
 
+    /**
+     * Apply world customizations (sky color, gravity, creature filter)
+     * Called when joining a world or when settings are changed
+     * @param {Object} world - The world object with settings and customizations
+     */
+    applyWorldCustomizations(world) {
+        if (!world) return;
+
+        const customizations = world.customizations;
+        const settings = world.settings;
+
+        // Apply sky color
+        if (customizations?.skyColor && this.game.environment) {
+            this.game.environment.applySkyColor(customizations.skyColor);
+            console.log(`[SocketManager] Applied sky color: ${customizations.skyColor}`);
+        }
+
+        // Apply gravity multiplier
+        if (customizations?.gravity !== undefined) {
+            this.game.gravityMultiplier = customizations.gravity;
+            console.log(`[SocketManager] Applied gravity multiplier: ${customizations.gravity}`);
+        }
+
+        // Apply creature filter
+        if (settings?.allowedCreatures !== undefined && this.game.spawnManager) {
+            this.game.spawnManager.setAllowedCreatures(settings.allowedCreatures);
+            console.log(`[SocketManager] Applied creature filter:`, settings.allowedCreatures);
+        }
+
+        // Apply time frozen setting
+        if (settings?.timeFrozen !== undefined && this.game.environment) {
+            this.game.environment.freezeTime(settings.timeFrozen);
+            console.log(`[SocketManager] Time frozen: ${settings.timeFrozen}`);
+        }
+    }
+
     joinGame() {
         if (this.socket && this.socket.connected) {
             const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
@@ -979,11 +1025,15 @@ export class SocketManager {
             const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
             const shirtColor = localStorage.getItem('settings_shirt_color');
 
-            console.log('[SocketManager] Requesting to join world:', worldId, 'as:', playerName);
+            // Get Firebase user ID if logged in
+            const userId = auth.currentUser?.uid || null;
+
+            console.log('[SocketManager] Requesting to join world:', worldId, 'as:', playerName, 'userId:', userId);
             this.socket.emit('join_world', {
                 worldId: worldId,
                 name: playerName,
-                shirtColor: shirtColor ? parseInt(shirtColor) : null
+                shirtColor: shirtColor ? parseInt(shirtColor) : null,
+                userId: userId
             });
         }
     }

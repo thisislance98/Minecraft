@@ -362,8 +362,8 @@ export class Environment {
         // Calculate space transition factor
         // Only apply space transition on Earth - alien worlds have their own sky colors
         const playerY = playerPos.y;
-        const spaceStart = 200;
-        const spaceFull = 600;
+        const spaceStart = 500;   // Start transitioning to space at Y=500
+        const spaceFull = 800;    // Full space environment at Y=800
         let spaceFactor = 0;
 
         // Space transition only applies on Earth world
@@ -451,6 +451,15 @@ export class Environment {
 
         // Update alien world moons
         this.updateAlienMoons(playerPos);
+
+        // Update space environment features
+        this.updateDistantPlanets(playerPos, dt);
+        this.updateNebula(playerPos);
+
+        // Update asteroids for space transition (on Earth only)
+        if (this.currentWorld === 'earth') {
+            this.updateAsteroids(playerPos, spaceFactor, dt);
+        }
     }
 
     isNight() {
@@ -946,5 +955,365 @@ export class Environment {
                 cloud.position.x = playerPos.x - 500;
             }
         }
+    }
+
+    // ==========================================
+    // SPACE ENVIRONMENT FEATURES
+    // ==========================================
+
+    /**
+     * Create distant planets visible in space
+     */
+    createDistantPlanets(planetConfigs) {
+        // Remove existing planets
+        this.clearDistantPlanets();
+
+        if (!planetConfigs || planetConfigs.length === 0) return;
+
+        this.distantPlanets = [];
+
+        for (const config of planetConfigs) {
+            // Main planet sphere
+            const planetGeo = new THREE.SphereGeometry(config.size, 64, 64);
+            const planetMat = new THREE.MeshBasicMaterial({
+                color: config.color,
+                fog: false
+            });
+            const planetMesh = new THREE.Mesh(planetGeo, planetMat);
+
+            // Add atmosphere glow
+            const glowGeo = new THREE.SphereGeometry(config.size * 1.15, 32, 32);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: config.color,
+                transparent: true,
+                opacity: 0.2,
+                fog: false,
+                side: THREE.BackSide
+            });
+            const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+            planetMesh.add(glowMesh);
+
+            // Add rings to the gas giant
+            if (config.name === 'Gas Giant') {
+                const ringGeo = new THREE.RingGeometry(config.size * 1.3, config.size * 2.0, 64);
+                const ringMat = new THREE.MeshBasicMaterial({
+                    color: 0xCCBB99,
+                    transparent: true,
+                    opacity: 0.5,
+                    side: THREE.DoubleSide,
+                    fog: false
+                });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                ringMesh.rotation.x = Math.PI / 2.5; // Tilt the rings
+                planetMesh.add(ringMesh);
+            }
+
+            this.scene.add(planetMesh);
+            this.distantPlanets.push({
+                mesh: planetMesh,
+                basePosition: { ...config.position },
+                color: config.color,
+                name: config.name,
+                rotationSpeed: 0.001 + Math.random() * 0.002
+            });
+        }
+
+        console.log(`[Environment] Created ${this.distantPlanets.length} distant planets`);
+    }
+
+    clearDistantPlanets() {
+        if (!this.distantPlanets) {
+            this.distantPlanets = [];
+            return;
+        }
+
+        for (const planet of this.distantPlanets) {
+            this.scene.remove(planet.mesh);
+            planet.mesh.geometry.dispose();
+            planet.mesh.material.dispose();
+        }
+        this.distantPlanets = [];
+    }
+
+    updateDistantPlanets(playerPos, dt) {
+        if (!this.distantPlanets) return;
+
+        for (const planet of this.distantPlanets) {
+            // Position relative to player (they follow like sky objects)
+            planet.mesh.position.set(
+                playerPos.x + planet.basePosition.x,
+                playerPos.y + planet.basePosition.y,
+                playerPos.z + planet.basePosition.z
+            );
+
+            // Slow rotation for visual interest
+            planet.mesh.rotation.y += planet.rotationSpeed * dt;
+        }
+    }
+
+    /**
+     * Create nebula particle effect for space
+     */
+    createNebula() {
+        if (this.nebula) return; // Already exists
+
+        const nebulaCount = 500;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(nebulaCount * 3);
+        const colors = new Float32Array(nebulaCount * 3);
+        const sizes = new Float32Array(nebulaCount);
+
+        // Color palette for nebula (purples, blues, pinks)
+        const nebulaColors = [
+            new THREE.Color(0x6633AA),  // Purple
+            new THREE.Color(0x3366CC),  // Blue
+            new THREE.Color(0xAA3366),  // Pink
+            new THREE.Color(0x2244AA),  // Deep blue
+            new THREE.Color(0x884488),  // Magenta
+        ];
+
+        for (let i = 0; i < nebulaCount; i++) {
+            // Position in a large cloud around origin
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const radius = 1500 + Math.random() * 400;
+
+            positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+            positions[i * 3 + 2] = radius * Math.cos(phi);
+
+            // Random color from palette
+            const color = nebulaColors[Math.floor(Math.random() * nebulaColors.length)];
+            colors[i * 3] = color.r;
+            colors[i * 3 + 1] = color.g;
+            colors[i * 3 + 2] = color.b;
+
+            // Random size
+            sizes[i] = 20 + Math.random() * 40;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        const material = new THREE.PointsMaterial({
+            size: 30,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.15,
+            sizeAttenuation: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        this.nebula = new THREE.Points(geometry, material);
+        this.scene.add(this.nebula);
+
+        console.log('[Environment] Created nebula effect');
+    }
+
+    clearNebula() {
+        if (!this.nebula) return;
+
+        this.scene.remove(this.nebula);
+        this.nebula.geometry.dispose();
+        this.nebula.material.dispose();
+        this.nebula = null;
+    }
+
+    updateNebula(playerPos) {
+        if (!this.nebula) return;
+
+        // Follow player position
+        this.nebula.position.copy(playerPos);
+
+        // Slow rotation for visual effect
+        this.nebula.rotation.y += 0.0001;
+        this.nebula.rotation.x += 0.00005;
+    }
+
+    // ==========================================
+    // ASTEROID SYSTEM (for space transition)
+    // ==========================================
+
+    /**
+     * Create asteroids that appear during space transition
+     */
+    createAsteroids() {
+        if (this.asteroidGroup) return; // Already exists
+
+        this.asteroidGroup = new THREE.Group();
+        this.asteroids = [];
+
+        const asteroidCount = 50;
+
+        // Asteroid colors (greys and browns)
+        const asteroidColors = [
+            0x4a4a4a,  // Dark grey
+            0x6b6b6b,  // Medium grey
+            0x5a4a3a,  // Brown-grey
+            0x3a3a3a,  // Darker grey
+            0x7a6a5a,  // Light brown
+        ];
+
+        for (let i = 0; i < asteroidCount; i++) {
+            // Create irregular asteroid shape using icosahedron with noise
+            const baseSize = 3 + Math.random() * 15;
+            const geometry = new THREE.IcosahedronGeometry(baseSize, 1);
+
+            // Deform vertices for irregular shape
+            const positionAttr = geometry.attributes.position;
+            for (let v = 0; v < positionAttr.count; v++) {
+                const x = positionAttr.getX(v);
+                const y = positionAttr.getY(v);
+                const z = positionAttr.getZ(v);
+                const noise = 0.7 + Math.random() * 0.6; // 0.7-1.3 scale
+                positionAttr.setXYZ(v, x * noise, y * noise, z * noise);
+            }
+            geometry.computeVertexNormals();
+
+            const color = asteroidColors[Math.floor(Math.random() * asteroidColors.length)];
+            const material = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.9,
+                metalness: 0.1,
+                flatShading: true
+            });
+
+            const asteroid = new THREE.Mesh(geometry, material);
+
+            // Random position in a ring/sphere around origin (will be offset by player pos)
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const radius = 200 + Math.random() * 600; // Distance from player
+
+            asteroid.position.set(
+                radius * Math.sin(phi) * Math.cos(theta),
+                radius * Math.sin(phi) * Math.sin(theta) - 100, // Slightly below player level
+                radius * Math.cos(phi)
+            );
+
+            // Random rotation
+            asteroid.rotation.set(
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2,
+                Math.random() * Math.PI * 2
+            );
+
+            // Store rotation speed for animation
+            asteroid.userData.rotationSpeed = {
+                x: (Math.random() - 0.5) * 0.02,
+                y: (Math.random() - 0.5) * 0.02,
+                z: (Math.random() - 0.5) * 0.01
+            };
+
+            // Store base position for following player
+            asteroid.userData.basePosition = asteroid.position.clone();
+
+            // Optional: drift velocity for moving asteroids
+            asteroid.userData.drift = new THREE.Vector3(
+                (Math.random() - 0.5) * 2,
+                (Math.random() - 0.5) * 0.5,
+                (Math.random() - 0.5) * 2
+            );
+
+            this.asteroidGroup.add(asteroid);
+            this.asteroids.push(asteroid);
+        }
+
+        this.asteroidGroup.visible = false; // Start hidden
+        this.scene.add(this.asteroidGroup);
+
+        console.log(`[Environment] Created ${asteroidCount} asteroids for space transition`);
+    }
+
+    clearAsteroids() {
+        if (!this.asteroidGroup) return;
+
+        for (const asteroid of this.asteroids) {
+            asteroid.geometry.dispose();
+            asteroid.material.dispose();
+        }
+        this.scene.remove(this.asteroidGroup);
+        this.asteroidGroup = null;
+        this.asteroids = [];
+    }
+
+    updateAsteroids(playerPos, spaceFactor, dt) {
+        if (!this.asteroidGroup) {
+            // Create asteroids on first call
+            this.createAsteroids();
+        }
+
+        if (!this.asteroidGroup) return;
+
+        // Show asteroids based on space transition
+        const shouldBeVisible = spaceFactor > 0.1;
+        this.asteroidGroup.visible = shouldBeVisible;
+
+        // Store for debugging
+        this.lastSpaceFactor = spaceFactor;
+
+        if (!this.asteroidGroup.visible) return;
+
+        // Update each asteroid
+        for (const asteroid of this.asteroids) {
+            // Position relative to player
+            const base = asteroid.userData.basePosition;
+            asteroid.position.set(
+                playerPos.x + base.x,
+                playerPos.y + base.y,
+                playerPos.z + base.z
+            );
+
+            // Add drift motion
+            const drift = asteroid.userData.drift;
+            base.x += drift.x * dt;
+            base.y += drift.y * dt;
+            base.z += drift.z * dt;
+
+            // Wrap around if too far
+            const maxDist = 800;
+            if (Math.abs(base.x) > maxDist) base.x *= -0.9;
+            if (Math.abs(base.y) > maxDist) base.y *= -0.9;
+            if (Math.abs(base.z) > maxDist) base.z *= -0.9;
+
+            // Tumbling rotation
+            const rot = asteroid.userData.rotationSpeed;
+            asteroid.rotation.x += rot.x;
+            asteroid.rotation.y += rot.y;
+            asteroid.rotation.z += rot.z;
+        }
+
+        // Fade in opacity based on space factor
+        for (const asteroid of this.asteroids) {
+            asteroid.material.opacity = spaceFactor;
+            asteroid.material.transparent = spaceFactor < 1;
+        }
+    }
+
+    /**
+     * Get the gravity multiplier based on player Y position
+     * Used for space physics (zero gravity in deep space)
+     */
+    getGravityMultiplier(playerY) {
+        const transitionStart = 1200; // Start reducing gravity
+        const transitionEnd = 1280;   // Full zero-g
+
+        if (playerY < transitionStart) {
+            return 1.0; // Normal gravity
+        } else if (playerY > transitionEnd) {
+            return 0.0; // Zero gravity in deep space
+        } else {
+            // Smooth transition
+            const t = (playerY - transitionStart) / (transitionEnd - transitionStart);
+            return 1.0 - t;
+        }
+    }
+
+    /**
+     * Check if player is in space zone
+     */
+    isInSpace() {
+        return this.currentWorld === 'space';
     }
 }

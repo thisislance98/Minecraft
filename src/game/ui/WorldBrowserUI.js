@@ -108,7 +108,93 @@ export class WorldBrowserUI {
                                 <label for="world-seed">Seed (optional)</label>
                                 <input type="number" id="world-seed" placeholder="Random if empty">
                             </div>
-                            <button type="submit" class="create-world-submit">Create World</button>
+
+                            <div class="create-settings-divider">
+                                <span>⚙️ World Settings</span>
+                            </div>
+
+                            <div class="create-settings-section">
+                                <h4>🎨 Sky Appearance</h4>
+                                <div class="form-row">
+                                    <label>Sky Color:</label>
+                                    <input type="color" id="create-sky-color" value="#87CEEB">
+                                </div>
+                                <div class="sky-presets">
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#87CEEB" title="Earth Blue">🌍</button>
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#FF6B35" title="Sunset Orange">🌅</button>
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#050510" title="Space Black">🌌</button>
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#1E90FF" title="Bright Blue">☀️</button>
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#2D1B4E" title="Purple Night">🔮</button>
+                                    <button type="button" class="preset-btn create-sky-preset" data-color="#FFB6C1" title="Pink Sky">🌸</button>
+                                </div>
+                            </div>
+
+                            <div class="create-settings-section">
+                                <h4>⚖️ Physics</h4>
+                                <div class="form-row">
+                                    <label>Gravity:</label>
+                                    <input type="range" id="create-gravity" min="0.1" max="3.0" step="0.1" value="1.0">
+                                    <span id="create-gravity-display">Normal (1.0x)</span>
+                                </div>
+                                <div class="gravity-presets">
+                                    <button type="button" class="preset-btn create-gravity-preset" data-value="0.3" title="Moon Gravity">🌙 Moon</button>
+                                    <button type="button" class="preset-btn create-gravity-preset" data-value="1.0" title="Normal Gravity">🌍 Normal</button>
+                                    <button type="button" class="preset-btn create-gravity-preset" data-value="2.0" title="Heavy Gravity">🪨 Heavy</button>
+                                </div>
+                            </div>
+
+                            <div class="create-settings-section">
+                                <h4>🏞️ Landscape</h4>
+                                <div class="form-row checkbox-row">
+                                    <label><input type="checkbox" id="create-enable-ocean" checked> Enable Ocean</label>
+                                </div>
+                                <div class="form-row checkbox-row">
+                                    <label><input type="checkbox" id="create-enable-rivers" checked> Enable Rivers</label>
+                                </div>
+                                <div class="form-row checkbox-row">
+                                    <label><input type="checkbox" id="create-enable-villages" checked> Generate Villages</label>
+                                </div>
+                                <div class="form-row">
+                                    <label>Sea Level:</label>
+                                    <input type="range" id="create-sea-level" min="10" max="60" value="30">
+                                    <span id="create-sea-level-display">30</span>
+                                </div>
+                                <div class="form-row">
+                                    <label>Terrain Height:</label>
+                                    <input type="range" id="create-terrain-scale" min="0.5" max="2.0" step="0.1" value="1.0">
+                                    <span id="create-terrain-scale-display">Normal (1.0x)</span>
+                                </div>
+                            </div>
+
+                            <div class="create-settings-section">
+                                <h4>🌍 Terrain Biomes</h4>
+                                <p class="section-desc">Select which biomes can generate</p>
+                                <div class="biome-grid" id="create-biome-grid">
+                                    <div class="biome-item selected" data-biome="PLAINS"><input type="checkbox" checked><span>🌾 Plains</span></div>
+                                    <div class="biome-item selected" data-biome="FOREST"><input type="checkbox" checked><span>🌲 Forest</span></div>
+                                    <div class="biome-item selected" data-biome="DESERT"><input type="checkbox" checked><span>🏜️ Desert</span></div>
+                                    <div class="biome-item selected" data-biome="SNOW"><input type="checkbox" checked><span>❄️ Snow</span></div>
+                                    <div class="biome-item selected" data-biome="JUNGLE"><input type="checkbox" checked><span>🌴 Jungle</span></div>
+                                    <div class="biome-item selected" data-biome="MOUNTAIN"><input type="checkbox" checked><span>⛰️ Mountain</span></div>
+                                    <div class="biome-item selected" data-biome="BEACH"><input type="checkbox" checked><span>🏖️ Beach</span></div>
+                                    <div class="biome-item selected" data-biome="OCEAN"><input type="checkbox" checked><span>🌊 Ocean</span></div>
+                                </div>
+                            </div>
+
+                            <div class="create-settings-section">
+                                <h4>🦁 Allowed Creatures</h4>
+                                <p class="section-desc">Select which creatures can spawn</p>
+                                <div class="creature-controls">
+                                    <button type="button" id="create-creatures-all">Select All</button>
+                                    <button type="button" id="create-creatures-none">Clear All</button>
+                                    <input type="text" id="create-creature-search" placeholder="Search...">
+                                </div>
+                                <div class="creature-grid" id="create-creature-grid">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <button type="submit" class="create-world-submit">✨ Create World</button>
                         </form>
                     </div>
 
@@ -226,6 +312,19 @@ export class WorldBrowserUI {
                             </div>
 
                             <div class="settings-section">
+                                <h4>🦁 Allowed Creatures</h4>
+                                <p class="section-desc">Select which creatures can spawn in this world</p>
+                                <div class="creature-controls">
+                                    <button type="button" id="wb-creatures-all">Select All</button>
+                                    <button type="button" id="wb-creatures-none">Clear All</button>
+                                    <input type="text" id="wb-creature-search" placeholder="Search...">
+                                </div>
+                                <div class="creature-grid" id="wb-creature-grid">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="settings-section">
                                 <h4>🔗 Share Link</h4>
                                 <div class="share-link-row">
                                     <input type="text" id="wb-share-link" readonly>
@@ -264,6 +363,9 @@ export class WorldBrowserUI {
                 this.switchTab(tabName);
             });
         });
+
+        // ========== Create Form Event Listeners ==========
+        this.setupCreateFormListeners();
 
         // Create world form
         document.getElementById('create-world-form').addEventListener('submit', async (e) => {
@@ -327,6 +429,8 @@ export class WorldBrowserUI {
             this.loadMyWorlds();
         } else if (tabName === 'settings') {
             this.loadSettingsTab();
+        } else if (tabName === 'create') {
+            this.populateCreateCreatureGrid();
         }
     }
 
@@ -499,6 +603,25 @@ export class WorldBrowserUI {
             return;
         }
 
+        // Get customization settings
+        const skyColor = document.getElementById('create-sky-color').value;
+        const gravity = parseFloat(document.getElementById('create-gravity').value);
+
+        // Get landscape settings
+        const landscapeSettings = {
+            enableOcean: document.getElementById('create-enable-ocean').checked,
+            enableRivers: document.getElementById('create-enable-rivers').checked,
+            enableVillages: document.getElementById('create-enable-villages').checked,
+            seaLevel: parseInt(document.getElementById('create-sea-level').value),
+            terrainScale: parseFloat(document.getElementById('create-terrain-scale').value)
+        };
+
+        // Get enabled biomes
+        const enabledBiomes = this.getSelectedBiomes();
+
+        // Get allowed creatures
+        const allowedCreatures = this.getSelectedCreateCreatures();
+
         const submitBtn = document.querySelector('.create-world-submit');
         submitBtn.disabled = true;
         submitBtn.textContent = 'Creating...';
@@ -517,7 +640,16 @@ export class WorldBrowserUI {
                     name,
                     description,
                     visibility,
-                    seed
+                    seed,
+                    settings: {
+                        allowedCreatures,
+                        enabledBiomes
+                    },
+                    customizations: {
+                        skyColor,
+                        gravity,
+                        landscapeSettings
+                    }
                 })
             });
 
@@ -531,6 +663,8 @@ export class WorldBrowserUI {
 
             // Clear form
             document.getElementById('create-world-form').reset();
+            // Reset create form to defaults
+            this.resetCreateFormDefaults();
 
             // Show success and switch to my worlds
             alert(`World "${data.world.name}" created successfully!`);
@@ -546,7 +680,7 @@ export class WorldBrowserUI {
             alert(`Failed to create world: ${error.message}`);
         } finally {
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Create World';
+            submitBtn.textContent = '✨ Create World';
         }
     }
 
@@ -632,6 +766,269 @@ export class WorldBrowserUI {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // ========== Create Form Methods ==========
+
+    setupCreateFormListeners() {
+        // Gravity slider
+        const gravitySlider = document.getElementById('create-gravity');
+        if (gravitySlider) {
+            gravitySlider.addEventListener('input', (e) => {
+                this.updateCreateGravityDisplay(parseFloat(e.target.value));
+            });
+        }
+
+        // Gravity presets
+        document.querySelectorAll('.create-gravity-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const value = parseFloat(e.target.dataset.value);
+                const slider = document.getElementById('create-gravity');
+                if (slider) {
+                    slider.value = value;
+                    this.updateCreateGravityDisplay(value);
+                }
+            });
+        });
+
+        // Sky color presets
+        document.querySelectorAll('.create-sky-preset').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const color = e.target.dataset.color;
+                const picker = document.getElementById('create-sky-color');
+                if (picker) {
+                    picker.value = color;
+                }
+            });
+        });
+
+        // Sea level slider
+        const seaLevelSlider = document.getElementById('create-sea-level');
+        if (seaLevelSlider) {
+            seaLevelSlider.addEventListener('input', (e) => {
+                document.getElementById('create-sea-level-display').textContent = e.target.value;
+            });
+        }
+
+        // Terrain scale slider
+        const terrainScaleSlider = document.getElementById('create-terrain-scale');
+        if (terrainScaleSlider) {
+            terrainScaleSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                this.updateCreateTerrainScaleDisplay(value);
+            });
+        }
+
+        // Biome item clicks
+        document.querySelectorAll('#create-biome-grid .biome-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const checkbox = item.querySelector('input');
+                checkbox.checked = !checkbox.checked;
+                item.classList.toggle('selected', checkbox.checked);
+            });
+        });
+
+        // Creature selection controls
+        const creaturesAllBtn = document.getElementById('create-creatures-all');
+        if (creaturesAllBtn) {
+            creaturesAllBtn.addEventListener('click', () => {
+                this.selectAllCreateCreatures(true);
+            });
+        }
+
+        const creaturesNoneBtn = document.getElementById('create-creatures-none');
+        if (creaturesNoneBtn) {
+            creaturesNoneBtn.addEventListener('click', () => {
+                this.selectAllCreateCreatures(false);
+            });
+        }
+
+        const creatureSearch = document.getElementById('create-creature-search');
+        if (creatureSearch) {
+            creatureSearch.addEventListener('input', (e) => {
+                this.filterCreateCreatures(e.target.value);
+            });
+        }
+    }
+
+    updateCreateGravityDisplay(value) {
+        const display = document.getElementById('create-gravity-display');
+        if (!display) return;
+
+        let label = 'Normal';
+        if (value < 0.5) label = 'Very Low';
+        else if (value < 0.8) label = 'Low';
+        else if (value < 1.2) label = 'Normal';
+        else if (value < 1.8) label = 'High';
+        else label = 'Very High';
+        display.textContent = `${label} (${value.toFixed(1)}x)`;
+    }
+
+    updateCreateTerrainScaleDisplay(value) {
+        const display = document.getElementById('create-terrain-scale-display');
+        if (!display) return;
+
+        let label = 'Normal';
+        if (value < 0.7) label = 'Flat';
+        else if (value < 1.3) label = 'Normal';
+        else label = 'Mountainous';
+        display.textContent = `${label} (${value.toFixed(1)}x)`;
+    }
+
+    populateCreateCreatureGrid() {
+        const grid = document.getElementById('create-creature-grid');
+        if (!grid) return;
+
+        // Only populate once
+        if (grid.children.length > 0) return;
+
+        // Get creature list from game's AnimalClasses or use a predefined list
+        const creatureNames = this.game.AnimalClasses ?
+            Object.keys(this.game.AnimalClasses).sort() :
+            // Fallback list of common creatures
+            ['Bear', 'Bunny', 'Cat', 'Chicken', 'Cow', 'Deer', 'Dog', 'Duck', 'Eagle',
+             'Elephant', 'Fish', 'Fox', 'Frog', 'Giraffe', 'Goat', 'Horse', 'Kangaroo',
+             'Lion', 'Monkey', 'Owl', 'Penguin', 'Pig', 'Sheep', 'Snake', 'Tiger',
+             'Turtle', 'Wolf', 'Zebra'].sort();
+
+        for (const name of creatureNames) {
+            // Skip non-creature types
+            if (['Animal', 'Vehicle', 'Agent'].includes(name)) continue;
+
+            const item = document.createElement('div');
+            item.className = 'creature-item selected';
+            item.dataset.creature = name;
+
+            item.innerHTML = `
+                <input type="checkbox" checked>
+                <span>${name}</span>
+            `;
+
+            item.addEventListener('click', () => {
+                const checkbox = item.querySelector('input');
+                checkbox.checked = !checkbox.checked;
+                item.classList.toggle('selected', checkbox.checked);
+            });
+
+            grid.appendChild(item);
+        }
+    }
+
+    selectAllCreateCreatures(select) {
+        const grid = document.getElementById('create-creature-grid');
+        if (!grid) return;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            checkbox.checked = select;
+            item.classList.toggle('selected', select);
+        });
+    }
+
+    filterCreateCreatures(searchText) {
+        const grid = document.getElementById('create-creature-grid');
+        if (!grid) return;
+
+        const search = searchText.toLowerCase();
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const name = item.dataset.creature.toLowerCase();
+            item.style.display = name.includes(search) ? '' : 'none';
+        });
+    }
+
+    getSelectedCreateCreatures() {
+        const grid = document.getElementById('create-creature-grid');
+        if (!grid) return null;
+
+        const selected = [];
+        let allSelected = true;
+        let noneSelected = true;
+
+        grid.querySelectorAll('.creature-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            if (checkbox.checked) {
+                selected.push(item.dataset.creature);
+                noneSelected = false;
+            } else {
+                allSelected = false;
+            }
+        });
+
+        // If all selected, return null (meaning "allow all")
+        if (allSelected) return null;
+        // If none selected, return empty array
+        if (noneSelected) return [];
+        // Otherwise return the specific list
+        return selected;
+    }
+
+    getSelectedBiomes() {
+        const grid = document.getElementById('create-biome-grid');
+        if (!grid) return null;
+
+        const selected = [];
+        let allSelected = true;
+
+        grid.querySelectorAll('.biome-item').forEach(item => {
+            const checkbox = item.querySelector('input');
+            if (checkbox.checked) {
+                selected.push(item.dataset.biome);
+            } else {
+                allSelected = false;
+            }
+        });
+
+        // If all selected, return null (meaning "all biomes")
+        if (allSelected) return null;
+        return selected;
+    }
+
+    resetCreateFormDefaults() {
+        // Reset sky color
+        const skyColor = document.getElementById('create-sky-color');
+        if (skyColor) skyColor.value = '#87CEEB';
+
+        // Reset gravity
+        const gravity = document.getElementById('create-gravity');
+        if (gravity) {
+            gravity.value = 1.0;
+            this.updateCreateGravityDisplay(1.0);
+        }
+
+        // Reset landscape settings
+        const oceanCheck = document.getElementById('create-enable-ocean');
+        if (oceanCheck) oceanCheck.checked = true;
+
+        const riversCheck = document.getElementById('create-enable-rivers');
+        if (riversCheck) riversCheck.checked = true;
+
+        const villagesCheck = document.getElementById('create-enable-villages');
+        if (villagesCheck) villagesCheck.checked = true;
+
+        const seaLevel = document.getElementById('create-sea-level');
+        if (seaLevel) {
+            seaLevel.value = 30;
+            document.getElementById('create-sea-level-display').textContent = '30';
+        }
+
+        const terrainScale = document.getElementById('create-terrain-scale');
+        if (terrainScale) {
+            terrainScale.value = 1.0;
+            this.updateCreateTerrainScaleDisplay(1.0);
+        }
+
+        // Reset biomes
+        const biomeGrid = document.getElementById('create-biome-grid');
+        if (biomeGrid) {
+            biomeGrid.querySelectorAll('.biome-item').forEach(item => {
+                const checkbox = item.querySelector('input');
+                checkbox.checked = true;
+                item.classList.add('selected');
+            });
+        }
+
+        // Reset creatures - select all
+        this.selectAllCreateCreatures(true);
     }
 
     // ========== Settings Tab Methods ==========
@@ -758,6 +1155,28 @@ export class WorldBrowserUI {
                 this.editWorldName();
             });
         }
+
+        // Creature selection controls
+        const creaturesAllBtn = document.getElementById('wb-creatures-all');
+        if (creaturesAllBtn) {
+            creaturesAllBtn.addEventListener('click', () => {
+                this.selectAllSettingsCreatures(true);
+            });
+        }
+
+        const creaturesNoneBtn = document.getElementById('wb-creatures-none');
+        if (creaturesNoneBtn) {
+            creaturesNoneBtn.addEventListener('click', () => {
+                this.selectAllSettingsCreatures(false);
+            });
+        }
+
+        const creatureSearch = document.getElementById('wb-creature-search');
+        if (creatureSearch) {
+            creatureSearch.addEventListener('input', (e) => {
+                this.filterSettingsCreatures(e.target.value);
+            });
+        }
     }
 
     populateSettings() {
@@ -816,6 +1235,9 @@ export class WorldBrowserUI {
         // Share link
         const shareLinkEl = document.getElementById('wb-share-link');
         if (shareLinkEl) shareLinkEl.value = `${window.location.origin}/world/${this.currentWorld.id}`;
+
+        // Populate creature grid
+        this.populateSettingsCreatureGrid();
     }
 
     updateTimeDisplay(value) {
@@ -1587,6 +2009,241 @@ export class WorldBrowserUI {
                 font-size: 14px;
                 color: #aaa;
                 margin-top: 5px;
+            }
+
+            /* ========== Create Form Settings Styles ========== */
+
+            .create-settings-divider {
+                text-align: center;
+                margin: 25px 0 20px;
+                position: relative;
+            }
+
+            .create-settings-divider::before {
+                content: '';
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 50%;
+                height: 1px;
+                background: #444;
+            }
+
+            .create-settings-divider span {
+                background: #222;
+                padding: 0 15px;
+                position: relative;
+                color: #4CAF50;
+                font-size: 16px;
+            }
+
+            .create-settings-section {
+                margin-bottom: 20px;
+                padding: 15px;
+                background: #1a1a1a;
+                border: 1px solid #333;
+                border-radius: 6px;
+            }
+
+            .create-settings-section h4 {
+                margin: 0 0 12px;
+                font-size: 15px;
+                color: #4CAF50;
+            }
+
+            .form-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+
+            .form-row label {
+                color: #ccc;
+                font-size: 14px;
+                min-width: 100px;
+            }
+
+            .form-row input[type="range"] {
+                flex: 1;
+            }
+
+            .form-row span {
+                min-width: 80px;
+                text-align: right;
+                color: #888;
+                font-size: 12px;
+            }
+
+            .checkbox-row {
+                margin-bottom: 8px;
+            }
+
+            .checkbox-row label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                color: #ccc;
+                font-size: 14px;
+            }
+
+            .checkbox-row input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                cursor: pointer;
+            }
+
+            /* Create form sky color */
+            #create-sky-color {
+                width: 50px;
+                height: 30px;
+                padding: 0;
+                border: 2px solid #444;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+
+            /* Biome Grid */
+            .biome-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+                gap: 6px;
+                padding: 8px;
+                background: #1a1a1a;
+                border: 1px solid #333;
+                border-radius: 4px;
+            }
+
+            .biome-item {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 8px;
+                background: #222;
+                border-radius: 4px;
+                font-size: 13px;
+                cursor: pointer;
+                border: 1px solid transparent;
+                color: #ccc;
+            }
+
+            .biome-item:hover {
+                background: #2a2a2a;
+            }
+
+            .biome-item.selected {
+                border-color: #4CAF50;
+                background: #1a2a1a;
+            }
+
+            .biome-item input[type="checkbox"] {
+                margin: 0;
+                pointer-events: none;
+            }
+
+            /* Creature Grid for Create Form */
+            #create-creature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                gap: 6px;
+                max-height: 180px;
+                overflow-y: auto;
+                padding: 8px;
+                background: #1a1a1a;
+                border: 1px solid #333;
+                border-radius: 4px;
+            }
+
+            #create-creature-grid .creature-item {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 5px 8px;
+                background: #222;
+                border-radius: 4px;
+                font-size: 11px;
+                cursor: pointer;
+                border: 1px solid transparent;
+                color: #ccc;
+            }
+
+            #create-creature-grid .creature-item:hover {
+                background: #2a2a2a;
+            }
+
+            #create-creature-grid .creature-item.selected {
+                border-color: #4CAF50;
+                background: #1a2a1a;
+            }
+
+            #create-creature-grid .creature-item input[type="checkbox"] {
+                margin: 0;
+                pointer-events: none;
+                width: 12px;
+                height: 12px;
+            }
+
+            /* Creature controls for create form */
+            .creature-controls {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+
+            .creature-controls button {
+                padding: 6px 12px;
+                background: #333;
+                border: 1px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                cursor: pointer;
+                font-size: 12px;
+                font-family: inherit;
+            }
+
+            .creature-controls button:hover {
+                border-color: #4CAF50;
+            }
+
+            .creature-controls input {
+                flex: 1;
+                padding: 6px 10px;
+                background: #222;
+                border: 1px solid #444;
+                border-radius: 4px;
+                color: #fff;
+                font-family: inherit;
+                font-size: 12px;
+            }
+
+            .section-desc {
+                font-size: 12px;
+                color: #888;
+                margin: 0 0 10px;
+            }
+
+            /* Create form scroll styling */
+            #world-tab-create {
+                max-height: calc(80vh - 150px);
+                overflow-y: auto;
+            }
+
+            #world-tab-create::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            #world-tab-create::-webkit-scrollbar-track {
+                background: #1a1a1a;
+            }
+
+            #world-tab-create::-webkit-scrollbar-thumb {
+                background: #444;
+                border-radius: 4px;
+            }
+
+            #world-tab-create::-webkit-scrollbar-thumb:hover {
+                background: #555;
             }
         `;
         document.head.appendChild(style);

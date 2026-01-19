@@ -144,4 +144,14 @@ export const Blocks = {
     SOCCER_WALL: 'soccer_wall',             // Arena wall (transparent-ish)
     SOCCER_GOAL_FRAME: 'soccer_goal_frame', // Goal post frame
     SOCCER_GOAL_NET: 'soccer_goal_net',     // Goal net (transparent mesh)
+
+    // Space Zone Blocks (asteroids and space structures)
+    ASTEROID_ROCK: 'asteroid_rock',         // Common gray asteroid rock
+    ASTEROID_IRON: 'asteroid_iron',         // Iron-rich asteroid (orange/brown)
+    ASTEROID_GOLD: 'asteroid_gold',         // Gold-rich asteroid (yellow sparkle)
+    ASTEROID_CRYSTAL: 'asteroid_crystal',   // Crystal asteroid (blue glow)
+    ASTEROID_ICE: 'asteroid_ice',           // Ice asteroid (white/blue)
+    SPACE_PLATFORM: 'space_platform',       // Buildable platform in space
+    WARP_GATE_FRAME: 'warp_gate_frame',     // Warp gate structure
+    WARP_GATE_CORE: 'warp_gate_core',       // Active warp gate portal
 };

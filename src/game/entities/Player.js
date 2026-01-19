@@ -369,14 +369,59 @@ export class Player {
         // Move player to entity position
         this.position.copy(entity.position);
         this.velocity.set(0, 0, 0);
+
+        // Switch to far follow camera for vehicles/aircraft
+        if (entity.constructor.name === 'Spaceship' || entity.constructor.name === 'MillenniumFalcon' || entity.preferFarCamera) {
+            // Save current camera state before changing it
+            this._preMountCameraMode = this.cameraMode;
+            this._preMountCameraDistance = this.thirdPersonCamera.distance;
+            this._preMountCameraHeight = this.thirdPersonCamera.heightOffset;
+
+            this.cameraMode = 1; // Third person
+            // Use entity's preferred camera settings if available
+            const camDistance = entity.cameraDistance || 15;
+            const camHeight = entity.cameraHeightOffset || 6;
+            this.thirdPersonCamera.setDistance(camDistance);
+            this.thirdPersonCamera.setHeightOffset(camHeight);
+            this.thirdPersonCamera.reset(this);
+            // Show body in 3rd person
+            this.game.scene.add(this.body);
+            this.body.visible = true;
+            if (this.head) this.head.visible = true;
+            if (this.torso) this.torso.visible = true;
+        }
     }
 
     dismount() {
         if (this.mount) {
+            const wasVehicleWithCamera = this.mount.constructor.name === 'Spaceship' ||
+                               this.mount.constructor.name === 'MillenniumFalcon' ||
+                               this.mount.preferFarCamera;
             this.mount.rider = null;
             this.mount = null;
             // Pop player up slightly
             this.velocity.y = 5;
+
+            // Restore camera settings to what they were before mounting
+            if (wasVehicleWithCamera) {
+                // Restore previous camera mode
+                if (this._preMountCameraMode !== undefined) {
+                    this.cameraMode = this._preMountCameraMode;
+                }
+                // Restore previous camera distance and height
+                if (this._preMountCameraDistance !== undefined) {
+                    this.thirdPersonCamera.setDistance(this._preMountCameraDistance);
+                }
+                if (this._preMountCameraHeight !== undefined) {
+                    this.thirdPersonCamera.setHeightOffset(this._preMountCameraHeight);
+                }
+                this.thirdPersonCamera.reset(this);
+
+                // Clear saved values
+                this._preMountCameraMode = undefined;
+                this._preMountCameraDistance = undefined;
+                this._preMountCameraHeight = undefined;
+            }
         }
     }
 
@@ -1178,9 +1223,16 @@ export class Player {
                     this.takeDamage(10, 'Void'); // Take damage every frame until death
                 }
 
+                // Get gravity multiplier (combines environment-based and world settings)
+                const envGravityMultiplier = this.game.environment ?
+                    this.game.environment.getGravityMultiplier(this.position.y) : 1.0;
+                const worldGravityMultiplier = this.game.gravityMultiplier ?? 1.0;
+                const gravityMultiplier = envGravityMultiplier * worldGravityMultiplier;
+                const inSpace = gravityMultiplier < 0.1;
+
                 // Apply gravity
                 if (inWater) {
-                    const gravityAccel = this.game.gravity * 0.2 * REF_FPS * REF_FPS;
+                    const gravityAccel = this.game.gravity * 0.2 * REF_FPS * REF_FPS * gravityMultiplier;
                     this.velocity.y -= gravityAccel * deltaTime; // Reduced gravity
 
                     if (input.isActionActive('JUMP')) {
@@ -1189,13 +1241,38 @@ export class Player {
 
                     // Drag: 0.5 per frame decay means speed halving every frame.
                     // (0.5)^FPS per second.
-                    // frameFactor = 0.5. dt=1/60. 
+                    // frameFactor = 0.5. dt=1/60.
                     // To do time based: factor = Math.pow(0.5, deltaTime * 60)
                     const drag = Math.pow(0.5, deltaTime * REF_FPS);
                     this.velocity.x *= drag;
                     this.velocity.z *= drag;
+                } else if (inSpace) {
+                    // Space physics - zero gravity, inertia-based movement
+                    // Very light drag to prevent infinite drift
+                    const spaceDrag = 0.995;
+                    this.velocity.x *= spaceDrag;
+                    this.velocity.y *= spaceDrag;
+                    this.velocity.z *= spaceDrag;
+
+                    // Space thrust controls (similar to flying but momentum-based)
+                    const thrustPower = 0.15 * REF_FPS;
+                    if (allowInput) {
+                        if (input.isActionActive('JUMP')) {
+                            this.velocity.y += thrustPower * deltaTime; // Thrust up
+                        }
+                        if (input.isActionActive('SNEAK')) {
+                            this.velocity.y -= thrustPower * deltaTime; // Thrust down
+                        }
+                    }
+
+                    // Show space mode indicator (only once when entering)
+                    if (!this.wasInSpace) {
+                        this.game.addMessage && this.game.addMessage("Entering zero gravity zone!");
+                        this.wasInSpace = true;
+                    }
                 } else {
-                    const gravityAccel = this.game.gravity * REF_FPS * REF_FPS;
+                    // Normal gravity with multiplier (for transition zone)
+                    const gravityAccel = this.game.gravity * REF_FPS * REF_FPS * gravityMultiplier;
                     this.velocity.y -= gravityAccel * deltaTime;
 
                     // Apply friction to horizontal momentum (knockback)
@@ -1212,6 +1289,12 @@ export class Player {
                         this.velocity.y = this.jumpForce * REF_FPS;
                         this.onGround = false;
                         this.game.soundManager.playSound('jump');
+                    }
+
+                    // Reset space flag when leaving space
+                    if (this.wasInSpace && gravityMultiplier > 0.5) {
+                        this.wasInSpace = false;
+                        this.game.addMessage && this.game.addMessage("Re-entering gravity zone");
                     }
                 }
 
@@ -1454,21 +1537,6 @@ export class Player {
 
 
 
-    dismount() {
-        if (!this.mount) return;
-
-        const entity = this.mount;
-        this.mount = null;
-        entity.rider = null;
-
-        // Drop player slightly to the side
-        // But safe check?
-        this.position.x += 1.0;
-        this.position.y = Math.floor(this.position.y); // Floor it? Or keeps falling?
-        this.velocity.y = 0;
-
-        console.log("Dismounted.");
-    }
 
     toggleFlying() {
         this.isFlying = !this.isFlying;

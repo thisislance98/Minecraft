@@ -27,7 +27,16 @@ export const Config = {
 
         // Soccer World (Rocket League style arena)
         SOCCER_WORLD_Y_START: 70,   // Y chunks 70-78
-        SOCCER_WORLD_HEIGHT: 8
+        SOCCER_WORLD_HEIGHT: 8,
+
+        // Space Zone (explorable space between planets)
+        SPACE_ZONE_Y_START: 80,     // Y chunks 80+ (Y=1280+)
+        SPACE_ZONE_HEIGHT: 20,      // 20 chunks of space (320 blocks)
+
+        // Space Physics
+        SPACE_GRAVITY_MULTIPLIER: 0.0,  // Zero gravity in deep space
+        SPACE_TRANSITION_START: 1200,   // Y where gravity starts reducing
+        SPACE_TRANSITION_END: 1280,     // Y where full zero-g kicks in
     },
 
     // Player

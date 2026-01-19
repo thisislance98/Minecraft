@@ -206,8 +206,8 @@ export class VoxelGame {
         this.ships = [];
 
         // Physics
-        // Physics
         this.gravity = Config.WORLD.GRAVITY;
+        this.gravityMultiplier = 1.0; // World-specific gravity multiplier (set from world settings)
 
         // Game State (Centralized)
         this.gameState = new GameState(this);
@@ -1891,7 +1891,7 @@ export class VoxelGame {
                     this.spawnManager.spawnPugasusNearPlayer();
                     this.spawnManager.spawnSnowmenNearPlayer();
                     this.spawnDragon();
-                    this.spawnMerlin();
+                    // this.spawnMerlin(); // Disabled - wizard no longer spawns near player
                     this.spawnPlayerShip();
                 }
             }

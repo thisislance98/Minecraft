@@ -633,6 +633,14 @@ export class SpawnManager {
         const spawnZ = player.position.z + forward.z * distance;
         const createdAnimals = [];
 
+        // Calculate spawn rotation: entity should face away from player (same direction player is looking)
+        // The forward vector points where the player is looking (-Z in camera space, rotated)
+        // For entities that use +Z as forward (like Starfighter), we want the yaw that makes +Z point
+        // in the same direction as the spawn direction (away from player = same as player forward)
+        // atan2(-forward.x, -forward.z) gives yaw for +Z forward convention
+        const spawnYaw = Math.atan2(-forward.x, -forward.z);
+        console.log(`[SpawnManager] Spawning ${typeName}: forward=(${forward.x.toFixed(2)}, ${forward.z.toFixed(2)}), spawnYaw=${(spawnYaw * 180 / Math.PI).toFixed(1)}°`);
+
         for (let i = 0; i < count; i++) {
             const offsetX = (rng.next() - 0.5) * spread;
             const offsetZ = (rng.next() - 0.5) * spread;
@@ -642,6 +650,16 @@ export class SpawnManager {
             const y = terrainY + 1;
 
             const animal = new AnimalClass(this.game, x, y, z, rng.next());
+
+            // Set rotation so entity faces away from player (in the direction player is looking)
+            // Use setHeading if available (for ships with quaternion-based rotation)
+            if (typeof animal.setHeading === 'function') {
+                animal.setHeading(spawnYaw);
+            } else {
+                animal.rotation = spawnYaw;
+                animal.mesh.rotation.y = spawnYaw;
+            }
+
             this.game.animals.push(animal);
             this.game.scene.add(animal.mesh);
             this.entityRegistry.register(animal.id, animal);

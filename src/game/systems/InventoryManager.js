@@ -158,6 +158,7 @@ export class InventoryManager {
     // For now, simpler: true if fully added, false if full?
     // Let's implement robust "add remainder" logic if needed, but standard stack logic is fine.
     addItem(item, count, type = 'block') {
+        console.log(`[InventoryManager] addItem called: item='${item}', count=${count}, type='${type}'`);
         let remaining = count;
 
         // Helper to trigger UI update
@@ -231,9 +232,11 @@ export class InventoryManager {
 
         if (remaining < count) {
             // Trigger UI update if any item was added (partial add)
+            console.log(`[InventoryManager] addItem: Partial add - ${count - remaining}/${count} items added`);
             triggerUIUpdate();
             return true;
         }
+        console.error(`[InventoryManager] addItem: FAILED - inventory full, no items added`);
         return false;
     }
 

@@ -229,7 +229,160 @@ class Animal extends Entity {
   RIGHT: bodyMesh.rotation.y += dt (spins around mesh's own center)
 - Store reference to body mesh: this.bodyMesh = body; then in updateAI: this.bodyMesh.rotation.y += dt;
 
-2. Reference Implementation (Template for create_creature):
+═══════════════════════════════════════════════════════════════════════════════
+██████  WORKING CREATURE TEMPLATES - COPY THESE EXACTLY  ██████
+═══════════════════════════════════════════════════════════════════════════════
+
+▓▓▓ TEMPLATE A: QUADRUPED ANIMAL (Wolf, Dog, Cat, Pig) ▓▓▓
+Based on working Wolf.js - FULL FEATURED with eyes, ears, legs, tail:
+
+class CustomDog extends Animal {
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
+        this.width = 0.6; this.height = 0.8; this.depth = 1.4;
+        this.speed = 4.0;
+        this.createBody();
+    }
+    createBody() {
+        const furColor = 0xD2691E; // Brown
+        const mat = new window.THREE.MeshLambertMaterial({ color: furColor });
+        const whiteMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const blackMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
+        const noseMat = new window.THREE.MeshLambertMaterial({ color: 0x111111 });
+
+        // Body (longer than wide)
+        const body = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.5, 0.5, 1.0), mat);
+        body.position.set(0, 0.5, 0);
+        this.mesh.add(body);
+
+        // Head
+        const head = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.4, 0.4, 0.5), mat);
+        head.position.set(0, 0.7, 0.7);
+        this.mesh.add(head);
+
+        // Snout
+        const snout = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.2, 0.2, 0.25), mat);
+        snout.position.set(0, 0.6, 1.0);
+        this.mesh.add(snout);
+
+        // Nose
+        const nose = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.08, 0.08, 0.04), noseMat);
+        nose.position.set(0, 0.7, 1.12);
+        this.mesh.add(nose);
+
+        // Eyes (WHITE background + BLACK pupil)
+        const eyeGeo = new window.THREE.BoxGeometry(0.08, 0.08, 0.04);
+        const pupilGeo = new window.THREE.BoxGeometry(0.04, 0.04, 0.04);
+
+        const leftEye = new window.THREE.Mesh(eyeGeo, whiteMat);
+        leftEye.position.set(-0.12, 0.75, 0.92);
+        this.mesh.add(leftEye);
+        const leftPupil = new window.THREE.Mesh(pupilGeo, blackMat);
+        leftPupil.position.set(-0.12, 0.75, 0.95);
+        this.mesh.add(leftPupil);
+
+        const rightEye = new window.THREE.Mesh(eyeGeo, whiteMat);
+        rightEye.position.set(0.12, 0.75, 0.92);
+        this.mesh.add(rightEye);
+        const rightPupil = new window.THREE.Mesh(pupilGeo, blackMat);
+        rightPupil.position.set(0.12, 0.75, 0.95);
+        this.mesh.add(rightPupil);
+
+        // Ears
+        const earGeo = new window.THREE.BoxGeometry(0.1, 0.15, 0.08);
+        const leftEar = new window.THREE.Mesh(earGeo, mat);
+        leftEar.position.set(-0.15, 0.95, 0.65);
+        this.mesh.add(leftEar);
+        const rightEar = new window.THREE.Mesh(earGeo, mat);
+        rightEar.position.set(0.15, 0.95, 0.65);
+        this.mesh.add(rightEar);
+
+        // Tail
+        const tail = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.1, 0.1, 0.4), mat);
+        tail.position.set(0, 0.6, -0.7);
+        tail.rotation.x = -0.3;
+        this.mesh.add(tail);
+
+        // Legs (with animation pivots)
+        const legGeo = new window.THREE.BoxGeometry(0.15, 0.4, 0.15);
+        const makeLeg = (x, z) => {
+            const pivot = new window.THREE.Group();
+            pivot.position.set(x, 0.4, z);
+            const leg = new window.THREE.Mesh(legGeo, mat);
+            leg.position.set(0, -0.2, 0);
+            pivot.add(leg);
+            this.mesh.add(pivot);
+            return pivot;
+        };
+        this.legParts = [makeLeg(-0.15, 0.35), makeLeg(0.15, 0.35), makeLeg(-0.15, -0.35), makeLeg(0.15, -0.35)];
+    }
+}
+
+▓▓▓ TEMPLATE B: FLYING CREATURE (Bird, Bat, Fairy) ▓▓▓
+Overrides physics for flying behavior:
+
+class FlyingFairy extends Animal {
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
+        this.width = 0.3; this.height = 0.4; this.depth = 0.3;
+        this.speed = 3.0;
+        this.floatHeight = y;
+        this.time = 0;
+        this.createBody();
+    }
+    createBody() {
+        const bodyMat = new window.THREE.MeshLambertMaterial({ color: 0xFFB6C1, emissive: 0x331111 });
+        const wingMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.7, side: window.THREE.DoubleSide });
+
+        // Body
+        const body = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.15, 16, 16), bodyMat);
+        body.position.y = 0.15;
+        this.mesh.add(body);
+
+        // Head
+        const head = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.1, 16, 16), bodyMat);
+        head.position.set(0, 0.35, 0);
+        this.mesh.add(head);
+
+        // Eyes
+        const eyeMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
+        const leftEye = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.03, 8, 8), eyeMat);
+        leftEye.position.set(-0.05, 0.37, 0.08);
+        this.mesh.add(leftEye);
+        const rightEye = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.03, 8, 8), eyeMat);
+        rightEye.position.set(0.05, 0.37, 0.08);
+        this.mesh.add(rightEye);
+
+        // Wings
+        const wingShape = new window.THREE.PlaneGeometry(0.3, 0.2);
+        this.leftWing = new window.THREE.Mesh(wingShape, wingMat);
+        this.leftWing.position.set(-0.2, 0.2, 0);
+        this.leftWing.rotation.y = -0.3;
+        this.mesh.add(this.leftWing);
+
+        this.rightWing = new window.THREE.Mesh(wingShape, wingMat);
+        this.rightWing.position.set(0.2, 0.2, 0);
+        this.rightWing.rotation.y = 0.3;
+        this.mesh.add(this.rightWing);
+    }
+    updatePhysics(dt) {
+        // Override: Flying creatures don't fall
+        this.time += dt;
+        this.position.y = this.floatHeight + Math.sin(this.time * 2) * 0.3;
+    }
+    updateAI(dt) {
+        // Wing flapping animation
+        if (this.leftWing && this.rightWing) {
+            const flap = Math.sin(this.time * 15) * 0.4;
+            this.leftWing.rotation.z = flap;
+            this.rightWing.rotation.z = -flap;
+        }
+        super.updateAI(dt);
+    }
+}
+
+▓▓▓ TEMPLATE C: STATIONARY/SPINNING OBJECT ▓▓▓
+
 class SpinningCube extends Animal {
     constructor(game, x, y, z, seed) {
         super(game, x, y, z, seed);
@@ -250,6 +403,79 @@ class SpinningCube extends Animal {
         super.updateAI(dt);
     }
 }
+
+▓▓▓ TEMPLATE D: HOSTILE MOB (Attacks Player) ▓▓▓
+
+class AngryGolem extends Animal {
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
+        this.width = 1.2; this.height = 2.0; this.depth = 0.8;
+        this.speed = 2.5;
+        this.isHostile = true;
+        this.damage = 15;
+        this.attackRange = 2.0;
+        this.attackCooldown = 1.5;
+        this.health = 50;
+        this.maxHealth = 50;
+        this.createBody();
+    }
+    createBody() {
+        const stoneMat = new window.THREE.MeshLambertMaterial({ color: 0x666666 });
+        const eyeMat = new window.THREE.MeshLambertMaterial({ color: 0xFF0000, emissive: 0x330000 });
+
+        // Body
+        const body = new window.THREE.Mesh(new window.THREE.BoxGeometry(1.0, 1.2, 0.6), stoneMat);
+        body.position.y = 1.0;
+        this.mesh.add(body);
+
+        // Head
+        const head = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.6, 0.6, 0.5), stoneMat);
+        head.position.set(0, 1.9, 0);
+        this.mesh.add(head);
+
+        // Glowing Red Eyes
+        const leftEye = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.15, 0.1, 0.05), eyeMat);
+        leftEye.position.set(-0.15, 1.95, 0.25);
+        this.mesh.add(leftEye);
+        const rightEye = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.15, 0.1, 0.05), eyeMat);
+        rightEye.position.set(0.15, 1.95, 0.25);
+        this.mesh.add(rightEye);
+
+        // Arms
+        const armGeo = new window.THREE.BoxGeometry(0.3, 1.0, 0.3);
+        this.armParts = [];
+        const leftArm = new window.THREE.Group();
+        leftArm.position.set(-0.65, 1.3, 0);
+        const leftArmMesh = new window.THREE.Mesh(armGeo, stoneMat);
+        leftArmMesh.position.y = -0.5;
+        leftArm.add(leftArmMesh);
+        this.mesh.add(leftArm);
+        this.armParts.push(leftArm);
+
+        const rightArm = new window.THREE.Group();
+        rightArm.position.set(0.65, 1.3, 0);
+        const rightArmMesh = new window.THREE.Mesh(armGeo, stoneMat);
+        rightArmMesh.position.y = -0.5;
+        rightArm.add(rightArmMesh);
+        this.mesh.add(rightArm);
+        this.armParts.push(rightArm);
+
+        // Legs
+        const legGeo = new window.THREE.BoxGeometry(0.35, 0.6, 0.35);
+        const makeLeg = (x) => {
+            const pivot = new window.THREE.Group();
+            pivot.position.set(x, 0.4, 0);
+            const leg = new window.THREE.Mesh(legGeo, stoneMat);
+            leg.position.y = -0.3;
+            pivot.add(leg);
+            this.mesh.add(pivot);
+            return pivot;
+        };
+        this.legParts = [makeLeg(-0.3), makeLeg(0.3)];
+    }
+}
+
+═══════════════════════════════════════════════════════════════════════════════
 
 3. Verified Creation Workflow (MANDATORY):
    When creating a new creature (e.g., "create a bouncing slime"):
@@ -386,49 +612,109 @@ class SpinningCube extends Animal {
 
     <item_creation_protocol>
     CRITICAL INSTRUCTION FOR CREATING ITEMS (wands, potions, tools, weapons):
-    
-    ***** STEP 0: MANDATORY KNOWLEDGE LOOKUP (2 QUERIES) *****
-    BEFORE creating ANY new item, you MUST call 'search_knowledge' 2 times with DIFFERENT queries.
-    
-    Example: "healing potion"
-    - Query 1: "healing health restore" (for effect code)
-    - Query 2: "potion item icon" (for SVG icon pattern)
-    
-    Example: "teleport wand"
-    - Query 1: "teleport wand blink" (for teleport logic)
-    - Query 2: "item svg icon" (for icon pattern)
-    
-    When creating a new item with 'create_item' tool, you MUST:
-    
-    1. **ALWAYS INCLUDE AN SVG ICON** - Every item needs a visible icon for the inventory.
-       The code MUST include 'this.icon =' with a complete SVG string:
-       
-       // WAND ICON EXAMPLE (blue wand):
-       this.icon = '<svg viewBox="0 0 24 24"><rect x="10" y="2" width="4" height="18" fill="#3B82F6" rx="1"/><circle cx="12" cy="4" r="3" fill="#60A5FA"/><path d="M8,22 L16,22 L14,18 L10,18 Z" fill="#1E40AF"/></svg>';
-       
-       // POTION ICON EXAMPLE (red healing potion):
-       this.icon = '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="4" ry="2" fill="#666"/><path d="M8,6 L8,10 L6,20 Q6,22 12,22 Q18,22 18,20 L16,10 L16,6" fill="#EF4444"/><ellipse cx="12" cy="18" rx="5" ry="2" fill="#DC2626" opacity="0.5"/></svg>';
-       
-       // SWORD ICON EXAMPLE:
-       this.icon = '<svg viewBox="0 0 24 24"><rect x="11" y="2" width="2" height="14" fill="#9CA3AF"/><rect x="7" y="14" width="10" height="2" fill="#6B7280"/><rect x="10" y="16" width="4" height="4" fill="#78350F"/></svg>';
-    
-    2. **SET THE ITEM ID** - For inventory registration:
-       this.id = 'unique_item_name'; // lowercase with underscores
-    
-    3. **ADD TO INVENTORY AFTER CREATION** - Use 'give_item' tool IMMEDIATELY after create_item:
-       - First: create_item (creates the item class)
-       - Then: give_item (adds it to player inventory)
-       
-    4. **ITEM CODE TEMPLATE**:
-       class MyWandItem {
-           constructor() {
-               this.id = 'my_wand';
-               this.icon = '<svg viewBox="0 0 24 24">...</svg>';
-           }
-           onUseDown(game, player) {
-               // Effect code here
-           }
-       }
+
+    ***** MANDATORY CHECKLIST - ALL items MUST have: *****
+    □ 1. SVG Icon (64x64 viewBox) - for inventory display
+    □ 2. mesh_code parameter - for 3D representation when held in hand
+    □ 3. Proper item ID (snake_case) in super() call
+    □ 4. Working onUseDown() or onPrimaryDown() method for spacebar/click action
+
+    ***** AUTOMATIC BEHAVIOR *****
+    Items are AUTOMATICALLY added to player inventory after creation - no need to call give_item!
+
+    ***** CRITICAL: ITEMS MUST BE FUNCTIONAL *****
+    An item is NOT complete unless:
+    1. It appears in the inventory (icon)
+    2. It shows in the player's hand when selected (getMesh)
+    3. It DOES SOMETHING when spacebar/click is pressed (onUseDown/onPrimaryDown)
+
+    ═══════════════════════════════════════════════════════════════════════════════
+    ██████  WORKING ITEM TEMPLATES - COPY THESE EXACTLY  ██████
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    ▓▓▓ TEMPLATE 1: WAND (Shoots Projectile) ▓▓▓
+    Based on working LevitationWandItem.js:
+
+    {
+      "name": "TreeGrowthWandItem",
+      "code": "class TreeGrowthWandItem extends Item { constructor() { super('tree_growth_wand', 'Tree Growth Wand'); this.maxStack = 1; this.isTool = true; this.lastUseTime = 0; this.cooldown = 500; } onUseDown(game, player) { const now = Date.now(); if (now - this.lastUseTime < this.cooldown) return false; this.lastUseTime = now; const camDir = new window.THREE.Vector3(); game.camera.getWorldDirection(camDir); const spawnPos = game.camera.position.clone().add(camDir.clone().multiplyScalar(1.0)); game.spawnGrowthProjectile(spawnPos, camDir); return true; } onPrimaryDown(game, player) { return this.onUseDown(game, player); } }",
+      "icon": "<svg viewBox='0 0 64 64'><rect x='29' y='16' width='6' height='40' fill='#5C4033' rx='1'/><circle cx='32' cy='14' r='10' fill='#22C55E'/><circle cx='32' cy='14' r='5' fill='#4ADE80'/><path d='M32 8 L34 12 L32 10 L30 12 Z' fill='#86EFAC'/></svg>",
+      "mesh_code": "const group = new window.THREE.Group(); const handle = new window.THREE.Mesh(new window.THREE.CylinderGeometry(0.03, 0.04, 0.5, 8), new window.THREE.MeshLambertMaterial({color: 0x5C4033})); handle.position.y = 0; group.add(handle); const gem = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.08, 16, 16), new window.THREE.MeshLambertMaterial({color: 0x22C55E, emissive: 0x115522})); gem.position.y = 0.3; group.add(gem); return group;"
+    }
+
+    ▓▓▓ TEMPLATE 2: WAND (Custom Effect - No Projectile) ▓▓▓
+    For wands that create effects directly without shooting:
+
+    {
+      "name": "TeleportWandItem",
+      "code": "class TeleportWandItem extends Item { constructor() { super('teleport_wand', 'Teleport Wand'); this.maxStack = 1; this.isTool = true; this.lastUseTime = 0; this.cooldown = 2000; } onUseDown(game, player) { const now = Date.now(); if (now - this.lastUseTime < this.cooldown) return false; this.lastUseTime = now; const camDir = new window.THREE.Vector3(); game.camera.getWorldDirection(camDir); const targetPos = player.position.clone().add(camDir.multiplyScalar(10)); targetPos.y = game.worldGen ? game.worldGen.getTerrainHeight(targetPos.x, targetPos.z) + 1 : targetPos.y; player.position.copy(targetPos); return true; } onPrimaryDown(game, player) { return this.onUseDown(game, player); } }",
+      "icon": "<svg viewBox='0 0 64 64'><rect x='29' y='16' width='6' height='40' fill='#4B0082' rx='1'/><circle cx='32' cy='14' r='10' fill='#8B5CF6'/><circle cx='32' cy='14' r='5' fill='#C4B5FD'/><path d='M28 14 L32 8 L36 14 L32 20 Z' fill='#E9D5FF' opacity='0.7'/></svg>",
+      "mesh_code": "const group = new window.THREE.Group(); const handle = new window.THREE.Mesh(new window.THREE.CylinderGeometry(0.03, 0.04, 0.5, 8), new window.THREE.MeshLambertMaterial({color: 0x4B0082})); group.add(handle); const gem = new window.THREE.Mesh(new window.THREE.OctahedronGeometry(0.1), new window.THREE.MeshLambertMaterial({color: 0x8B5CF6, emissive: 0x4B0082})); gem.position.y = 0.3; group.add(gem); return group;"
+    }
+
+    ▓▓▓ TEMPLATE 3: MELEE WEAPON (Sword/Hammer) ▓▓▓
+    Based on working combat items:
+
+    {
+      "name": "FlameSwordItem",
+      "code": "class FlameSwordItem extends Item { constructor() { super('flame_sword', 'Flame Sword'); this.maxStack = 1; this.isTool = true; this.damage = 8; this.lastUseTime = 0; this.cooldown = 300; } onPrimaryDown(game, player) { const now = Date.now(); if (now - this.lastUseTime < this.cooldown) return false; this.lastUseTime = now; if (player.swingArm) player.swingArm(); const hit = game.physics.getHitAnimal(); if (hit) { hit.takeDamage(this.damage, player); const dir = new window.THREE.Vector3().subVectors(hit.position, player.position).normalize(); hit.knockback(dir, 0.5); } return true; } onUseDown(game, player) { return this.onPrimaryDown(game, player); } }",
+      "icon": "<svg viewBox='0 0 64 64'><rect x='30' y='4' width='4' height='36' fill='#FF6B35'/><rect x='30' y='4' width='4' height='36' fill='url(#flame)' opacity='0.5'/><defs><linearGradient id='flame' x1='0%' y1='100%' x2='0%' y2='0%'><stop offset='0%' stop-color='#FF0000'/><stop offset='100%' stop-color='#FFFF00'/></linearGradient></defs><rect x='22' y='40' width='20' height='4' fill='#8B4513'/><rect x='28' y='44' width='8' height='12' fill='#5C4033'/></svg>",
+      "mesh_code": "const group = new window.THREE.Group(); const blade = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.08, 0.45, 0.02), new window.THREE.MeshLambertMaterial({color: 0xFF6B35, emissive: 0x331100})); blade.position.y = 0.2; group.add(blade); const guard = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.2, 0.04, 0.04), new window.THREE.MeshLambertMaterial({color: 0x8B4513})); guard.position.y = -0.05; group.add(guard); const handle = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.05, 0.15, 0.05), new window.THREE.MeshLambertMaterial({color: 0x5C4033})); handle.position.y = -0.15; group.add(handle); return group;"
+    }
+
+    ▓▓▓ TEMPLATE 4: RANGED WEAPON (Bow) ▓▓▓
+    Based on working BowItem.js:
+
+    {
+      "name": "CrossbowItem",
+      "code": "class CrossbowItem extends Item { constructor() { super('crossbow', 'Crossbow'); this.maxStack = 1; this.isTool = true; this.lastFireTime = 0; this.fireCooldown = 800; } onPrimaryDown(game, player) { const now = performance.now(); if (now - this.lastFireTime < this.fireCooldown) return false; this.lastFireTime = now; const camDir = new window.THREE.Vector3(); game.camera.getWorldDirection(camDir); const spawnPos = game.camera.position.clone().add(camDir.clone().multiplyScalar(0.5)); const arrowSpeed = 0.8; const velocity = camDir.clone().multiplyScalar(arrowSpeed); game.spawnArrow(spawnPos, velocity); if (player.swingArm) player.swingArm(); return true; } onUseDown(game, player) { return this.onPrimaryDown(game, player); } }",
+      "icon": "<svg viewBox='0 0 64 64'><rect x='20' y='28' width='24' height='8' fill='#8B4513'/><rect x='30' y='16' width='4' height='32' fill='#5C4033'/><path d='M20,32 Q10,32 10,20' stroke='#D2691E' fill='none' stroke-width='3'/><path d='M44,32 Q54,32 54,20' stroke='#D2691E' fill='none' stroke-width='3'/></svg>",
+      "mesh_code": "const group = new window.THREE.Group(); const stock = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.08, 0.35, 0.06), new window.THREE.MeshLambertMaterial({color: 0x8B4513})); group.add(stock); const bow = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.3, 0.04, 0.03), new window.THREE.MeshLambertMaterial({color: 0x5C4033})); bow.position.y = 0.15; group.add(bow); return group;"
+    }
+
+    ▓▓▓ TEMPLATE 5: UTILITY ITEM (Non-Combat) ▓▓▓
+    For items that provide utility effects:
+
+    {
+      "name": "SpeedBootsItem",
+      "code": "class SpeedBootsItem extends Item { constructor() { super('speed_boots', 'Speed Boots'); this.maxStack = 1; this.isTool = true; this.isActive = false; this.originalSpeed = 0; } onSelect(game, player) { this.originalSpeed = player.speed || 5; player.speed = this.originalSpeed * 2; this.isActive = true; } onDeselect(game, player) { if (this.isActive) { player.speed = this.originalSpeed; this.isActive = false; } } onUseDown(game, player) { return false; } }",
+      "icon": "<svg viewBox='0 0 64 64'><path d='M20,50 L20,30 Q20,20 32,20 Q44,20 44,30 L44,50 Q44,58 32,58 Q20,58 20,50' fill='#4A90D9'/><path d='M48,35 L56,30 M48,40 L58,38 M48,45 L56,46' stroke='#FFD700' stroke-width='2'/></svg>",
+      "mesh_code": "const group = new window.THREE.Group(); const boot = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.15, 0.25, 0.3), new window.THREE.MeshLambertMaterial({color: 0x4A90D9})); group.add(boot); const sole = new window.THREE.Mesh(new window.THREE.BoxGeometry(0.18, 0.05, 0.35), new window.THREE.MeshLambertMaterial({color: 0x333333})); sole.position.y = -0.12; group.add(sole); return group;"
+    }
+
+    ═══════════════════════════════════════════════════════════════════════════════
+    ***** KEY METHODS EXPLAINED *****
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    - onUseDown(game, player): Called on SPACEBAR or RIGHT-CLICK press
+    - onPrimaryDown(game, player): Called on LEFT-CLICK press
+    - onSelect(game, player): Called when item is selected in hotbar
+    - onDeselect(game, player): Called when switching away from item
+    - getMesh(): Returns THREE.Object3D for 3D representation in hand
+
+    ***** AVAILABLE GAME METHODS FOR EFFECTS *****
+
+    PROJECTILES:
+    - game.spawnMagicProjectile(pos, direction) - Basic magic bolt
+    - game.spawnGrowthProjectile(pos, direction) - Makes things grow
+    - game.spawnLevitationProjectile(pos, direction) - Levitates targets
+    - game.spawnArrow(pos, velocity) - Physical arrow
+
+    COMBAT:
+    - game.physics.getHitAnimal() - Get animal in crosshair
+    - animal.takeDamage(amount, attacker) - Deal damage
+    - animal.knockback(direction, force) - Push back
+
+    UTILITY:
+    - game.camera.getWorldDirection(vec) - Get look direction
+    - game.camera.position - Get camera position
+    - player.position - Get/set player position
+    - game.worldGen.getTerrainHeight(x, z) - Get ground height
+
+    ***** ICON GUIDELINES (64x64 viewBox) *****
+    Icons must be valid SVG with viewBox='0 0 64 64'
+    Use simple shapes: rect, circle, path, ellipse
+    Colors should be hex (#FF0000) not named colors
     </item_creation_protocol>
 
     <verification_protocol>

@@ -1,0 +1,16 @@
+{
+    "name": "Movement Performance Verification",
+    "headless": false,
+    "actions": [
+        {
+            "name": "wait",
+            "args": [3000]
+        }
+    ],
+    "verify": [
+        {
+            "type": "customCode",
+            "code": "() => { const game = window.__VOXEL_GAME__; if (!game) return { success: false, message: 'Game not found' }; const initialPos = game.player.position.clone(); const perfLog = []; const startTime = performance.now(); let frames = 0; const testMovement = () => { return new Promise((resolve) => { const moveInterval = setInterval(() => { game.player.position.x += 2; frames++; }, 16); setTimeout(() => { clearInterval(moveInterval); const endTime = performance.now(); const totalTime = endTime - startTime; const avgFps = frames / (totalTime / 1000); const chunksLoaded = game.chunks.size; const queueSize = game.chunkGenQueue.length; resolve({ success: avgFps > 20, avgFps: Math.round(avgFps), frames, totalTime: Math.round(totalTime), chunksLoaded, queueSize, message: avgFps > 20 ? `Performance OK: ${Math.round(avgFps)} fps avg` : `Performance LOW: ${Math.round(avgFps)} fps avg` }); }, 3000); }); }; return testMovement(); }"
+        }
+    ]
+}

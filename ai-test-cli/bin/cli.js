@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import readline from 'readline';
 import { AntigravityClient } from '../src/client.js';
+import { WorldClient } from '../src/world-client.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -775,6 +776,13 @@ program
                 console.log('  health         - Show player health');
                 console.log('  players        - Show remote players');
                 console.log('  exit           - Close browser and exit');
+                console.log(chalk.cyan('\n═══ Item Testing Commands ═══'));
+                console.log('  iteminfo <id>  - Get comprehensive item info');
+                console.log('  checkitem <id> - Check if item is in inventory');
+                console.log('  itemicon <id>  - Check if item has an icon');
+                console.log('  itemmesh <id>  - Check if item has a 3D mesh');
+                console.log('  testitem <id>  - Test item registration, icon, mesh & functionality');
+                console.log('  listitems      - List all registered items');
                 console.log('');
             },
             state: async () => {
@@ -997,6 +1005,69 @@ program
                         const pos = p.position ? `(${p.position.x.toFixed(1)}, ${p.position.y.toFixed(1)}, ${p.position.z.toFixed(1)})` : 'unknown';
                         console.log(`  ${p.id.substring(0, 8)}... at ${pos} [health bar: ${p.hasHealthBar ? 'yes' : 'no'}]`);
                     }
+                }
+            },
+            // ========== ITEM TESTING COMMANDS ==========
+            iteminfo: async (itemId) => {
+                if (!itemId) { console.log(chalk.red('Usage: iteminfo <itemId>')); return; }
+                const info = await gc.getItemInfo(browser, itemId);
+                gc.printItemInfo(info);
+            },
+            checkitem: async (itemId) => {
+                if (!itemId) { console.log(chalk.red('Usage: checkitem <itemId>')); return; }
+                const inv = await gc.checkItemInInventory(browser, itemId);
+                console.log(chalk.blue(`\n═══ Item Check: ${itemId} ═══`));
+                console.log(`In Inventory: ${inv.found ? chalk.green('Yes') : chalk.dim('No')}`);
+                if (inv.found) {
+                    console.log(`Total Count: ${inv.totalCount}`);
+                    console.log(`Slots: ${inv.slots.map(s => `#${s.slot} (${s.count})`).join(', ')}`);
+                }
+            },
+            itemicon: async (itemId) => {
+                if (!itemId) { console.log(chalk.red('Usage: itemicon <itemId>')); return; }
+                const icon = await gc.checkItemIcon(browser, itemId);
+                console.log(chalk.blue(`\n═══ Icon Check: ${itemId} ═══`));
+                console.log(`Has Icon: ${icon.hasIcon ? chalk.green('Yes') : chalk.yellow('No (default)')}`);
+                console.log(`Icon Type: ${icon.iconType}`);
+                console.log(`Dynamic Icon: ${icon.hasDynamicIcon ? 'Yes' : 'No'}`);
+            },
+            itemmesh: async (itemId) => {
+                if (!itemId) { console.log(chalk.red('Usage: itemmesh <itemId>')); return; }
+                const mesh = await gc.checkItemMesh(browser, itemId);
+                console.log(chalk.blue(`\n═══ Mesh Check: ${itemId} ═══`));
+                if (!mesh.found) {
+                    console.log(chalk.red(`Item '${itemId}' not found`));
+                } else {
+                    console.log(`Has getMesh: ${mesh.hasGetMesh ? chalk.green('Yes') : chalk.red('No')}`);
+                    console.log(`Has Mesh: ${mesh.hasMesh ? chalk.green('Yes') : chalk.red('No')}`);
+                    if (mesh.meshInfo) {
+                        console.log(`Mesh Type: ${mesh.meshInfo.geometryType || 'custom'}`);
+                        console.log(`Is Object3D: ${mesh.meshInfo.isObject3D ? 'Yes' : 'No'}`);
+                    }
+                }
+            },
+            testitem: async (itemId) => {
+                if (!itemId) { console.log(chalk.red('Usage: testitem <itemId>')); return; }
+                console.log(chalk.cyan(`Testing item: ${itemId}...`));
+                const result = await gc.testItemFunctionality(browser, itemId, { testUse: true });
+                console.log(chalk.blue(`\n═══ Item Test: ${itemId} ═══`));
+                console.log(`Summary: ${result.summary}`);
+                for (const test of result.tests) {
+                    const status = test.passed ? chalk.green('✓') : chalk.red('✗');
+                    console.log(`  ${status} ${test.name}`);
+                }
+                if (result.error) console.log(chalk.red(`Error: ${result.error}`));
+            },
+            listitems: async () => {
+                const result = await gc.listAllItems(browser);
+                console.log(chalk.blue('\n═══ All Registered Items ═══'));
+                console.log(`Total: ${result.totalItems}`);
+                console.log(`Dynamic: ${result.dynamicItemCount}`);
+                console.log(chalk.cyan('\nItems:'));
+                for (const item of result.items) {
+                    const dynamicTag = item.isDynamic ? chalk.magenta(' [dynamic]') : '';
+                    const toolTag = item.isTool ? chalk.yellow(' [tool]') : '';
+                    console.log(`  ${item.id}${dynamicTag}${toolTag}`);
                 }
             }
         };
@@ -1560,6 +1631,1031 @@ program
             if (!options.persist) await browser.close();
             process.exit(1);
         }
+    });
+
+// ============================================================
+// WORLD MANAGEMENT COMMANDS
+// ============================================================
+
+const worldCommand = program
+    .command('world')
+    .description('World management commands');
+
+worldCommand
+    .command('create')
+    .description('Create a new world')
+    .requiredOption('-n, --name <name>', 'World name')
+    .option('-d, --description <desc>', 'World description', '')
+    .option('-v, --visibility <type>', 'Visibility: public, private, unlisted', 'unlisted')
+    .option('--seed <number>', 'World seed (random if not specified)')
+    .option('--sky-color <hex>', 'Sky color (e.g. #87CEEB)')
+    .option('--gravity <value>', 'Gravity multiplier (0.1-3.0)', '1.0')
+    .action(async (options) => {
+        const { WorldClient } = await import('../src/world-client.js');
+        const client = new WorldClient();
+
+        try {
+            const worldOptions = {
+                name: options.name,
+                description: options.description,
+                visibility: options.visibility
+            };
+
+            if (options.seed) {
+                worldOptions.seed = parseInt(options.seed);
+            }
+
+            // Build customizations if any are specified
+            const customizations = {};
+            if (options.skyColor) {
+                customizations.skyColor = options.skyColor;
+            }
+            if (options.gravity && options.gravity !== '1.0') {
+                customizations.gravity = parseFloat(options.gravity);
+            }
+            if (Object.keys(customizations).length > 0) {
+                worldOptions.customizations = customizations;
+            }
+
+            const world = await client.createWorld(worldOptions);
+
+            console.log(chalk.green('\n✅ World created successfully!\n'));
+            console.log(chalk.blue('═══════════════════════════════════════'));
+            console.log(`  ${chalk.bold('ID:')}          ${world.id}`);
+            console.log(`  ${chalk.bold('Name:')}        ${world.name}`);
+            console.log(`  ${chalk.bold('Visibility:')}  ${world.visibility}`);
+            console.log(`  ${chalk.bold('Seed:')}        ${world.seed}`);
+            console.log(chalk.blue('═══════════════════════════════════════\n'));
+            console.log(chalk.dim(`Load this world with: ai-test world load ${world.id}`));
+            console.log(chalk.dim(`Or open in browser: http://localhost:5173/?world=${world.id}\n`));
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to create world: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+worldCommand
+    .command('list')
+    .description('List worlds')
+    .option('-m, --mine', 'List only my worlds')
+    .option('-l, --limit <number>', 'Number of worlds to show', '20')
+    .action(async (options) => {
+        const { WorldClient } = await import('../src/world-client.js');
+        const client = new WorldClient();
+
+        try {
+            let worlds;
+            if (options.mine) {
+                worlds = await client.listMyWorlds();
+                console.log(chalk.blue('\n═══ My Worlds ═══\n'));
+            } else {
+                worlds = await client.listPublicWorlds(parseInt(options.limit));
+                console.log(chalk.blue('\n═══ Public Worlds ═══\n'));
+            }
+
+            if (worlds.length === 0) {
+                console.log(chalk.dim('  No worlds found.\n'));
+            } else {
+                worlds.forEach((world, i) => {
+                    const visibility = world.visibility === 'public' ? chalk.green('public') :
+                        world.visibility === 'private' ? chalk.red('private') :
+                            chalk.yellow('unlisted');
+                    console.log(`  ${i + 1}. ${chalk.bold(world.name)} ${chalk.dim(`(${world.id})`)}`);
+                    console.log(`     ${visibility} | ${chalk.dim(world.description || 'No description')}`);
+                    console.log(`     ${chalk.dim(`Players: ${world.playerCount || 0} | Visits: ${world.totalVisits || 0}`)}`);
+                    console.log('');
+                });
+            }
+
+            console.log(chalk.dim(`Load a world with: ai-test world load <world-id>\n`));
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to list worlds: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+worldCommand
+    .command('load <worldId>')
+    .description('Load a world in the browser')
+    .option('--headless', 'Run browser in headless mode', false)
+    .option('-q, --quiet', 'Suppress browser console output', false)
+    .option('--console', 'Open interactive console after loading', false)
+    .action(async (worldId, options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const gc = await import('../src/game-commands.js');
+
+        console.log(chalk.blue(`\n🌍 Loading world: ${worldId}\n`));
+
+        // Construct URL with world parameter
+        const url = `http://localhost:5173/?world=${worldId}`;
+
+        const browser = new GameBrowser({
+            headless: options.headless,
+            quiet: options.quiet,
+            url: url
+        });
+
+        try {
+            await browser.launch();
+            await browser.waitForGameLoad();
+
+            // Verify we loaded the correct world
+            const loadedWorld = await browser.evaluate(() => {
+                const game = window.__VOXEL_GAME__;
+                return {
+                    worldId: game?.worldId,
+                    worldName: game?.worldName
+                };
+            });
+
+            if (loadedWorld.worldId === worldId) {
+                console.log(chalk.green(`✅ World loaded: ${loadedWorld.worldName || worldId}\n`));
+            } else {
+                console.log(chalk.yellow(`⚠️  Loaded world ID: ${loadedWorld.worldId} (requested: ${worldId})\n`));
+            }
+
+            if (options.console) {
+                // Open interactive console
+                console.log(chalk.dim('Type "help" for available commands, "exit" to quit.\n'));
+
+                const rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout,
+                    prompt: chalk.cyan(`[${worldId}]> `)
+                });
+
+                rl.prompt();
+
+                rl.on('line', async (line) => {
+                    const text = line.trim();
+                    if (text === 'exit') {
+                        rl.close();
+                        return;
+                    }
+                    if (text === 'help') {
+                        console.log(chalk.dim('Commands: state, entities, pos, tp <x> <y> <z>, spawn <type>, exit'));
+                    } else if (text === 'state') {
+                        const state = await gc.getGameState(browser);
+                        gc.printGameState(state);
+                    } else if (text === 'entities') {
+                        const entities = await gc.getEntities(browser);
+                        gc.printEntities(entities);
+                    } else if (text === 'pos') {
+                        const pos = await gc.getPlayerPosition(browser);
+                        console.log(`Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
+                    } else if (text.startsWith('tp ')) {
+                        const [, x, y, z] = text.split(/\s+/);
+                        if (x && y && z) {
+                            await gc.teleportPlayer(browser, parseFloat(x), parseFloat(y), parseFloat(z));
+                            console.log(chalk.green(`Teleported to (${x}, ${y}, ${z})`));
+                        }
+                    } else if (text.startsWith('spawn ')) {
+                        const type = text.replace('spawn ', '').trim();
+                        const result = await gc.spawnCreature(browser, type, 1);
+                        if (result.error) {
+                            console.log(chalk.red(result.error));
+                        } else {
+                            console.log(chalk.green(`Spawned ${result.type}`));
+                        }
+                    }
+                    rl.prompt();
+                });
+
+                rl.on('close', async () => {
+                    console.log(chalk.yellow('\nClosing browser...'));
+                    await browser.close();
+                    process.exit(0);
+                });
+
+            } else {
+                // Just keep browser open
+                console.log(chalk.dim('Press Ctrl+C to close browser and exit.\n'));
+
+                process.on('SIGINT', async () => {
+                    console.log(chalk.yellow('\nClosing browser...'));
+                    await browser.close();
+                    process.exit(0);
+                });
+            }
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to load world: ${error.message}\n`));
+            await browser.close();
+            process.exit(1);
+        }
+    });
+
+worldCommand
+    .command('delete <worldId>')
+    .description('Delete a world')
+    .option('-f, --force', 'Skip confirmation')
+    .action(async (worldId, options) => {
+        const { WorldClient } = await import('../src/world-client.js');
+        const client = new WorldClient();
+
+        if (worldId === 'global') {
+            console.error(chalk.red('\n❌ Cannot delete the global world.\n'));
+            process.exit(1);
+        }
+
+        try {
+            // Get world info first
+            const { world } = await client.getWorld(worldId);
+
+            if (!options.force) {
+                console.log(chalk.yellow(`\n⚠️  You are about to delete world: ${world.name} (${worldId})\n`));
+
+                const rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout
+                });
+
+                const answer = await new Promise(resolve => {
+                    rl.question(chalk.yellow('Type the world name to confirm: '), resolve);
+                });
+                rl.close();
+
+                if (answer !== world.name) {
+                    console.log(chalk.dim('\nDeletion cancelled.\n'));
+                    process.exit(0);
+                }
+            }
+
+            await client.deleteWorld(worldId);
+            console.log(chalk.green(`\n✅ World "${world.name}" deleted successfully.\n`));
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to delete world: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+worldCommand
+    .command('info <worldId>')
+    .description('Get details about a world')
+    .action(async (worldId) => {
+        const { WorldClient } = await import('../src/world-client.js');
+        const client = new WorldClient();
+
+        try {
+            const { world, permissions } = await client.getWorld(worldId);
+
+            console.log(chalk.blue('\n═══════════════════════════════════════'));
+            console.log(chalk.bold(`  World: ${world.name}`));
+            console.log(chalk.blue('═══════════════════════════════════════\n'));
+
+            console.log(`  ${chalk.bold('ID:')}           ${world.id}`);
+            console.log(`  ${chalk.bold('Owner:')}        ${world.ownerName}`);
+            console.log(`  ${chalk.bold('Visibility:')}   ${world.visibility}`);
+            console.log(`  ${chalk.bold('Description:')}  ${world.description || chalk.dim('(none)')}`);
+            console.log(`  ${chalk.bold('Seed:')}         ${world.seed}`);
+            console.log(`  ${chalk.bold('Players:')}      ${world.playerCount || 0}`);
+            console.log(`  ${chalk.bold('Total Visits:')} ${world.totalVisits || 0}`);
+            console.log(`  ${chalk.bold('Created:')}      ${new Date(world.createdAt).toLocaleString()}`);
+
+            if (world.customizations) {
+                console.log(chalk.cyan('\n  Customizations:'));
+                if (world.customizations.skyColor) {
+                    console.log(`    Sky Color: ${world.customizations.skyColor}`);
+                }
+                if (world.customizations.gravity) {
+                    console.log(`    Gravity: ${world.customizations.gravity}x`);
+                }
+            }
+
+            if (permissions) {
+                console.log(chalk.cyan('\n  Your Permissions:'));
+                console.log(`    Owner: ${permissions.isOwner ? chalk.green('Yes') : 'No'}`);
+                console.log(`    Can Build: ${permissions.canBuild ? chalk.green('Yes') : chalk.red('No')}`);
+                console.log(`    Can Spawn: ${permissions.canSpawnCreatures ? chalk.green('Yes') : chalk.red('No')}`);
+            }
+
+            console.log(chalk.blue('\n═══════════════════════════════════════\n'));
+            console.log(chalk.dim(`Load this world: ai-test world load ${world.id}`));
+            console.log(chalk.dim(`Browser URL: http://localhost:5173/?world=${world.id}\n`));
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to get world info: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+worldCommand
+    .command('update <worldId>')
+    .description('Update world settings')
+    .option('-n, --name <name>', 'New world name')
+    .option('-d, --description <desc>', 'New description')
+    .option('-v, --visibility <type>', 'New visibility: public, private, unlisted')
+    .action(async (worldId, options) => {
+        const { WorldClient } = await import('../src/world-client.js');
+        const client = new WorldClient();
+
+        try {
+            const updates = {};
+            if (options.name) updates.name = options.name;
+            if (options.description !== undefined) updates.description = options.description;
+            if (options.visibility) updates.visibility = options.visibility;
+
+            if (Object.keys(updates).length === 0) {
+                console.log(chalk.yellow('\n⚠️  No updates specified. Use --name, --description, or --visibility.\n'));
+                process.exit(0);
+            }
+
+            const world = await client.updateWorld(worldId, updates);
+
+            console.log(chalk.green('\n✅ World updated successfully!\n'));
+            console.log(`  ${chalk.bold('Name:')}        ${world.name}`);
+            console.log(`  ${chalk.bold('Visibility:')}  ${world.visibility}`);
+            console.log(`  ${chalk.bold('Description:')} ${world.description || chalk.dim('(none)')}\n`);
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to update world: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+// ============================================================
+// ENHANCED MERLIN COMMANDS
+// ============================================================
+
+program
+    .command('merlin-chat')
+    .description('Interactive chat with Merlin AI (WebSocket mode)')
+    .option('--world <id>', 'Connect to a specific world')
+    .option('--provider <name>', 'AI provider: gemini, openrouter, claude', 'gemini')
+    .action(async (options) => {
+        const client = new AntigravityClient(`ws://localhost:2567/api/antigravity?provider=${options.provider}`);
+
+        try {
+            console.log(chalk.blue(`\n🧙 Connecting to Merlin (${options.provider})...`));
+            await client.connect();
+            console.log(chalk.green('✅ Connected!\n'));
+            console.log(chalk.dim('Type your message and press Enter. Type "exit" to quit.\n'));
+
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+                prompt: chalk.yellow('You > ')
+            });
+
+            // Track when AI is responding
+            let isResponding = false;
+
+            client.on('thought', (msg) => {
+                console.log(chalk.gray(`\n💭 ${msg.text}`));
+            });
+
+            client.on('tool_start', (msg) => {
+                console.log(chalk.cyan(`\n🛠  Tool: ${msg.name}`));
+                if (msg.args) {
+                    console.log(chalk.dim(JSON.stringify(msg.args, null, 2)));
+                }
+            });
+
+            client.on('tool_end', (msg) => {
+                if (msg.result?.error) {
+                    console.log(chalk.red(`   ❌ ${msg.result.error}`));
+                } else {
+                    console.log(chalk.green(`   ✓ Done`));
+                }
+            });
+
+            client.on('token', (msg) => {
+                if (!isResponding) {
+                    isResponding = true;
+                    process.stdout.write(chalk.cyan('\nMerlin: '));
+                }
+                process.stdout.write(msg.text);
+            });
+
+            client.on('turn_end', () => {
+                if (isResponding) {
+                    console.log('\n');
+                    isResponding = false;
+                }
+                rl.prompt();
+            });
+
+            client.on('token_usage', (msg) => {
+                const totalCost = ((msg.promptTokens + msg.candidatesTokens) / 1000000) * 1.5;
+                console.log(chalk.dim(`💰 ${msg.totalTokens} tokens (~$${totalCost.toFixed(6)})`));
+            });
+
+            client.on('error', (err) => {
+                console.log(chalk.red(`\n❌ Error: ${err.message}`));
+                rl.prompt();
+            });
+
+            rl.prompt();
+
+            rl.on('line', (line) => {
+                const text = line.trim();
+                if (text === 'exit') {
+                    rl.close();
+                    return;
+                }
+                if (text) {
+                    const context = {};
+                    if (options.world) {
+                        context.worldId = options.world;
+                    }
+                    client.sendPrompt(text, context);
+                } else {
+                    rl.prompt();
+                }
+            });
+
+            rl.on('close', () => {
+                console.log(chalk.yellow('\nDisconnecting...'));
+                client.disconnect();
+                process.exit(0);
+            });
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed to connect: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('merlin-prompt <prompt>')
+    .description('Send a single prompt to Merlin and get the response')
+    .option('--world <id>', 'Connect to a specific world')
+    .option('--provider <name>', 'AI provider: gemini, openrouter, claude', 'gemini')
+    .option('-t, --timeout <ms>', 'Timeout in milliseconds', '60000')
+    .option('--json', 'Output result as JSON')
+    .action(async (prompt, options) => {
+        const client = new AntigravityClient(`ws://localhost:2567/api/antigravity?provider=${options.provider}`);
+
+        const result = {
+            prompt,
+            response: '',
+            tools: [],
+            tokens: null,
+            error: null
+        };
+
+        try {
+            if (!options.json) {
+                console.log(chalk.blue(`\n🧙 Sending prompt to Merlin...\n`));
+            }
+
+            await client.connect();
+
+            let timeoutHandle = setTimeout(() => {
+                result.error = 'Timeout waiting for response';
+                if (options.json) {
+                    console.log(JSON.stringify(result, null, 2));
+                } else {
+                    console.error(chalk.red('\n❌ Timeout waiting for response\n'));
+                }
+                client.disconnect();
+                process.exit(1);
+            }, parseInt(options.timeout));
+
+            client.on('tool_start', (msg) => {
+                result.tools.push({ name: msg.name, args: msg.args });
+                if (!options.json) {
+                    console.log(chalk.cyan(`🛠  ${msg.name}`));
+                }
+            });
+
+            client.on('token', (msg) => {
+                result.response += msg.text;
+                if (!options.json) {
+                    process.stdout.write(msg.text);
+                }
+            });
+
+            client.on('token_usage', (msg) => {
+                result.tokens = msg;
+            });
+
+            client.on('turn_end', () => {
+                clearTimeout(timeoutHandle);
+                if (options.json) {
+                    console.log(JSON.stringify(result, null, 2));
+                } else {
+                    console.log('\n');
+                }
+                client.disconnect();
+                process.exit(0);
+            });
+
+            client.on('error', (err) => {
+                clearTimeout(timeoutHandle);
+                result.error = err.message;
+                if (options.json) {
+                    console.log(JSON.stringify(result, null, 2));
+                } else {
+                    console.error(chalk.red(`\n❌ Error: ${err.message}\n`));
+                }
+                client.disconnect();
+                process.exit(1);
+            });
+
+            const context = {};
+            if (options.world) {
+                context.worldId = options.world;
+            }
+            client.sendPrompt(prompt, context);
+
+        } catch (error) {
+            result.error = error.message;
+            if (options.json) {
+                console.log(JSON.stringify(result, null, 2));
+            } else {
+                console.error(chalk.red(`\n❌ Failed: ${error.message}\n`));
+            }
+            process.exit(1);
+        }
+    });
+
+// ============================================================
+// RAG TEMPLATE TESTING
+// ============================================================
+
+program
+    .command('rag')
+    .description('Test RAG template lookup for a given prompt')
+    .argument('<prompt>', 'The prompt to classify and find templates for')
+    .option('--json', 'Output as JSON', false)
+    .option('--no-semantic', 'Disable semantic search (keyword only)', false)
+    .action(async (prompt, options) => {
+        console.log(chalk.blue('\n🔍 RAG Template Lookup Test\n'));
+        console.log(chalk.dim(`Prompt: "${prompt}"\n`));
+
+        const client = new AntigravityClient();
+
+        try {
+            await client.connect();
+            console.log(chalk.green('✓ Connected to server\n'));
+
+            let ragResult = null;
+            let completed = false;
+            let responseText = '';
+
+            // Listen for RAG lookup event
+            client.on('rag_lookup', (msg) => {
+                ragResult = msg;
+                console.log(chalk.cyan('📚 RAG Lookup Result:'));
+                console.log(chalk.dim(`   Task Type: ${msg.taskType} (${msg.subType || 'generic'})`));
+                console.log(chalk.dim(`   Confidence: ${(msg.confidence * 100).toFixed(0)}%`));
+                console.log(chalk.dim(`   Templates Found: ${msg.templatesFound}`));
+
+                if (msg.templates && msg.templates.length > 0) {
+                    console.log(chalk.yellow('\n   Templates:'));
+                    msg.templates.forEach((t, i) => {
+                        console.log(chalk.dim(`     ${i + 1}. ${t.title} (${(t.relevance * 100).toFixed(0)}% - ${t.source})`));
+                    });
+                }
+                console.log('');
+            });
+
+            // Listen for response
+            client.on('token', (msg) => {
+                responseText += msg.text;
+                if (!options.json) {
+                    process.stdout.write(msg.text);
+                }
+            });
+
+            client.on('complete', () => {
+                completed = true;
+                if (!options.json) {
+                    console.log('\n');
+                }
+            });
+
+            client.on('error', (msg) => {
+                console.error(chalk.red(`Error: ${msg.message}`));
+            });
+
+            // Handle tool requests with mock responses
+            client.on('tool_request', (msg) => {
+                console.log(chalk.cyan(`🛠️  Tool Request: ${msg.name}`));
+                // Send mock response
+                client.ws.send(JSON.stringify({
+                    type: 'tool_response',
+                    id: msg.id,
+                    result: { success: true, message: 'Mock tool response for RAG test' }
+                }));
+            });
+
+            // Send prompt
+            client.sendPrompt(prompt, {
+                position: { x: 0, y: 64, z: 0 },
+                rotation: { x: 0, y: 0, z: 0 }
+            });
+
+            // Wait for completion or timeout
+            const timeout = 60000;
+            const startTime = Date.now();
+            while (!completed && Date.now() - startTime < timeout) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            if (!completed) {
+                console.error(chalk.red('\n⏱️  Timeout waiting for response'));
+            }
+
+            // Output JSON if requested
+            if (options.json) {
+                const output = {
+                    prompt,
+                    rag: ragResult,
+                    response: responseText,
+                    completed
+                };
+                console.log(JSON.stringify(output, null, 2));
+            }
+
+            // Summary
+            console.log(chalk.blue('\n📊 RAG Test Summary:'));
+            if (ragResult) {
+                console.log(chalk.green(`   ✓ RAG lookup successful`));
+                console.log(chalk.dim(`   Task: ${ragResult.taskType}${ragResult.subType ? ' (' + ragResult.subType + ')' : ''}`));
+                console.log(chalk.dim(`   Templates injected: ${ragResult.templatesFound}`));
+            } else {
+                console.log(chalk.yellow(`   ⚠ No RAG lookup event received (may be conversation or disabled)`));
+            }
+
+            client.disconnect();
+            process.exit(0);
+
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed: ${error.message}\n`));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('rag-classify')
+    .description('Test task classification via server HTTP API')
+    .argument('<prompt>', 'The prompt to classify')
+    .option('--json', 'Output as JSON', false)
+    .option('--batch', 'Test multiple prompts (pass comma-separated)', false)
+    .option('--server <url>', 'Server URL', 'http://localhost:2567')
+    .action(async (prompt, options) => {
+        console.log(chalk.blue('\n🏷️  RAG Task Classification Test\n'));
+
+        try {
+            if (options.batch) {
+                // Batch mode: split by comma
+                const prompts = prompt.split(',').map(p => p.trim());
+                console.log(chalk.dim(`Testing ${prompts.length} prompts...\n`));
+
+                const response = await fetch(`${options.server}/api/ai/classify/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompts })
+                });
+
+                const data = await response.json();
+
+                if (options.json) {
+                    console.log(JSON.stringify(data, null, 2));
+                } else {
+                    for (const result of data.results) {
+                        console.log(chalk.yellow(`"${result.prompt.substring(0, 40)}..."`));
+                        console.log(chalk.dim(`   Type: ${result.classification.taskType} (${result.classification.subType || 'generic'})`));
+                        console.log(chalk.dim(`   Confidence: ${(result.classification.confidence * 100).toFixed(0)}%`));
+                        console.log('');
+                    }
+                }
+            } else {
+                // Single prompt
+                console.log(chalk.dim(`Prompt: "${prompt}"\n`));
+
+                const response = await fetch(`${options.server}/api/ai/classify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+
+                const data = await response.json();
+
+                if (options.json) {
+                    console.log(JSON.stringify(data, null, 2));
+                } else {
+                    console.log(chalk.cyan('Classification Result:'));
+                    console.log(chalk.dim(`   Task Type: ${data.taskType}`));
+                    console.log(chalk.dim(`   Sub Type: ${data.subType || 'none'}`));
+                    console.log(chalk.dim(`   Confidence: ${(data.confidence * 100).toFixed(0)}%`));
+                    console.log(chalk.dim(`   Keywords: ${data.keywords?.join(', ') || 'none'}`));
+                }
+            }
+
+            process.exit(0);
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed: ${error.message}`));
+            console.error(chalk.dim('Make sure the server is running (npm run dev in server/).\n'));
+            process.exit(1);
+        }
+    });
+
+program
+    .command('rag-lookup')
+    .description('Test full RAG template lookup via server HTTP API')
+    .argument('<prompt>', 'The prompt to find templates for')
+    .option('--json', 'Output as JSON', false)
+    .option('--no-semantic', 'Disable semantic search', false)
+    .option('--server <url>', 'Server URL', 'http://localhost:2567')
+    .action(async (prompt, options) => {
+        console.log(chalk.blue('\n📚 RAG Template Lookup Test\n'));
+        console.log(chalk.dim(`Prompt: "${prompt}"\n`));
+
+        try {
+            const response = await fetch(`${options.server}/api/ai/rag`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, semantic: options.semantic !== false })
+            });
+
+            const data = await response.json();
+
+            if (options.json) {
+                console.log(JSON.stringify(data, null, 2));
+            } else {
+                console.log(chalk.cyan('Classification:'));
+                console.log(chalk.dim(`   Task Type: ${data.classification.taskType} (${data.classification.subType || 'generic'})`));
+                console.log(chalk.dim(`   Confidence: ${(data.classification.confidence * 100).toFixed(0)}%`));
+                console.log(chalk.dim(`   Keywords: ${data.classification.keywords?.join(', ') || 'none'}`));
+
+                console.log(chalk.yellow('\nTemplates Found:'));
+                if (data.templates.length === 0) {
+                    console.log(chalk.dim('   (none)'));
+                } else {
+                    data.templates.forEach((t, i) => {
+                        console.log(chalk.dim(`   ${i + 1}. ${t.title}`));
+                        console.log(chalk.dim(`      Relevance: ${(t.relevance * 100).toFixed(0)}% | Source: ${t.source}`));
+                        console.log(chalk.dim(`      Preview: ${t.contentPreview.substring(0, 80)}...`));
+                    });
+                }
+
+                console.log(chalk.dim(`\nContext injection: ${data.contextInjectionLength} chars`));
+            }
+
+            process.exit(0);
+        } catch (error) {
+            console.error(chalk.red(`\n❌ Failed: ${error.message}`));
+            console.error(chalk.dim('Make sure the server is running (npm run dev in server/).\n'));
+            process.exit(1);
+        }
+    });
+
+// ============ Server Commands ============
+program
+    .command('restart')
+    .description('Restart the server by killing port 2567 (relies on file watcher to restart)')
+    .action(async () => {
+        const { execSync } = await import('child_process');
+
+        console.log(chalk.blue('\nRestarting server...\n'));
+
+        try {
+            // Kill process on port 2567
+            const pids = execSync('lsof -ti :2567 2>/dev/null || true').toString().trim();
+            if (pids) {
+                const pidList = pids.split('\n').join(' ');
+                console.log(chalk.yellow(`Killing processes on port 2567: ${pidList}`));
+                execSync(`kill -9 ${pidList}`);
+                console.log(chalk.green('✅ Server killed. File watcher should restart it automatically.'));
+            } else {
+                console.log(chalk.yellow('No server process found on port 2567.'));
+                console.log(chalk.dim('Run ./start.sh to start the server.'));
+            }
+        } catch (error) {
+            // Kill might partially succeed, check if server is down
+            const stillRunning = execSync('lsof -ti :2567 2>/dev/null || true').toString().trim();
+            if (!stillRunning) {
+                console.log(chalk.green('✅ Server killed. File watcher should restart it automatically.'));
+            } else {
+                console.error(chalk.red(`Failed: ${error.message}`));
+                console.log(chalk.dim('\nTo fully restart, run: ./start.sh'));
+            }
+        }
+
+        process.exit(0);
+    });
+
+// ============ Item Commands ============
+const itemCommand = program
+    .command('item')
+    .description('Manage dynamic items');
+
+itemCommand
+    .command('delete <name>')
+    .description('Delete a dynamic item')
+    .option('-w, --world <worldId>', 'World ID (default: global)', 'global')
+    .action(async (name, options) => {
+        const { io } = await import('socket.io-client');
+        const socket = io('http://localhost:2567');
+
+        console.log(chalk.blue(`\nDeleting item: ${name} (world: ${options.world})...\n`));
+
+        socket.on('connect', () => {
+            socket.emit('admin:delete_item', {
+                name: name,
+                worldId: options.world,
+                token: process.env.CLI_SECRET || 'asdf123'
+            });
+        });
+
+        socket.on('admin:delete_item:result', (result) => {
+            if (result.success) {
+                console.log(chalk.green(`✅ Deleted: ${name}`));
+            } else {
+                console.log(chalk.red(`❌ Failed: ${result.error}`));
+            }
+            socket.disconnect();
+            process.exit(result.success ? 0 : 1);
+        });
+
+        socket.on('connect_error', (err) => {
+            console.error(chalk.red(`Connection error: ${err.message}`));
+            process.exit(1);
+        });
+
+        setTimeout(() => {
+            console.log(chalk.yellow('Timeout - no response from server'));
+            socket.disconnect();
+            process.exit(1);
+        }, 5000);
+    });
+
+itemCommand
+    .command('list')
+    .description('List all dynamic items')
+    .option('-w, --world <worldId>', 'World ID (default: global)', 'global')
+    .action(async (options) => {
+        try {
+            const response = await fetch(`http://localhost:2567/api/worlds/${options.world}/items`);
+            if (!response.ok) {
+                // Try alternate endpoint
+                const altResponse = await fetch(`http://localhost:2567/api/items?worldId=${options.world}`);
+                if (!altResponse.ok) throw new Error('Failed to fetch items');
+                const data = await altResponse.json();
+                console.log(chalk.blue('\n═══ Dynamic Items ═══'));
+                console.log(JSON.stringify(data, null, 2));
+            } else {
+                const data = await response.json();
+                console.log(chalk.blue('\n═══ Dynamic Items ═══'));
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(item => {
+                        console.log(`  - ${item.name}`);
+                    });
+                } else {
+                    console.log(chalk.dim('  (no dynamic items)'));
+                }
+            }
+            process.exit(0);
+        } catch (error) {
+            console.error(chalk.red(`Failed: ${error.message}`));
+            process.exit(1);
+        }
+    });
+
+// ============================================================
+// CLEANUP COMMAND
+// ============================================================
+
+program
+    .command('cleanup')
+    .description('Remove test artifacts (screenshots, recordings, test results)')
+    .option('--dry-run', 'Show what would be deleted without actually deleting')
+    .option('--keep-golden', 'Keep golden test files in tests/golden/')
+    .option('--all', 'Also clean test-results directory')
+    .action(async (options) => {
+        const { readdir, unlink, rmdir, stat } = await import('fs/promises');
+        const pathModule = await import('path');
+
+        console.log(chalk.blue('\n🧹 Test Artifact Cleanup\n'));
+
+        const cliRoot = pathModule.dirname(pathModule.dirname(new URL(import.meta.url).pathname));
+
+        // Directories to scan with their file patterns
+        const scanDirs = [
+            { dir: cliRoot, pattern: /\.png$/ },
+            { dir: pathModule.join(cliRoot, 'tests'), pattern: /\.png$/ },
+        ];
+
+        if (options.all) {
+            scanDirs.push({ dir: pathModule.join(cliRoot, 'test-results'), pattern: /.*/, recursive: true });
+        }
+
+        let totalFiles = 0;
+        let totalSize = 0;
+        const filesToDelete = [];
+
+        for (const { dir, pattern, recursive } of scanDirs) {
+            try {
+                const entries = await readdir(dir, { withFileTypes: true });
+
+                for (const entry of entries) {
+                    const filePath = pathModule.join(dir, entry.name);
+
+                    if (entry.isFile() && pattern.test(entry.name)) {
+                        // Skip golden files if requested
+                        if (options.keepGolden && filePath.includes('/golden/')) {
+                            continue;
+                        }
+
+                        try {
+                            const stats = await stat(filePath);
+                            filesToDelete.push({ path: filePath, size: stats.size });
+                            totalSize += stats.size;
+                            totalFiles++;
+                        } catch (e) {
+                            // File may have been deleted already
+                        }
+                    } else if (entry.isDirectory() && recursive) {
+                        // Handle recursive directories
+                        try {
+                            const subEntries = await readdir(filePath, { withFileTypes: true });
+                            for (const subEntry of subEntries) {
+                                if (subEntry.isFile()) {
+                                    const subPath = pathModule.join(filePath, subEntry.name);
+                                    try {
+                                        const stats = await stat(subPath);
+                                        filesToDelete.push({ path: subPath, size: stats.size });
+                                        totalSize += stats.size;
+                                        totalFiles++;
+                                    } catch (e) {}
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+            } catch (e) {
+                // Directory doesn't exist, skip
+            }
+        }
+
+        if (filesToDelete.length === 0) {
+            console.log(chalk.green('✅ No test artifacts found. Already clean!'));
+            process.exit(0);
+        }
+
+        console.log(chalk.dim(`Found ${totalFiles} files (${(totalSize / 1024).toFixed(1)} KB)\n`));
+
+        // Group by directory for display
+        const byDir = {};
+        for (const f of filesToDelete) {
+            const dir = pathModule.dirname(f.path).replace(cliRoot + '/', '').replace(cliRoot, '.');
+            byDir[dir] = byDir[dir] || [];
+            byDir[dir].push(f);
+        }
+
+        for (const [dir, files] of Object.entries(byDir)) {
+            console.log(chalk.cyan(`${dir}/`));
+            for (const f of files.slice(0, 10)) {
+                const name = pathModule.basename(f.path);
+                const size = (f.size / 1024).toFixed(1);
+                console.log(chalk.dim(`  ${options.dryRun ? '[would delete]' : '✗'} ${name} (${size} KB)`));
+            }
+            if (files.length > 10) {
+                console.log(chalk.dim(`  ... and ${files.length - 10} more`));
+            }
+        }
+
+        if (options.dryRun) {
+            console.log(chalk.yellow(`\n🔍 Dry run: Would delete ${totalFiles} files (${(totalSize / 1024).toFixed(1)} KB)`));
+            console.log(chalk.dim('Run without --dry-run to actually delete.\n'));
+            process.exit(0);
+        }
+
+        // Actually delete files
+        let deleted = 0;
+        let errors = 0;
+        for (const f of filesToDelete) {
+            try {
+                await unlink(f.path);
+                deleted++;
+            } catch (e) {
+                errors++;
+            }
+        }
+
+        // Clean up empty test-results directory if --all
+        if (options.all) {
+            const { rm } = await import('fs/promises');
+            try {
+                await rm(pathModule.join(cliRoot, 'test-results'), { recursive: true, force: true });
+                console.log(chalk.dim('Removed test-results/ directory'));
+            } catch (e) {
+                // Directory not empty or doesn't exist
+            }
+        }
+
+        console.log(chalk.green(`\n✅ Deleted ${deleted} files (${(totalSize / 1024).toFixed(1)} KB)`));
+        if (errors > 0) {
+            console.log(chalk.yellow(`⚠️  ${errors} files could not be deleted`));
+        }
+        console.log('');
+        process.exit(0);
     });
 
 program.parse();

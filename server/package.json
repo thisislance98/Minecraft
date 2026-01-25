@@ -10,7 +10,7 @@
         "test": "jest"
     },
     "dependencies": {
-        "@google/generative-ai": "^0.24.1",
+        "@opencode-ai/sdk": "^1.1.26",
         "@types/ws": "^8.18.1",
         "cors": "^2.8.5",
         "dotenv": "^17.2.3",

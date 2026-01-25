@@ -427,12 +427,48 @@ export class Player {
         const selectedItem = this.game.inventory ? this.game.inventory.getSelectedItem() : null;
         const itemType = selectedItem ? selectedItem.item : null;
 
+        // Hide any previously shown dynamic item mesh
+        if (this.dynamicItemMesh && this.toolAttachment) {
+            this.toolAttachment.remove(this.dynamicItemMesh);
+            this.dynamicItemMesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.dynamicItemMesh = null;
+        }
+
         if (this.pickaxe) this.pickaxe.visible = itemType === 'pickaxe';
         if (this.sword) this.sword.visible = itemType === 'sword';
         if (this.bow) this.bow.visible = itemType === 'bow';
         if (this.apple) this.apple.visible = itemType === 'apple';
         if (this.bread) this.bread.visible = itemType === 'bread';
         if (this.wand) this.wand.visible = itemType === 'wand';
+
+        // Check for dynamic items with getMesh()
+        if (itemType && this.game.itemManager && this.toolAttachment) {
+            const itemInstance = this.game.itemManager.getItem(itemType);
+            if (itemInstance && typeof itemInstance.getMesh === 'function') {
+                const builtInVisible = [this.pickaxe, this.sword, this.bow, this.apple, this.bread, this.wand]
+                    .some(model => model && model.visible);
+                if (!builtInVisible) {
+                    try {
+                        this.dynamicItemMesh = itemInstance.getMesh();
+                        if (this.dynamicItemMesh) {
+                            this.dynamicItemMesh.position.set(0, -0.35, 0);
+                            this.dynamicItemMesh.traverse((child) => {
+                                if (child.material) {
+                                    child.material.depthTest = false;
+                                    child.renderOrder = 999;
+                                }
+                            });
+                            this.toolAttachment.add(this.dynamicItemMesh);
+                        }
+                    } catch (e) {
+                        console.warn(`[Player] Failed to get mesh for item ${itemType}:`, e);
+                    }
+                }
+            }
+        }
     }
 
     swingArm() {

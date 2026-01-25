@@ -1,10 +1,10 @@
 import { io } from 'socket.io-client';
 import * as THREE from 'three';
-import { Peer } from 'peerjs';
 import { registerDynamicCreature, registerMultipleCreatures } from '../DynamicCreatureRegistry.js';
 import { registerDynamicItem, registerMultipleItems } from '../DynamicItemRegistry.js';
 import { ItemFactory } from '../entities/ItemFactory.js';
 import { auth } from '../../config/firebase-client.js';
+import { VoiceChatManager } from './socket/VoiceChatManager.js';
 
 export class SocketManager {
     // Static shared geometry/material cache for remote player models
@@ -50,13 +50,8 @@ export class SocketManager {
         this.world = null;             // Full world data from server
         this.permissions = null;       // Player's permissions in current world
 
-        // Voice Chat (PeerJS)
-        this.localStream = null;
-        this.peerJs = null; // PeerJS instance
-        this.activeCalls = new Map(); // peerId -> MediaConnection
-        this.pendingStreams = new Map(); // id -> MediaStream (if mesh not ready)
-        this.voiceEnabled = localStorage.getItem('settings_voice') === 'true';
-        this.lastVoiceState = false;
+        // Voice Chat - handled by VoiceChatManager
+        this.voiceChatManager = new VoiceChatManager(game, this);
 
         // Soccer Ball Multiplayer State
         this.isSoccerBallHost = false;  // First player in Soccer World becomes host
@@ -93,8 +88,8 @@ export class SocketManager {
             }
 
             // Initialize voice chat
-            if (this.voiceEnabled) {
-                this.initVoiceChat();
+            if (this.voiceChatManager.isEnabled()) {
+                this.voiceChatManager.initVoiceChat();
             }
         });
 
@@ -194,8 +189,16 @@ export class SocketManager {
         });
 
         this.socket.on('connect_error', (err) => {
-            console.error('[SocketManager] Connection Error:', err);
-            this.game.uiManager?.updateNetworkStatus('Connection Error');
+            // Only log first connection error, not during reconnection attempts
+            if (!this._hasLoggedConnectError) {
+                console.warn('[SocketManager] Connection Error (reconnecting...):', err.message || err);
+                this._hasLoggedConnectError = true;
+            }
+            this.game.uiManager?.updateNetworkStatus('Reconnecting...');
+        });
+
+        this.socket.on('reconnect', () => {
+            this._hasLoggedConnectError = false; // Reset for next disconnect
         });
 
         this.socket.on('room:joined', (data) => {
@@ -289,8 +292,9 @@ export class SocketManager {
             // So we don't call callPeer() here.
             // However, if we already have voice chat active, we need to re-broadcast our peer ID
             // so the new player knows about us and can initiate a call
-            if (this.voiceEnabled && this.peerJs && this.peerJs.open) {
-                const myPeerId = this.socketIdToPeerId(this.socketId);
+            const vcm = this.voiceChatManager;
+            if (vcm.isEnabled() && vcm.peerJs && vcm.peerJs.open) {
+                const myPeerId = vcm.socketIdToPeerId(this.socketId);
                 console.log(`[SocketManager] Re-broadcasting our PeerJS ID ${myPeerId} to new player ${data.id}`);
                 this.socket.emit('peerjs:id', { peerId: myPeerId });
             }
@@ -300,21 +304,8 @@ export class SocketManager {
             console.log('[SocketManager] Player left:', id);
             this.game.uiManager?.updateRemotePlayerStatus(id, null); // Remove from UI
 
-            // Close PeerJS call and cleanup audio
-            const peerId = this.socketIdToPeerId(id);
-            if (this.activeCalls.has(peerId)) {
-                console.log(`[SocketManager] Closing voice call with ${peerId}`);
-                this.activeCalls.get(peerId).close();
-                this.activeCalls.delete(peerId);
-            }
-
-            // Remove audio element for this peer
-            if (this.peerAudioElements && this.peerAudioElements.has(peerId)) {
-                console.log(`[SocketManager] Removing audio element for ${peerId}`);
-                const audio = this.peerAudioElements.get(peerId);
-                audio.pause();
-                audio.srcObject = null;
-                this.peerAudioElements.delete(peerId);
+            // Close PeerJS call and cleanup audio via VoiceChatManager
+            this.voiceChatManager.handlePeerLeave(id);
             }
 
             // Remove from pending peer IDs
@@ -335,20 +326,8 @@ export class SocketManager {
         this.socket.on('peerjs:id', (data) => {
             // data: { socketId, peerId }
             console.log(`[SocketManager] Received PeerJS ID from ${data.socketId}: ${data.peerId}`);
-            console.log(`[SocketManager] Voice state: voiceEnabled=${this.voiceEnabled}, localStream=${!!this.localStream}, peerJs=${!!this.peerJs}`);
-
-            // If voice chat isn't initialized yet, store the peer info for later connection
-            if (!this.pendingPeerIds) {
-                this.pendingPeerIds = new Map();
-            }
-            this.pendingPeerIds.set(data.socketId, data.peerId);
-
-            // If we have a stream and this is a new player, call them
-            if (this.localStream && this.peerJs && data.socketId !== this.socketId) {
-                this.callPeer(data.peerId);
-            } else {
-                console.log(`[SocketManager] Cannot call peer yet - waiting for voice chat init. Stored peerId for later.`);
-            }
+            // Delegate to VoiceChatManager
+            this.voiceChatManager.handlePeerJoin(data.socketId, data.peerId);
         });
 
         this.socket.on('player:move', (data) => {
@@ -777,17 +756,19 @@ export class SocketManager {
 
         // 0. Update Push-to-Talk
         let voiceActive = this.game.inputManager.isActionActive('VOICE');
+        const vcm = this.voiceChatManager;
 
         // Only allow voice if enabled in settings AND if there are other players
-        if (!this.voiceEnabled || this.playerMeshes.size === 0) {
+        if (!vcm.isEnabled() || this.playerMeshes.size === 0) {
             voiceActive = false;
         }
 
-        if (voiceActive !== this.lastVoiceState) {
-            this.lastVoiceState = voiceActive;
-            if (this.localStream) {
+        if (voiceActive !== vcm.lastVoiceState) {
+            vcm.lastVoiceState = voiceActive;
+            const localStream = vcm.getLocalStream();
+            if (localStream) {
                 console.log(`[SocketManager] Voice ${voiceActive ? 'ON' : 'OFF'}`);
-                this.localStream.getAudioTracks().forEach(t => t.enabled = voiceActive);
+                localStream.getAudioTracks().forEach(t => t.enabled = voiceActive);
                 this.game.uiManager?.toggleVoiceTransmitIndicator(voiceActive);
             }
         }
@@ -1558,7 +1539,8 @@ export class SocketManager {
             }
         } else {
             // Turn on
-            if (!this.localStream) {
+            const localStream = this.voiceChatManager.getLocalStream();
+            if (!localStream) {
                 console.warn('[SocketManager] Cannot enable echo: No local stream');
                 this.game.uiManager?.addChatMessage('system', 'Voice Echo: Failed (No Microphone detected)');
                 return;
@@ -1579,7 +1561,7 @@ export class SocketManager {
             }
 
             // Create a MediaStreamSource from the local stream
-            this._echoSource = this._echoContext.createMediaStreamSource(this.localStream);
+            this._echoSource = this._echoContext.createMediaStreamSource(localStream);
 
             // Connect directly to the destination (speakers)
             this._echoSource.connect(this._echoContext.destination);
@@ -1588,251 +1570,8 @@ export class SocketManager {
         }
     }
 
-    // Voice chat methods - PeerJS Implementation
-
-    socketIdToPeerId(socketId) {
-        // Convert socket.io ID to PeerJS-safe ID (remove special chars)
-        return 'mc_' + socketId.replace(/[^a-zA-Z0-9]/g, '');
-    }
-
-    setVoiceChatEnabled(enabled) {
-        this.voiceEnabled = enabled;
-        console.log(`[SocketManager] Voice Chat Setting: ${enabled}`);
-
-        if (enabled) {
-            this.initVoiceChat();
-        } else {
-            // Disable logic:
-            // 1. Mute local stream
-            if (this.localStream) {
-                this.localStream.getAudioTracks().forEach(t => t.enabled = false);
-            }
-            // 2. We don't fully destroy PeerJS connection to avoid re-handshake complexity on toggle,
-            // but we ensure we don't transmit.
-            // Ideally we could close calls, but just muting writes is safer for quick toggle.
-
-            // If we wanted to fully shut down:
-            /*
-            if (this.peerJs) {
-                this.peerJs.destroy();
-                this.peerJs = null;
-            }
-            if (this.localStream) {
-                this.localStream.getTracks().forEach(track => track.stop());
-                this.localStream = null;
-            }
-            */
-        }
-    }
-
-    initVoiceChat() {
-        if (!this.voiceEnabled) return; // double check
-        if (this.localStream) return;
-
-        console.log('[SocketManager] Initializing PeerJS Voice Chat...');
-
-        // Get microphone first
-        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-            .then(stream => {
-                console.log('[SocketManager] Microphone access granted.');
-                this.localStream = stream;
-
-                // Mute by default for PTT
-                stream.getAudioTracks().forEach(t => t.enabled = false);
-
-                // Create PeerJS instance
-                const peerId = this.socketIdToPeerId(this.socketId);
-                console.log(`[SocketManager] Creating PeerJS with ID: ${peerId}`);
-
-                this.peerJs = new Peer(peerId);
-
-                this.peerJs.on('open', (id) => {
-                    console.log('[SocketManager] PeerJS connected with ID:', id);
-                    if (this.socket && this.roomId) {
-                        this.socket.emit('peerjs:id', { peerId: id });
-
-                        // Connect to any pending peers that joined before we initialized
-                        if (this.pendingPeerIds && this.pendingPeerIds.size > 0) {
-                            console.log(`[SocketManager] Connecting to ${this.pendingPeerIds.size} pending peers...`);
-                            for (const [pendingSocketId, pendingPeerId] of this.pendingPeerIds) {
-                                if (pendingSocketId !== this.socketId) {
-                                    console.log(`[SocketManager] Calling pending peer: ${pendingPeerId}`);
-                                    this.callPeer(pendingPeerId);
-                                }
-                            }
-                        }
-                    }
-                });
-
-                this.peerJs.on('call', (call) => {
-                    console.log(`[SocketManager] Incoming call from ${call.peer}`);
-                    call.answer(this.localStream);
-
-                    call.on('stream', (remoteStream) => {
-                        console.log(`[SocketManager] Received stream from ${call.peer}`);
-                        this.setupSpatialAudioForPeer(call.peer, remoteStream);
-                    });
-
-                    call.on('error', (err) => {
-                        console.error(`[SocketManager] Call error:`, err);
-                    });
-
-                    this.activeCalls.set(call.peer, call);
-                });
-
-                this.peerJs.on('error', (err) => {
-                    console.error('[SocketManager] PeerJS error:', err);
-                });
-            })
-            .catch(err => {
-                console.error('[SocketManager] Failed to get local stream', err);
-                this.game.uiManager?.addChatMessage('system', 'Microphone access denied. Voice chat disabled.');
-            });
-    }
-
-    callPeer(peerId) {
-        if (!this.peerJs || !this.localStream) {
-            console.warn('[SocketManager] Cannot call peer: PeerJS or stream not ready');
-            console.warn(`[SocketManager] peerJs=${!!this.peerJs}, localStream=${!!this.localStream}`);
-            return;
-        }
-        if (this.activeCalls.has(peerId)) {
-            console.log(`[SocketManager] Already in call with ${peerId}`);
-            return;
-        }
-
-        console.log(`[SocketManager] Calling peer: ${peerId}`);
-        console.log(`[SocketManager] PeerJS connection open: ${this.peerJs.open}, disconnected: ${this.peerJs.disconnected}`);
-
-        try {
-            const call = this.peerJs.call(peerId, this.localStream);
-
-            if (!call) {
-                console.error(`[SocketManager] Failed to create call to ${peerId} - call object is null`);
-                return;
-            }
-
-            call.on('stream', (remoteStream) => {
-                console.log(`[SocketManager] Received stream from ${peerId}`);
-                console.log(`[SocketManager] Stream tracks: ${remoteStream.getTracks().length}, audio: ${remoteStream.getAudioTracks().length}`);
-                this.setupSpatialAudioForPeer(peerId, remoteStream);
-            });
-
-            call.on('error', (err) => {
-                console.error(`[SocketManager] Call error with ${peerId}:`, err);
-                this.activeCalls.delete(peerId);
-            });
-
-            call.on('close', () => {
-                console.log(`[SocketManager] Call with ${peerId} closed`);
-                this.activeCalls.delete(peerId);
-            });
-
-            this.activeCalls.set(peerId, call);
-            console.log(`[SocketManager] Call initiated to ${peerId}, active calls: ${this.activeCalls.size}`);
-        } catch (error) {
-            console.error(`[SocketManager] Exception calling peer ${peerId}:`, error);
-        }
-    }
-
-    setupSpatialAudioForPeer(peerId, stream) {
-        // For now, just play the audio directly (non-spatial)
-        // We can add spatial audio later once basic audio works
-        console.log(`[SocketManager] Setting up audio for ${peerId}`);
-
-        // Check if we already have an audio element for this peer
-        if (!this.peerAudioElements) {
-            this.peerAudioElements = new Map();
-        }
-        if (this.peerAudioElements.has(peerId)) {
-            console.log(`[SocketManager] Audio element already exists for ${peerId}, updating stream`);
-            const existingAudio = this.peerAudioElements.get(peerId);
-            existingAudio.srcObject = stream;
-            return;
-        }
-
-        // Simple approach: create an audio element
-        const audio = new Audio();
-        audio.srcObject = stream;
-        audio.autoplay = true;
-        audio.volume = 1.0;
-
-        // Monitor audio for debugging
-        audio.onloadedmetadata = () => {
-            console.log(`[SocketManager] Audio metadata loaded for ${peerId}`);
-        };
-        audio.onplay = () => {
-            console.log(`[SocketManager] Audio started playing for ${peerId}`);
-        };
-        audio.onerror = (e) => {
-            console.error(`[SocketManager] Audio error for ${peerId}:`, e);
-        };
-
-        // Store the audio element
-        this.peerAudioElements.set(peerId, audio);
-
-        // Play (may need user interaction)
-        audio.play().then(() => {
-            console.log(`[SocketManager] Audio play() succeeded for ${peerId}`);
-        }).catch(e => {
-            console.warn('[SocketManager] Audio autoplay blocked, will play on interaction:', e.message);
-            const playOnce = () => {
-                audio.play().then(() => {
-                    console.log(`[SocketManager] Audio play() succeeded after click for ${peerId}`);
-                }).catch(err => {
-                    console.error(`[SocketManager] Audio play() failed after click for ${peerId}:`, err);
-                });
-                window.removeEventListener('click', playOnce);
-            };
-            window.addEventListener('click', playOnce);
-        });
-
-        console.log(`[SocketManager] Audio element created for ${peerId}, active audio elements: ${this.peerAudioElements.size}`);
-    }
-
-    setupSpatialAudio(id, stream) {
-        const meshInfo = this.playerMeshes.get(id);
-        if (!meshInfo) {
-            console.warn(`[SocketManager] Mesh not found for ${id}, storing pending stream.`);
-            this.pendingStreams.set(id, stream);
-            return;
-        }
-
-        if (!this.game.audioListener) {
-            console.error('[SocketManager] AudioListener not found on camera');
-            return;
-        }
-
-        // Resume AudioContext on first interaction if suspended
-        const context = this.game.audioListener.context;
-        if (context.state === 'suspended') {
-            const resume = () => {
-                context.resume().then(() => {
-                    console.log('[SocketManager] AudioContext resumed');
-                });
-                window.removeEventListener('click', resume);
-                window.removeEventListener('keydown', resume);
-            };
-            window.addEventListener('click', resume);
-            window.addEventListener('keydown', resume);
-        }
-
-        // Create PositionalAudio
-        const sound = new THREE.PositionalAudio(this.game.audioListener);
-
-        // Use MediaStreamSource
-        const source = context.createMediaStreamSource(stream);
-
-        sound.setNodeSource(source);
-        sound.setRefDistance(5); // Distance at which sound starts to attenuate
-        sound.setMaxDistance(50); // Distance at which sound is completely silent
-        sound.setRolloffFactor(1);
-
-        meshInfo.group.add(sound);
-        meshInfo.spatialAudio = sound;
-
-        console.log(`[SocketManager] Spatial audio setup for ${id}`);
-    }
+    // Note: Voice chat methods moved to voiceChatManager
+    // Use: socketManager.voiceChatManager.initVoiceChat(), .callPeer(), .setVoiceChatEnabled(), etc.
 
     updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth, shirtColor, isFlying = false) {
         let meshInfo = this.playerMeshes.get(id);
@@ -1878,12 +1617,12 @@ export class SocketManager {
                 isFlying: isFlying
             });
 
-            // Check if we have a pending stream for this mesh
-            const pendingStream = this.pendingStreams.get(id);
+            // Check if we have a pending stream for this mesh via VoiceChatManager
+            const pendingStream = this.voiceChatManager.pendingStreams.get(id);
             if (pendingStream) {
                 console.log(`[SocketManager] Found pending stream for ${id}, setting up spatial audio now.`);
-                this.setupSpatialAudio(id, pendingStream);
-                this.pendingStreams.delete(id);
+                this.voiceChatManager.setupSpatialAudio(id, pendingStream);
+                this.voiceChatManager.pendingStreams.delete(id);
             }
             if (health !== undefined) {
                 this.updateHealthBar(meshInfo, health, maxHealth);

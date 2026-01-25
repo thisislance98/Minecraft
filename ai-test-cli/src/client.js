@@ -4,7 +4,11 @@ import EventEmitter from 'events';
 export class AntigravityClient extends EventEmitter {
     constructor(url = 'ws://localhost:2567/api/antigravity') {
         super();
-        this.url = url;
+        // Append CLI params to URL for authentication bypass
+        const urlObj = new URL(url);
+        urlObj.searchParams.set('cli', 'true');
+        urlObj.searchParams.set('secret', process.env.CLI_SECRET || 'asdf123');
+        this.url = urlObj.toString();
         this.ws = null;
         this.isConnected = false;
     }
@@ -14,7 +18,7 @@ export class AntigravityClient extends EventEmitter {
             this.ws = new WebSocket(this.url, {
                 headers: {
                     'x-antigravity-client': 'cli',
-                    'x-antigravity-secret': 'asdf123'
+                    'x-antigravity-secret': process.env.CLI_SECRET || 'asdf123'
                 }
             });
 

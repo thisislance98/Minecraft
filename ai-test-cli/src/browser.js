@@ -8,8 +8,9 @@ export class GameBrowser {
     constructor(options = {}) {
         this.browser = null;
         this.page = null;
+        // Support custom URL (e.g., with world parameter) or default
         // Append ?cli=true to bypass authentication on server
-        const baseUrl = options.gameUrl || 'http://localhost:3000';
+        const baseUrl = options.url || options.gameUrl || 'http://localhost:3000';
         this.gameUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'cli=true&secret=asdf123';
         this.headless = options.headless ?? false; // Always headed for visual debugging
         this.quiet = options.quiet ?? false; // Suppress browser logs when true

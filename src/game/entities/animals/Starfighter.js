@@ -34,8 +34,13 @@ export class Starfighter extends Animal {
 
         // Current orientation angles (for reference/debugging)
         this.pitch = 0;    // Nose up/down (-PI/2 to PI/2)
-        this.yaw = 0;      // Heading (0 to 2*PI)
+        // Initialize yaw from base rotation (set by Animal constructor or spawn system)
+        // This ensures the ship faces the direction it was spawned in
+        this.yaw = this.rotation;
         this.roll = 0;     // Visual bank angle
+
+        // Initialize quaternion from initial yaw so ship starts facing correct direction
+        this._initializeQuaternion();
 
         // Speed control
         this.currentSpeed = 15;  // Start at cruise speed
@@ -50,7 +55,7 @@ export class Starfighter extends Animal {
         this.pitchSpeed = 2.0;   // Radians per second
         this.yawSpeed = 1.8;     // Radians per second
         this.rollSpeed = 3.0;    // Visual roll speed
-        this.maxPitch = Math.PI * 0.45;  // Max pitch angle (81 degrees)
+        this.maxPitch = Math.PI * 2;  // Allow full loops (no pitch limit)
         this.autoLevelStrength = 0.5;    // How strongly ship auto-levels when not pitching
 
         // Engine effects
@@ -61,7 +66,39 @@ export class Starfighter extends Animal {
         // Landing state
         this.isLanded = false;
 
+        // Laser weapon system
+        this.lasers = [];
+        this.laserCooldown = 0;
+        this.laserFireRate = 0.15; // Seconds between shots
+        this.laserSpeed = 200; // Blocks per second
+        this.laserRange = 150; // Max distance before despawn
+
         this.createBody();
+    }
+
+    /**
+     * Initialize quaternion from current yaw/pitch/roll angles.
+     * Called after construction and when rotation is externally set.
+     */
+    _initializeQuaternion() {
+        const euler = new THREE.Euler(this.pitch, this.yaw, this.roll, 'YXZ');
+        this.flightQuaternion.setFromEuler(euler);
+        this.targetQuaternion.copy(this.flightQuaternion);
+    }
+
+    /**
+     * Set the ship's heading direction. Use this to orient the ship
+     * after spawning to face a specific direction.
+     * @param {number} yaw - Yaw angle in radians
+     */
+    setHeading(yaw) {
+        this.yaw = yaw;
+        this.rotation = yaw;
+        this._initializeQuaternion();
+        if (this.bodyGroup) {
+            this.bodyGroup.quaternion.copy(this.flightQuaternion);
+        }
+        console.log(`[Starfighter] setHeading: yaw=${(yaw * 180 / Math.PI).toFixed(1)}°`);
     }
 
     createBody() {
@@ -230,10 +267,16 @@ export class Starfighter extends Animal {
 
         const input = this.game.inputManager;
         const isBraking = input && (input.keys['ShiftLeft'] || input.keys['KeyX']);
+        const isBoosting = input && input.keys['KeyE'];
+
+        // === WEAPONS - Space fires lasers ===
+        if (jump) {
+            this.fireLasers();
+        }
 
         // === SPEED CONTROL ===
-        if (jump) {
-            // Boost (Space)
+        if (isBoosting) {
+            // Boost (E key)
             this.currentSpeed += this.boostAccel * dt;
             this.boostIntensity = 1;
         } else if (isBraking) {
@@ -249,21 +292,25 @@ export class Starfighter extends Animal {
         }
         this.currentSpeed = THREE.MathUtils.clamp(this.currentSpeed, this.minSpeed, this.maxSpeed);
 
-        // === PITCH CONTROL (W/S) ===
-        // In Three.js with Euler XYZ and forward = +Z:
-        // Negative pitch rotation = nose goes UP (climb)
-        // Positive pitch rotation = nose goes DOWN (dive)
+        // === PITCH CONTROL (W/S) - Inverted flight style ===
+        // W = pitch down (dive), S = pitch up (climb)
+        // This matches traditional inverted flight controls (pull back to climb)
         if (moveForward > 0) {
-            // W = pitch up (nose goes up) = negative X rotation
-            this.pitch -= this.pitchSpeed * dt;
-        } else if (moveForward < 0) {
-            // S = pitch down (nose goes down) = positive X rotation
+            // W = pitch down (nose goes down)
             this.pitch += this.pitchSpeed * dt;
+        } else if (moveForward < 0) {
+            // S = pitch up (nose goes up)
+            this.pitch -= this.pitchSpeed * dt;
         } else {
             // Auto-level pitch toward 0 when not pressing W/S
-            this.pitch *= (1 - this.autoLevelStrength * dt);
+            // Only auto-level if we're not inverted (doing a loop)
+            if (Math.abs(this.pitch) < Math.PI / 2) {
+                this.pitch *= (1 - this.autoLevelStrength * dt);
+            }
         }
-        this.pitch = THREE.MathUtils.clamp(this.pitch, -this.maxPitch, this.maxPitch);
+        // Keep pitch in -PI to PI range for smooth loops
+        if (this.pitch > Math.PI) this.pitch -= Math.PI * 2;
+        if (this.pitch < -Math.PI) this.pitch += Math.PI * 2;
 
         // === YAW CONTROL (A/D) ===
         if (moveRight < 0) {
@@ -324,6 +371,213 @@ export class Starfighter extends Animal {
         });
     }
 
+    /**
+     * Fire lasers from wing cannons
+     */
+    fireLasers() {
+        if (this.laserCooldown > 0) return;
+        this.laserCooldown = this.laserFireRate;
+
+        // Get forward direction from flight quaternion
+        const forward = new THREE.Vector3(0, 0, 1);
+        forward.applyQuaternion(this.flightQuaternion);
+
+        // Wing cannon positions (left and right)
+        const cannonOffsets = [
+            new THREE.Vector3(-2.5, 0, 2),  // Left wing
+            new THREE.Vector3(2.5, 0, 2)    // Right wing
+        ];
+
+        cannonOffsets.forEach(offset => {
+            // Transform offset by ship rotation
+            const worldOffset = offset.clone().applyQuaternion(this.flightQuaternion);
+            const startPos = this.position.clone().add(worldOffset);
+
+            // Create laser bolt
+            const laserGeo = new THREE.BoxGeometry(0.15, 0.15, 2);
+            const laserMat = new THREE.MeshBasicMaterial({
+                color: 0xff0000,
+                transparent: true,
+                opacity: 0.9
+            });
+            const laser = new THREE.Mesh(laserGeo, laserMat);
+            laser.position.copy(startPos);
+            laser.quaternion.copy(this.flightQuaternion);
+
+            // Add glow effect
+            const glowGeo = new THREE.BoxGeometry(0.3, 0.3, 2.2);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xff4400,
+                transparent: true,
+                opacity: 0.4
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            laser.add(glow);
+
+            this.game.scene.add(laser);
+
+            // Track laser data
+            this.lasers.push({
+                mesh: laser,
+                velocity: forward.clone().multiplyScalar(this.laserSpeed),
+                startPos: startPos.clone(),
+                distance: 0
+            });
+        });
+    }
+
+    /**
+     * Update all active lasers
+     */
+    updateLasers(dt) {
+        this.laserCooldown = Math.max(0, this.laserCooldown - dt);
+
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+            const laser = this.lasers[i];
+
+            // Move laser
+            const movement = laser.velocity.clone().multiplyScalar(dt);
+            laser.mesh.position.add(movement);
+            laser.distance += movement.length();
+
+            // Check for block collision
+            const hit = this.checkLaserCollision(laser);
+            if (hit) {
+                this.explodeBlock(hit.x, hit.y, hit.z);
+                this.destroyLaser(i);
+                continue;
+            }
+
+            // Remove if too far
+            if (laser.distance > this.laserRange) {
+                this.destroyLaser(i);
+            }
+        }
+    }
+
+    /**
+     * Check if laser hit a block
+     */
+    checkLaserCollision(laser) {
+        const pos = laser.mesh.position;
+        const bx = Math.floor(pos.x);
+        const by = Math.floor(pos.y);
+        const bz = Math.floor(pos.z);
+
+        // Check current block and nearby
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    const x = bx + dx;
+                    const y = by + dy;
+                    const z = bz + dz;
+                    const block = this.game.getBlock(x, y, z);
+                    if (block && block !== 'air' && block !== 'water') {
+                        // Check actual distance to block center
+                        const blockCenter = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+                        if (pos.distanceTo(blockCenter) < 1.0) {
+                            return { x, y, z };
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Destroy a block with explosion effect
+     */
+    explodeBlock(x, y, z) {
+        // Remove the block
+        this.game.setBlock(x, y, z, null);
+
+        // Create explosion particles
+        const particleCount = 12;
+        const blockCenter = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+
+        for (let i = 0; i < particleCount; i++) {
+            const particleGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const particleMat = new THREE.MeshBasicMaterial({
+                color: Math.random() > 0.5 ? 0xff6600 : 0xffaa00,
+                transparent: true,
+                opacity: 1
+            });
+            const particle = new THREE.Mesh(particleGeo, particleMat);
+            particle.position.copy(blockCenter);
+
+            // Random velocity outward
+            const vel = new THREE.Vector3(
+                (Math.random() - 0.5) * 10,
+                (Math.random() - 0.5) * 10 + 3,
+                (Math.random() - 0.5) * 10
+            );
+
+            this.game.scene.add(particle);
+
+            // Animate particle
+            const startTime = Date.now();
+            const duration = 500 + Math.random() * 300;
+
+            const animateParticle = () => {
+                const elapsed = Date.now() - startTime;
+                if (elapsed > duration) {
+                    this.game.scene.remove(particle);
+                    particle.geometry.dispose();
+                    particle.material.dispose();
+                    return;
+                }
+
+                const dt = 0.016;
+                particle.position.add(vel.clone().multiplyScalar(dt));
+                vel.y -= 15 * dt; // Gravity
+                particle.material.opacity = 1 - (elapsed / duration);
+                particle.scale.multiplyScalar(0.97);
+
+                requestAnimationFrame(animateParticle);
+            };
+            animateParticle();
+        }
+
+        // Flash effect
+        const flashGeo = new THREE.SphereGeometry(1.5, 8, 8);
+        const flashMat = new THREE.MeshBasicMaterial({
+            color: 0xffff00,
+            transparent: true,
+            opacity: 0.8
+        });
+        const flash = new THREE.Mesh(flashGeo, flashMat);
+        flash.position.copy(blockCenter);
+        this.game.scene.add(flash);
+
+        // Animate flash
+        const flashStart = Date.now();
+        const animateFlash = () => {
+            const elapsed = Date.now() - flashStart;
+            if (elapsed > 150) {
+                this.game.scene.remove(flash);
+                flash.geometry.dispose();
+                flash.material.dispose();
+                return;
+            }
+            flash.scale.multiplyScalar(1.1);
+            flash.material.opacity = 0.8 * (1 - elapsed / 150);
+            requestAnimationFrame(animateFlash);
+        };
+        animateFlash();
+    }
+
+    /**
+     * Remove a laser from the scene
+     */
+    destroyLaser(index) {
+        const laser = this.lasers[index];
+        this.game.scene.remove(laser.mesh);
+        laser.mesh.geometry.dispose();
+        laser.mesh.material.dispose();
+        this.lasers.splice(index, 1);
+    }
+
     updatePhysics(dt) {
         // Apply velocity to position
         this.position.addScaledVector(this.velocity, dt);
@@ -357,8 +611,68 @@ export class Starfighter extends Animal {
         // Mount the player
         if (this.game.player && !this.game.player.mount) {
             this.game.player.mountEntity(this);
+            this.attachRider(this.game.player);
             this.game.uiManager?.addChatMessage('system',
-                '🚀 Starfighter controls: W/S = pitch, A/D = turn, Space = boost, Shift = brake');
+                '🚀 Starfighter: W/S = pitch, A/D = turn, Space = FIRE, E = boost, Shift = brake');
         }
+    }
+
+    /**
+     * Attach the rider's body to the ship so they rotate with it
+     */
+    attachRider(player) {
+        if (!player.body || !this.bodyGroup) return;
+
+        // Remove player body from scene and add to ship's bodyGroup
+        this.game.scene.remove(player.body);
+        this.bodyGroup.add(player.body);
+
+        // Position player in cockpit (cockpit is at z=1.5, y=0.5)
+        // Adjust for player body pivot point - raise Y so legs aren't under the ship
+        player.body.position.set(0, 1.0, 1.2);
+        player.body.rotation.set(0, 0, 0); // Face forward in ship's local space
+
+        this._riderAttached = true;
+        console.log('[Starfighter] Rider attached to cockpit');
+    }
+
+    /**
+     * Detach the rider's body from the ship
+     */
+    detachRider(player) {
+        if (!player.body || !this._riderAttached) return;
+
+        // Remove from ship and add back to scene
+        this.bodyGroup.remove(player.body);
+        this.game.scene.add(player.body);
+
+        // Reset body position to world space
+        player.body.position.copy(this.position);
+        player.body.position.y += 2;
+
+        this._riderAttached = false;
+        console.log('[Starfighter] Rider detached from cockpit');
+    }
+
+    /**
+     * Override update to handle quaternion-based rotation properly.
+     * The base Animal class sets mesh.rotation.y which conflicts with our bodyGroup quaternion.
+     */
+    update(dt) {
+        // Call base class update
+        super.update(dt);
+
+        // Override: Don't use mesh.rotation.y for the Starfighter
+        // Instead, keep mesh rotation at 0 and let bodyGroup.quaternion handle all rotation
+        // The base class sets mesh.rotation.y = this.rotation, but we use bodyGroup quaternion
+        this.mesh.rotation.y = 0;
+
+        // Apply the flight quaternion to the body group for visual rotation
+        if (this.bodyGroup) {
+            this.bodyGroup.quaternion.copy(this.flightQuaternion);
+        }
+
+        // Update laser projectiles
+        this.updateLasers(dt);
     }
 }

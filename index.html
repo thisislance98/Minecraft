@@ -153,6 +153,18 @@
                     </label>
                     <p class="settings-description" style="margin: 4px 0 0 26px; font-size: 0.9em; opacity: 0.7;">When
                         enabled, Merlin uses Claude Code with custom skills. Interact via the Claude Code terminal.</p>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-model-mode-toggle" checked>
+                        <span>🧠 Smart Mode (Gemini Pro)</span>
+                    </label>
+                    <p class="settings-description" style="margin: 4px 0 0 26px; font-size: 0.9em; opacity: 0.7;">When
+                        disabled, uses cheaper/faster Flash model. Smart mode is more capable but costs more tokens.</p>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-show-cost-toggle">
+                        <span>💰 Show Task Cost</span>
+                    </label>
+                    <p class="settings-description" style="margin: 4px 0 0 26px; font-size: 0.9em; opacity: 0.7;">Display
+                        the estimated cost (in USD) for each AI task after completion.</p>
                 </div>
 
                 <!-- Graphics Quality Presets -->
@@ -370,7 +382,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1244</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1272</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
     </div>
@@ -413,18 +425,17 @@
             <button id="close-chat">×</button>
         </div>
         <div class="chat-tabs">
-            <button class="chat-tab active" data-mode="ai"><span class="tab-icon">🧙</span>Merlin</button>
-            <button class="chat-tab" data-mode="group"><span class="tab-icon">👥</span>Group</button>
+            <button class="chat-tab active" data-mode="group"><span class="tab-icon">👥</span>Group</button>
             <button class="chat-tab" data-mode="player"><span class="tab-icon">💬</span>Player</button>
+            <button class="chat-tab merlin-tab" onclick="window.merlinPanelUI?.toggle(); document.getElementById('chat-panel').classList.add('hidden');"><span class="tab-icon">🧙</span>Merlin (M)</button>
         </div>
-        <div id="chat-messages-ai" class="chat-messages-container active">
-            <!-- AI Messages -->
+        <div id="chat-messages-ai" class="chat-messages-container">
+            <!-- AI Messages (now accessed via M key / Merlin Panel) -->
             <div class="message ai">
-                <div class="message-content">Greetings, traveler. I am the Wizard of Code. How may I assist you in
-                    shaping this world?</div>
+                <div class="message-content">Press M to open Merlin's Workshop for AI assistance.</div>
             </div>
         </div>
-        <div id="chat-messages-group" class="chat-messages-container">
+        <div id="chat-messages-group" class="chat-messages-container active">
             <!-- Group Messages -->
         </div>
         <div id="chat-messages-player" class="chat-messages-container">

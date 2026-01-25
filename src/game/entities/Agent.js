@@ -312,9 +312,8 @@ Max 25 words total.
             case 'tool_end':
                 // Tool finished - no separate notification needed
                 break;
-            case 'tool_request':
-                await this.handleToolRequest(msg);
-                break;
+            // Note: tool_request is handled by MerlinClient.handleMessage() directly
+            // to avoid double-handling (MerlinClient calls agent.handleToolRequest)
             case 'error':
                 this.game.uiManager.hideThinking();
                 this.game.uiManager.addChatMessage('error', msg.message);
@@ -380,6 +379,8 @@ Max 25 words total.
                 result = this.captureScreenshot(args);
             } else if (name === 'capture_logs') {
                 result = await this.captureLogs(args);
+            } else if (name === 'give_item') {
+                result = await this.giveItem(args);
             } else {
                 throw new Error(`Unknown client tool: ${name}`);
             }
@@ -536,6 +537,136 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
         }
 
         return { success: true, message: `Spawned ${count} ${CreatureClass.name}`, ids: spawnResult.map(e => e.id) };
+    }
+
+    async giveItem(args) {
+        const { item, count = 1, forceHotbar = true } = args;
+
+        if (!item) {
+            console.error('[Agent] giveItem: No item ID provided');
+            return { error: 'Item ID is required' };
+        }
+
+        if (!this.game.inventoryManager) {
+            console.error('[Agent] giveItem: No inventory manager');
+            return { error: 'Inventory manager not available' };
+        }
+
+        console.log(`[Agent] giveItem called: item='${item}', count=${count}, forceHotbar=${forceHotbar}`);
+
+        // Wait a bit for the dynamic item to be registered (race condition fix)
+        // Dynamic items are registered via socket event which may not have arrived yet
+        let waitTime = 0;
+        const maxWait = 2000; // 2 seconds max
+        const pollInterval = 100;
+
+        while (waitTime < maxWait) {
+            if (this.game.itemManager) {
+                const itemInstance = this.game.itemManager.getItem(item);
+                if (itemInstance) {
+                    console.log(`[Agent] giveItem: Found item '${item}' in ItemManager after ${waitTime}ms`);
+                    break;
+                }
+            }
+            await new Promise(r => setTimeout(r, pollInterval));
+            waitTime += pollInterval;
+        }
+
+        // Determine item type based on ID or look it up
+        let itemType = 'item';
+        if (item.includes('wand')) itemType = 'wand';
+        else if (item.includes('sword') || item.includes('pickaxe') || item.includes('bow') || item.includes('staff')) itemType = 'tool';
+        else if (item.includes('block')) itemType = 'block';
+
+        // Try to get item from ItemManager to determine type more accurately
+        if (this.game.itemManager) {
+            const itemInstance = this.game.itemManager.getItem(item);
+            if (itemInstance) {
+                console.log(`[Agent] giveItem: Item found in ItemManager - isTool=${itemInstance.isTool}, maxStack=${itemInstance.maxStack}`);
+                if (itemInstance.isTool) itemType = 'tool';
+                else if (itemInstance.maxStack === 1) itemType = 'tool';
+            } else {
+                console.warn(`[Agent] giveItem: Item '${item}' not found in ItemManager after ${waitTime}ms wait`);
+            }
+        }
+
+        const invManager = this.game.inventoryManager;
+        const slots = invManager.slots;
+
+        // Check if hotbar has space before adding
+        let hasHotbarSpace = false;
+        for (let i = 0; i < 9; i++) {
+            if (!slots[i].item || (slots[i].item === item && slots[i].count < 64)) {
+                hasHotbarSpace = true;
+                break;
+            }
+        }
+
+        console.log(`[Agent] giveItem: Adding to inventory - item='${item}', count=${count}, type='${itemType}', hotbarSpace=${hasHotbarSpace}`);
+        const added = invManager.addItem(item, count, itemType);
+        console.log(`[Agent] giveItem: addItem returned: ${added}`);
+
+        if (added) {
+            // Find where the item ended up
+            let foundSlot = -1;
+            for (let i = 0; i < 63; i++) {
+                if (slots[i].item === item) {
+                    foundSlot = i;
+                    // Prefer finding it in the hotbar if it's there
+                    if (i < 9) break;
+                }
+            }
+
+            console.log(`[Agent] giveItem: Item found at slot ${foundSlot} (hotbar: ${foundSlot < 9})`);
+
+            // If item is NOT in hotbar and forceHotbar is true, swap it into a hotbar slot
+            if (foundSlot >= 9 && forceHotbar) {
+                // Find a suitable hotbar slot to swap with
+                // Prefer slots with stackable items like blocks, or the last hotbar slot
+                let targetHotbarSlot = 8; // Default to last hotbar slot
+
+                // Try to find a less important slot (blocks with high count)
+                for (let i = 8; i >= 0; i--) {
+                    const slot = slots[i];
+                    if (slot.type === 'block' && slot.count > 1) {
+                        targetHotbarSlot = i;
+                        break;
+                    }
+                }
+
+                // Swap the slots
+                const temp = { ...slots[targetHotbarSlot] };
+                slots[targetHotbarSlot] = { ...slots[foundSlot] };
+                slots[foundSlot] = temp;
+
+                console.log(`[Agent] giveItem: Swapped item from slot ${foundSlot} to hotbar slot ${targetHotbarSlot}`);
+                foundSlot = targetHotbarSlot;
+
+                // Auto-select the new item in hotbar
+                invManager.selectSlot(targetHotbarSlot);
+            }
+
+            // Update inventory UI
+            if (this.game.inventory) {
+                this.game.inventory.renderHotbar();
+                this.game.inventory.renderInventoryScreen();
+                console.log(`[Agent] giveItem: Updated UI`);
+            }
+
+            // Show notification to user
+            const locationMsg = foundSlot < 9
+                ? `Added to hotbar slot ${foundSlot + 1}!`
+                : `Added to inventory (press E to see)`;
+
+            if (this.game.uiManager) {
+                this.game.uiManager.addChatMessage('system', `✨ Received: ${item} (x${count}) - ${locationMsg}`);
+            }
+
+            return { success: true, message: `Added ${count}x ${item} to inventory`, slot: foundSlot };
+        } else {
+            console.error(`[Agent] giveItem: Failed to add item - inventory may be full`);
+            return { error: 'Inventory full - could not add item' };
+        }
     }
 
     updateEntity(args) {

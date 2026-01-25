@@ -158,3 +158,27 @@ export function getAllKnowledge(): KnowledgeEntry[] {
 export function clearKnowledgeCache(): void {
     knowledgeCache.clear();
 }
+
+/**
+ * Delete all knowledge entries from Firebase and cache
+ */
+export async function deleteAllKnowledge(): Promise<{ success: boolean; deleted: number; error?: string }> {
+    try {
+        let deleted = 0;
+        if (db) {
+            const snapshot = await db.collection('knowledge').get();
+            const batch = db.batch();
+            snapshot.forEach(doc => {
+                batch.delete(doc.ref);
+                deleted++;
+            });
+            await batch.commit();
+        }
+        knowledgeCache.clear();
+        console.log(`[KnowledgeService] Deleted ${deleted} knowledge entries`);
+        return { success: true, deleted };
+    } catch (e: any) {
+        console.error('[KnowledgeService] Failed to delete knowledge:', e);
+        return { success: false, deleted: 0, error: e.message };
+    }
+}

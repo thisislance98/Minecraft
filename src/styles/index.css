@@ -849,6 +849,18 @@ canvas {
     margin-right: 6px;
 }
 
+/* Merlin tab - styled differently to show it opens a separate panel */
+.chat-tab.merlin-tab {
+    background: linear-gradient(90deg, rgba(74, 74, 138, 0.3), rgba(74, 74, 138, 0.1));
+    border-left: 1px solid rgba(130, 130, 200, 0.3);
+    color: rgba(180, 180, 220, 0.8);
+}
+
+.chat-tab.merlin-tab:hover {
+    background: linear-gradient(90deg, rgba(74, 74, 138, 0.5), rgba(74, 74, 138, 0.2));
+    color: #c8b4ff;
+}
+
 /* Hide/show message containers based on mode */
 .chat-messages-container {
     flex: 1;

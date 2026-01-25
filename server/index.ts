@@ -16,6 +16,7 @@ import { channelRoutes } from './routes/channels';
 import { destinationRoutes } from './routes/destinations';
 import { announcementRoutes } from './routes/announcements';
 import { worldRoutes } from './routes/worlds';
+import { aiRoutes } from './routes/ai';
 import { auth } from './config'; // Initialize config
 import { worldManagementService } from './services/WorldManagementService';
 import { worldPersistence } from './services/WorldPersistence';
@@ -23,7 +24,7 @@ import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreature
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { initKnowledgeService } from './services/KnowledgeService';
 import { WebSocketServer } from 'ws';
-import { MerlinSession } from './services/MerlinSession';
+import { OpenRouterSession } from './services/OpenRouterSession';
 import { logError } from './utils/logger';
 import {
     validateBlockChange,
@@ -70,6 +71,7 @@ app.use('/api/channels', channelRoutes);
 app.use('/api/destinations', destinationRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/worlds', worldRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -106,30 +108,8 @@ httpServer.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (ws, req) => {
-    console.log('[AI] Client connected to AI Agent. Checking provider...');
-
-    // Parse URL to determine which provider to use
-    const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const provider = url.searchParams.get('provider') || 'gemini'; // Default to gemini
-
-    console.log(`[AI] Provider requested: ${provider}`);
-
-    if (provider === 'claude') {
-        // Claude provider not available - fall through to Gemini
-        console.log('[Claude] Claude provider not available, using Gemini instead');
-    }
-
-    // Use Gemini (Google AI API)
-    {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.error('[Gemini] CRITICAL: Missing GEMINI_API_KEY in environment variables.');
-            ws.close(1011, 'Server configuration error: Missing Gemini API Key');
-            return;
-        }
-        console.log('[Gemini] API Key present. Initializing MerlinSession...');
-        new MerlinSession(ws, apiKey, req);
-    }
+    console.log('[AI] Client connected to AI Agent. Initializing OpenRouterSession...');
+    new OpenRouterSession(ws, req);
 });
 
 // Simple in-memory room storage
@@ -141,7 +121,8 @@ const TIME_INCREMENT_PER_SEC = 0; // Frozen at 0 to keep the game bright per use
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
 // CLI secret for testing (should be set in production env)
-const CLI_SECRET = process.env.CLI_SECRET || (process.env.NODE_ENV === 'development' ? 'asdf123' : '');
+// Default secret for local development (same as worlds.ts) - only require explicit CLI_SECRET in production
+const CLI_SECRET = process.env.CLI_SECRET || 'asdf123';
 
 // Global Game Loop (Low frequency for sync)
 // We tick time for all rooms here
@@ -611,27 +592,39 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('admin:delete_item', async (data: { name: string, token: string }) => {
-        console.log(`[Admin] Received admin:delete_item event from ${socket.id}:`, { name: data.name, tokenLength: data.token?.length });
+    socket.on('admin:delete_item', async (data: { name: string, worldId?: string, token: string }) => {
+        console.log(`[Admin] Received admin:delete_item event from ${socket.id}:`, { name: data.name, worldId: data.worldId, tokenLength: data.token?.length });
         try {
-            if (!auth) throw new Error('Auth service unavailable');
-            console.log('[Admin] Verifying token...');
-            const decodedToken = await auth.verifyIdToken(data.token);
-            console.log('[Admin] Token verified for:', decodedToken.email);
+            // Allow CLI mode with secret
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            let userEmail = 'cli@local';
 
-            if (decodedToken.email !== ADMIN_EMAIL) {
-                throw new Error('Unauthorized: Admin access required');
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                console.log('[Admin] Verifying token...');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                console.log('[Admin] Token verified for:', decodedToken.email);
+
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+                userEmail = decodedToken.email!;
+            } else {
+                console.log('[Admin] CLI mode access granted');
             }
 
-            console.log(`[Admin] User ${decodedToken.email} deleting item: ${data.name}`);
-            const result = await deleteItem(data.name);
+            console.log(`[Admin] User ${userEmail} deleting item: ${data.name}`);
+            const result = await deleteItem(data.name, data.worldId);
             console.log('[Admin] Delete item result:', result);
+
+            socket.emit('admin:delete_item:result', result);
 
             if (!result.success) {
                 socket.emit('admin:error', { message: result.error });
             }
         } catch (error: any) {
             console.error('[Admin] Delete item failed:', error);
+            socket.emit('admin:delete_item:result', { success: false, error: error.message });
             socket.emit('admin:error', { message: error.message });
         }
     });
@@ -1768,15 +1761,10 @@ io.on('connection', (socket) => {
             console.log(`[Villager Chat] Request from ${socket.id}:`, { ...data, quest: data.quest ? data.quest.title : 'None' });
 
             try {
-                const apiKey = process.env.GEMINI_API_KEY;
+                const apiKey = process.env.OPENROUTER_API_KEY;
                 if (!apiKey) {
-                    throw new Error('No Gemini API key');
+                    throw new Error('No OpenRouter API key');
                 }
-
-                // Dynamic import of GoogleGenerativeAI
-                const { GoogleGenerativeAI } = await import('@google/generative-ai');
-                const genAI = new GoogleGenerativeAI(apiKey);
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 // Conversation Key
                 const historyKey = `${socket.id}:${data.villagerId}`;
@@ -1818,7 +1806,7 @@ io.on('connection', (socket) => {
                         If the player says "yes", "I accept", "sure", or "okay" to the quest, start your response with the tag [QUEST_ACCEPTED].
                         Do NOT use the tag unless they explicitly agree to help.`;
                     } else if (data.quest.canComplete) {
-                        systemInstruction += `\nIMPORTANT: The player has completed your quest "${data.quest.title}"! 
+                        systemInstruction += `\nIMPORTANT: The player has completed your quest "${data.quest.title}"!
                         Thank them warmly and tell them you are giving them a reward.
                         Start your response with the tag [QUEST_COMPLETED].`;
                     } else {
@@ -1827,38 +1815,53 @@ io.on('connection', (socket) => {
                     }
                 }
 
-                // Construct System Instruction as the first part of the conversation or as a separate system instruction if supported
-                // For simplicity with this model, we'll prepend persona to the first message or treat as context.
-                // We will build the full content array for Gemini.
+                // Build messages array for OpenRouter (OpenAI-compatible format)
+                const messages: Array<{ role: string; content: string }> = [
+                    { role: 'system', content: systemInstruction }
+                ];
 
-                const contents = [...history]; // Copy existing history
-
-                let nextUserMessage = '';
-                if (data.isGreeting) {
-                    nextUserMessage = `${systemInstruction}\n\nThe player just approached you. Give a short, friendly greeting (1-2 sentences max). Be in character.`;
-                } else {
-                    // For subsequent turns, we assume the persona is already established in context, 
-                    // but reinforcing it lightly or relying on history is fine. 
-                    // To be safe, if history is empty (shouldn't be, but edge case), we include persona.
-                    if (contents.length === 0) {
-                        nextUserMessage = `${systemInstruction}\n\nThe player said: "${data.playerMessage}". Give a short, friendly response (1-2 sentences max). Stay in character.`;
-                    } else {
-                        nextUserMessage = `The player said: "${data.playerMessage}". (Remember to stay in character as ${data.name})`;
+                // Add history (convert from Gemini format to OpenAI format)
+                for (const msg of history) {
+                    const role = msg.role === 'model' ? 'assistant' : 'user';
+                    const content = msg.parts?.[0]?.text || '';
+                    if (content) {
+                        messages.push({ role, content });
                     }
                 }
 
-                const userContentObj = { role: 'user', parts: [{ text: nextUserMessage }] };
-                contents.push(userContentObj);
+                // Add current user message
+                let nextUserMessage = '';
+                if (data.isGreeting) {
+                    nextUserMessage = 'The player just approached you. Give a short, friendly greeting (1-2 sentences max). Be in character.';
+                } else {
+                    nextUserMessage = `The player said: "${data.playerMessage}"`;
+                }
+                messages.push({ role: 'user', content: nextUserMessage });
 
-                const result = await model.generateContent({
-                    contents: contents,
-                    generationConfig: {
-                        maxOutputTokens: 150, // Increased for quest descriptions
+                // Call OpenRouter API
+                const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': process.env.OPENROUTER_REFERER || 'http://localhost:2567',
+                        'X-Title': 'Villager Chat'
+                    },
+                    body: JSON.stringify({
+                        model: process.env.OPENROUTER_VILLAGER_MODEL || 'google/gemini-2.0-flash-001',
+                        messages: messages,
+                        max_tokens: 150,
                         temperature: 0.9
-                    }
+                    })
                 });
 
-                let response = result.response.text().trim();
+                if (!openRouterResponse.ok) {
+                    const errorText = await openRouterResponse.text();
+                    throw new Error(`OpenRouter API error: ${openRouterResponse.status} - ${errorText}`);
+                }
+
+                const result = await openRouterResponse.json() as any;
+                let response = (result.choices?.[0]?.message?.content || '').trim();
                 console.log(`[Villager Chat] ${data.professionName} raw response: "${response}"`);
 
                 // Parse Tags
@@ -1877,12 +1880,9 @@ io.on('connection', (socket) => {
 
                 console.log(`[Villager Chat] Processed response: "${response}" (Accepted: ${questAccepted}, Completed: ${questCompleted})`);
 
-                // Update History
-                // Add the user message we effectively sent (simplifying the prompt part for history key if needed, but Gemini handles it)
-                // Actually, for history consistency, we should store what we sent.
+                // Update History (keep in Gemini format for backward compatibility)
+                const userContentObj = { role: 'user', parts: [{ text: nextUserMessage }] };
                 history.push(userContentObj);
-
-                // Add the model response (clean version + tags maybe? keeping clean for history is better)
                 history.push({ role: 'model', parts: [{ text: response }] });
 
                 // Keep history size manageable (last 10 turns = 20 messages)
@@ -2126,3 +2126,29 @@ Promise.all([
         console.log('[Server] Startup: complete (with content load error)');
     });
 });
+
+// Graceful shutdown
+let isShuttingDown = false;
+function shutdown(signal: string) {
+    if (isShuttingDown) {
+        console.log(`\n[Server] Force exiting...`);
+        process.exit(1);
+    }
+    isShuttingDown = true;
+    console.log(`\n[Server] Received ${signal}, shutting down gracefully...`);
+
+    // Force exit after 3 seconds if graceful shutdown hangs
+    const forceExitTimeout = setTimeout(() => {
+        console.log('[Server] Graceful shutdown timed out, forcing exit...');
+        process.exit(1);
+    }, 3000);
+
+    httpServer.close(() => {
+        clearTimeout(forceExitTimeout);
+        console.log('[Server] HTTP server closed');
+        process.exit(0);
+    });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

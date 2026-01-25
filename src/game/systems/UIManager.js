@@ -3,7 +3,14 @@ import { DebugPanel } from '../ui/DebugPanel.js';
 import { CommunityUI } from '../ui/CommunityUI.js';
 import { Minimap } from '../ui/Minimap.js';
 import { MinigameManager } from '../minigames/MinigameManager.js';
+import { MerlinPanelUI } from '../ui/MerlinPanelUI.js';
 import { auth } from '../../config/firebase-client.js';
+
+// Sub-managers (extracted for modularity)
+import { NotificationManager } from './ui/NotificationManager.js';
+import { HUDManager } from './ui/HUDManager.js';
+import { DialogueManager } from './ui/DialogueManager.js';
+import { MobileControlsManager } from './ui/MobileControlsManager.js';
 
 /**
  * UIManager centralizes all HUD/UI updates.
@@ -13,7 +20,13 @@ export class UIManager {
     constructor(game) {
         this.game = game;
 
-        // Cache DOM elements
+        // Initialize sub-managers
+        this.notificationManager = new NotificationManager(game, this);
+        this.hudManager = new HUDManager(game, this);
+        this.dialogueManager = new DialogueManager(game, this);
+        this.mobileControlsManager = new MobileControlsManager(game, this);
+
+        // Cache DOM elements (legacy - some still needed for direct access)
         this.fpsElement = document.getElementById('fps');
         this.fpsCounter = document.getElementById('fps-counter');
         this.positionElement = document.getElementById('position');
@@ -30,6 +43,15 @@ export class UIManager {
 
         // Minimap
         this.minimap = new Minimap(game);
+
+        // Merlin Panel UI
+        this.merlinPanel = new MerlinPanelUI(game);
+        window.merlinPanelUI = this.merlinPanel; // Global reference for onclick handlers
+
+        // Wire up TaskManager to MerlinPanel
+        if (window.merlinClient && window.merlinClient.taskManager) {
+            this.merlinPanel.setTaskManager(window.merlinClient.taskManager);
+        }
 
         this.createFeedbackButton();
 
@@ -51,7 +73,7 @@ export class UIManager {
 
         // Chat Panel elements
         this.chatPanel = document.getElementById('chat-panel');
-        this.chatMessages = document.getElementById('chat-messages-ai'); // Default to AI
+        this.chatMessages = document.getElementById('chat-messages-group'); // Default to Group
         this.chatMessagesAI = document.getElementById('chat-messages-ai');
         this.chatMessagesGroup = document.getElementById('chat-messages-group');
         this.chatMessagesPlayer = document.getElementById('chat-messages-player');
@@ -62,7 +84,7 @@ export class UIManager {
         this.clearChatBtn = document.getElementById('clear-chat');
 
         // Chat mode state: 'ai', 'group', 'player'
-        this.chatMode = 'ai';
+        this.chatMode = 'group'; // Default to group chat (Merlin now uses M key)
         this.setupChatTabListeners();
 
         this.setupChatPanelListeners();
@@ -88,9 +110,9 @@ export class UIManager {
         // Chat scroll state
         this.userHasScrolledUp = false;
 
-        // Mobile Controls
+        // Mobile Controls - use sub-manager
         if (this.game.inputManager && this.game.inputManager.isTouchDevice) {
-            this.initTouchControls();
+            this.mobileControlsManager.initialize();
         }
 
         // Listen for world join events to show/hide reset button based on ownership
@@ -109,6 +131,43 @@ export class UIManager {
             resetBtn.style.display = isOwner ? 'block' : 'none';
         }
         console.log(`[UIManager] World joined: ${data.world?.name}, isOwner: ${isOwner}`);
+    }
+
+    /**
+     * Check if any panel/modal is currently open that should block hotkeys
+     * @returns {boolean} true if any blocking panel is open
+     */
+    isAnyPanelOpen() {
+        // Check Merlin Panel - blocks other panel hotkeys but player can still move/play
+        if (this.merlinPanel && this.merlinPanel.isVisible) return true;
+
+        // Check Debug Panel
+        if (this.debugPanel && this.debugPanel.isVisible) return true;
+
+        // Check Spawn UI
+        if (window.spawnUI && window.spawnUI.isOpen) return true;
+
+        // Check World Settings UI
+        if (window.worldSettingsUI && window.worldSettingsUI.isVisible) return true;
+
+        // Check Community UI (feedback panel)
+        if (this.communityUI && this.communityUI.isOpen) return true;
+
+        // Check Feedback UI
+        if (window.feedbackUI && window.feedbackUI.isOpen) return true;
+
+        // Check settings modal
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal && !settingsModal.classList.contains('hidden')) return true;
+
+        // Check help modal
+        const helpModal = document.getElementById('help-modal');
+        if (helpModal && !helpModal.classList.contains('hidden')) return true;
+
+        // Check inventory
+        if (this.game && this.game.gameState && this.game.gameState.flags.inventoryOpen) return true;
+
+        return false;
     }
 
     closeAllMenus(exclude = null) {
@@ -377,7 +436,7 @@ export class UIManager {
 
             // Enable/disable voice chat
             if (this.game.socketManager) {
-                this.game.socketManager.setVoiceChatEnabled(newState);
+                this.game.socketManager.voiceChatManager.setVoiceChatEnabled(newState);
             }
 
             // Show feedback message
@@ -457,7 +516,7 @@ export class UIManager {
         if (this.mobileToggle) {
             this.mobileToggle.checked = savedMobile;
             this.game.gameState.flags.mobileControls = savedMobile;
-            this.updateMobileControlsVisibility(savedMobile);
+            this.mobileControlsManager.setVisible(savedMobile);
         }
 
         // Settings button click - open modal
@@ -511,14 +570,14 @@ export class UIManager {
 
             // Apply initial state if socket manager exists (might be too early, handled in SocketManager init too)
             if (this.game.socketManager) {
-                this.game.socketManager.setVoiceChatEnabled(savedVoice);
+                this.game.socketManager.voiceChatManager.setVoiceChatEnabled(savedVoice);
             }
 
             this.voiceToggle.addEventListener('change', (e) => {
                 const enabled = e.target.checked;
                 localStorage.setItem('settings_voice', enabled);
                 if (this.game.socketManager) {
-                    this.game.socketManager.setVoiceChatEnabled(enabled);
+                    this.game.socketManager.voiceChatManager.setVoiceChatEnabled(enabled);
                 }
                 // Sync the voice button in top-right controls
                 this.updateVoiceButtonState(enabled);
@@ -600,6 +659,54 @@ export class UIManager {
                 // Show info message
                 if (useClaude) {
                     alert('🧙 Claude Code mode enabled!\n\nMerlin will now use Claude Code with custom skills.\n\nTo interact:\n1. Use the Claude Code terminal where you started the game\n2. Merlin has skills for creating creatures, items, and structures\n3. Example: "Create a bouncing slime creature"');
+                }
+            });
+        }
+
+        // Model Mode toggle (Smart/Pro vs Cheap/Flash)
+        this.modelModeToggle = document.getElementById('settings-model-mode-toggle');
+        if (this.modelModeToggle) {
+            // Default to TRUE (Smart mode by default)
+            const savedModelMode = localStorage.getItem('settings_model_mode') || 'smart';
+            this.modelModeToggle.checked = savedModelMode === 'smart';
+
+            // Apply initial state to MerlinClient
+            if (window.merlinClient) {
+                window.merlinClient.modelMode = savedModelMode;
+            }
+
+            this.modelModeToggle.addEventListener('change', (e) => {
+                const useSmart = e.target.checked;
+                const mode = useSmart ? 'smart' : 'cheap';
+                localStorage.setItem('settings_model_mode', mode);
+
+                // Update MerlinClient
+                if (window.merlinClient) {
+                    window.merlinClient.modelMode = mode;
+                    console.log('[UIManager] Model mode switched to:', mode, useSmart ? '(Gemini Pro)' : '(Gemini Flash)');
+                }
+            });
+        }
+
+        // Show Cost toggle
+        this.showCostToggle = document.getElementById('settings-show-cost-toggle');
+        if (this.showCostToggle) {
+            // Default to FALSE (Off by default)
+            const savedShowCost = localStorage.getItem('settings_show_cost') === 'true';
+            this.showCostToggle.checked = savedShowCost;
+
+            // Apply initial state to MerlinClient
+            if (window.merlinClient) {
+                window.merlinClient.showCost = savedShowCost;
+            }
+
+            this.showCostToggle.addEventListener('change', (e) => {
+                const enabled = e.target.checked;
+                localStorage.setItem('settings_show_cost', enabled);
+                // Update MerlinClient
+                if (window.merlinClient) {
+                    window.merlinClient.showCost = enabled;
+                    console.log('[UIManager] Show cost', enabled ? 'enabled' : 'disabled');
                 }
             });
         }
@@ -689,7 +796,8 @@ export class UIManager {
                 const enabled = e.target.checked;
                 localStorage.setItem('settings_mobile', enabled);
                 this.game.gameState.flags.mobileControls = enabled;
-                this.updateMobileControlsVisibility(enabled);
+                this.mobileControlsManager.setVisible(enabled);
+                this.updateFeedbackButtonState();
             });
         }
 
@@ -1753,136 +1861,6 @@ export class UIManager {
 
     /**
      * Show an in-game notification (toast) message
-     * @param {string} message - The message to display
-     * @param {'error' | 'warning' | 'info' | 'success'} type - Notification type
-     * @param {number} duration - Duration in ms before auto-dismiss (default: 3000)
-     */
-    showGameNotification(message, type = 'info', duration = 3000) {
-        // Log for CLI testing
-        console.log('[GAME_NOTIFICATION]', type, message);
-
-        const container = document.getElementById('game-notifications');
-        if (!container) {
-            console.warn('game-notifications container not found');
-            return;
-        }
-
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `game-notification ${type}`;
-
-        // Icon based on type
-        const icons = {
-            error: '❌',
-            warning: '⚠️',
-            info: 'ℹ️',
-            success: '✅'
-        };
-        const icon = icons[type] || icons.info;
-
-        notification.innerHTML = `
-            <span class="notif-icon">${icon}</span>
-            <span class="notif-message">${message}</span>
-        `;
-
-        container.appendChild(notification);
-
-        // Auto-dismiss after duration
-        setTimeout(() => {
-            notification.classList.add('fade-out');
-            // Remove after fade animation completes
-            setTimeout(() => {
-                notification.remove();
-            }, 500);
-        }, duration);
-
-        return notification;
-    }
-
-    /**
-     * Show a prominent refresh prompt when changes require browser reload
-     */
-    showRefreshPrompt() {
-        // Remove existing prompt if any
-        const existing = document.getElementById('refresh-prompt');
-        if (existing) existing.remove();
-
-        const prompt = document.createElement('div');
-        prompt.id = 'refresh-prompt';
-        prompt.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg, rgba(20, 20, 40, 0.95), rgba(40, 20, 60, 0.95));
-            border: 2px solid #ff9900;
-            border-radius: 16px;
-            padding: 30px 40px;
-            z-index: 3000;
-            text-align: center;
-            font-family: 'VT323', monospace;
-            box-shadow: 0 0 30px rgba(255, 153, 0, 0.3);
-            animation: pulse-glow 2s ease-in-out infinite;
-        `;
-
-        prompt.innerHTML = `
-            <style>
-                @keyframes pulse-glow {
-                    0%, 100% { box-shadow: 0 0 30px rgba(255, 153, 0, 0.3); }
-                    50% { box-shadow: 0 0 50px rgba(255, 153, 0, 0.5); }
-                }
-            </style>
-            <div style="font-size: 48px; margin-bottom: 15px;">🔄</div>
-            <h2 style="color: #ff9900; margin: 0 0 10px 0; font-size: 28px;">Refresh Required</h2>
-            <p style="color: #ccc; margin: 0 0 20px 0; font-size: 18px;">
-                Some changes require a browser refresh to take effect.
-            </p>
-            <button id="refresh-now-btn" style="
-                background: linear-gradient(135deg, #ff9900, #ff6600);
-                border: none;
-                color: white;
-                padding: 12px 30px;
-                font-size: 20px;
-                font-family: 'VT323', monospace;
-                border-radius: 8px;
-                cursor: pointer;
-                margin-right: 10px;
-                transition: all 0.2s;
-            ">Refresh Now</button>
-            <button id="refresh-later-btn" style="
-                background: transparent;
-                border: 1px solid #666;
-                color: #aaa;
-                padding: 12px 20px;
-                font-size: 18px;
-                font-family: 'VT323', monospace;
-                border-radius: 8px;
-                cursor: pointer;
-                transition: all 0.2s;
-            ">Later</button>
-        `;
-
-        document.body.appendChild(prompt);
-
-        // Button handlers
-        document.getElementById('refresh-now-btn').onclick = () => {
-            window.location.reload();
-        };
-
-        document.getElementById('refresh-later-btn').onclick = () => {
-            prompt.remove();
-        };
-
-        // Auto-dismiss after 30 seconds
-        setTimeout(() => {
-            if (document.getElementById('refresh-prompt')) {
-                prompt.remove();
-            }
-        }, 30000);
-    }
-
-
-
 
 
 
@@ -2269,10 +2247,10 @@ export class UIManager {
         if (text.toLowerCase() === '/voicereinit') {
             // Force reinitialize voice chat
             const sm = this.game.socketManager;
-            if (sm) {
-                sm.voiceEnabled = true;
-                sm.localStream = null; // Reset to force reinit
-                sm.initVoiceChat();
+            if (sm && sm.voiceChatManager) {
+                sm.voiceChatManager.voiceEnabled = true;
+                sm.voiceChatManager.localStream = null; // Reset to force reinit
+                sm.voiceChatManager.initVoiceChat();
                 this.addChatMessage('system', '🎤 Voice chat reinitializing...');
             }
             this.chatInput.value = '';
@@ -2569,186 +2547,12 @@ export class UIManager {
         }
         return false;
     }
-
-    /**
-     * Update FPS counter (call every frame, updates display once per second)
-     */
-    updateFPS() {
-        this.frameCount++;
-        const now = performance.now();
-
-        if (now - this.lastFpsUpdate >= 1000) {
-            this.fps = this.frameCount;
-            this.frameCount = 0;
-            this.lastFpsUpdate = now;
-
-            if (this.fpsElement) {
-                this.fpsElement.textContent = this.fps;
-            }
-
-            if (this.fpsCounter) {
-                this.fpsCounter.classList.remove('low', 'medium');
-                if (this.fps < 30) {
-                    this.fpsCounter.classList.add('low');
-                } else if (this.fps < 50) {
-                    this.fpsCounter.classList.add('medium');
-                }
-            }
-
-            // Auto-disable terrain shadows when FPS drops below 60
-            // Only if auto-shadow management is enabled and shadows are currently on
-            if (this.game && this.game.autoShadowManagement !== false) {
-                if (this.fps < 60 && this.game.terrainShadowsEnabled && !this.game.shadowsAutoDisabled) {
-                    console.log(`[Performance] Auto-disabling terrain shadows due to low FPS (${this.fps})`);
-                    this.game.toggleTerrainShadows(false);
-                    this.game.shadowsAutoDisabled = true;
-
-                    // Update debug panel checkbox if visible
-                    const shadowCheck = document.getElementById('dbg-shadows');
-                    if (shadowCheck) shadowCheck.checked = false;
-                }
-            }
-        }
-    }
-
-    /**
-     * Update player position display
-     * @param {THREE.Vector3} pos - Player position
-     */
-    updatePosition(pos) {
-        if (this.positionElement) {
-            this.positionElement.textContent =
-                `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
-        }
-    }
-
-    /**
-     * Update block count display
-     * @param {number} count - Number of blocks
-     */
-    updateBlockCount(count) {
-        if (this.blockCountElement) {
-            this.blockCountElement.textContent = count;
-        }
-        if (this.debugPanel) this.debugPanel.updateStats();
-    }
-
-    // --- Dialogue System ---
-
-    createDialogueBox() {
-        if (this.dialogueBox) return;
-
-        const div = document.createElement('div');
-        div.className = 'dialogue-box';
-        div.innerHTML = `
-            <div class="dialogue-close">✕</div>
-            <h3 id="dialogue-speaker">Speaker</h3>
-            <p id="dialogue-text">...</p>
-        `;
-        document.body.appendChild(div);
-
-        div.querySelector('.dialogue-close').addEventListener('click', () => {
-            this.hideDialogue();
-        });
-
-        this.dialogueBox = div;
-        this.dialogueSpeaker = div.querySelector('#dialogue-speaker');
-        this.dialogueText = div.querySelector('#dialogue-text');
-    }
-
-    showDialogue(speaker, text) {
-        if (!this.dialogueBox) this.createDialogueBox();
-
-        this.dialogueSpeaker.textContent = speaker;
-        this.dialogueText.textContent = text;
-        this.dialogueBox.style.display = 'block';
-
-        // Auto hide after 5 seconds if not interactive? 
-        // For now, let user close it or clicking away closes it.
-        // Or simply overwrite if new dialogue comes.
-    }
-
-    hideDialogue() {
-        if (this.dialogueBox) {
-            this.dialogueBox.style.display = 'none';
-        }
-    }
-
-    // --- Speech Bubbles ---
-
-    addSpeechBubble(entity, text, duration = 3000) {
-        // Remove existing bubble for this entity if any
-        this.removeSpeechBubble(entity);
-
-        const bubble = document.createElement('div');
-        bubble.className = 'speech-bubble';
-        bubble.textContent = text;
-        document.body.appendChild(bubble);
-
-        const bubbleData = {
-            element: bubble,
-            entity: entity,
-            timer: duration
-        };
-
-        if (!this.speechBubbles) this.speechBubbles = [];
-        this.speechBubbles.push(bubbleData);
-    }
-
-    removeSpeechBubble(entity) {
-        if (!this.speechBubbles) return;
-        const idx = this.speechBubbles.findIndex(b => b.entity === entity);
-        if (idx !== -1) {
-            const b = this.speechBubbles[idx];
-            b.element.remove();
-            this.speechBubbles.splice(idx, 1);
-        }
-    }
+    // Note: Dialogue and Speech Bubble methods moved to dialogueManager
+    // Use: uiManager.dialogueManager.showDialogue(), .hideDialogue(), .addSpeechBubble(), etc.
 
     update(dt) {
-        if (this.speechBubbles) {
-            // Update bubble positions
-            const camera = this.game.camera;
-            const width = window.innerWidth;
-            const height = window.innerHeight;
-            const widthHalf = width / 2;
-            const heightHalf = height / 2;
-
-            for (let i = this.speechBubbles.length - 1; i >= 0; i--) {
-                const b = this.speechBubbles[i];
-                b.timer -= dt * 1000;
-
-                if (b.timer <= 0) {
-                    b.element.remove();
-                    this.speechBubbles.splice(i, 1);
-                    continue;
-                }
-
-                if (!b.entity || b.entity.isDead || !b.entity.mesh.parent) {
-                    b.element.remove();
-                    this.speechBubbles.splice(i, 1);
-                    continue;
-                }
-
-                // Project position
-                const pos = new THREE.Vector3().copy(b.entity.position);
-                pos.y += b.entity.height + 0.5; // Above head
-
-                pos.project(camera);
-
-                // Check if behind camera
-                if (pos.z > 1) {
-                    b.element.style.display = 'none';
-                } else {
-                    b.element.style.display = 'block';
-                    const x = (pos.x * widthHalf) + widthHalf;
-                    const y = -(pos.y * heightHalf) + heightHalf;
-
-                    b.element.style.left = `${x} px`;
-                    b.element.style.top = `${y} px`;
-                }
-            }
-        }
+        // Update speech bubbles via sub-manager
+        this.dialogueManager.update(dt);
     }
 
     // --- Omni Wand Spell Selector ---
@@ -3211,696 +3015,8 @@ export class UIManager {
         }
     }
 
-    toggleSprint() {
-        const isSprinting = this.game.inputManager.actions['SPRINT'];
-        this.game.inputManager.actions['SPRINT'] = !isSprinting;
-        // Visual toggle state
-        if (!isSprinting) {
-            this.mobileSprintBtn.style.background = 'rgba(0, 255, 204, 0.4)';
-            this.mobileSprintBtn.style.borderColor = '#00ffcc';
-        } else {
-            this.mobileSprintBtn.style.background = 'rgba(0, 0, 0, 0.6)';
-            this.mobileSprintBtn.style.borderColor = 'rgba(255, 255, 255, 0.4)';
-        }
-    }
-
-    toggleFly() {
-        if (this.game.player) {
-            this.game.player.toggleFlying();
-            // Visual sync is hard because flight can end by collision, but accurate enough for toggle
-            const isFlying = this.game.player.isFlying; // State after toggle
-            if (isFlying) {
-                this.mobileFlyBtn.style.background = 'rgba(0, 255, 204, 0.4)';
-                this.mobileFlyBtn.style.borderColor = '#00ffcc';
-            } else {
-                this.mobileFlyBtn.style.background = 'rgba(0, 0, 0, 0.6)';
-                this.mobileFlyBtn.style.borderColor = 'rgba(255, 255, 255, 0.4)';
-            }
-        }
-    }
-
-    initTouchControls() {
-        if (this.joystickContainer) return;
-        // 1. Create Joystick
-        this.joystickContainer = document.createElement('div');
-        this.joystickContainer.id = 'touch-joystick';
-        this.joystickContainer.style.cssText = `
-            position: fixed;
-            bottom: 40px;
-            left: 40px;
-            width: 150px;
-            height: 150px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            z-index: 1000;
-            touch-action: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-
-        this.joystickKnob = document.createElement('div');
-        this.joystickKnob.style.cssText = `
-            width: 60px;
-            height: 60px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            transition: transform 0.1s ease;
-            pointer-events: none;
-        `;
-        this.joystickContainer.appendChild(this.joystickKnob);
-        document.body.appendChild(this.joystickContainer);
-
-        // 2. Create Jump Button
-        this.jumpBtn = document.createElement('div');
-        this.jumpBtn.id = 'touch-jump';
-        this.jumpBtn.innerText = 'JUMP';
-        this.jumpBtn.style.cssText = `
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            width: 80px;
-            height: 80px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            z-index: 1000;
-            touch-action: manipulation;
-            user-select: none;
-        `;
-        document.body.appendChild(this.jumpBtn);
-
-        // 3. Create Interact Button
-        this.interactBtn = document.createElement('div');
-        this.interactBtn.id = 'touch-interact';
-        this.interactBtn.innerText = 'E';
-        this.interactBtn.style.cssText = `
-            position: fixed;
-            bottom: 140px;
-            right: 40px;
-            width: 60px;
-            height: 60px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            z-index: 1000;
-            touch-action: manipulation;
-            user-select: none;
-        `;
-        document.body.appendChild(this.interactBtn);
-
-        // 4. Create Mobile Top Bar (Inventory, Debug, Chat buttons)
-        this.mobileTopBar = document.createElement('div');
-        this.mobileTopBar.id = 'mobile-top-bar';
-        this.mobileTopBar.style.cssText = `
-            position: fixed;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-            z-index: 2500;
-        `;
-
-        // Inventory Button
-        this.mobileInventoryBtn = document.createElement('div');
-        this.mobileInventoryBtn.id = 'mobile-inventory-btn';
-        this.mobileInventoryBtn.innerHTML = '📦';
-        this.mobileInventoryBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileInventoryBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.game.toggleInventory();
-        }, { passive: false });
-        this.mobileInventoryBtn.addEventListener('click', () => {
-            this.game.toggleInventory();
-        });
-        this.mobileTopBar.appendChild(this.mobileInventoryBtn);
-
-        // Debug Panel Button
-        this.mobileDebugBtn = document.createElement('div');
-        this.mobileDebugBtn.id = 'mobile-debug-btn';
-        this.mobileDebugBtn.innerHTML = '🔧';
-        this.mobileDebugBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileDebugBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.game.toggleDebugPanel();
-        }, { passive: false });
-        this.mobileDebugBtn.addEventListener('click', () => {
-            this.game.toggleDebugPanel();
-        });
-        this.mobileTopBar.appendChild(this.mobileDebugBtn);
-
-        // Chat Panel Button
-        this.mobileChatBtn = document.createElement('div');
-        this.mobileChatBtn.id = 'mobile-chat-btn';
-        this.mobileChatBtn.innerHTML = '💬';
-        this.mobileChatBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileChatBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (this.game.agent) {
-                this.game.agent.toggleChat();
-            }
-        }, { passive: false });
-        this.mobileChatBtn.addEventListener('click', () => {
-            if (this.game.agent) {
-                this.game.agent.toggleChat();
-            }
-        });
-        this.mobileTopBar.appendChild(this.mobileChatBtn);
-
-        // Settings Button (Moved from Desktop UI)
-        this.mobileSettingsBtn = document.createElement('div');
-        this.mobileSettingsBtn.id = 'mobile-settings-btn';
-        this.mobileSettingsBtn.innerHTML = '⚙️';
-        this.mobileSettingsBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileSettingsBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.toggleSettingsModal();
-        }, { passive: false });
-        this.mobileSettingsBtn.addEventListener('click', () => {
-            this.toggleSettingsModal();
-        });
-        this.mobileTopBar.appendChild(this.mobileSettingsBtn);
-
-        // Camera Button (Cycle View)
-        this.mobileCameraBtn = document.createElement('div');
-        this.mobileCameraBtn.id = 'mobile-camera-btn';
-        this.mobileCameraBtn.innerHTML = '🎥';
-        this.mobileCameraBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileCameraBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.game.cycleCamera();
-        }, { passive: false });
-        this.mobileCameraBtn.addEventListener('click', () => {
-            this.game.cycleCamera();
-        });
-        this.mobileTopBar.appendChild(this.mobileCameraBtn);
-
-        // Sprint Toggle Button
-        this.mobileSprintBtn = document.createElement('div');
-        this.mobileSprintBtn.id = 'mobile-sprint-btn';
-        this.mobileSprintBtn.innerHTML = '🏃';
-        this.mobileSprintBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileSprintBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.toggleSprint();
-        }, { passive: false });
-        this.mobileSprintBtn.addEventListener('click', () => {
-            this.toggleSprint();
-        });
-        this.mobileTopBar.appendChild(this.mobileSprintBtn);
-
-        // Fly Toggle Button
-        this.mobileFlyBtn = document.createElement('div');
-        this.mobileFlyBtn.id = 'mobile-fly-btn';
-        this.mobileFlyBtn.innerHTML = '🕊️';
-        this.mobileFlyBtn.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 0, 0, 0.6);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            touch-action: manipulation;
-            user-select: none;
-            cursor: pointer;
-        `;
-        this.mobileFlyBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.toggleFly();
-        }, { passive: false });
-        this.mobileFlyBtn.addEventListener('click', () => {
-            this.toggleFly();
-        });
-        this.mobileTopBar.appendChild(this.mobileFlyBtn);
-
-
-        document.body.appendChild(this.mobileTopBar);
-
-        // 5. Create Drop Button (near action cluster)
-        this.dropBtn = document.createElement('div');
-        this.dropBtn.id = 'touch-drop';
-        this.dropBtn.innerHTML = '🗑️'; // or a down arrow
-        this.dropBtn.style.cssText = `
-            position: fixed;
-            bottom: 220px;
-            right: 50px;
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 68, 68, 0.2);
-            border: 2px solid rgba(255, 68, 68, 0.5);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            z-index: 1000;
-            touch-action: manipulation;
-            cursor: pointer;
-        `;
-        this.dropBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (this.game.inventory) {
-                this.game.inventory.dropCurrentItem();
-            }
-        }, { passive: false });
-        document.body.appendChild(this.dropBtn);
-
-        // Joystick Logic
-        let joystickActive = false;
-        let joystickTouchId = null;
-        let rect = null;
-        let centerX = 0;
-        let centerY = 0;
-        let maxRadius = 0;
-
-        const updateRect = () => {
-            rect = this.joystickContainer.getBoundingClientRect();
-            centerX = rect.left + rect.width / 2;
-            centerY = rect.top + rect.height / 2;
-            maxRadius = rect.width / 2;
-        };
-
-        const handleJoystick = (clientX, clientY) => {
-            // Note: joystickActive check is done by caller usually, but good to have here
-            const dx = clientX - centerX;
-            const dy = clientY - centerY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            const angle = Math.atan2(dy, dx);
-            const moveDist = Math.min(dist, maxRadius);
-
-            const knobX = Math.cos(angle) * moveDist;
-            const knobY = Math.sin(angle) * moveDist;
-
-            this.joystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
-
-            // Update InputManager actions
-            const deadzone = 10;
-            this.game.inputManager.actions['FORWARD'] = dy < -deadzone;
-            this.game.inputManager.actions['BACKWARD'] = dy > deadzone;
-            this.game.inputManager.actions['LEFT'] = dx < -deadzone;
-            this.game.inputManager.actions['RIGHT'] = dx > deadzone;
-        };
-
-        const stopJoystick = () => {
-            joystickActive = false;
-            joystickTouchId = null;
-            if (this.joystickKnob) this.joystickKnob.style.transform = `translate(0px, 0px)`;
-            this.game.inputManager.actions['FORWARD'] = false;
-            this.game.inputManager.actions['BACKWARD'] = false;
-            this.game.inputManager.actions['LEFT'] = false;
-            this.game.inputManager.actions['RIGHT'] = false;
-        };
-
-        // Touch Listeners
-        this.joystickContainer.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (joystickActive) return;
-
-            const touch = e.changedTouches[0];
-            joystickTouchId = touch.identifier;
-            joystickActive = true;
-            updateRect();
-            handleJoystick(touch.clientX, touch.clientY);
-        }, { passive: false });
-
-        this.joystickContainer.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (!joystickActive) return;
-
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === joystickTouchId) {
-                    const touch = e.changedTouches[i];
-                    handleJoystick(touch.clientX, touch.clientY);
-                    break;
-                }
-            }
-        }, { passive: false });
-
-        const onTouchEnd = (e) => {
-            if (!joystickActive) return;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === joystickTouchId) {
-                    stopJoystick();
-                    break;
-                }
-            }
-        };
-
-        this.joystickContainer.addEventListener('touchend', onTouchEnd, { passive: false });
-        this.joystickContainer.addEventListener('touchcancel', onTouchEnd, { passive: false });
-
-        // Mouse Listeners
-        this.joystickContainer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            updateRect();
-            joystickActive = true;
-            joystickTouchId = 'mouse';
-            handleJoystick(e.clientX, e.clientY);
-
-            const onMouseMove = (moveEvent) => {
-                if (joystickActive && joystickTouchId === 'mouse') {
-                    handleJoystick(moveEvent.clientX, moveEvent.clientY);
-                }
-            };
-
-            const onMouseUp = () => {
-                if (joystickTouchId === 'mouse') {
-                    stopJoystick();
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
-                }
-            };
-
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
-        });
-
-        // Jump Logic
-        const startJump = (e) => {
-            if (e && e.cancelable) e.preventDefault();
-            this.game.inputManager.actions['JUMP'] = true;
-        };
-        const stopJump = (e) => {
-            if (e && e.cancelable) e.preventDefault();
-            this.game.inputManager.actions['JUMP'] = false;
-        };
-
-        this.jumpBtn.addEventListener('touchstart', startJump, { passive: false });
-        this.jumpBtn.addEventListener('touchend', stopJump, { passive: false });
-        this.jumpBtn.addEventListener('mousedown', startJump);
-        this.jumpBtn.addEventListener('mouseup', stopJump);
-        this.jumpBtn.addEventListener('mouseleave', stopJump);
-
-        // Interact Logic
-        const triggerInteract = (e) => {
-            if (e && e.cancelable) e.preventDefault();
-            this.game.onRightClickDown();
-        };
-
-        this.interactBtn.addEventListener('touchstart', triggerInteract, { passive: false });
-        this.interactBtn.addEventListener('mousedown', triggerInteract);
-
-        // =====================
-        // RIGHT JOYSTICK (LOOK)
-        // =====================
-        this.lookJoystickContainer = document.createElement('div');
-        this.lookJoystickContainer.id = 'touch-look-joystick';
-        this.lookJoystickContainer.style.cssText = `
-            position: fixed;
-            bottom: 40px;
-            right: 140px;
-            width: 120px;
-            height: 120px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            z-index: 1000;
-            touch-action: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-
-        this.lookJoystickKnob = document.createElement('div');
-        this.lookJoystickKnob.style.cssText = `
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            pointer-events: none;
-        `;
-        this.lookJoystickContainer.appendChild(this.lookJoystickKnob);
-        document.body.appendChild(this.lookJoystickContainer);
-
-        // Look Joystick Logic - Continuous rotation
-        let lookJoystickActive = false;
-        let lookJoystickTouchId = null;
-        let lookRect = null;
-        let lookCenterX = 0;
-        let lookCenterY = 0;
-        let lookMaxRadius = 0;
-        let lookDeltaX = 0; // Stored delta for continuous rotation
-        let lookDeltaY = 0;
-        let lookAnimationFrame = null;
-
-        const updateLookRect = () => {
-            lookRect = this.lookJoystickContainer.getBoundingClientRect();
-            lookCenterX = lookRect.left + lookRect.width / 2;
-            lookCenterY = lookRect.top + lookRect.height / 2;
-            lookMaxRadius = lookRect.width / 2;
-        };
-
-        // Continuous rotation loop
-        const lookRotationLoop = () => {
-            if (!lookJoystickActive) {
-                lookAnimationFrame = null;
-                return;
-            }
-
-            // Apply rotation continuously based on stored delta
-            if (this.game.player && (Math.abs(lookDeltaX) > 0.01 || Math.abs(lookDeltaY) > 0.01)) {
-                this.game.player.rotate(lookDeltaX, lookDeltaY);
-            }
-
-            lookAnimationFrame = requestAnimationFrame(lookRotationLoop);
-        };
-
-        const handleLookJoystick = (clientX, clientY) => {
-            const dx = clientX - lookCenterX;
-            const dy = clientY - lookCenterY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            const angle = Math.atan2(dy, dx);
-            const moveDist = Math.min(dist, lookMaxRadius);
-
-            const knobX = Math.cos(angle) * moveDist;
-            const knobY = Math.sin(angle) * moveDist;
-
-            this.lookJoystickKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
-
-            // Store rotation delta based on joystick position (normalized -1 to 1)
-            const sensitivity = 3.0;
-            lookDeltaX = (dx / lookMaxRadius) * sensitivity;
-            lookDeltaY = (dy / lookMaxRadius) * sensitivity;
-        };
-
-        const startLookJoystick = () => {
-            if (!lookAnimationFrame) {
-                lookAnimationFrame = requestAnimationFrame(lookRotationLoop);
-            }
-        };
-
-        const stopLookJoystick = () => {
-            lookJoystickActive = false;
-            lookJoystickTouchId = null;
-            lookDeltaX = 0;
-            lookDeltaY = 0;
-            if (this.lookJoystickKnob) this.lookJoystickKnob.style.transform = `translate(0px, 0px)`;
-            if (lookAnimationFrame) {
-                cancelAnimationFrame(lookAnimationFrame);
-                lookAnimationFrame = null;
-            }
-        };
-
-        // Touch Listeners for Look Joystick
-        this.lookJoystickContainer.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (lookJoystickActive) return;
-
-            const touch = e.changedTouches[0];
-            lookJoystickTouchId = touch.identifier;
-            lookJoystickActive = true;
-            updateLookRect();
-            handleLookJoystick(touch.clientX, touch.clientY);
-            startLookJoystick();
-        }, { passive: false });
-
-        this.lookJoystickContainer.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (!lookJoystickActive) return;
-
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === lookJoystickTouchId) {
-                    const touch = e.changedTouches[i];
-                    handleLookJoystick(touch.clientX, touch.clientY);
-                    break;
-                }
-            }
-        }, { passive: false });
-
-        const onLookTouchEnd = (e) => {
-            if (!lookJoystickActive) return;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === lookJoystickTouchId) {
-                    stopLookJoystick();
-                    break;
-                }
-            }
-        };
-
-        this.lookJoystickContainer.addEventListener('touchend', onLookTouchEnd, { passive: false });
-        this.lookJoystickContainer.addEventListener('touchcancel', onLookTouchEnd, { passive: false });
-
-        // Mouse Listeners for Look Joystick
-        this.lookJoystickContainer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            updateLookRect();
-            lookJoystickActive = true;
-            lookJoystickTouchId = 'mouse';
-            handleLookJoystick(e.clientX, e.clientY);
-            startLookJoystick();
-
-            const onMouseMove = (moveEvent) => {
-                if (lookJoystickActive && lookJoystickTouchId === 'mouse') {
-                    handleLookJoystick(moveEvent.clientX, moveEvent.clientY);
-                }
-            };
-
-            const onMouseUp = () => {
-                if (lookJoystickTouchId === 'mouse') {
-                    stopLookJoystick();
-                    window.removeEventListener('mousemove', onMouseMove);
-                    window.removeEventListener('mouseup', onMouseUp);
-                }
-            };
-
-            window.addEventListener('mousemove', onMouseMove);
-            window.addEventListener('mouseup', onMouseUp);
-        });
-    }
-    updateMobileControlsVisibility(visible) {
-        console.log(`[UIManager] updateMobileControlsVisibility(${visible})`);
-
-        if (visible && !this.joystickContainer) {
-            this.initTouchControls();
-        }
-
-        // Toggle body class for CSS targeting
-        if (visible) {
-            document.body.classList.add('mobile-controls-active');
-        } else {
-            document.body.classList.remove('mobile-controls-active');
-        }
-
-        const display = visible ? 'flex' : 'none';
-        if (this.joystickContainer) this.joystickContainer.style.display = display;
-        if (this.lookJoystickContainer) this.lookJoystickContainer.style.display = display;
-        if (this.jumpBtn) this.jumpBtn.style.display = display;
-        if (this.interactBtn) this.interactBtn.style.display = display;
-        if (this.dropBtn) this.dropBtn.style.display = display;
-        if (this.mobileTopBar) this.mobileTopBar.style.display = display;
-
-        // Toggle Desktop UI elements - ensure proper display values
-        const desktopSettingsBtn = document.getElementById('settings-btn');
-        const desktopChatBtn = document.getElementById('chat-button');
-        const desktopFeedbackBtn = document.getElementById('feedback-btn');
-
-        const desktopDisplay = visible ? 'none' : 'block';
-        console.log(`[UIManager] Desktop buttons display: ${desktopDisplay}, feedbackBtn exists: ${!!desktopFeedbackBtn}`);
-
-        if (desktopSettingsBtn) desktopSettingsBtn.style.display = desktopDisplay;
-        if (desktopChatBtn) desktopChatBtn.style.display = desktopDisplay;
-        // Managed by updateFeedbackButtonState now
-        // if (desktopFeedbackBtn) desktopFeedbackBtn.style.display = desktopDisplay;
-
-
-        // Call the centralized button state updater
-        this.updateFeedbackButtonState();
-    }
+    // Note: Mobile controls methods moved to mobileControlsManager
+    // Use: uiManager.mobileControlsManager.toggleSprint(), .toggleFly(), .setVisible()
 
     updateFeedbackButtonState() {
         if (!this.feedbackBtn) return;

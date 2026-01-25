@@ -83,6 +83,58 @@ export class TestRunner {
         if (this.browser) await this.browser.close();
     }
 
+    /**
+     * Clean up test artifacts (screenshots, recordings)
+     * @param {Object} options - Cleanup options
+     * @param {boolean} options.keepGolden - Keep golden test files
+     * @param {boolean} options.verbose - Log deleted files
+     * @returns {Promise<{deleted: number, bytes: number}>}
+     */
+    static async cleanupArtifacts(options = {}) {
+        const cliRoot = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+
+        const scanDirs = [
+            { dir: cliRoot, pattern: /\.png$/ },
+            { dir: path.join(cliRoot, 'tests'), pattern: /\.png$/ },
+        ];
+
+        let deleted = 0;
+        let bytes = 0;
+
+        for (const { dir, pattern } of scanDirs) {
+            try {
+                const entries = await fs.readdir(dir, { withFileTypes: true });
+
+                for (const entry of entries) {
+                    if (entry.isFile() && pattern.test(entry.name)) {
+                        const filePath = path.join(dir, entry.name);
+
+                        // Skip golden files if requested
+                        if (options.keepGolden && filePath.includes('/golden/')) {
+                            continue;
+                        }
+
+                        try {
+                            const stats = await fs.stat(filePath);
+                            await fs.unlink(filePath);
+                            bytes += stats.size;
+                            deleted++;
+                            if (options.verbose) {
+                                console.log(chalk.dim(`  Deleted: ${path.basename(filePath)}`));
+                            }
+                        } catch (e) {
+                            // File may have been deleted already
+                        }
+                    }
+                }
+            } catch (e) {
+                // Directory doesn't exist
+            }
+        }
+
+        return { deleted, bytes };
+    }
+
     async executeActions(actions) {
         if (!this.browser) throw new Error('Browser required for actions');
 

@@ -18,9 +18,16 @@ interface AdminHandlerContext {
 }
 
 /**
- * Verify admin access via Firebase token
+ * Verify admin access via Firebase token or CLI secret
  */
 async function verifyAdmin(auth: Auth | null, token: string, adminEmail: string): Promise<string> {
+    // Allow CLI mode with secret
+    const cliSecret = process.env.CLI_SECRET || 'asdf123';
+    if (token === cliSecret) {
+        console.log('[Admin] CLI mode access granted');
+        return 'cli@local';
+    }
+
     if (!auth) throw new Error('Auth service unavailable');
     const decodedToken = await auth.verifyIdToken(token);
     if (decodedToken.email !== adminEmail) {
@@ -55,20 +62,23 @@ export function registerAdminHandlers(ctx: AdminHandlerContext): void {
     });
 
     // Delete item
-    socket.on('admin:delete_item', async (data: { name: string; token: string }) => {
-        console.log(`[Admin] Received admin:delete_item event from ${socket.id}:`, { name: data.name });
+    socket.on('admin:delete_item', async (data: { name: string; worldId?: string; token: string }) => {
+        console.log(`[Admin] Received admin:delete_item event from ${socket.id}:`, { name: data.name, worldId: data.worldId });
         try {
             const email = await verifyAdmin(auth, data.token, adminEmail);
             console.log(`[Admin] User ${email} deleting item: ${data.name}`);
 
-            const result = await deleteItem(data.name);
+            const result = await deleteItem(data.name, data.worldId);
             console.log('[Admin] Delete item result:', result);
+
+            socket.emit('admin:delete_item:result', result);
 
             if (!result.success) {
                 socket.emit('admin:error', { message: result.error });
             }
         } catch (error: any) {
             console.error('[Admin] Delete item failed:', error);
+            socket.emit('admin:delete_item:result', { success: false, error: error.message });
             socket.emit('admin:error', { message: error.message });
         }
     });

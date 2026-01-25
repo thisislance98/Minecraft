@@ -1,151 +1,185 @@
 
 import { addKnowledge, initKnowledgeService } from '../services/KnowledgeService';
 
-const EXPANDED_DATA = [
-    // 1. Advanced Particle Entity Template (Tornado-style)
+type KnowledgeCategory = 'template' | 'gotcha' | 'howto' | 'error' | 'example';
+
+const EXPANDED_DATA: Array<{
+    category: KnowledgeCategory;
+    title: string;
+    content: string;
+    tags: string[];
+}> = [
+    // WAND ITEM PROJECTILE TEMPLATE - Lightning style with particles and block destruction
     {
-        category: 'template',
-        title: 'Advanced Particle Entity Template',
-        content: `class ParticleEntity extends Animal {
-    constructor(game, position) {
-        // Note: position is a THREE.Vector3 here if spawned manually, or x,y,z if via command
-        // This template assumes manual spawning via game.entities.push
-        this.game = game;
-        this.position = position.clone();
-        this.lifeTime = 0;
-        this.maxLifeTime = 10.0;
-        
-        // Create particle system
-        this.particles = [];
-        this.particleSystem = this.createParticleSystem();
-        this.game.scene.add(this.particleSystem);
+        category: 'template' as const,
+        title: 'Wand Item Projectile Template',
+        content: `// ========================================
+// COMPLETE WAND ITEM WITH PROJECTILE GUIDE
+// ========================================
+// This template shows how to create:
+// 1. The Wand Item class (with inventory icon and 3D hand mesh)
+// 2. The Projectile class that shoots LIGHTNING BOLTS
+// 3. Particle explosions and block destruction on impact
+
+// ==========================================
+// PART 1: THE WAND ITEM CLASS
+// ==========================================
+class MyWandItem extends Item {
+    constructor() {
+        super('lightning_wand', 'Lightning Wand');
+        this.maxStack = 1;
+        this.isTool = true;
+        this.cooldown = 500;        // Milliseconds between shots
+        this.lastUseTime = 0;
+        this.damage = 15;
+        this.blastRadius = 2;       // Block destruction radius
+
+        // INVENTORY ICON (SVG string)
+        this.icon = \`<svg viewBox="0 0 24 24">
+            <rect x="10" y="10" width="4" height="12" fill="#4B0082" rx="1"/>
+            <circle cx="12" cy="6" r="4" fill="#FFD700"/>
+            <path d="M10,4 L14,8 L11,7 L13,12 L9,8 L12,9 Z" fill="#00FFFF"/>
+        </svg>\`;
     }
 
-    createParticleSystem() {
-        const count = 200;
-        const geometry = new window.THREE.BufferGeometry();
-        const positions = new Float32Array(count * 3);
-        const material = new window.THREE.PointsMaterial({
-            color: 0x88CCFF,
-            size: 0.5,
-            transparent: true,
-            opacity: 0.8
-        });
+    onUseDown(game, player) {
+        const now = Date.now();
+        if (now - this.lastUseTime < this.cooldown) return false;
+        this.lastUseTime = now;
 
-        for (let i = 0; i < count; i++) {
-            this.particles.push({
-                angle: Math.random() * Math.PI * 2,
-                radius: 2 + Math.random() * 3,
-                y: Math.random() * 5,
-                speed: 1 + Math.random()
-            });
-            // Initial positions handled in update
-        }
-        
-        geometry.setAttribute('position', new window.THREE.BufferAttribute(positions, 3));
-        return new window.THREE.Points(geometry, material);
+        const camDir = new window.THREE.Vector3();
+        game.camera.getWorldDirection(camDir);
+        const spawnPos = game.camera.position.clone().add(camDir.clone().multiplyScalar(1.5));
+
+        // Create lightning projectile
+        const projectile = new LightningBoltProjectile(game, spawnPos, camDir, this.damage, this.blastRadius);
+        game.projectiles = game.projectiles || [];
+        game.projectiles.push(projectile);
+        game.scene.add(projectile.mesh);
+
+        if (player.swingArm) player.swingArm();
+        return true;
+    }
+
+    onPrimaryDown(game, player) {
+        return this.onUseDown(game, player);
+    }
+
+    // 3D model shown in player's hand
+    getMesh() {
+        const group = new window.THREE.Group();
+
+        // Handle
+        const handle = new window.THREE.Mesh(
+            new window.THREE.CylinderGeometry(0.04, 0.06, 0.6, 8),
+            new window.THREE.MeshLambertMaterial({ color: 0x4B0082 })
+        );
+        handle.position.y = -0.15;
+        group.add(handle);
+
+        // Crystal tip
+        const crystal = new window.THREE.Mesh(
+            new window.THREE.OctahedronGeometry(0.1, 0),
+            new window.THREE.MeshStandardMaterial({
+                color: 0xFFD700,
+                emissive: 0xFFAA00,
+                emissiveIntensity: 0.4
+            })
+        );
+        crystal.position.y = 0.25;
+        group.add(crystal);
+
+        return group;
+    }
+}
+
+// ==========================================
+// PART 2: LIGHTNING BOLT PROJECTILE
+// ==========================================
+// Creates a jagged lightning bolt visual (like weather system)
+// On hit: particle explosion + block destruction
+
+class LightningBoltProjectile {
+    constructor(game, position, direction, damage = 15, blastRadius = 2) {
+        this.game = game;
+        this.position = position.clone();
+        this.direction = direction.clone().normalize();
+        this.velocity = this.direction.clone().multiplyScalar(40); // Fast!
+        this.damage = damage;
+        this.blastRadius = blastRadius;
+        this.lifeTime = 0;
+        this.maxLifeTime = 3.0;
+
+        // Create lightning bolt mesh
+        this.mesh = this.createLightningMesh();
+        this.mesh.position.copy(this.position);
+
+        // Trail effect - store previous positions
+        this.trail = [];
+        this.trailMesh = null;
+    }
+
+    createLightningMesh() {
+        const group = new window.THREE.Group();
+
+        // Core energy ball
+        const coreGeo = new window.THREE.SphereGeometry(0.2, 8, 8);
+        const coreMat = new window.THREE.MeshBasicMaterial({
+            color: 0xFFFFFF,
+            transparent: true,
+            opacity: 0.9
+        });
+        const core = new window.THREE.Mesh(coreGeo, coreMat);
+        group.add(core);
+
+        // Electric glow ring
+        const ringGeo = new window.THREE.RingGeometry(0.25, 0.35, 6);
+        const ringMat = new window.THREE.MeshBasicMaterial({
+            color: 0x00FFFF,
+            transparent: true,
+            opacity: 0.7,
+            side: window.THREE.DoubleSide
+        });
+        const ring = new window.THREE.Mesh(ringGeo, ringMat);
+        group.add(ring);
+
+        // Second ring perpendicular
+        const ring2 = ring.clone();
+        ring2.rotation.x = Math.PI / 2;
+        group.add(ring2);
+
+        return group;
     }
 
     update(dt) {
         this.lifeTime += dt;
         if (this.lifeTime > this.maxLifeTime) {
-            this.game.scene.remove(this.particleSystem);
-            this.particleSystem.geometry.dispose();
-            this.particleSystem.material.dispose();
-            return false; // Remove from game
-        }
-
-        const positions = this.particleSystem.geometry.attributes.position.array;
-        for (let i = 0; i < this.particles.length; i++) {
-            const p = this.particles[i];
-            p.angle += p.speed * dt;
-            
-            // Circular motion
-            positions[i * 3] = this.position.x + Math.cos(p.angle) * p.radius;
-            positions[i * 3 + 1] = this.position.y + p.y;
-            positions[i * 3 + 2] = this.position.z + Math.sin(p.angle) * p.radius;
-        }
-        this.particleSystem.geometry.attributes.position.needsUpdate = true;
-        return true;
-    }
-}`,
-        tags: ['particles', 'storm', 'tornado', 'effect', 'advanced']
-    },
-
-    // 2. Interactive Tool Item Template (Broom-style)
-    {
-        category: 'template',
-        title: 'Interactive Tool Item Template',
-        content: `// Requires extending Item class
-class CustomToolItem extends Item {
-    constructor() {
-        super('custom_tool_id', 'Display Name'); // ID must be unique
-        this.maxStack = 1;
-        this.isTool = true;
-        
-        // Inventory Icon (SVG string)
-        // This will be rendered in the inventory slot
-        this.icon = \`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14.5 4l-8.5 16M6 9h12" />
-        </svg>\`;
-    }
-
-    // Triggered when player left-clicks with item
-    onUseDown(game, player) {
-        console.log('Tool used!');
-        
-        // Example: Apply velocity (Jetpack style)
-        if (player.velocity) {
-            player.velocity.y += 15;
-            game.chat('Lift off!');
-        }
-        
-        return true; // handled
-    }
-    
-    // Optional: Triggered every frame while held
-    update(dt, game, player) {
-        // Continuous effects
-    }
-}`,
-        tags: ['item', 'tool', 'interaction', 'custom_item', 'click']
-    },
-
-    // 3. Explosive Projectile Template
-    {
-        category: 'template',
-        title: 'Explosive Projectile Template',
-        content: `class ExplosiveProjectile {
-    constructor(game, position, velocity) {
-        this.game = game;
-        this.position = position.clone();
-        this.velocity = velocity.clone();
-        this.speed = 20.0;
-        this.velocity.normalize().multiplyScalar(this.speed);
-        this.lifeTime = 0;
-        
-        // Visuals
-        const geo = new window.THREE.SphereGeometry(0.3);
-        const mat = new window.THREE.MeshBasicMaterial({ color: 0xFF00FF });
-        this.mesh = new window.THREE.Mesh(geo, mat);
-        this.mesh.position.copy(this.position);
-        this.game.scene.add(this.mesh); // IMPORTANT: Add to scene manually if not using factory
-    }
-
-    update(dt) {
-        this.lifeTime += dt;
-        if (this.lifeTime > 5.0) {
-            this.game.scene.remove(this.mesh);
+            this.dispose();
             return false;
         }
 
+        // Animate rings rotation
+        if (this.mesh.children[1]) this.mesh.children[1].rotation.z += dt * 10;
+        if (this.mesh.children[2]) this.mesh.children[2].rotation.y += dt * 8;
+
+        // Flicker effect
+        if (this.mesh.children[0]) {
+            this.mesh.children[0].material.opacity = 0.7 + Math.sin(this.lifeTime * 30) * 0.3;
+        }
+
         // Move
-        const nextPos = this.position.clone().add(this.velocity.clone().multiplyScalar(dt));
-        
-        // Simple floor collision check
-        if (nextPos.y < this.game.worldManager.getTerrainHeight(nextPos.x, nextPos.z)) {
-            this.explode();
-            return false; // Destroy projectile
+        const moveStep = this.velocity.clone().multiplyScalar(dt);
+        const nextPos = this.position.clone().add(moveStep);
+
+        // Update trail (jagged lightning effect behind projectile)
+        this.updateTrail(nextPos);
+
+        // Check collisions
+        const hitPos = this.checkCollisions(nextPos);
+        if (hitPos) {
+            this.onHit(hitPos);
+            this.dispose();
+            return false;
         }
 
         this.position.copy(nextPos);
@@ -153,975 +187,590 @@ class CustomToolItem extends Item {
         return true;
     }
 
-    explode() {
-        this.game.scene.remove(this.mesh);
-        // Create explosion particles...
-        // Destroy nearby blocks...
-        console.log('Boom!');
-    }
-}`,
-        tags: ['projectile', 'combat', 'explosion', 'weapon', 'magic']
-    },
+    updateTrail(newPos) {
+        // Add current position to trail with jitter
+        this.trail.push({
+            pos: this.position.clone().add(new window.THREE.Vector3(
+                (Math.random() - 0.5) * 0.3,
+                (Math.random() - 0.5) * 0.3,
+                (Math.random() - 0.5) * 0.3
+            )),
+            age: 0
+        });
 
-    // 4. Glowing Creature Template (from Firefly.js)
-    {
-        category: 'template',
-        title: 'Glowing Creature Template',
-        content: `// From Firefly.js - Use emissive material for glow effect
-const glowMat = new window.THREE.MeshStandardMaterial({
-    color: 0xffff00,       // Base color
-    emissive: 0xffff00,    // Glow color (same or different)
-    emissiveIntensity: 2   // Brightness of glow (0-5 typical)
-});
-// PERFORMANCE TIP: Avoid PointLights - emissive material already provides glow`,
-        tags: ['glow', 'emissive', 'light', 'firefly', 'glowing', 'bright', 'shine']
-    },
-
-    // 5. Flying Creature Template (from Firefly.js)
-    {
-        category: 'template',
-        title: 'Flying Creature Template',
-        content: `// From Firefly.js - Override updatePhysics to disable gravity
-class FlyingCreature extends Animal {
-    constructor(game, x, y, z) {
-        super(game, x, y, z);
-        this.floatPhase = Math.random() * Math.PI * 2;
-    }
-    
-    updateAI(dt) {
-        this.floatPhase += dt * 2;
-        if (!this.targetDir || Math.random() < 0.05) {
-            this.targetDir = new window.THREE.Vector3(
-                (Math.random() - 0.5) * 2,
-                (Math.random() - 0.5) * 1,
-                (Math.random() - 0.5) * 2
-            ).normalize();
+        // Remove old trail mesh
+        if (this.trailMesh) {
+            this.game.scene.remove(this.trailMesh);
+            this.trailMesh.geometry.dispose();
+            this.trailMesh.material.dispose();
         }
-        this.velocity.y = (this.targetDir.y * this.speed) + Math.sin(this.floatPhase) * 0.5;
-    }
-    
-    updatePhysics(dt) {
-        // Override to DISABLE gravity
-    }
-}`,
-        tags: ['flying', 'float', 'hover', 'fly', 'air', 'bird', 'flight', 'gravity']
-    },
 
-    // 6. Follow Player Template (from Merlin.js)
-    {
-        category: 'template',
-        title: 'Follow Player Template',
-        content: `// From Merlin.js - Following behavior with distance threshold
-updateAI(dt) {
-    const player = this.game.player;
-    const dx = player.position.x - this.position.x;
-    const dz = player.position.z - this.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    
-    if (dist > this.followDistance + 1.0) {
-        const angle = Math.atan2(dx, dz);
-        this.rotation = angle;
-        this.moveDirection.set(Math.sin(angle), 0, Math.cos(angle));
-        this.isMoving = true;
-    } else {
-        this.isMoving = false;
-        this.rotation = Math.atan2(dx, dz);
-    }
-}`,
-        tags: ['follow', 'player', 'pet', 'companion', 'chase', 'move', 'AI']
-    },
+        // Keep only recent trail points
+        this.trail = this.trail.filter(t => t.age < 0.15);
+        this.trail.forEach(t => t.age += 0.016);
 
-    // 7. Teleport Template (from Merlin.js)
-    {
-        category: 'template',
-        title: 'Teleport Template',
-        content: `// From Merlin.js - Teleportation with particle effects
-teleportToPlayer() {
-    const player = this.game.player;
-    const dir = new window.THREE.Vector3();
-    this.game.camera.getWorldDirection(dir);
-    dir.y = 0;
-    dir.normalize();
-    
-    this.position.x = player.position.x - dir.x * this.followDistance;
-    this.position.y = player.position.y + 1;
-    this.position.z = player.position.z - dir.z * this.followDistance;
-    
-    this.spawnTeleportParticles();
-}`,
-        tags: ['teleport', 'warp', 'blink', 'flash', 'instant', 'move', 'particles']
-    },
+        // Create new trail mesh (jagged lightning line)
+        if (this.trail.length > 1) {
+            const points = this.trail.map(t => t.pos);
+            points.push(newPos);
 
-    // 8. Healing Template
-    {
-        category: 'template',
-        title: 'Healing Template',
-        content: `// Heal player or entity
-healEntity(entity, amount) {
-    entity.health = Math.min(entity.health + amount, entity.maxHealth);
-    this.game.chat('Healed for ' + amount + ' HP!');
-}
-
-// For items - onUseDown method:
-onUseDown(game, player) {
-    player.health = Math.min(player.health + 20, player.maxHealth);
-    game.chat('Healed!');
-}`,
-        tags: ['heal', 'health', 'restore', 'potion', 'regenerate', 'hp', 'life']
-    },
-
-    // 9. Invisibility Item Template
-    {
-        category: 'template',
-        title: 'Invisibility Item Template',
-        content: `class InvisibilityItem extends Item {
-    constructor() {
-        super('invis_wand', 'Invisibility Wand');
-        this.icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="purple" opacity="0.5"/></svg>';
-    }
-    onUseDown(game, player) {
-        player.mesh.visible = false;
-        game.chat('You are now invisible!');
-        setTimeout(() => { player.mesh.visible = true; }, 5000);
-    }
-}`,
-        tags: ['invisibility', 'invisible', 'hide', 'stealth', 'effect', 'icon', 'svg']
-    },
-
-    // 10. GOLD STANDARD: Dragon Body Template (from Dragon.js)
-    {
-        category: 'template',
-        title: 'Dragon Body Template',
-        content: `// GOLD STANDARD from Dragon.js - High-quality creature mesh
-createBody() {
-    const bodyMat = new window.THREE.MeshLambertMaterial({ color: 0x8B0000 }); // Dark red
-    const bellyMat = new window.THREE.MeshLambertMaterial({ color: 0xD2691E }); // Contrast belly
-    const eyeMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFF00 }); // Yellow eyes
-    const pupilMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
-    const hornMat = new window.THREE.MeshLambertMaterial({ color: 0x2F2F2F }); // Dark gray
-    
-    // BODY - Main elongated shape
-    const bodyGeo = new window.THREE.BoxGeometry(2.5, 1.2, 1.5);
-    const body = new window.THREE.Mesh(bodyGeo, bodyMat);
-    body.position.set(0, 0, 0);
-    this.mesh.add(body);
-    
-    // BELLY - Lighter contrast color underneath
-    const bellyGeo = new window.THREE.BoxGeometry(2.0, 0.4, 1.2);
-    const belly = new window.THREE.Mesh(bellyGeo, bellyMat);
-    belly.position.set(0, -0.5, 0);
-    this.mesh.add(belly);
-    
-    // HEAD with neck connecting to body
-    const neckGeo = new window.THREE.BoxGeometry(0.8, 0.8, 1.5);
-    const neck = new window.THREE.Mesh(neckGeo, bodyMat);
-    neck.position.set(1.4, 0.4, 0);
-    neck.rotation.z = Math.PI / 6; // Angled up
-    this.mesh.add(neck);
-    
-    const headGeo = new window.THREE.BoxGeometry(1.2, 0.8, 0.9);
-    const head = new window.THREE.Mesh(headGeo, bodyMat);
-    head.position.set(2.2, 0.9, 0);
-    this.mesh.add(head);
-    
-    // EYES - White with black pupil
-    const eyeGeo = new window.THREE.BoxGeometry(0.2, 0.25, 0.15);
-    const leftEye = new window.THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(2.5, 1.1, 0.4);
-    this.mesh.add(leftEye);
-    
-    const pupilGeo = new window.THREE.BoxGeometry(0.1, 0.15, 0.12);
-    const leftPupil = new window.THREE.Mesh(pupilGeo, pupilMat);
-    leftPupil.position.set(2.55, 1.1, 0.45); // Slightly in front of eye
-    this.mesh.add(leftPupil);
-    
-    // Mirror for right eye (same pattern)
-}`,
-        tags: ['creature', 'dragon', 'mesh', 'body', 'visual', 'design', 'high-quality', 'gold-standard', 'anatomy']
-    },
-
-    // 11. GOLD STANDARD: Wing Construction Template (from Dragon.js)
-    {
-        category: 'template',
-        title: 'Wing Construction Template',
-        content: `// GOLD STANDARD Wing from Dragon.js - Proper wing structure with bones and membrane
-createWing(boneMat) {
-    const wing = new window.THREE.Group();
-    
-    // Wing BONE structure - Use multiple segments
-    const upperBoneGeo = new window.THREE.BoxGeometry(0.2, 0.2, 1.5);
-    const upperBone = new window.THREE.Mesh(upperBoneGeo, boneMat);
-    upperBone.position.set(0, 0, 0);
-    wing.add(upperBone);
-    
-    const lowerBoneGeo = new window.THREE.BoxGeometry(0.15, 0.15, 2.0);
-    const lowerBone = new window.THREE.Mesh(lowerBoneGeo, boneMat);
-    lowerBone.position.set(-0.5, -0.1, 1.25);
-    lowerBone.rotation.x = 0.3; // Angled outward
-    wing.add(lowerBone);
-    
-    // Wing MEMBRANE (skin) - Use PlaneGeometry for flat wing surface
-    const membraneGeo = new window.THREE.PlaneGeometry(1.5, 3.0);
-    const membraneMat = new window.THREE.MeshLambertMaterial({ 
-        color: 0x4a0000, 
-        side: window.THREE.DoubleSide, 
-        transparent: true, 
-        opacity: 0.9 
-    });
-    const membrane = new window.THREE.Mesh(membraneGeo, membraneMat);
-    membrane.position.set(-0.5, 0, 1.0);
-    membrane.rotation.x = Math.PI / 2;
-    wing.add(membrane);
-    
-    return wing;
-}
-
-// USING THE WING - Position on body and animate
-this.leftWing = this.createWing(bodyMat);
-this.leftWing.position.set(-0.3, 0.4, 0.75);
-this.mesh.add(this.leftWing);
-
-this.rightWing = this.createWing(bodyMat);
-this.rightWing.position.set(-0.3, 0.4, -0.75);
-this.mesh.add(this.rightWing);
-
-// WING ANIMATION in update():
-const flapAngle = Math.sin(this.wingFlapTimer) * 0.5;
-this.leftWing.rotation.z = flapAngle + 0.3;
-this.rightWing.rotation.z = -flapAngle - 0.3; // Mirror`,
-        tags: ['wing', 'wings', 'flying', 'membrane', 'bone', 'dragon', 'bird', 'animation', 'flap']
-    },
-
-    // 12. GOLD STANDARD: Pig/Animal Body Template (from Pig.js)
-    {
-        category: 'template',
-        title: 'Quadruped Animal Body Template',
-        content: `// GOLD STANDARD from Pig.js - Well-proportioned quadruped animal
-createBody() {
-    const skinColor = 0xF0ACBC; // Pink
-    const mat = new window.THREE.MeshLambertMaterial({ color: skinColor });
-    const whiteMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    const blackMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
-    const hoofMat = new window.THREE.MeshLambertMaterial({ color: 0x5C3A21 }); // Dark brown
-    
-    // BODY - Main rectangle
-    const bodyGeo = new window.THREE.BoxGeometry(0.8, 0.7, 1.1);
-    const body = new window.THREE.Mesh(bodyGeo, mat);
-    body.position.set(0, 0.6, 0); // Raised to leg height
-    this.mesh.add(body);
-    
-    // HEAD - Positioned in front of body
-    const headGeo = new window.THREE.BoxGeometry(0.6, 0.6, 0.6);
-    const head = new window.THREE.Mesh(headGeo, mat);
-    head.position.set(0, 0.9, 0.8); // Forward of body
-    this.mesh.add(head);
-    
-    // SNOUT
-    const snoutGeo = new window.THREE.BoxGeometry(0.3, 0.2, 0.1);
-    const snout = new window.THREE.Mesh(snoutGeo, mat);
-    snout.position.set(0, 0.8, 1.15);
-    this.mesh.add(snout);
-    
-    // EYES - White background with black pupil
-    const eyeGeo = new window.THREE.BoxGeometry(0.12, 0.12, 0.05);
-    const pupilGeo = new window.THREE.BoxGeometry(0.06, 0.06, 0.06);
-    
-    const leftEye = new window.THREE.Mesh(eyeGeo, whiteMat);
-    leftEye.position.set(-0.2, 1.0, 1.1);
-    this.mesh.add(leftEye);
-    
-    const leftPupil = new window.THREE.Mesh(pupilGeo, blackMat);
-    leftPupil.position.set(-0.2, 1.0, 1.12); // Slightly in front
-    this.mesh.add(leftPupil);
-    
-    // (Mirror for right eye)
-    
-    // LEGS - Use Groups for animation
-    const makeLeg = (x, z) => {
-        const pivot = new window.THREE.Group();
-        pivot.position.set(x, 0.4, z);
-        
-        const legGeo = new window.THREE.BoxGeometry(0.25, 0.3, 0.25);
-        const legMesh = new window.THREE.Mesh(legGeo, mat);
-        legMesh.position.set(0, -0.15, 0);
-        pivot.add(legMesh);
-        
-        const hoofGeo = new window.THREE.BoxGeometry(0.25, 0.1, 0.25);
-        const hoofMesh = new window.THREE.Mesh(hoofGeo, hoofMat);
-        hoofMesh.position.set(0, -0.35, 0);
-        pivot.add(hoofMesh);
-        
-        this.mesh.add(pivot);
-        return pivot;
-    };
-    
-    this.legParts = [
-        makeLeg(-0.25, 0.4),  // Front Left
-        makeLeg(0.25, 0.4),   // Front Right
-        makeLeg(-0.25, -0.4), // Back Left
-        makeLeg(0.25, -0.4)   // Back Right
-    ];
-}`,
-        tags: ['creature', 'animal', 'pig', 'dog', 'quadruped', 'legs', 'body', 'visual', 'gold-standard', 'pet']
-    },
-
-    // 13. GOLD STANDARD: Creature Proportions Reference
-    {
-        category: 'template',
-        title: 'Creature Proportions Reference',
-        content: `// CREATURE PROPORTIONS - Use these scales for natural-looking creatures
-
-// SMALL ANIMAL (dog, cat, rabbit)
-this.width = 0.6;
-this.height = 0.6;
-this.depth = 0.8;
-// Body: BoxGeometry(0.5, 0.4, 0.7)
-// Head: BoxGeometry(0.35, 0.35, 0.35)
-// Legs: BoxGeometry(0.15, 0.25, 0.15)
-
-// MEDIUM ANIMAL (pig, sheep, wolf)
-this.width = 0.9;
-this.height = 0.9;
-this.depth = 1.3;
-// Body: BoxGeometry(0.8, 0.7, 1.1)
-// Head: BoxGeometry(0.6, 0.6, 0.6)
-// Legs: BoxGeometry(0.25, 0.4, 0.25)
-
-// LARGE CREATURE (dragon, horse, cow)
-this.width = 2.0;
-this.height = 2.0;
-this.depth = 5.0;
-// Body: BoxGeometry(2.5, 1.2, 1.5)
-// Head: BoxGeometry(1.2, 0.8, 0.9)
-// Legs: BoxGeometry(0.3, 0.8, 0.3)
-
-// EYE PROPORTIONS - Always include pupils!
-// Eye white: 15-20% of head width
-// Pupil: 50% of eye size, positioned slightly forward
-
-// COLOR TIPS
-// - Use darker shade for belly/underside contrast
-// - Hooves/claws should be dark brown (0x5C3A21)
-// - Eyes: Yellow (0xFFFF00) or White (0xFFFFFF)
-// - Pupils: Black (0x000000)`,
-        tags: ['proportions', 'size', 'scale', 'anatomy', 'creature', 'visual', 'design', 'reference']
-    },
-
-    // ============ NEW TEMPLATES FROM CODEBASE ANALYSIS ============
-
-    // 1. GLOWING/EMISSIVE CREATURE TEMPLATE (from Firefly.js)
-    {
-        category: 'template',
-        title: 'Glowing Emissive Creature Template',
-        content: `// HOW TO MAKE CREATURES GLOW (from Firefly.js)
-// Use MeshStandardMaterial with emissive property
-
-createBody() {
-    // GLOWING MATERIAL - No PointLight needed (performance!)
-    const glowMat = new window.THREE.MeshStandardMaterial({
-        color: 0xffff00,           // Base color (yellow)
-        emissive: 0xffff00,        // Glow color (same as base)
-        emissiveIntensity: 2       // 1-3 is typical range
-    });
-
-    const body = new window.THREE.Mesh(
-        new window.THREE.SphereGeometry(0.1, 8, 8),  // Sphere looks nice for glowing
-        glowMat
-    );
-    this.mesh.add(body);
-}
-
-// TIPS:
-// - emissive color can differ from base color for interesting effects
-// - emissiveIntensity 1-2 = subtle glow, 3+ = bright
-// - SphereGeometry looks better than BoxGeometry for glowing objects
-// - AVOID PointLight - expensive performance, use emissive instead`,
-        tags: ['glow', 'glowing', 'emissive', 'light', 'bright', 'luminous', 'shine', 'firefly', 'wisp', 'fairy', 'neon']
-    },
-
-    // 2. FLOATING/FLYING CREATURE TEMPLATE (from Firefly.js)
-    {
-        category: 'template',
-        title: 'Floating Flying Creature Template',
-        content: `// HOW TO MAKE CREATURES FLOAT/FLY (from Firefly.js)
-// Override updatePhysics to disable gravity and override updateAI for movement
-// INCLUDES: Throttled behavior logging (logs first 5 times, then stops)
-
-createBody() {
-    this.floatPhase = Math.random() * Math.PI * 2;  // Random start phase
-    this._behaviorLogCount = 0;  // For throttled logging
-    // ... mesh creation ...
-}
-
-// THROTTLED LOG: Only logs first 5 times, then auto-stops
-_logBehavior(action) {
-    if (this._behaviorLogCount < 5) {
-        console.log(\`[BEHAVIOR] \${this.constructor.name}: \${action}\`);
-        this._behaviorLogCount++;
-    }
-}
-
-updateAI(dt) {
-    this.floatPhase += dt * 2;  // Controls bob speed
-
-    // Log floating behavior (throttled)
-    this._logBehavior('Floating - Y offset: ' + Math.sin(this.floatPhase).toFixed(2));
-
-    // Random wandering direction
-    if (!this.targetDir || Math.random() < 0.05) {
-        this.targetDir = new window.THREE.Vector3(
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 1,  // Less vertical variation
-            (Math.random() - 0.5) * 2
-        ).normalize();
-    }
-
-    // Apply velocity with floating bob
-    this.velocity.x = this.targetDir.x * this.speed;
-    this.velocity.y = (this.targetDir.y * this.speed) + Math.sin(this.floatPhase) * 0.5;  // Sine wave bob!
-    this.velocity.z = this.targetDir.z * this.speed;
-
-    // Update position
-    this.position.x += this.velocity.x * dt;
-    this.position.y += this.velocity.y * dt;
-    this.position.z += this.velocity.z * dt;
-}
-
-updatePhysics(dt) {
-    // OVERRIDE to disable gravity and ground collision
-    // No calls to super.updatePhysics or updateWalkerPhysics!
-    if (this.position.y < -50) this.position.y = 50;  // World bounds
-}`,
-        tags: ['fly', 'flying', 'float', 'floating', 'hover', 'air', 'airborne', 'bob', 'soar', 'wing', 'fairy', 'ghost', 'wisp', 'bird']
-    },
-
-    // 3. FOLLOW PLAYER PET TEMPLATE (from Wolf.js chase behavior)
-    {
-        category: 'template',
-        title: 'Follow Player Pet Behavior Template',
-        content: `// HOW TO MAKE CREATURES FOLLOW THE PLAYER (adapted from Wolf.js)
-
-updateAI(dt) {
-    const player = this.game.player;
-    if (!player) {
-        super.updateAI(dt);  // Wander if no player
-        return;
-    }
-
-    const followDistance = 3.0;   // Stop this far from player
-    const maxRange = 30.0;        // Max distance to follow
-    const distSq = this.position.distanceToSquared(player.position);
-
-    if (distSq > maxRange * maxRange) {
-        // Too far - teleport near player
-        this.position.copy(player.position);
-        this.position.x += (Math.random() - 0.5) * 4;
-        this.position.z += (Math.random() - 0.5) * 4;
-        return;
-    }
-
-    if (distSq > followDistance * followDistance) {
-        // Move towards player
-        const dir = new window.THREE.Vector3().subVectors(player.position, this.position);
-        dir.normalize();
-        this.moveDirection.copy(dir);
-        this.rotation = Math.atan2(dir.x, dir.z);
-        this.isMoving = true;
-    } else {
-        // Close enough - stop and look at player
-        this.isMoving = false;
-        const dx = player.position.x - this.position.x;
-        const dz = player.position.z - this.position.z;
-        this.rotation = Math.atan2(dx, dz);
-    }
-}`,
-        tags: ['follow', 'following', 'pet', 'companion', 'loyal', 'chase', 'track', 'player', 'dog', 'cat', 'tame', 'friend']
-    },
-
-    // 4. QUADRUPED BODY TEMPLATE (from Wolf.js, Cat.js)
-    {
-        category: 'template',
-        title: 'Quadruped Animal Body Template',
-        content: `// COMPLETE QUADRUPED BODY (from Wolf.js, Cat.js)
-// Includes: body, head, snout, ears, eyes, tail, 4 legs
-
-createBody() {
-    const furColor = 0x808080;  // Main body color
-    const mat = new window.THREE.MeshLambertMaterial({ color: furColor });
-    const whiteMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    const blackMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
-    const noseMat = new window.THREE.MeshLambertMaterial({ color: 0x111111 });
-
-    // BODY
-    const body = new window.THREE.Mesh(
-        new window.THREE.BoxGeometry(0.6, 0.6, 1.4), mat
-    );
-    body.position.set(0, 0.6, 0);
-    this.mesh.add(body);
-
-    // HEAD
-    const head = new window.THREE.Mesh(
-        new window.THREE.BoxGeometry(0.5, 0.5, 0.6), mat
-    );
-    head.position.set(0, 0.9, 0.9);
-    this.mesh.add(head);
-
-    // SNOUT
-    const snout = new window.THREE.Mesh(
-        new window.THREE.BoxGeometry(0.25, 0.25, 0.3), mat
-    );
-    snout.position.set(0, 0.8, 1.3);
-    this.mesh.add(snout);
-
-    // NOSE
-    const nose = new window.THREE.Mesh(
-        new window.THREE.BoxGeometry(0.1, 0.1, 0.05), noseMat
-    );
-    nose.position.set(0, 0.9, 1.45);
-    this.mesh.add(nose);
-
-    // EARS
-    const earGeo = new window.THREE.BoxGeometry(0.15, 0.2, 0.1);
-    const leftEar = new window.THREE.Mesh(earGeo, mat);
-    leftEar.position.set(-0.18, 1.2, 0.85);
-    this.mesh.add(leftEar);
-    const rightEar = new window.THREE.Mesh(earGeo, mat);
-    rightEar.position.set(0.18, 1.2, 0.85);
-    this.mesh.add(rightEar);
-
-    // EYES (white + black pupil)
-    const eyeGeo = new window.THREE.BoxGeometry(0.1, 0.1, 0.05);
-    const pupilGeo = new window.THREE.BoxGeometry(0.05, 0.05, 0.05);
-
-    const leftEye = new window.THREE.Mesh(eyeGeo, whiteMat);
-    leftEye.position.set(-0.15, 0.95, 1.2);
-    this.mesh.add(leftEye);
-    const leftPupil = new window.THREE.Mesh(pupilGeo, blackMat);
-    leftPupil.position.set(-0.15, 0.95, 1.23);  // Slightly forward!
-    this.mesh.add(leftPupil);
-
-    const rightEye = new window.THREE.Mesh(eyeGeo, whiteMat);
-    rightEye.position.set(0.15, 0.95, 1.2);
-    this.mesh.add(rightEye);
-    const rightPupil = new window.THREE.Mesh(pupilGeo, blackMat);
-    rightPupil.position.set(0.15, 0.95, 1.23);
-    this.mesh.add(rightPupil);
-
-    // TAIL
-    const tail = new window.THREE.Mesh(
-        new window.THREE.BoxGeometry(0.15, 0.15, 1.0), mat
-    );
-    tail.position.set(0, 0.7, -0.9);
-    tail.rotation.x = -0.4;
-    this.mesh.add(tail);
-
-    // LEGS (with pivots for animation)
-    const legGeo = new window.THREE.BoxGeometry(0.2, 0.5, 0.2);
-    const makeLeg = (x, z) => {
-        const pivot = new window.THREE.Group();
-        pivot.position.set(x, 0.5, z);
-        const leg = new window.THREE.Mesh(legGeo, mat);
-        leg.position.set(0, -0.25, 0);
-        pivot.add(leg);
-        this.mesh.add(pivot);
-        return pivot;
-    };
-
-    this.legParts = [
-        makeLeg(-0.2, 0.5),   // Front left
-        makeLeg(0.2, 0.5),    // Front right
-        makeLeg(-0.2, -0.5),  // Back left
-        makeLeg(0.2, -0.5)    // Back right
-    ];
-}`,
-        tags: ['quadruped', 'four legs', 'dog', 'cat', 'wolf', 'animal', 'body', 'anatomy', 'legs', 'eyes', 'tail', 'snout', 'ears', 'pet', 'mammal']
-    },
-
-    // 5. SWIMMING CREATURE TEMPLATE (from Fish.js)
-    {
-        category: 'template',
-        title: 'Swimming Aquatic Creature Template',
-        content: `// HOW TO MAKE SWIMMING CREATURES (from Fish.js)
-// Check for water and adjust physics accordingly
-
-constructor(game, x, y, z, seed) {
-    super(game, x, y, z, seed);
-    this.gravity = 0;  // Disable gravity in constructor
-}
-
-updatePhysics(dt) {
-    // Check if in water
-    const pos = this.position;
-    const block = this.game.getBlock(
-        Math.floor(pos.x),
-        Math.floor(pos.y),
-        Math.floor(pos.z)
-    );
-    const inWater = block && block.type === 'water';
-
-    if (inWater) {
-        // 3D Swimming - apply drag
-        this.velocity.y *= 0.9;
-        this.velocity.x *= 0.9;
-        this.velocity.z *= 0.9;
-
-        // Swim in move direction
-        const speed = 2.0;
-        this.velocity.x += this.moveDirection.x * speed * dt;
-        this.velocity.y += this.moveDirection.y * speed * dt;
-        this.velocity.z += this.moveDirection.z * speed * dt;
-
-        this.position.add(this.velocity.clone().multiplyScalar(dt));
-    } else {
-        // Out of water - flop!
-        this.velocity.y -= 30.0 * dt;  // Apply gravity
-        super.updateWalkerPhysics(dt);
-
-        // Random jump to get back to water
-        if (this.onGround && Math.random() < 0.05) {
-            this.velocity.y = 5;
-            this.velocity.x = (Math.random() - 0.5) * 5;
-            this.velocity.z = (Math.random() - 0.5) * 5;
+            const geometry = new window.THREE.BufferGeometry().setFromPoints(points);
+            const material = new window.THREE.LineBasicMaterial({
+                color: 0x88FFFF,
+                transparent: true,
+                opacity: 0.8
+            });
+            this.trailMesh = new window.THREE.Line(geometry, material);
+            this.game.scene.add(this.trailMesh);
         }
     }
-}`,
-        tags: ['swim', 'swimming', 'water', 'aquatic', 'fish', 'dolphin', 'ocean', 'sea', 'underwater', 'float', 'dive']
-    },
 
-    // 6. HUNTING AI TEMPLATE (from Wolf.js, Cat.js)
-    {
-        category: 'template',
-        title: 'Hunting Chase AI Template',
-        content: `// HOW TO MAKE CREATURES HUNT/CHASE (from Wolf.js, Cat.js)
+    checkCollisions(nextPos) {
+        // Block collision
+        const bx = Math.floor(nextPos.x);
+        const by = Math.floor(nextPos.y);
+        const bz = Math.floor(nextPos.z);
 
-updateAI(dt) {
-    const detectionRange = 20.0;  // How far can detect prey
-    const attackRange = 1.5;       // Distance to attack
-    let target = null;
-    let nearestDist = detectionRange * detectionRange;
+        const block = this.game.getBlock ? this.game.getBlock(bx, by, bz) : null;
+        if (block && block.type && block.type !== 'air' && block.type !== 'water') {
+            return nextPos.clone();
+        }
 
-    // Find nearest target
-    if (this.game.animals) {
-        for (const animal of this.game.animals) {
-            // Replace TargetClass with what you want to hunt (e.g., Bunny, Mouse)
-            if (animal.constructor.name === 'Bunny' && !animal.isDead) {
-                const distSq = this.position.distanceToSquared(animal.position);
-                if (distSq < nearestDist) {
-                    nearestDist = distSq;
-                    target = animal;
+        // Animal/creature collision
+        if (this.game.animals) {
+            for (const animal of this.game.animals) {
+                if (!animal.position) continue;
+                const dist = animal.position.distanceTo(nextPos);
+                if (dist < 1.5) {
+                    if (animal.takeDamage) animal.takeDamage(this.damage);
+                    // Knockback
+                    if (animal.velocity) {
+                        const knockDir = this.direction.clone().multiplyScalar(5);
+                        animal.velocity.add(knockDir);
+                    }
+                    return nextPos.clone();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    onHit(hitPos) {
+        // 1. Create particle explosion
+        this.createExplosionParticles(hitPos);
+
+        // 2. Create lightning strike visual (like weather system)
+        this.createLightningStrike(hitPos);
+
+        // 3. Destroy blocks in radius
+        this.destroyBlocks(hitPos);
+
+        // 4. Screen flash effect
+        this.createFlashEffect(hitPos);
+    }
+
+    createExplosionParticles(pos) {
+        // Use game's particle system if available
+        if (this.game.worldParticleSystem && this.game.worldParticleSystem.spawn) {
+            const colors = [0xFFFFFF, 0x00FFFF, 0xFFFF00, 0x88FFFF];
+            for (let i = 0; i < 30; i++) {
+                const vel = new window.THREE.Vector3(
+                    (Math.random() - 0.5) * 8,
+                    Math.random() * 6 + 2,
+                    (Math.random() - 0.5) * 8
+                );
+                this.game.worldParticleSystem.spawn({
+                    position: pos.clone(),
+                    velocity: vel,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    life: 0.5 + Math.random() * 0.5
+                });
+            }
+        }
+    }
+
+    createLightningStrike(pos) {
+        // Create jagged lightning bolt from sky to hit point (like weather system)
+        const startY = pos.y + 20;
+        const points = [];
+
+        let currentX = pos.x;
+        let currentY = startY;
+        let currentZ = pos.z;
+
+        points.push(new window.THREE.Vector3(currentX, currentY, currentZ));
+
+        // Create jagged path down to hit point
+        while (currentY > pos.y) {
+            currentY -= (Math.random() * 3 + 1);
+            currentX += (Math.random() - 0.5) * 2;
+            currentZ += (Math.random() - 0.5) * 2;
+            points.push(new window.THREE.Vector3(currentX, Math.max(currentY, pos.y), currentZ));
+        }
+
+        // Ensure we end at hit point
+        points.push(pos.clone());
+
+        const geometry = new window.THREE.BufferGeometry().setFromPoints(points);
+        const material = new window.THREE.LineBasicMaterial({
+            color: 0xFFFFFF,
+            linewidth: 2
+        });
+        const bolt = new window.THREE.Line(geometry, material);
+        this.game.scene.add(bolt);
+
+        // Create a thicker glow bolt
+        const glowMat = new window.THREE.LineBasicMaterial({
+            color: 0x00FFFF,
+            transparent: true,
+            opacity: 0.5
+        });
+        const glowBolt = new window.THREE.Line(geometry.clone(), glowMat);
+        this.game.scene.add(glowBolt);
+
+        // Remove after flash
+        setTimeout(() => {
+            this.game.scene.remove(bolt);
+            this.game.scene.remove(glowBolt);
+            geometry.dispose();
+            material.dispose();
+            glowMat.dispose();
+        }, 150);
+    }
+
+    destroyBlocks(hitPos) {
+        const cx = Math.floor(hitPos.x);
+        const cy = Math.floor(hitPos.y);
+        const cz = Math.floor(hitPos.z);
+        const r = this.blastRadius;
+
+        // Destroy blocks in sphere radius
+        for (let x = -r; x <= r; x++) {
+            for (let y = -r; y <= r; y++) {
+                for (let z = -r; z <= r; z++) {
+                    if (x*x + y*y + z*z <= r*r) {
+                        const bx = cx + x;
+                        const by = cy + y;
+                        const bz = cz + z;
+
+                        const block = this.game.getBlock ? this.game.getBlock(bx, by, bz) : null;
+                        if (block && block.type && block.type !== 'air' && block.type !== 'water' && block.type !== 'bedrock') {
+                            // Spawn block particles before destroying
+                            if (this.game.worldParticleSystem && this.game.worldParticleSystem.spawnBlockParticles) {
+                                this.game.worldParticleSystem.spawnBlockParticles({ x: bx, y: by, z: bz }, block.type);
+                            }
+                            // Remove the block
+                            if (this.game.setBlock) {
+                                this.game.setBlock(bx, by, bz, null);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    if (target) {
-        this.state = 'chase';
-        const dir = new window.THREE.Vector3().subVectors(
-            target.position, this.position
-        );
-        const dist = dir.length();
+    createFlashEffect(pos) {
+        // Bright flash sphere
+        const flashGeo = new window.THREE.SphereGeometry(3, 8, 8);
+        const flashMat = new window.THREE.MeshBasicMaterial({
+            color: 0xFFFFFF,
+            transparent: true,
+            opacity: 0.8
+        });
+        const flash = new window.THREE.Mesh(flashGeo, flashMat);
+        flash.position.copy(pos);
+        this.game.scene.add(flash);
 
-        if (dist < attackRange) {
-            // ATTACK!
-            if (this.attackTimer <= 0) {
-                target.takeDamage(10);
-                this.attackTimer = 1.0;  // Cooldown
+        // Fade out
+        let opacity = 0.8;
+        const fadeOut = () => {
+            opacity -= 0.05;
+            if (opacity > 0) {
+                flash.material.opacity = opacity;
+                flash.scale.multiplyScalar(1.1);
+                requestAnimationFrame(fadeOut);
+            } else {
+                this.game.scene.remove(flash);
+                flashGeo.dispose();
+                flashMat.dispose();
             }
-        } else {
-            // Move towards target
-            dir.normalize();
-            this.moveDirection.copy(dir);
-            this.rotation = Math.atan2(dir.x, dir.z);
-            this.isMoving = true;
-            this.speed = 5.0;  // Run faster when chasing!
-        }
-    } else {
-        // No targets, wander
-        this.speed = 3.0;
-        super.updateAI(dt);
+        };
+        fadeOut();
     }
 
-    if (this.attackTimer > 0) this.attackTimer -= dt;
+    dispose() {
+        this.game.scene.remove(this.mesh);
+        this.mesh.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        });
+
+        // Clean up trail
+        if (this.trailMesh) {
+            this.game.scene.remove(this.trailMesh);
+            this.trailMesh.geometry.dispose();
+            this.trailMesh.material.dispose();
+        }
+    }
 }`,
-        tags: ['hunt', 'hunting', 'chase', 'chasing', 'predator', 'attack', 'aggressive', 'wolf', 'cat', 'monster', 'enemy', 'hostile']
+        tags: ['wand', 'projectile', 'shoot', 'magic', 'spell', 'cast', 'item', 'weapon', 'staff', 'rod', 'lightning', 'bolt', 'thunder', 'electric', 'explosion', 'particles', 'destroy', 'blocks', 'blast', 'icon', 'inventory', 'hand', 'mesh']
     },
 
-    // 7. WAND ITEM PROJECTILE TEMPLATE (from LevitationWandItem.js)
+    // FEAR SPELL TEMPLATE - Makes creatures flee from player
     {
         category: 'template',
-        title: 'Wand Item Projectile Template',
-        content: `// HOW TO CREATE A WAND THAT SHOOTS PROJECTILES (from LevitationWandItem.js)
+        title: 'Fear Spell Wand Template',
+        content: `// ========================================
+// FEAR SPELL WAND - MAKES CREATURES FLEE
+// ========================================
+// This template shows how to create a wand that:
+// 1. Emits a fear wave/aura around the player
+// 2. Makes ALL creatures in range flee for 30 seconds
+// 3. Includes spooky visual effects (dark wave, skull particles)
 
-class MyWandItem {
+// ==========================================
+// PART 1: THE FEAR WAND ITEM CLASS
+// ==========================================
+class FearWandItem extends Item {
     constructor() {
-        this.id = 'my_wand';
-        this.name = 'Magic Wand';
+        super('fear_wand', 'Fear Wand');
         this.maxStack = 1;
         this.isTool = true;
-        
-        // SVG ICON (required for inventory display!)
-        this.icon = '<svg viewBox="0 0 24 24"><rect x="10" y="2" width="4" height="18" fill="#9333EA" rx="1"/><circle cx="12" cy="4" r="3" fill="#A855F7"/><path d="M8,22 L16,22 L14,18 L10,18 Z" fill="#6B21A8"/></svg>';
+        this.cooldown = 5000;       // 5 second cooldown (powerful spell)
+        this.lastUseTime = 0;
+        this.fearRadius = 20;       // Affects creatures within 20 blocks
+        this.fearDuration = 30.0;   // Creatures flee for 30 seconds
+
+        // INVENTORY ICON - Spooky skull wand
+        this.icon = \\\`<svg viewBox="0 0 24 24">
+            <rect x="10" y="12" width="4" height="10" fill="#2D1B4E" rx="1"/>
+            <circle cx="12" cy="7" r="5" fill="#E8E8E8"/>
+            <circle cx="10" cy="6" r="1.2" fill="#1a1a1a"/>
+            <circle cx="14" cy="6" r="1.2" fill="#1a1a1a"/>
+            <path d="M10,9 Q12,11 14,9" stroke="#1a1a1a" fill="none" stroke-width="0.8"/>
+            <path d="M7,7 L5,5 M17,7 L19,5" stroke="#9B59B6" stroke-width="0.5"/>
+        </svg>\\\`;
     }
 
     onUseDown(game, player) {
-        // Get camera direction
-        const camDir = new window.THREE.Vector3();
-        game.camera.getWorldDirection(camDir);
+        const now = Date.now();
+        if (now - this.lastUseTime < this.cooldown) return false;
+        this.lastUseTime = now;
 
-        // Spawn position in front of camera
-        const spawnPos = game.camera.position.clone()
-            .add(camDir.clone().multiplyScalar(1.0));
+        // Create the fear wave effect
+        const fearWave = new FearWaveEffect(game, player.position.clone(), this.fearRadius, this.fearDuration);
+        game.projectiles = game.projectiles || [];
+        game.projectiles.push(fearWave);
+        game.scene.add(fearWave.mesh);
 
-        // Call game's projectile spawn method
-        // Options: spawnProjectile, spawnMagicProjectile, spawnFireball, etc.
-        game.spawnMagicProjectile(spawnPos, camDir);
+        // Apply fear to all creatures in range
+        this.applyFearToCreatures(game, player);
 
-        return true;  // Indicate item was used
+        if (player.swingArm) player.swingArm();
+        return true;
     }
 
     onPrimaryDown(game, player) {
         return this.onUseDown(game, player);
     }
-}`,
-        tags: ['wand', 'projectile', 'shoot', 'magic', 'spell', 'cast', 'item', 'weapon', 'staff', 'rod', 'fireball', 'shoot']
-    },
 
-    // 8. SPAWN EGG RAYCAST ITEM TEMPLATE (from SpawnEggItem.js)
-    {
-        category: 'template',
-        title: 'Raycast Target Item Template',
-        content: `// HOW TO CREATE ITEMS THAT TARGET WHERE PLAYER LOOKS (from SpawnEggItem.js)
+    applyFearToCreatures(game, player) {
+        if (!game.animals) return;
 
-class MyTargetItem {
-    constructor() {
-        this.id = 'target_item';
-        this.name = 'Target Item';
-        this.maxStack = 64;
-        
-        this.icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#22C55E"/><circle cx="12" cy="12" r="6" fill="#16A34A"/><circle cx="12" cy="12" r="2" fill="#052E16"/></svg>';
-    }
+        const playerPos = player.position.clone();
+        let affectedCount = 0;
 
-    onUseDown(game, player) {
-        // Create raycast from camera center
-        const raycaster = new window.THREE.Raycaster();
-        const center = new window.THREE.Vector2(0, 0);
-        raycaster.setFromCamera(center, game.camera);
+        for (const animal of game.animals) {
+            if (!animal.position) continue;
+            if (animal === game.merlin) continue; // Don't scare Merlin!
+            if (animal.isDead || animal.isDying) continue;
 
-        // Find what player is looking at
-        const intersects = raycaster.intersectObjects(game.scene.children, true);
+            const dist = animal.position.distanceTo(playerPos);
+            if (dist <= this.fearRadius) {
+                // Apply extended fear effect
+                this.applyFearEffect(animal, player, this.fearDuration);
+                affectedCount++;
 
-        for (let i = 0; i < intersects.length; i++) {
-            const hit = intersects[i];
-
-            // Skip player mesh
-            if (hit.object.isPlayer || hit.object === player.mesh) continue;
-
-            if (hit.distance < 100) {
-                // hit.point = exact world position
-                const pos = hit.point;
-                
-                // DO SOMETHING AT THIS POSITION
-                // Examples:
-                // game.spawnManager.createAnimal(AnimalClass, pos.x, pos.y + 0.1, pos.z);
-                // game.createExplosion(pos.x, pos.y, pos.z, 3);
-                // game.setBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z), BLOCK_TYPE);
-                
-                return true;  // Consume item
+                // Visual indicator on each affected creature
+                this.spawnFearParticlesOnCreature(game, animal);
             }
         }
-        return false;
-    }
-}`,
-        tags: ['raycast', 'target', 'aim', 'point', 'click', 'spawn', 'place', 'teleport', 'egg', 'item']
-    },
 
-    // 9. CREATURE EYE PATTERN (from Wolf.js, Cat.js) 
-    {
-        category: 'template',
-        title: 'Creature Eye Construction Pattern',
-        content: `// HOW TO CREATE REALISTIC EYES (from Wolf.js, Cat.js)
-// Eyes = white background + black pupil, positioned slightly forward
-
-createEyes() {
-    const whiteMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    const blackMat = new window.THREE.MeshLambertMaterial({ color: 0x000000 });
-    
-    // Eye background (white)
-    const eyeGeo = new window.THREE.BoxGeometry(0.1, 0.1, 0.05);
-    
-    // Pupil (black, smaller)
-    const pupilGeo = new window.THREE.BoxGeometry(0.05, 0.05, 0.05);
-
-    // HEAD_Y and HEAD_Z should be where your head mesh is positioned
-    const HEAD_Y = 0.95;
-    const HEAD_Z = 1.2;
-    const EYE_SPACING = 0.15;  // Distance from center
-
-    // Left Eye
-    const leftEye = new window.THREE.Mesh(eyeGeo, whiteMat);
-    leftEye.position.set(-EYE_SPACING, HEAD_Y, HEAD_Z);
-    this.mesh.add(leftEye);
-
-    // Left Pupil (slightly forward!)
-    const leftPupil = new window.THREE.Mesh(pupilGeo, blackMat);
-    leftPupil.position.set(-EYE_SPACING, HEAD_Y, HEAD_Z + 0.03);
-    this.mesh.add(leftPupil);
-
-    // Right Eye
-    const rightEye = new window.THREE.Mesh(eyeGeo, whiteMat);
-    rightEye.position.set(EYE_SPACING, HEAD_Y, HEAD_Z);
-    this.mesh.add(rightEye);
-
-    // Right Pupil
-    const rightPupil = new window.THREE.Mesh(pupilGeo, blackMat);
-    rightPupil.position.set(EYE_SPACING, HEAD_Y, HEAD_Z + 0.03);
-    this.mesh.add(rightPupil);
-}
-
-// TIPS:
-// - Pupil Z should be slightly MORE than eye Z (in front)
-// - Eye size ~0.08-0.12 for medium creatures
-// - For colored eyes (cat), use color like 0x2ecc71 instead of white`,
-        tags: ['eye', 'eyes', 'pupil', 'face', 'anatomy', 'visual', 'look', 'see', 'creature', 'head']
-    },
-
-    // 10. TAIL ANIMATION PATTERN (from Fish.js, Cat.js)
-    {
-        category: 'template',
-        title: 'Tail Wagging Animation Pattern',
-        content: `// HOW TO ANIMATE TAILS (from Fish.js, Cat.js)
-
-createBody() {
-    // ... other body parts ...
-    
-    // Create tail and store reference
-    const tailGeo = new window.THREE.BoxGeometry(0.1, 0.1, 0.5);
-    const mat = new window.THREE.MeshLambertMaterial({ color: 0x808080 });
-    this.tail = new window.THREE.Mesh(tailGeo, mat);
-    this.tail.position.set(0, 0.5, -0.6);  // Behind body
-    this.tail.rotation.x = 0.5;  // Slight angle up
-    this.mesh.add(this.tail);
-}
-
-updateAnimation(dt) {
-    if (this.tail) {
-        // Simple sine wave wag
-        this.tail.rotation.y = Math.sin(performance.now() * 0.01) * 0.4;
-        
-        // Or wag based on isMoving state:
-        // if (this.isMoving) {
-        //     this.tail.rotation.y = Math.sin(performance.now() * 0.02) * 0.6;
-        // } else {
-        //     this.tail.rotation.y = Math.sin(performance.now() * 0.005) * 0.2;
-        // }
-    }
-}`,
-        tags: ['tail', 'wag', 'animation', 'animate', 'move', 'swing', 'sway', 'dog', 'cat', 'creature']
-    },
-
-    // 11. POTION/CONSUMABLE ITEM TEMPLATE
-    {
-        category: 'template',
-        title: 'Healing Potion Consumable Template',
-        content: `// HOW TO CREATE POTIONS/CONSUMABLES
-
-class HealingPotionItem {
-    constructor() {
-        this.id = 'healing_potion';
-        this.name = 'Healing Potion';
-        this.maxStack = 16;
-        this.isTool = false;  // Not a tool
-        
-        // SVG POTION ICON
-        this.icon = '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="4" ry="2" fill="#666"/><path d="M8,6 L8,10 L6,20 Q6,22 12,22 Q18,22 18,20 L16,10 L16,6" fill="#EF4444"/><ellipse cx="12" cy="18" rx="5" ry="2" fill="#DC2626" opacity="0.5"/></svg>';
+        console.log(\\\`[FearWand] Affected \\\${affectedCount} creatures for \\\${this.fearDuration}s\\\`);
     }
 
-    onUseDown(game, player) {
-        // Heal the player
-        const healAmount = 20;  // Heal 10 hearts (20 HP)
-        
-        if (player.health < player.maxHealth) {
-            player.health = Math.min(player.health + healAmount, player.maxHealth);
-            
-            // Optional: Visual/audio feedback
-            // game.playSound('potion_drink');
-            // game.createParticles(player.position, 'heal');
-            
-            return true;  // Consume the item
+    applyFearEffect(animal, player, duration) {
+        // Set the animal to flee state
+        animal.state = 'flee';
+        animal.stateTimer = duration;  // 30 seconds of fleeing!
+        animal.isMoving = true;
+        animal.fleeTarget = player;
+
+        // Store original flee settings to restore later
+        if (!animal._originalFleeOnProximity) {
+            animal._originalFleeOnProximity = animal.fleeOnProximity;
+            animal._originalFleeRange = animal.fleeRange;
         }
-        
-        return false;  // Don't consume if already full health
+
+        // Temporarily boost flee behavior
+        animal.fleeOnProximity = true;
+        animal.fleeRange = 50; // Extended flee range while feared
+
+        // Set up restoration after fear ends
+        setTimeout(() => {
+            if (animal && !animal.isDead) {
+                // Restore original settings
+                if (animal._originalFleeOnProximity !== undefined) {
+                    animal.fleeOnProximity = animal._originalFleeOnProximity;
+                    animal.fleeRange = animal._originalFleeRange;
+                    delete animal._originalFleeOnProximity;
+                    delete animal._originalFleeRange;
+                }
+            }
+        }, duration * 1000);
     }
-}`,
-        tags: ['potion', 'heal', 'health', 'restore', 'consumable', 'drink', 'item', 'recovery', 'medicine', 'elixir']
-    },
 
-    // BOUNCING CREATURE TEMPLATE
-    {
-        category: 'template',
-        title: 'Bouncing Hopping Creature Template',
-        content: `// HOW TO MAKE CREATURES BOUNCE/HOP (like slimes or frogs)
-// Uses jump() periodically with physics gravity for natural bouncing
-// INCLUDES: Throttled behavior logging (logs first 5 times, then stops)
+    spawnFearParticlesOnCreature(game, animal) {
+        if (!game.worldParticleSystem || !game.worldParticleSystem.spawn) return;
 
-createBody() {
-    this.bounceTimer = 0;
-    this.bounceInterval = 0.8 + Math.random() * 0.4;  // Random bounce timing
-    this._behaviorLogCount = 0;  // For throttled logging
-    
-    // Create a squishy-looking body (spherical or blob shape)
-    const bodyGeo = new window.THREE.SphereGeometry(0.5, 16, 16);
-    const bodyMat = new window.THREE.MeshLambertMaterial({ color: 0x44FF44 });  // Green slime
-    const body = new window.THREE.Mesh(bodyGeo, bodyMat);
-    this.mesh.add(body);
-    
-    // Add eyes
-    const eyeGeo = new window.THREE.SphereGeometry(0.1, 8, 8);
-    const eyeMat = new window.THREE.MeshLambertMaterial({ color: 0xFFFFFF });
-    const leftEye = new window.THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.15, 0.2, 0.4);
-    this.mesh.add(leftEye);
-    
-    const rightEye = new window.THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.15, 0.2, 0.4);
-    this.mesh.add(rightEye);
+        // Dark purple/black fear particles around the creature
+        const colors = [0x4B0082, 0x2D1B4E, 0x1a1a1a, 0x9B59B6];
+        for (let i = 0; i < 8; i++) {
+            const vel = new window.THREE.Vector3(
+                (Math.random() - 0.5) * 2,
+                Math.random() * 3 + 1,
+                (Math.random() - 0.5) * 2
+            );
+            game.worldParticleSystem.spawn({
+                position: animal.position.clone().add(new window.THREE.Vector3(0, 1, 0)),
+                velocity: vel,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                life: 1.0 + Math.random() * 0.5
+            });
+        }
+    }
+
+    // 3D model shown in player's hand - Skull-topped wand
+    getMesh() {
+        const group = new window.THREE.Group();
+
+        // Dark handle
+        const handle = new window.THREE.Mesh(
+            new window.THREE.CylinderGeometry(0.03, 0.05, 0.5, 8),
+            new window.THREE.MeshLambertMaterial({ color: 0x2D1B4E })
+        );
+        handle.position.y = -0.1;
+        group.add(handle);
+
+        // Skull head (simplified)
+        const skull = new window.THREE.Mesh(
+            new window.THREE.SphereGeometry(0.1, 8, 8),
+            new window.THREE.MeshStandardMaterial({
+                color: 0xE8E8E8,
+                emissive: 0x4B0082,
+                emissiveIntensity: 0.2
+            })
+        );
+        skull.position.y = 0.2;
+        skull.scale.set(1, 0.9, 0.8);
+        group.add(skull);
+
+        // Eye sockets (dark spheres)
+        const eyeMat = new window.THREE.MeshBasicMaterial({ color: 0x000000 });
+        const leftEye = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.025, 6, 6), eyeMat);
+        leftEye.position.set(-0.035, 0.22, 0.07);
+        group.add(leftEye);
+
+        const rightEye = new window.THREE.Mesh(new window.THREE.SphereGeometry(0.025, 6, 6), eyeMat);
+        rightEye.position.set(0.035, 0.22, 0.07);
+        group.add(rightEye);
+
+        return group;
+    }
 }
 
-// THROTTLED LOG: Only logs first 5 times, then auto-stops
-_logBehavior(action) {
-    if (this._behaviorLogCount < 5) {
-        console.log(\`[BEHAVIOR] \${this.constructor.name}: \${action}\`);
-        this._behaviorLogCount++;
+// ==========================================
+// PART 2: FEAR WAVE VISUAL EFFECT
+// ==========================================
+// Expanding dark ring that pulses outward from the player
+
+class FearWaveEffect {
+    constructor(game, position, maxRadius, fearDuration) {
+        this.game = game;
+        this.position = position.clone();
+        this.maxRadius = maxRadius;
+        this.fearDuration = fearDuration;
+        this.lifeTime = 0;
+        this.maxLifeTime = 1.5; // Visual effect lasts 1.5 seconds
+        this.currentRadius = 0;
+
+        // Create the expanding ring mesh
+        this.mesh = this.createWaveMesh();
+        this.mesh.position.copy(this.position);
+        this.mesh.position.y += 0.5; // Slightly above ground
+
+        // Spawn initial burst particles
+        this.spawnBurstParticles();
+    }
+
+    createWaveMesh() {
+        const group = new window.THREE.Group();
+
+        // Main dark ring
+        const ringGeo = new window.THREE.RingGeometry(0.5, 1.5, 32);
+        const ringMat = new window.THREE.MeshBasicMaterial({
+            color: 0x4B0082,
+            transparent: true,
+            opacity: 0.7,
+            side: window.THREE.DoubleSide
+        });
+        this.ring = new window.THREE.Mesh(ringGeo, ringMat);
+        this.ring.rotation.x = -Math.PI / 2; // Lay flat
+        group.add(this.ring);
+
+        // Secondary inner ring (lighter purple)
+        const innerRingGeo = new window.THREE.RingGeometry(0.2, 0.8, 32);
+        const innerRingMat = new window.THREE.MeshBasicMaterial({
+            color: 0x9B59B6,
+            transparent: true,
+            opacity: 0.5,
+            side: window.THREE.DoubleSide
+        });
+        this.innerRing = new window.THREE.Mesh(innerRingGeo, innerRingMat);
+        this.innerRing.rotation.x = -Math.PI / 2;
+        this.innerRing.position.y = 0.1;
+        group.add(this.innerRing);
+
+        // Dark vertical pillar of energy
+        const pillarGeo = new window.THREE.CylinderGeometry(0.3, 0.3, 3, 8, 1, true);
+        const pillarMat = new window.THREE.MeshBasicMaterial({
+            color: 0x2D1B4E,
+            transparent: true,
+            opacity: 0.4,
+            side: window.THREE.DoubleSide
+        });
+        this.pillar = new window.THREE.Mesh(pillarGeo, pillarMat);
+        this.pillar.position.y = 1.5;
+        group.add(this.pillar);
+
+        return group;
+    }
+
+    spawnBurstParticles() {
+        if (!this.game.worldParticleSystem || !this.game.worldParticleSystem.spawn) return;
+
+        // Outward burst of dark particles
+        const colors = [0x4B0082, 0x2D1B4E, 0x1a1a1a, 0x9B59B6, 0x6B3FA0];
+        for (let i = 0; i < 40; i++) {
+            const angle = (i / 40) * Math.PI * 2;
+            const speed = 5 + Math.random() * 5;
+            const vel = new window.THREE.Vector3(
+                Math.cos(angle) * speed,
+                Math.random() * 3,
+                Math.sin(angle) * speed
+            );
+            this.game.worldParticleSystem.spawn({
+                position: this.position.clone().add(new window.THREE.Vector3(0, 1, 0)),
+                velocity: vel,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                life: 0.8 + Math.random() * 0.5
+            });
+        }
+
+        // Upward spiral particles
+        for (let i = 0; i < 20; i++) {
+            const vel = new window.THREE.Vector3(
+                (Math.random() - 0.5) * 2,
+                5 + Math.random() * 5,
+                (Math.random() - 0.5) * 2
+            );
+            this.game.worldParticleSystem.spawn({
+                position: this.position.clone(),
+                velocity: vel,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                life: 1.0 + Math.random() * 0.5
+            });
+        }
+    }
+
+    update(dt) {
+        this.lifeTime += dt;
+        if (this.lifeTime > this.maxLifeTime) {
+            this.dispose();
+            return false;
+        }
+
+        const progress = this.lifeTime / this.maxLifeTime;
+
+        // Expand the rings outward
+        this.currentRadius = progress * this.maxRadius;
+        const scale = 1 + progress * (this.maxRadius / 2);
+        this.ring.scale.set(scale, scale, 1);
+        this.innerRing.scale.set(scale * 0.8, scale * 0.8, 1);
+
+        // Fade out
+        const fadeOut = 1 - progress;
+        this.ring.material.opacity = 0.7 * fadeOut;
+        this.innerRing.material.opacity = 0.5 * fadeOut;
+        this.pillar.material.opacity = 0.4 * fadeOut;
+
+        // Pillar rises and expands
+        this.pillar.scale.y = 1 + progress * 2;
+        this.pillar.scale.x = 1 + progress * 3;
+        this.pillar.scale.z = 1 + progress * 3;
+        this.pillar.position.y = 1.5 + progress * 2;
+
+        // Spawn trailing particles periodically
+        if (Math.random() < 0.3) {
+            this.spawnTrailParticle();
+        }
+
+        return true;
+    }
+
+    spawnTrailParticle() {
+        if (!this.game.worldParticleSystem || !this.game.worldParticleSystem.spawn) return;
+
+        const angle = Math.random() * Math.PI * 2;
+        const radius = this.currentRadius * Math.random();
+        const pos = this.position.clone().add(new window.THREE.Vector3(
+            Math.cos(angle) * radius,
+            Math.random() * 2,
+            Math.sin(angle) * radius
+        ));
+
+        this.game.worldParticleSystem.spawn({
+            position: pos,
+            velocity: new window.THREE.Vector3(0, 2, 0),
+            color: 0x4B0082,
+            life: 0.5
+        });
+    }
+
+    dispose() {
+        this.game.scene.remove(this.mesh);
+        this.mesh.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        });
     }
 }
 
-updateAI(dt) {
-    super.updateAI(dt);  // Keep default wander behavior
-    
-    this.bounceTimer += dt;
-    
-    if (this.bounceTimer >= this.bounceInterval && this.onGround) {
-        // BOUNCE!
-        this.jump();
-        this.bounceTimer = 0;
-        this.bounceInterval = 0.8 + Math.random() * 0.4;  // Randomize next bounce
-        
-        // Log bouncing behavior (throttled)
-        this._logBehavior('BOUNCE! Height: ' + this.position.y.toFixed(2));
-    }
-    
-    // Squish effect when landing
-    if (this.onGround && this.mesh) {
-        this.mesh.scale.y = 0.8;  // Squished
-        this.mesh.scale.x = 1.1;
-        this.mesh.scale.z = 1.1;
-    } else if (this.mesh) {
-        this.mesh.scale.y = 1.1;  // Stretched in air
-        this.mesh.scale.x = 0.9;
-        this.mesh.scale.z = 0.9;
-    }
-}`,
-        tags: ['bounce', 'bouncing', 'hop', 'hopping', 'jump', 'jumping', 'slime', 'frog', 'spring', 'blob']
+// ==========================================
+// USAGE NOTES
+// ==========================================
+// - Register the item: game.dynamicItemRegistry.registerItem('fear_wand', FearWandItem);
+// - Give to player: game.giveItem('fear_wand');
+// - The fear effect:
+//   * Sets animal.state = 'flee' for 30 seconds
+//   * Sets animal.fleeTarget = player
+//   * Temporarily boosts fleeRange to 50 blocks
+//   * Original flee settings restore after duration
+// - Works on all animals EXCEPT Merlin
+// - 5 second cooldown between uses`,
+        tags: ['wand', 'fear', 'flee', 'scare', 'repel', 'creature', 'animal', 'spell', 'magic', 'aura', 'wave', 'effect', 'crowd', 'control', 'run', 'away', 'escape', 'duration', 'timed', 'status', 'debuff']
     }
 ];
 

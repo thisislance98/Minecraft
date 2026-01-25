@@ -10,3 +10,9 @@ server/firebase-service-account.json
 src/config/firebase-credentials.json
 *.credentials.json
 *-service-account.json
+
+# Test artifacts
+ai-test-cli/*.png
+ai-test-cli/tests/*.png
+ai-test-cli/test-results/
+!ai-test-cli/tests/golden/

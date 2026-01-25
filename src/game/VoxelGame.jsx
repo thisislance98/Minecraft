@@ -46,6 +46,7 @@ import { AnimalClasses } from './AnimalRegistry.js';
 import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
 import { Starfighter } from './entities/animals/Starfighter.js';
+import { setItemManager } from './DynamicItemRegistry.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
@@ -223,6 +224,8 @@ export class VoxelGame {
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
         this.itemManager = new ItemManager(this);
+        // Set ItemManager reference for DynamicItemRegistry so dynamic items can be used
+        setItemManager(this.itemManager);
         this.inventory = new Inventory(this, this.inventoryManager); // Inventory is now UI
         this.player = new Player(this);
         this.agent = new Agent(this);
@@ -350,10 +353,10 @@ export class VoxelGame {
             const chatInput = document.getElementById('chat-input');
             if (chatInput && document.activeElement === chatInput) return;
 
-            if (e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+            if (e.key && e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.setDaytime();
             }
-            if (e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+            if (e.key && e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
                 this.uiManager.openSettings();
             }
         });
@@ -848,10 +851,18 @@ export class VoxelGame {
 
         const seed = 12345; // Fixed seed for consistent appearance
         this.playerShip = new Starfighter(this, x, y, z, seed);
+
+        // Set the ship to face away from player (toward +Z since it spawns at +X, +Z)
+        // Calculate direction from player to ship, then set heading to face that direction
+        const dx = x - this.player.position.x;
+        const dz = z - this.player.position.z;
+        const headingAwayFromPlayer = Math.atan2(-dx, -dz);
+        this.playerShip.setHeading(headingAwayFromPlayer);
+
         this.scene.add(this.playerShip.mesh);
         this.animals.push(this.playerShip);
 
-        console.log('[Game] Player spaceship (Starfighter) spawned near player');
+        console.log('[Game] Player spaceship (Starfighter) spawned near player, heading:', (headingAwayFromPlayer * 180 / Math.PI).toFixed(1) + '°');
     }
 
     createHighlightBox() {
@@ -2025,7 +2036,7 @@ export class VoxelGame {
         // Or we can sum them up occasinally.
         let total = 0;
         // Optimization: Only count every few seconds or just show Loaded Chunks.
-        this.uiManager.updateBlockCount(this.chunks.size + " Chunks");
+        this.uiManager.hudManager.updateBlockCount(this.chunks.size + " Chunks");
     }
 
     // updateHighlight removed - handled by PhysicsManager
@@ -2124,8 +2135,8 @@ export class VoxelGame {
     }
 
     updateDebug() {
-        this.uiManager.updatePosition(this.player.position);
-        this.uiManager.updateFPS();
+        this.uiManager.hudManager.updatePosition(this.player.position);
+        this.uiManager.hudManager.updateFPS();
 
         // PERFORMANCE: Log slow frames for debugging
         const now = performance.now();

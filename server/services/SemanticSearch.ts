@@ -1,9 +1,10 @@
 /**
  * SemanticSearch - Use embeddings to find similar templates/examples
  * Compares user prompts against knowledge base using vector similarity
+ *
+ * Uses OpenRouter API for embeddings (supporting various models)
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getAllKnowledge, KnowledgeEntry } from './KnowledgeService';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,25 +15,28 @@ interface EmbeddingCache {
 }
 
 let embeddingCache: EmbeddingCache = {};
-let genAI: GoogleGenerativeAI | null = null;
 const CACHE_FILE = path.join(process.cwd(), '.embedding_cache.json');
 
-// Initialize the embedding model
-function getEmbeddingModel() {
-    if (!genAI) {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) throw new Error('GEMINI_API_KEY not set');
-        genAI = new GoogleGenerativeAI(apiKey);
-    }
-    return genAI.getGenerativeModel({ model: 'text-embedding-004' });
-}
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/embeddings';
+const EXPECTED_EMBEDDING_DIM = 1024; // gte-large model dimension
 
 // Load cache from disk
 async function loadCache() {
     try {
         const data = await fs.promises.readFile(CACHE_FILE, 'utf8');
-        embeddingCache = JSON.parse(data);
-        console.log(`[SemanticSearch] Loaded ${Object.keys(embeddingCache).length} cached embeddings`);
+        const rawCache = JSON.parse(data);
+        // Filter out embeddings with wrong dimensions (from old models)
+        embeddingCache = {};
+        let filtered = 0;
+        for (const [key, value] of Object.entries(rawCache)) {
+            const embedding = value as number[];
+            if (embedding.length === EXPECTED_EMBEDDING_DIM) {
+                embeddingCache[key] = embedding;
+            } else {
+                filtered++;
+            }
+        }
+        console.log(`[SemanticSearch] Loaded ${Object.keys(embeddingCache).length} cached embeddings (filtered ${filtered} with wrong dimensions)`);
     } catch {
         embeddingCache = {};
     }
@@ -48,7 +52,7 @@ async function saveCache() {
 }
 
 /**
- * Get embedding for a text string
+ * Get embedding for a text string using OpenRouter
  */
 async function getEmbedding(text: string): Promise<number[]> {
     // Check cache
@@ -57,10 +61,35 @@ async function getEmbedding(text: string): Promise<number[]> {
         return embeddingCache[cacheKey];
     }
 
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
+
     try {
-        const model = getEmbeddingModel();
-        const result = await model.embedContent(text);
-        const embedding = result.embedding.values;
+        const response = await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'HTTP-Referer': process.env.OPENROUTER_REFERER || 'http://localhost:2567',
+                'X-Title': 'Merlin SemanticSearch'
+            },
+            body: JSON.stringify({
+                model: 'thenlper/gte-large',
+                input: text
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenRouter embedding error: ${response.status} - ${errorText}`);
+        }
+
+        const result = await response.json() as any;
+        const embedding = result.data?.[0]?.embedding;
+
+        if (!embedding) {
+            throw new Error('No embedding in response');
+        }
 
         // Cache it
         embeddingCache[cacheKey] = embedding;
@@ -78,7 +107,10 @@ async function getEmbedding(text: string): Promise<number[]> {
  * Cosine similarity between two vectors
  */
 function cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0;
+    if (a.length !== b.length) {
+        console.warn(`[SemanticSearch] Dimension mismatch: ${a.length} vs ${b.length}`);
+        return 0;
+    }
 
     let dotProduct = 0;
     let normA = 0;
@@ -112,6 +144,7 @@ export async function semanticSearch(
 
     // Get all knowledge entries
     const allEntries = getAllKnowledge();
+    console.log(`[SemanticSearch] Knowledge entries: ${allEntries.length}`);
 
     if (allEntries.length === 0) {
         console.log('[SemanticSearch] No knowledge entries found');
@@ -119,7 +152,9 @@ export async function semanticSearch(
     }
 
     // Get query embedding
+    console.log('[SemanticSearch] Getting query embedding...');
     const queryEmbedding = await getEmbedding(query);
+    console.log(`[SemanticSearch] Got query embedding, dimension: ${queryEmbedding.length}`);
 
     // Score each entry
     const scored: SemanticSearchResult[] = [];

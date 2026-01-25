@@ -401,6 +401,12 @@ export class Player {
             const wasVehicleWithCamera = this.mount.constructor.name === 'Spaceship' ||
                                this.mount.constructor.name === 'Starfighter' ||
                                this.mount.preferFarCamera;
+
+            // Detach rider from vehicle if it has a detachRider method
+            if (typeof this.mount.detachRider === 'function') {
+                this.mount.detachRider(this);
+            }
+
             this.mount.rider = null;
             this.mount = null;
             // Pop player up slightly
@@ -840,6 +846,17 @@ export class Player {
         const selectedItem = this.game.inventory ? this.game.inventory.getSelectedItem() : null;
         const itemType = selectedItem ? selectedItem.item : null;
 
+        // Hide any previously shown dynamic item mesh
+        if (this.dynamicItemMesh) {
+            this.toolAttachment.remove(this.dynamicItemMesh);
+            // Dispose of old mesh
+            this.dynamicItemMesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            this.dynamicItemMesh = null;
+        }
+
         if (this.pickaxe) this.pickaxe.visible = itemType === 'pickaxe';
         if (this.sword) this.sword.visible = itemType === 'sword';
         if (this.bow) this.bow.visible = itemType === 'bow';
@@ -868,6 +885,43 @@ export class Player {
         if (this.chairModel) this.chairModel.visible = itemType === 'chair';
         if (this.tableModel) this.tableModel.visible = itemType === 'table';
         if (this.couchModel) this.couchModel.visible = itemType === 'couch';
+
+        // Check if this is a dynamic item with getMesh()
+        // Only do this if no built-in model is showing
+        if (itemType && this.game.itemManager) {
+            const itemInstance = this.game.itemManager.getItem(itemType);
+            if (itemInstance && typeof itemInstance.getMesh === 'function') {
+                // Check if any built-in model is already visible
+                const builtInVisible = [
+                    this.pickaxe, this.sword, this.bow, this.binoculars,
+                    this.apple, this.bread, this.chocolateBar,
+                    this.wand, this.levitationWand, this.shrinkWand, this.growthWand,
+                    this.rideWand, this.wizardTowerWand, this.broom,
+                    this.chairModel, this.tableModel, this.couchModel
+                ].some(model => model && model.visible);
+
+                if (!builtInVisible) {
+                    try {
+                        this.dynamicItemMesh = itemInstance.getMesh();
+                        if (this.dynamicItemMesh) {
+                            // Position the mesh in the hand
+                            this.dynamicItemMesh.position.set(0, -0.35, 0);
+                            this.dynamicItemMesh.rotation.set(0, 0, 0);
+                            // Disable depth test for visibility
+                            this.dynamicItemMesh.traverse((child) => {
+                                if (child.material) {
+                                    child.material.depthTest = false;
+                                    child.renderOrder = 999;
+                                }
+                            });
+                            this.toolAttachment.add(this.dynamicItemMesh);
+                        }
+                    } catch (e) {
+                        console.warn(`[Player] Failed to get mesh for item ${itemType}:`, e);
+                    }
+                }
+            }
+        }
     }
 
     swingArm() {
@@ -1333,9 +1387,13 @@ export class Player {
         // 3rd Person - Smooth Follow Camera
         if (this.cameraMode === 1) {
             // Update body position for 3rd person view
-            this.body.position.copy(this.position);
-            this.body.position.y += 1.57 + this.stepSmoothingY;
-            this.body.rotation.set(0, this.rotation.y, 0);
+            // Skip if body is attached to a vehicle (e.g., Starfighter cockpit)
+            const isAttachedToVehicle = this.mount && typeof this.mount.detachRider === 'function' && this.mount._riderAttached;
+            if (!isAttachedToVehicle) {
+                this.body.position.copy(this.position);
+                this.body.position.y += 1.57 + this.stepSmoothingY;
+                this.body.rotation.set(0, this.rotation.y, 0);
+            }
 
             // Use smooth follow camera
             this.thirdPersonCamera.update(deltaTime, this);

@@ -1,4 +1,5 @@
 import { auth } from '../../config/firebase-client.js';
+import { TaskManager } from './TaskManager.js';
 
 export class MerlinClient {
     constructor() {
@@ -13,6 +14,7 @@ export class MerlinClient {
         this.maxReconnectDelay = 30000;
         this.currentReconnectDelay = this.baseReconnectDelay;
         this.isExplicitlyDisconnected = false; // If user logs out or we want to stop
+        this.isReconnecting = false; // Suppress noisy logs during reconnection
 
         // Message queue for when game is not ready
         this.messageQueue = [];
@@ -24,7 +26,12 @@ export class MerlinClient {
         this.autoFixErrors = false; // Off by default - user must enable
         this.thinkingEnabled = localStorage.getItem('settings_thoughts') === 'true'; // Off by default
         this.bypassTokens = localStorage.getItem('settings_bypass_tokens') !== 'false'; // On by default
-        this.aiProvider = localStorage.getItem('settings_ai_provider') || 'gemini'; // 'gemini' or 'claude'
+        this.aiProvider = localStorage.getItem('settings_ai_provider') || 'openrouter'; // 'openrouter', 'gemini', or 'claude'
+        this.modelMode = localStorage.getItem('settings_model_mode') || 'smart'; // 'smart' (pro) or 'cheap' (flash)
+        this.showCost = localStorage.getItem('settings_show_cost') === 'true'; // Off by default
+
+        // TaskManager for handling queued tasks
+        this.taskManager = new TaskManager(this);
 
         // Global Error Monitoring
         this.lastSentError = null;
@@ -124,12 +131,15 @@ export class MerlinClient {
             console.log('[MerlinClient] CLI mode detected, bypassing authentication');
         }
 
-        console.log('[MerlinClient] Connecting to:', url);
+        if (!this.isReconnecting) {
+            console.log('[MerlinClient] Connecting to:', url);
+        }
         this.ws = new WebSocket(url);
 
         this.ws.onopen = () => {
             console.log('[MerlinClient] Connected.');
             this.isConnected = true;
+            this.isReconnecting = false;
             this.currentReconnectDelay = this.baseReconnectDelay; // Reset backoff
             this.notifyListeners({ type: 'status', status: 'connected' });
             if (this.game && this.game.uiManager) {
@@ -147,7 +157,10 @@ export class MerlinClient {
         };
 
         this.ws.onclose = (event) => {
-            console.log(`[MerlinClient] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+            // Only log disconnect on first disconnect, not during reconnection attempts
+            if (!this.isReconnecting) {
+                console.log(`[MerlinClient] Disconnected. Code: ${event.code}, Reason: ${event.reason}`);
+            }
             this.isConnected = false;
             this.notifyListeners({ type: 'status', status: 'disconnected' });
 
@@ -164,7 +177,10 @@ export class MerlinClient {
             if (this.isExplicitlyDisconnected) return;
 
             // Exponential Backoff Reconnect
-            console.log(`[MerlinClient] Reconnecting in ${this.currentReconnectDelay}ms...`);
+            if (!this.isReconnecting) {
+                console.log(`[MerlinClient] Reconnecting...`);
+            }
+            this.isReconnecting = true;
             this.reconnectTimer = setTimeout(() => {
                 this.connect();
                 // Increase delay for next time, cap at max
@@ -173,8 +189,10 @@ export class MerlinClient {
         };
 
         this.ws.onerror = (err) => {
-            // Just log it, onclose will handle the retry logic
-            console.error('[MerlinClient] WebSocket error:', err);
+            // Suppress expected errors during reconnection attempts
+            if (!this.isReconnecting) {
+                console.warn('[MerlinClient] WebSocket error:', err);
+            }
         };
     }
 
@@ -198,7 +216,8 @@ export class MerlinClient {
                 }
                 data.settings = {
                     thinkingEnabled: this.thinkingEnabled,
-                    bypassTokens: this.bypassTokens
+                    bypassTokens: this.bypassTokens,
+                    modelMode: this.modelMode
                 };
             }
             this.ws.send(JSON.stringify(data));
@@ -282,6 +301,11 @@ ${context?.scene ? `\nNearby: ${JSON.stringify(context.scene)}` : ''}
             // Let tool_request, error, etc. pass through
         }
 
+        // Route to TaskManager for task-specific handling
+        if (this.taskManager) {
+            this.taskManager.handleMessage(msg);
+        }
+
         // 1. Notify listeners (UI updates)
         this.notifyListeners(msg);
 
@@ -316,6 +340,7 @@ ${context?.scene ? `\nNearby: ${JSON.stringify(context.scene)}` : ''}
 
         // 2. Handle Tool Requests (Requires Game)
         if (msg.type === 'tool_request') {
+            console.log(`[MerlinClient] Received tool_request: ${msg.name}`, msg.args);
             if (this.game && this.game.agent) {
                 // Delegate to Agent entity which has the tool logic
                 // In a full refactor, tools might move here or to a ToolManager

@@ -1,10 +1,11 @@
 /**
  * DynamicItemRegistry - Handles client-side registration of dynamic items
- * 
+ *
  * Receives item definitions from the server and:
  * 1. Evaluates the code safely using Function constructor
  * 2. Registers the item class in ItemClasses
  * 3. Stores SVG icons for inventory display
+ * 4. Registers instance with ItemManager so the item can be used
  */
 
 import { ItemClasses } from './ItemRegistry.js';
@@ -21,6 +22,18 @@ export const DynamicItemIcons = {};
 // Expose to window for testing/debugging
 window.DynamicItems = DynamicItems;
 window.DynamicItemIcons = DynamicItemIcons;
+
+// Reference to the game's ItemManager (set via setItemManager)
+let itemManagerRef = null;
+
+/**
+ * Set the ItemManager reference so we can register item instances
+ * @param {ItemManager} manager
+ */
+export function setItemManager(manager) {
+    itemManagerRef = manager;
+    console.log('[DynamicItemRegistry] ItemManager reference set');
+}
 
 /**
  * Register a dynamic item class from a definition
@@ -73,12 +86,27 @@ export function registerDynamicItem(definition) {
             definition: definition
         };
 
+        // Extract the item id from the instance
+        const itemId = testInstance.id;
+
         // Store the SVG icon if provided
         if (icon) {
-            // Extract the item id from the instance
-            const itemId = testInstance.id;
             DynamicItemIcons[itemId] = icon;
             console.log(`[DynamicItemRegistry] Stored icon for item id '${itemId}'`);
+        }
+
+        // CRITICAL: Register the instance with ItemManager so the item can be used!
+        // This is what makes onUseDown/onPrimaryDown work
+        if (itemManagerRef) {
+            itemManagerRef.register(testInstance);
+            console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' with ItemManager (isTool: ${testInstance.isTool})`);
+        } else {
+            console.warn(`[DynamicItemRegistry] ⚠️ No ItemManager reference - item '${itemId}' won't be usable until game restart`);
+            // Try to get it from window.__VOXEL_GAME__ as fallback
+            if (window.__VOXEL_GAME__?.itemManager) {
+                window.__VOXEL_GAME__.itemManager.register(testInstance);
+                console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' via window.__VOXEL_GAME__.itemManager`);
+            }
         }
 
         console.log(`[DynamicItemRegistry] ✅ Registered item: ${name}`);

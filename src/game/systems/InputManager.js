@@ -110,11 +110,15 @@ export class InputManager {
                 return;
             }
 
-            // Block game inputs when typing in chat input (check if chat input is focused)
+            // Block game inputs when typing in any input field
             const commInput = document.getElementById('comm-input');
             const aiChatInput = document.getElementById('chat-input');
+            const merlinInput = document.getElementById('merlin-custom-input');
+            const merlinFollowupInput = document.getElementById('task-followup-input');
             if ((commInput && document.activeElement === commInput) ||
-                (aiChatInput && document.activeElement === aiChatInput)) return;
+                (aiChatInput && document.activeElement === aiChatInput) ||
+                (merlinInput && document.activeElement === merlinInput) ||
+                (merlinFollowupInput && document.activeElement === merlinFollowupInput)) return;
 
             // Tab toggles chat open/closed
             if (e.code === 'Tab') {
@@ -134,17 +138,21 @@ export class InputManager {
                 }
             }
 
-            // Debug Toggle (P) - REMOVED
-            if (e.code === 'KeyP') {
+            // Check if any panel is open - block most hotkeys if so
+            const isPanelOpen = this.game.uiManager && this.game.uiManager.isAnyPanelOpen();
+
+            // Debug Toggle (P) - blocked when panels open
+            if (e.code === 'KeyP' && !isPanelOpen) {
                 this.game.toggleDebugPanel();
             }
 
-            // T for Chat - opens chat and switches to Merlin (AI) tab by default
-            if (e.code === 'KeyT') {
+            // T for Chat - opens chat in Group mode (Merlin now accessed via M key)
+            // Blocked when panels are open
+            if (e.code === 'KeyT' && !isPanelOpen) {
                 if (this.game.agent && !this.game.agent.isChatOpen) {
                     e.preventDefault();
                     if (this.game.uiManager) {
-                        this.game.uiManager.setChatMode('ai');
+                        this.game.uiManager.setChatMode('group');
                     }
                     this.game.agent.toggleChat();
                 }
@@ -156,22 +164,29 @@ export class InputManager {
                 this.actions[this.bindings[e.code]] = true;
             }
 
-            // Spawn Panel Toggle (R)
-            if (e.code === 'KeyR' && !this.game.agent.isChatOpen) {
+            // Spawn Panel Toggle (R) - blocked when panels open
+            if (e.code === 'KeyR' && !this.game.agent.isChatOpen && !isPanelOpen) {
                 if (window.spawnUI) {
                     window.spawnUI.togglePanel();
                 }
             }
 
-            // Inventory Toggle (I)
-            if (e.code === 'KeyI') {
+            // Inventory Toggle (I) - blocked when panels open
+            if (e.code === 'KeyI' && !isPanelOpen) {
                 if (!this.game.agent.isChatOpen) {
                     this.game.toggleInventory();
                 }
             }
 
-            // Minimap Toggle (M)
-            if (e.code === 'KeyM' && !this.game.agent.isChatOpen) {
+            // Merlin Panel Toggle (M) - blocked when other panels open
+            if (e.code === 'KeyM' && !this.game.agent.isChatOpen && !isPanelOpen) {
+                if (this.game.uiManager && this.game.uiManager.merlinPanel) {
+                    this.game.uiManager.merlinPanel.toggle();
+                }
+            }
+
+            // Minimap Toggle (N) - blocked when panels open
+            if (e.code === 'KeyN' && !this.game.agent.isChatOpen && !isPanelOpen) {
                 if (this.game.uiManager && this.game.uiManager.minimap) {
                     this.game.uiManager.minimap.toggleVisibility();
                 }
@@ -196,10 +211,11 @@ export class InputManager {
             }
 
             // E for Dismount and Inventory toggle
+            // Note: E is allowed when debug panel is open for debug spawning
             if (e.code === 'KeyE') {
                 if (!this.game.agent.isChatOpen) {
 
-                    // Priority 0: Debug Spawning (Hover spawning)
+                    // Priority 0: Debug Spawning (Hover spawning) - allowed when debug panel is open
                     if (this.game.uiManager && this.game.uiManager.debugPanel && this.game.uiManager.debugPanel.isVisible) {
                         e.preventDefault();
                         const select = document.getElementById('dbg-spawn-select');
@@ -208,6 +224,9 @@ export class InputManager {
                         }
                         return;
                     }
+
+                    // Block E key when other panels are open (not debug panel)
+                    if (isPanelOpen) return;
 
                     // E dismounts if mounted (highest priority after debug spawn)
                     if (this.game.player.mount) {
@@ -235,8 +254,8 @@ export class InputManager {
 
 
 
-            // U - Use Selected Item (for wands/tools that can be activated with a key)
-            if (e.code === 'KeyU' && !e.repeat && !this.game.agent.isChatOpen) {
+            // U - Use Selected Item (for wands/tools that can be activated with a key) - blocked when panels open
+            if (e.code === 'KeyU' && !e.repeat && !this.game.agent.isChatOpen && !isPanelOpen) {
                 const item = this.game.inventory.getSelectedItem();
                 if (item && item.item) {
                     const itemInstance = this.game.itemManager.getItem(item.item);
@@ -246,15 +265,15 @@ export class InputManager {
                 }
             }
 
-            // Q for Drop Item (was Break, but Break is Left Click)
-            if (e.code === 'KeyQ' && !this.game.agent.isChatOpen) {
+            // Q for Drop Item (was Break, but Break is Left Click) - blocked when panels open
+            if (e.code === 'KeyQ' && !this.game.agent.isChatOpen && !isPanelOpen) {
                 if (this.game.inventoryManager) {
                     this.game.inventoryManager.dropSelected();
                 }
             }
 
-            // Number keys for hotbar
-            if (e.code.startsWith('Digit')) {
+            // Number keys for hotbar - blocked when panels open
+            if (e.code && e.code.startsWith('Digit') && !isPanelOpen) {
                 const num = parseInt(e.code.replace('Digit', ''));
                 if (num >= 1 && num <= 9) {
                     this.game.selectSlot(num - 1);
@@ -262,8 +281,8 @@ export class InputManager {
             }
 
 
-            // O for Weather Toggle (Debug)
-            if (e.code === 'KeyO') {
+            // O for Weather Toggle (Debug) - blocked when panels open
+            if (e.code === 'KeyO' && !isPanelOpen) {
                 if (this.game.weatherSystem) {
                     console.log('Toggling Weather...');
                     // Cycle: Clear -> Rain -> Storm -> Clear
@@ -274,8 +293,8 @@ export class InputManager {
                 }
             }
 
-            // Secondary Action Key (configurable, default 'E') - Spell Creator or Stop flying
-            if (e.code === this.hotkeys.secondaryAction) {
+            // Secondary Action Key (configurable, default 'E') - Spell Creator or Stop flying - blocked when panels open
+            if (e.code === this.hotkeys.secondaryAction && !isPanelOpen) {
                 if (!this.game.agent.isChatOpen) {
                     // If flying, stop flying (regardless of held item)
                     if (this.game.player.isFlying) {
@@ -287,15 +306,15 @@ export class InputManager {
                 }
             }
 
-            // H for Voice Echo (Debug)
-            if (e.code === 'KeyH') {
+            // H for Voice Echo (Debug) - blocked when panels open
+            if (e.code === 'KeyH' && !isPanelOpen) {
                 if (this.game.socketManager) {
                     this.game.socketManager.toggleEcho();
                 }
             }
 
-            // F for Merlin Voice Input
-            if (e.code === 'KeyF' && !e.repeat && !this.game.agent.isChatOpen) {
+            // F for Merlin Voice Input - blocked when panels open
+            if (e.code === 'KeyF' && !e.repeat && !this.game.agent.isChatOpen && !isPanelOpen) {
                 e.preventDefault();
                 if (window.merlinClient) {
                     window.merlinClient.toggleVoice();
@@ -307,13 +326,13 @@ export class InputManager {
 
 
             // Accessibility for Trackpad users:
-            // L for Left Click (Primary Action)
-            if (e.code === 'KeyL' && !this.game.agent.isChatOpen) {
+            // L for Left Click (Primary Action) - blocked when panels open
+            if (e.code === 'KeyL' && !this.game.agent.isChatOpen && !isPanelOpen) {
                 this.handlePrimaryAction();
             }
 
-            // Secondary Action Key (configurable, default 'E') for Right Click equivalent
-            if (e.code === this.hotkeys.secondaryAction && !this.game.agent.isChatOpen) {
+            // Secondary Action Key (configurable, default 'E') for Right Click equivalent - blocked when panels open
+            if (e.code === this.hotkeys.secondaryAction && !this.game.agent.isChatOpen && !isPanelOpen) {
                 this.handleSecondaryAction();
             }
         });

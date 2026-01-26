@@ -363,22 +363,22 @@ export class SpawnUI {
     }
 
     spawn(className) {
-        console.log(`Spawning ${this.activeTab}: ${className} `);
+        console.log(`[SpawnUI] Spawning ${this.activeTab}: ${className}`);
 
         if (this.activeTab === 'creature') {
             const AnimalClass = AnimalClasses[className];
+            console.log(`[SpawnUI] AnimalClass found: ${!!AnimalClass}, spawnManager: ${!!this.game.spawnManager}`);
+
             if (AnimalClass && this.game.spawnManager) {
-                // Use the reference implementation for "In Front Of Player"
-                if (this.game.spawnManager.spawnEntitiesInFrontOfPlayer) {
-                    this.game.spawnManager.spawnEntitiesInFrontOfPlayer(AnimalClass, 1);
-                } else {
-                    // Fallback
-                    this.spawnCreatureLegacy(className);
-                }
+                // Use the legacy method which is more reliable
+                console.log(`[SpawnUI] Calling spawnCreatureLegacy for ${className}`);
+                this.spawnCreatureLegacy(className);
 
                 if (this.game.uiManager) {
-                    this.game.uiManager.addChatMessage('system', `Spawned ${className} `);
+                    this.game.uiManager.addChatMessage('system', `Spawned ${className}`);
                 }
+            } else {
+                console.error(`[SpawnUI] Cannot spawn: AnimalClass=${!!AnimalClass}, spawnManager=${!!this.game.spawnManager}`);
             }
         } else {
             // Give Item
@@ -410,16 +410,32 @@ export class SpawnUI {
     }
 
     spawnCreatureLegacy(className) {
-        // Fallback if spawnEntitiesInFrontOfPlayer is missing
+        console.log(`[SpawnUI] spawnCreatureLegacy called for ${className}`);
         if (this.game.spawnManager) {
             const player = this.game.player;
+            if (!player) {
+                console.error('[SpawnUI] No player found!');
+                return;
+            }
+            console.log(`[SpawnUI] Player position: ${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)}, ${player.position.z.toFixed(1)}`);
+
             const direction = new THREE.Vector3();
             this.game.camera.getWorldDirection(direction);
+            console.log(`[SpawnUI] Camera direction: ${direction.x.toFixed(2)}, ${direction.y.toFixed(2)}, ${direction.z.toFixed(2)}`);
+
             const spawnPos = player.position.clone().add(direction.multiplyScalar(5));
+            console.log(`[SpawnUI] Spawn position: ${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)}`);
+
             const AnimalClass = AnimalClasses[className];
             if (AnimalClass) {
-                this.game.spawnManager.createAnimal(AnimalClass, spawnPos.x, spawnPos.y + 2, spawnPos.z, true);
+                console.log(`[SpawnUI] Creating ${className} at spawn position (y+2)`);
+                const animal = this.game.spawnManager.createAnimal(AnimalClass, spawnPos.x, spawnPos.y + 2, spawnPos.z, false);
+                console.log(`[SpawnUI] createAnimal returned:`, animal);
+            } else {
+                console.error(`[SpawnUI] AnimalClass not found for ${className}`);
             }
+        } else {
+            console.error('[SpawnUI] No spawnManager!');
         }
     }
 }

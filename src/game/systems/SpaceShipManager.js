@@ -559,12 +559,12 @@ export class SpaceShipManager {
                 if (this.game.socketManager) {
                     this.game.socketManager.releaseSoccerHost();
                 }
+            }
 
-                // Hide scoreboard UI
-                if (this.game.uiManager) {
-                    this.game.uiManager.hideSoccerScoreboard();
-                    this.game.uiManager.hideSoccerWinScreen();
-                }
+            // Always hide soccer UI when leaving Soccer World (regardless of whether we have a local ball)
+            if (worldName !== 'soccer' && this.game.uiManager) {
+                this.game.uiManager.hideSoccerScoreboard();
+                this.game.uiManager.hideSoccerWinScreen();
             }
 
             // Spawn the starship nearby in the new world (after a short delay for terrain)

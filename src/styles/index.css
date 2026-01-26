@@ -133,7 +133,8 @@ canvas {
 #voice-btn,
 #mute-btn,
 #world-btn,
-#world-settings-btn {
+#world-settings-btn,
+#merlin-btn {
     width: 40px;
     height: 40px;
     background: rgba(0, 0, 0, 0.6);
@@ -154,7 +155,8 @@ canvas {
 #voice-btn:hover,
 #mute-btn:hover,
 #world-btn:hover,
-#world-settings-btn:hover {
+#world-settings-btn:hover,
+#merlin-btn:hover {
     background: rgba(0, 0, 0, 0.8);
     border-color: #fff;
     transform: scale(1.1);
@@ -506,6 +508,48 @@ canvas {
 
 #debug p {
     margin: 4px 0;
+}
+
+/* Remote Players List */
+#remote-players-list {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    padding-top: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+#remote-players-list:empty {
+    display: none;
+}
+
+#remote-players-list .remote-player-header {
+    color: #00ffcc;
+    font-size: 12px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#remote-players-list .remote-player {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+    font-size: 13px;
+}
+
+#remote-players-list .remote-player .player-name {
+    color: #ffcc00;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#remote-players-list .remote-player .player-coords {
+    color: #aaa;
+    font-size: 12px;
 }
 
 /* Version Badge */

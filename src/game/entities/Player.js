@@ -427,6 +427,30 @@ export class Player {
                 }
                 this.thirdPersonCamera.reset(this);
 
+                // Fix: Restore body attachment based on camera mode
+                // The detachRider() method adds body to scene, but if we're restoring
+                // to first person mode, we need to re-attach body to camera
+                if (this.cameraMode === 0) {
+                    // First person - attach body to camera and hide parts
+                    if (this.body.parent) {
+                        this.body.parent.remove(this.body);
+                    }
+                    this.game.camera.add(this.body);
+                    this.body.position.set(0, -0.3, -0.4);
+                    this.body.rotation.set(0, 0, 0);
+                    if (this.head) this.head.visible = false;
+                    if (this.torso) this.torso.visible = false;
+                    if (this.leftLegPivot) this.leftLegPivot.visible = false;
+                    if (this.rightLegPivot) this.rightLegPivot.visible = false;
+                } else {
+                    // Third person - ensure body is visible in scene
+                    this.body.visible = true;
+                    if (this.head) this.head.visible = true;
+                    if (this.torso) this.torso.visible = true;
+                    if (this.leftLegPivot) this.leftLegPivot.visible = true;
+                    if (this.rightLegPivot) this.rightLegPivot.visible = true;
+                }
+
                 // Clear saved values
                 this._preMountCameraMode = undefined;
                 this._preMountCameraDistance = undefined;

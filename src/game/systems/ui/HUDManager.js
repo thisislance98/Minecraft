@@ -11,11 +11,15 @@ export class HUDManager {
         this.fpsCounter = document.getElementById('fps-counter');
         this.positionElement = document.getElementById('position');
         this.blockCountElement = document.getElementById('block-count');
+        this.remotePlayersListElement = document.getElementById('remote-players-list');
 
         // FPS tracking
         this.fps = 0;
         this.frameCount = 0;
         this.lastFpsUpdate = performance.now();
+
+        // Remote player tracking
+        this.remotePlayers = new Map(); // id -> { name, pos, rotY }
     }
 
     /**
@@ -89,6 +93,72 @@ export class HUDManager {
      */
     getFPS() {
         return this.fps;
+    }
+
+    /**
+     * Update network status display
+     * @param {string} status - Connection status
+     * @param {string} role - Player role (Host/Client)
+     * @param {string} roomId - Room/World ID
+     */
+    updateNetworkStatus(status, role, roomId) {
+        const statusEl = document.getElementById('network-status');
+        if (statusEl) {
+            if (roomId) {
+                statusEl.textContent = `${status} (${role}) - ${roomId}`;
+            } else {
+                statusEl.textContent = status;
+            }
+        }
+    }
+
+    /**
+     * Update remote player status in HUD
+     * @param {string} id - Player socket ID
+     * @param {Object} pos - Player position (or null to remove)
+     * @param {number} rotY - Player rotation
+     * @param {string} name - Player name
+     */
+    updateRemotePlayerStatus(id, pos, rotY, name) {
+        if (pos === null) {
+            // Player left - remove from tracking
+            this.remotePlayers.delete(id);
+            console.log(`[HUD] Remote player ${name || id} left`);
+        } else {
+            // Update or add player
+            const displayName = name || `Player_${id.substring(0, 4)}`;
+            this.remotePlayers.set(id, {
+                name: displayName,
+                pos: { x: pos.x, y: pos.y, z: pos.z },
+                rotY: rotY
+            });
+            console.log(`[HUD] Remote player ${displayName}: (${pos.x?.toFixed(1)}, ${pos.y?.toFixed(1)}, ${pos.z?.toFixed(1)})`);
+        }
+        this.renderRemotePlayersList();
+    }
+
+    /**
+     * Render the remote players list in the debug panel
+     */
+    renderRemotePlayersList() {
+        if (!this.remotePlayersListElement) return;
+
+        if (this.remotePlayers.size === 0) {
+            this.remotePlayersListElement.innerHTML = '';
+            return;
+        }
+
+        let html = '<div class="remote-player-header">Online Players</div>';
+        for (const [id, player] of this.remotePlayers) {
+            const coords = `${player.pos.x?.toFixed(0)}, ${player.pos.y?.toFixed(0)}, ${player.pos.z?.toFixed(0)}`;
+            html += `
+                <div class="remote-player" data-player-id="${id}">
+                    <span class="player-name">${player.name}</span>
+                    <span class="player-coords">${coords}</span>
+                </div>
+            `;
+        }
+        this.remotePlayersListElement.innerHTML = html;
     }
 
     cleanup() {

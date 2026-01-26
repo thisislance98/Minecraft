@@ -167,4 +167,11 @@ export class SoundManager {
         localStorage.setItem('isMuted', this.isMuted);
         return this.isMuted;
     }
+
+    setMuted(muted) {
+        this.isMuted = muted;
+        this.listener.setMasterVolume(this.isMuted ? 0 : 1);
+        localStorage.setItem('isMuted', this.isMuted);
+        console.log('[SoundManager] Muted:', this.isMuted);
+    }
 }

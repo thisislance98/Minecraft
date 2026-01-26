@@ -20,6 +20,11 @@ export class WizardTowerWandItem extends Item {
 
         if (game.spawnWizardTowerProjectile) {
             game.spawnWizardTowerProjectile(spawnPos, velocity);
+
+            // Trigger arm swing animation
+            if (player.swingArm) {
+                player.swingArm();
+            }
             return true;
         } else {
             console.error("spawnWizardTowerProjectile not defined in game");

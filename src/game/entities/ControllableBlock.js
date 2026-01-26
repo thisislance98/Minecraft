@@ -313,13 +313,49 @@ export class ControllableBlock {
         this.glowMesh.visible = true;
         player.controlledBlock = this;
 
-        console.log('[ControllableBlock] Player took control');
+        // Store player's camera mode when taking control
+        this._playerCameraModeOnEntry = player.cameraMode;
+
+        console.log('[ControllableBlock] Player took control, cameraMode:', player.cameraMode);
         this.glowMesh.material.color.setHex(0x00FF00);
     }
 
     releaseControl() {
         if (this.controller) {
-            this.controller.controlledBlock = null;
+            const player = this.controller;
+            player.controlledBlock = null;
+
+            console.log('[ControllableBlock] Releasing control, cameraMode:', player.cameraMode, 'body parent:', player.body?.parent?.type);
+
+            // Restore player body visibility based on current camera mode
+            // This fixes the bug where avatar stays visible at exit position in first person
+            if (player.cameraMode === 0) {
+                // First person - ensure body is attached to camera and parts are hidden
+                if (player.body && player.game && player.game.camera) {
+                    // Remove from scene first to ensure clean reparenting
+                    if (player.body.parent) {
+                        player.body.parent.remove(player.body);
+                    }
+                    player.game.camera.add(player.body);
+                    player.body.position.set(0, -0.3, -0.4);
+                    player.body.rotation.set(0, 0, 0);
+                    if (player.head) player.head.visible = false;
+                    if (player.torso) player.torso.visible = false;
+                    if (player.leftLegPivot) player.leftLegPivot.visible = false;
+                    if (player.rightLegPivot) player.rightLegPivot.visible = false;
+                    console.log('[ControllableBlock] Body re-attached to camera for first person');
+                }
+            } else {
+                // Third person - ensure body is in scene and visible
+                if (player.body && player.game && player.game.scene) {
+                    player.game.scene.add(player.body);
+                    player.body.visible = true;
+                    if (player.head) player.head.visible = true;
+                    if (player.torso) player.torso.visible = true;
+                    if (player.leftLegPivot) player.leftLegPivot.visible = true;
+                    if (player.rightLegPivot) player.rightLegPivot.visible = true;
+                }
+            }
         }
         this.controller = null;
         this.isControlled = false;

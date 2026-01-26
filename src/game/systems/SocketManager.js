@@ -5,6 +5,9 @@ import { registerDynamicItem, registerMultipleItems } from '../DynamicItemRegist
 import { ItemFactory } from '../entities/ItemFactory.js';
 import { auth } from '../../config/firebase-client.js';
 import { VoiceChatManager } from './socket/VoiceChatManager.js';
+import { NetworkMessageSender } from './socket/NetworkMessageSender.js';
+import { PlayerSyncManager } from './socket/PlayerSyncManager.js';
+import { PlayerModelFactory } from './socket/PlayerModelFactory.js';
 
 export class SocketManager {
     // Static shared geometry/material cache for remote player models
@@ -52,6 +55,12 @@ export class SocketManager {
 
         // Voice Chat - handled by VoiceChatManager
         this.voiceChatManager = new VoiceChatManager(game, this);
+
+        // Network Message Sender - handles all outgoing messages
+        this.messageSender = new NetworkMessageSender(game, this);
+
+        // Player Sync Manager - handles remote player meshes
+        this.playerSyncManager = new PlayerSyncManager(game, this);
 
         // Soccer Ball Multiplayer State
         this.isSoccerBallHost = false;  // First player in Soccer World becomes host
@@ -202,7 +211,8 @@ export class SocketManager {
         });
 
         this.socket.on('room:joined', (data) => {
-            console.log('[SocketManager] Joined room:', data);
+            console.log('[SocketManager] Joined room:', data.roomId, 'socketId:', this.socketId);
+            console.log('[SocketManager] playerStates received:', data.playerStates ? Object.keys(data.playerStates) : 'none');
             this.roomId = data.roomId;
 
             const role = data.isHost ? 'Host' : 'Client';
@@ -228,6 +238,8 @@ export class SocketManager {
                     if (state.pos) {
                         console.log(`[SocketManager] Creating mesh for existing player ${pid} at`, state.pos);
                         this.updatePlayerMesh(pid, state.pos, state.rotY);
+                        // Update HUD with existing player info
+                        this.game.uiManager?.updateRemotePlayerStatus(pid, state.pos, state.rotY, state.name);
                         if (state.heldItem) {
                             console.log(`[SocketManager] Syncing held item for ${pid}: ${state.heldItem}`);
                             this.updateRemoteHeldItem(pid, state.heldItem);
@@ -252,7 +264,7 @@ export class SocketManager {
         });
 
         this.socket.on('player:joined', (data) => {
-            console.log('[SocketManager] Another player joined:', data.id, 'name:', data.name);
+            console.log('[SocketManager] player:joined event received:', data);
 
             // Store the name for when we create their mesh
             if (data.name) {
@@ -306,7 +318,6 @@ export class SocketManager {
 
             // Close PeerJS call and cleanup audio via VoiceChatManager
             this.voiceChatManager.handlePeerLeave(id);
-            }
 
             // Remove from pending peer IDs
             if (this.pendingPeerIds && this.pendingPeerIds.has(id)) {
@@ -332,6 +343,7 @@ export class SocketManager {
 
         this.socket.on('player:move', (data) => {
             // data: { id, pos, rotY, name, isCrouching, isFlying, health, maxHealth, shirtColor }
+            console.log('[SocketManager] player:move received from:', data?.id, 'pos:', data?.pos);
             if (data && data.pos) {
                 this.game.uiManager?.updateRemotePlayerStatus(data.id, data.pos, data.rotY, data.name);
                 this.updatePlayerMesh(data.id, data.pos, data.rotY, data.name, data.isCrouching, data.health, data.maxHealth, data.shirtColor, data.isFlying);
@@ -428,14 +440,12 @@ export class SocketManager {
 
             const ball = this.game.spaceShipManager?.soccerBall;
             if (ball && !ball.isDead) {
-                // Apply position and velocity from host
-                ball.position.set(data.pos.x, data.pos.y, data.pos.z);
+                // Store target position/velocity for smooth interpolation
+                // instead of snapping directly (which causes jitter)
+                ball.targetPosition = ball.targetPosition || new THREE.Vector3();
+                ball.targetPosition.set(data.pos.x, data.pos.y, data.pos.z);
                 ball.velocity.set(data.vel.x, data.vel.y, data.vel.z);
-
-                // Update mesh position
-                if (ball.mesh) {
-                    ball.mesh.position.copy(ball.position);
-                }
+                ball.hasNetworkTarget = true;
             }
         });
 
@@ -448,6 +458,17 @@ export class SocketManager {
 
             // Show kick direction indicator if desired
             console.log(`[SocketManager] Ball kicked by ${data.playerId}`);
+        });
+
+        // Receive kick request from remote player (host only processes these)
+        this.socket.on('soccer:kick_request', (data) => {
+            // Only the host applies kick requests
+            if (!this.isSoccerBallHost) return;
+
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball && !ball.isDead) {
+                ball.applyRemoteKickRequest(data);
+            }
         });
 
         // Receive goal scored event (with updated scores)
@@ -1315,6 +1336,19 @@ export class SocketManager {
     }
 
     /**
+     * Send kick request from non-host client to host
+     * @param {Object} data - { playerPos, kickDir, kickPower }
+     */
+    sendSoccerKickRequest(data) {
+        if (!this.isConnected()) return;
+        // Non-host clients send kick requests to be processed by host
+        this.socket.emit('soccer:kick_request', {
+            ...data,
+            playerId: this.socketId
+        });
+    }
+
+    /**
      * Send goal scored event
      * @param {string} scoringSide - 'blue' or 'orange'
      * @param {Object} scores - Current scores { blue, orange }
@@ -1574,15 +1608,19 @@ export class SocketManager {
     // Use: socketManager.voiceChatManager.initVoiceChat(), .callPeer(), .setVoiceChatEnabled(), etc.
 
     updatePlayerMesh(id, pos, rotY, name, isCrouching = false, health, maxHealth, shirtColor, isFlying = false) {
+        console.log(`[SocketManager] updatePlayerMesh called for ${id} at pos:`, pos);
         let meshInfo = this.playerMeshes.get(id);
 
         if (!meshInfo || meshInfo instanceof THREE.Object3D) {
+            console.log(`[SocketManager] Creating NEW mesh for player ${id} (meshInfo was: ${meshInfo ? 'Object3D' : 'undefined'})`);
             if (meshInfo instanceof THREE.Object3D) {
                 this.game.scene.remove(meshInfo);
             }
             // Get stored name from player:joined event if not provided
             const playerName = name || (this.playerNames?.get(id)) || `Player_${id.substring(0, 4)}`;
+            console.log(`[SocketManager] Creating character model for ${id} with name: ${playerName}`);
             meshInfo = this.createCharacterModel(id, playerName, shirtColor);
+            console.log(`[SocketManager] Character model created, group:`, meshInfo?.group ? 'exists' : 'MISSING');
 
             // Check for pending held item
             if (this.pendingHeldItems && this.pendingHeldItems.has(id)) {

@@ -141,6 +141,27 @@ export class SoccerBall {
         // Check if we're the physics host for networked play
         const isHost = !this.isNetworked || this.game.socketManager?.isSoccerBallHost;
 
+        // ALL clients check their own local player collision and send kick requests
+        // This ensures collision detection works even when browser tab is in background
+        // (background tabs throttle updates, so host can't reliably detect remote collisions)
+        if (this.isNetworked && !isHost) {
+            this.checkLocalPlayerCollisionAndRequestKick(dt);
+
+            // Non-host: smoothly interpolate towards network target position
+            // This prevents jitter from discrete network updates
+            if (this.hasNetworkTarget && this.targetPosition) {
+                // Use velocity-based prediction combined with lerp to target
+                // Apply velocity for local prediction
+                this.position.add(this.velocity.clone().multiplyScalar(dt));
+
+                // Smoothly correct towards authoritative position
+                // Higher lerp = more responsive but potentially more jittery
+                // Lower lerp = smoother but may lag behind
+                const lerpFactor = Math.min(1, dt * 10); // ~10 corrections per second
+                this.position.lerp(this.targetPosition, lerpFactor);
+            }
+        }
+
         // Only run physics simulation if we're the host (or single player)
         if (isHost) {
             // Apply Gravity
@@ -153,6 +174,7 @@ export class SoccerBall {
             this.checkPlayerCollision(dt);
 
             // Check for remote player collisions (host processes all collisions)
+            // This is a backup - primary collision is detected by each client locally
             this.checkRemotePlayerCollisions(dt);
 
             // Check collision with world (arena walls, floor, goals)
@@ -250,6 +272,68 @@ export class SoccerBall {
         }
     }
 
+    /**
+     * Non-host clients check their local player collision and send a kick request to the host.
+     * This ensures collision detection works even when browser tabs are throttled.
+     */
+    checkLocalPlayerCollisionAndRequestKick(dt) {
+        const player = this.game.player;
+        if (!player) return;
+
+        // Calculate distance from player to ball center
+        const playerPos = player.position.clone();
+        playerPos.y += Config.PLAYER.HEIGHT / 2;  // Player center
+
+        const distance = this.position.distanceTo(playerPos);
+        const collisionDist = this.radius + Config.PLAYER.WIDTH / 2;
+
+        if (distance < collisionDist) {
+            // Player is touching the ball - send kick request to host
+            const now = performance.now() / 1000;
+            if (now - this.lastKickTime > this.kickCooldown) {
+                this.lastKickTime = now;
+
+                // Calculate kick direction (from player to ball)
+                const kickDir = new THREE.Vector3()
+                    .subVectors(this.position, playerPos)
+                    .normalize();
+
+                // Get player's velocity for momentum transfer
+                const playerVel = player.velocity ? player.velocity.clone() : new THREE.Vector3();
+                const playerSpeed = playerVel.length();
+
+                // Calculate kick strength based on player speed
+                let kickPower = this.minKickVelocity;
+                if (playerSpeed > 0.1) {
+                    kickPower = Math.min(this.kickStrength, this.minKickVelocity + playerSpeed * 50);
+                    const momentumDir = playerVel.clone().normalize();
+                    kickDir.lerp(momentumDir, 0.5);
+                    kickDir.normalize();
+                }
+
+                // Add slight upward component
+                kickDir.y = Math.max(kickDir.y, 0.2);
+                kickDir.normalize();
+
+                // Send kick request to host via server
+                if (this.game.socketManager) {
+                    this.game.socketManager.sendSoccerKickRequest({
+                        playerPos: { x: playerPos.x, y: playerPos.y, z: playerPos.z },
+                        kickDir: { x: kickDir.x, y: kickDir.y, z: kickDir.z },
+                        kickPower: kickPower
+                    });
+                }
+
+                // Play local sound effect immediately for responsiveness
+                if (this.game.soundManager) {
+                    this.game.soundManager.playSound('hit');
+                }
+
+                console.log(`[SoccerBall] Local player kick request sent, power: ${kickPower.toFixed(1)}`);
+            }
+        }
+    }
+
     checkRemotePlayerCollisions(dt) {
         // Check both possible sources of remote players:
         // 1. game.remotePlayers (PhotonManager)
@@ -264,21 +348,6 @@ export class SoccerBall {
         const now = performance.now() / 1000;
         if (now - this.lastKickTime < this.kickCooldown) return;
 
-        // Debug: log remote player count and positions periodically
-        if (!this._lastDebugLog || now - this._lastDebugLog > 2) {
-            this._lastDebugLog = now;
-            console.log(`[SoccerBall] Checking ${remotePlayers.size} remote player(s), ball at (${this.position.x.toFixed(1)}, ${this.position.y.toFixed(1)}, ${this.position.z.toFixed(1)})`);
-            for (const [pid, rp] of remotePlayers) {
-                const m = rp?.group || rp?.mesh || rp;
-                if (m && m.position) {
-                    const dist = this.position.distanceTo(m.position);
-                    console.log(`  - Player ${pid.substring(0,8)}: pos=(${m.position.x.toFixed(1)}, ${m.position.y.toFixed(1)}, ${m.position.z.toFixed(1)}), dist=${dist.toFixed(1)}`);
-                } else {
-                    console.log(`  - Player ${pid.substring(0,8)}: NO VALID MESH (group=${!!rp?.group}, mesh=${!!rp?.mesh})`);
-                }
-            }
-        }
-
         for (const [playerId, remotePlayer] of remotePlayers) {
             // Handle different mesh structures:
             // - PhotonManager: remotePlayer.mesh
@@ -286,7 +355,10 @@ export class SoccerBall {
             const mesh = remotePlayer?.group || remotePlayer?.mesh || remotePlayer;
             if (!mesh || !mesh.position) continue;
 
-            const playerPos = mesh.position.clone();
+            // Use targetPosition (network position) if available, as mesh.position may be interpolated
+            // and could lag behind the actual player position
+            const networkPos = remotePlayer?.targetPosition;
+            const playerPos = (networkPos || mesh.position).clone();
             playerPos.y += Config.PLAYER.HEIGHT / 2;
 
             const distance = this.position.distanceTo(playerPos);
@@ -549,6 +621,60 @@ export class SoccerBall {
             this.game.uiManager.updateSoccerScoreboard(this.scores.blue, this.scores.orange);
             this.game.uiManager.showSoccerWinScreen(winner);
         }
+    }
+
+    /**
+     * Apply a kick request from a remote player (called on host)
+     * @param {Object} data - Kick request data { playerPos, kickDir, kickPower, playerId }
+     */
+    applyRemoteKickRequest(data) {
+        // Only the host should apply kick requests
+        const isHost = !this.isNetworked || this.game.socketManager?.isSoccerBallHost;
+        if (!isHost) return;
+
+        // Validate the kick - check if player position is close to ball
+        const playerPos = new THREE.Vector3(data.playerPos.x, data.playerPos.y, data.playerPos.z);
+        const distance = this.position.distanceTo(playerPos);
+        const maxValidDistance = this.radius + Config.PLAYER.WIDTH / 2 + 2.0; // Allow some tolerance
+
+        if (distance > maxValidDistance) {
+            console.log(`[SoccerBall] Rejected kick request from ${data.playerId} - too far (${distance.toFixed(1)} > ${maxValidDistance.toFixed(1)})`);
+            return;
+        }
+
+        // Check kick cooldown
+        const now = performance.now() / 1000;
+        if (now - this.lastKickTime < this.kickCooldown) {
+            return;
+        }
+        this.lastKickTime = now;
+
+        // Apply the kick
+        const kickDir = new THREE.Vector3(data.kickDir.x, data.kickDir.y, data.kickDir.z);
+        const kickPower = Math.min(data.kickPower, this.kickStrength); // Cap at max strength
+
+        this.velocity.add(kickDir.multiplyScalar(kickPower));
+
+        // Push ball away from player
+        const pushDir = new THREE.Vector3()
+            .subVectors(this.position, playerPos)
+            .normalize();
+        const overlap = maxValidDistance - distance;
+        if (overlap > 0) {
+            this.position.add(pushDir.multiplyScalar(overlap + 0.1));
+        }
+
+        // Play sound
+        if (this.game.soundManager) {
+            this.game.soundManager.playSound('hit');
+        }
+
+        // Broadcast kick event for sound sync to other clients
+        if (this.game.socketManager) {
+            this.game.socketManager.sendSoccerBallKick();
+        }
+
+        console.log(`[SoccerBall] Applied kick from remote player ${data.playerId}, power: ${kickPower.toFixed(1)}`);
     }
 
     remove() {

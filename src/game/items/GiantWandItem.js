@@ -19,6 +19,11 @@ export class GiantWandItem extends Item {
         const velocity = camDir.clone().multiplyScalar(1.0); // Projectile logic handles speed
 
         game.spawnGiantProjectile(spawnPos, velocity);
+
+        // Trigger arm swing animation
+        if (player.swingArm) {
+            player.swingArm();
+        }
         return true;
     }
 

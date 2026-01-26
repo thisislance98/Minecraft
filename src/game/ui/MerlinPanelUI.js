@@ -30,6 +30,7 @@ export class MerlinPanelUI {
 
         this.createPanel();
         this.setupEventListeners();
+        this.setupMerlinButton();
 
         console.log('[MerlinPanelUI] Initialized');
     }
@@ -59,7 +60,6 @@ export class MerlinPanelUI {
             <div class="merlin-panel-content">
                 <div class="merlin-panel-header">
                     <h2>🧙 Merlin's Workshop</h2>
-                    <button id="merlin-panel-close" class="merlin-close-btn">×</button>
                 </div>
 
                 <div class="merlin-panel-body">
@@ -134,6 +134,9 @@ export class MerlinPanelUI {
                         </div>
                     </div>
                 </div>
+
+                <!-- Close button at bottom right -->
+                <button id="merlin-panel-close" class="merlin-close-btn">×</button>
             </div>
         `;
         document.body.appendChild(panel);
@@ -146,13 +149,23 @@ export class MerlinPanelUI {
      * Setup event listeners
      */
     setupEventListeners() {
+        // Helper to safely add event listeners
+        const addListener = (id, event, handler) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener(event, handler);
+            } else {
+                console.warn(`[MerlinPanelUI] Element not found: ${id}`);
+            }
+        };
+
         // Close button
-        document.getElementById('merlin-panel-close').addEventListener('click', () => {
+        addListener('merlin-panel-close', 'click', () => {
             this.hide();
         });
 
         // Category buttons
-        document.getElementById('merlin-categories').addEventListener('click', (e) => {
+        addListener('merlin-categories', 'click', (e) => {
             const btn = e.target.closest('.merlin-category-btn');
             if (btn) {
                 const category = btn.dataset.category;
@@ -161,7 +174,7 @@ export class MerlinPanelUI {
         });
 
         // Suggestions click
-        document.getElementById('merlin-suggestions').addEventListener('click', (e) => {
+        addListener('merlin-suggestions', 'click', (e) => {
             const suggestionEl = e.target.closest('.suggestion-item');
             if (suggestionEl) {
                 const text = suggestionEl.dataset.text;
@@ -170,14 +183,14 @@ export class MerlinPanelUI {
         });
 
         // Refresh suggestions button
-        document.getElementById('refresh-suggestions-btn').addEventListener('click', () => {
+        addListener('refresh-suggestions-btn', 'click', () => {
             if (this.selectedCategory) {
                 this.cycleSuggestions();
             }
         });
 
         // Task list click - open task detail
-        document.getElementById('merlin-task-list').addEventListener('click', (e) => {
+        addListener('merlin-task-list', 'click', (e) => {
             const taskItem = e.target.closest('.task-item');
             if (taskItem && !e.target.closest('.task-cancel-btn')) {
                 const taskId = taskItem.dataset.taskId;
@@ -186,17 +199,17 @@ export class MerlinPanelUI {
         });
 
         // Task detail back button
-        document.getElementById('task-detail-back').addEventListener('click', () => {
+        addListener('task-detail-back', 'click', () => {
             this.hideTaskDetail();
         });
 
         // Task follow-up send button
-        document.getElementById('task-followup-send').addEventListener('click', () => {
+        addListener('task-followup-send', 'click', () => {
             this.sendFollowUp();
         });
 
         // Task follow-up enter key
-        document.getElementById('task-followup-input').addEventListener('keydown', (e) => {
+        addListener('task-followup-input', 'keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendFollowUp();
@@ -204,12 +217,12 @@ export class MerlinPanelUI {
         });
 
         // Start task button
-        document.getElementById('merlin-start-task').addEventListener('click', () => {
+        addListener('merlin-start-task', 'click', () => {
             this.startCustomTask();
         });
 
         // Enter key in input
-        document.getElementById('merlin-custom-input').addEventListener('keydown', (e) => {
+        addListener('merlin-custom-input', 'keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.startCustomTask();
@@ -229,6 +242,31 @@ export class MerlinPanelUI {
                 }
             }
         });
+    }
+
+    /**
+     * Setup the Merlin button in top-right controls (next to world button)
+     */
+    setupMerlinButton() {
+        const topRightControls = document.getElementById('top-right-controls');
+        if (topRightControls) {
+            const worldBtn = document.getElementById('world-btn');
+
+            const merlinBtn = document.createElement('button');
+            merlinBtn.id = 'merlin-btn';
+            merlinBtn.title = "Merlin's Workshop (M)";
+            merlinBtn.textContent = '🧙';
+            merlinBtn.addEventListener('click', () => this.toggle());
+
+            // Insert after world button, or at the start if world button doesn't exist
+            if (worldBtn && worldBtn.nextSibling) {
+                topRightControls.insertBefore(merlinBtn, worldBtn.nextSibling);
+            } else if (worldBtn) {
+                topRightControls.appendChild(merlinBtn);
+            } else {
+                topRightControls.insertBefore(merlinBtn, topRightControls.firstChild);
+            }
+        }
     }
 
     /**
@@ -882,6 +920,7 @@ export class MerlinPanelUI {
                 justify-content: space-between;
                 align-items: center;
                 padding: 15px 20px;
+                padding-top: 50px; /* Extra padding to avoid top-right-controls overlay */
                 background: linear-gradient(90deg, #2d2d5a, #1a1a3a);
                 border-bottom: 2px solid #4a4a8a;
                 flex-shrink: 0;
@@ -895,17 +934,29 @@ export class MerlinPanelUI {
             }
 
             .merlin-close-btn {
-                background: none;
-                border: none;
+                position: absolute;
+                bottom: 15px;
+                right: 15px;
+                background: rgba(60, 60, 100, 0.8);
+                border: 2px solid #5a5a9a;
+                border-radius: 8px;
                 color: #fff;
-                font-size: 28px;
+                font-size: 24px;
+                width: 40px;
+                height: 40px;
                 cursor: pointer;
-                opacity: 0.7;
-                transition: opacity 0.2s;
+                opacity: 0.8;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10;
             }
 
             .merlin-close-btn:hover {
                 opacity: 1;
+                background: rgba(80, 80, 120, 0.9);
+                transform: scale(1.05);
             }
 
             .merlin-panel-body {

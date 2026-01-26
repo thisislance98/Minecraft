@@ -12,7 +12,24 @@
         ],
         "headers": [
             {
-                "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|js|css|eot|otf|ttf|ttc|woff|woff2|font.css)",
+                "source": "**",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "no-cache, no-store, must-revalidate"
+                    },
+                    {
+                        "key": "Pragma",
+                        "value": "no-cache"
+                    },
+                    {
+                        "key": "Expires",
+                        "value": "0"
+                    }
+                ]
+            },
+            {
+                "source": "/assets/**",
                 "headers": [
                     {
                         "key": "Cache-Control",
@@ -21,11 +38,11 @@
                 ]
             },
             {
-                "source": "**/*.html",
+                "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|eot|otf|ttf|ttc|woff|woff2|font.css|ico)",
                 "headers": [
                     {
                         "key": "Cache-Control",
-                        "value": "no-cache, no-store, must-revalidate"
+                        "value": "max-age=31536000, immutable"
                     }
                 ]
             }

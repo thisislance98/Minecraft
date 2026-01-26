@@ -99,6 +99,12 @@ export class Spaceship extends Animal {
         });
 
         this.createBody();
+
+        // Flying vehicles don't need a blob shadow (it causes rendering issues)
+        if (this.blobShadow) {
+            this.mesh.remove(this.blobShadow);
+            this.blobShadow = null;
+        }
     }
 
     createBody() {
@@ -145,6 +151,13 @@ export class Spaceship extends Animal {
         const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.6), trimMat);
         seat.position.y = 0.5;
         this.bodyGroup.add(seat);
+
+        // Ensure frustum culling is disabled on all parts to prevent flickering
+        this.mesh.frustumCulled = false;
+        this.bodyGroup.frustumCulled = false;
+        this.bodyGroup.traverse(child => {
+            child.frustumCulled = false;
+        });
     }
 
     updateAI(dt) {

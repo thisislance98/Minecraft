@@ -18,6 +18,11 @@ export class WandItem extends Item {
         const velocity = camDir.clone().multiplyScalar(1.0); // Direction for projectile
 
         game.spawnMagicProjectile(spawnPos, velocity);
+
+        // Trigger arm swing animation
+        if (player.swingArm) {
+            player.swingArm();
+        }
         return true;
     }
 

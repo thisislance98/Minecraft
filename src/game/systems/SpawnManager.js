@@ -462,6 +462,7 @@ export class SpawnManager {
     // ============ Entity Creation ============
 
     createAnimal(AnimalClass, x, y, z, snapToGround = true, seed = null) {
+        console.log(`[SpawnManager] createAnimal called: ${AnimalClass.name} at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}), snapToGround=${snapToGround}`);
         let spawnY = y;
 
         if (snapToGround) {
@@ -470,7 +471,7 @@ export class SpawnManager {
 
             if (groundY === null) {
                 console.warn(`[SpawnManager] Failed to find ground for ${AnimalClass.name} at ${x.toFixed(1)}, ${z.toFixed(1)}`);
-                return;
+                return null;
             }
 
             if (Math.abs(groundY - terrainY) > 3) {
@@ -479,10 +480,14 @@ export class SpawnManager {
             spawnY = groundY;
         }
 
+        console.log(`[SpawnManager] Creating ${AnimalClass.name} at final position (${x.toFixed(1)}, ${spawnY.toFixed(1)}, ${z.toFixed(1)})`);
         const animal = new AnimalClass(this.game, x, spawnY, z, seed);
+        console.log(`[SpawnManager] Animal created, mesh:`, animal.mesh ? 'exists' : 'MISSING');
         this.game.animals.push(animal);
         this.game.scene.add(animal.mesh);
         this.entityRegistry.register(animal.id, animal);
+        console.log(`[SpawnManager] ${AnimalClass.name} added to scene and registry, total animals: ${this.game.animals.length}`);
+        return animal;
     }
 
     // ============ Special Initial Spawns ============

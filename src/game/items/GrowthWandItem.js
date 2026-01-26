@@ -16,6 +16,11 @@ export class GrowthWandItem extends Item {
         const velocity = camDir.clone().multiplyScalar(1.0);
 
         game.spawnGrowthProjectile(spawnPos, velocity);
+
+        // Trigger arm swing animation
+        if (player.swingArm) {
+            player.swingArm();
+        }
         return true;
     }
 

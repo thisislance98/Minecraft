@@ -74,6 +74,12 @@ export class Starfighter extends Animal {
         this.laserRange = 150; // Max distance before despawn
 
         this.createBody();
+
+        // Flying vehicles don't need a blob shadow (it causes rendering issues)
+        if (this.blobShadow) {
+            this.mesh.remove(this.blobShadow);
+            this.blobShadow = null;
+        }
     }
 
     /**
@@ -216,13 +222,20 @@ export class Starfighter extends Animal {
         // Hitbox for interaction (invisible)
         const hitBoxGeo = new THREE.BoxGeometry(10, 3, 8);
         const hitBoxMat = new THREE.MeshBasicMaterial({
-            visible: false,
             transparent: true,
             opacity: 0
         });
         const hitBox = new THREE.Mesh(hitBoxGeo, hitBoxMat);
+        hitBox.visible = false; // Hide mesh, not material
         hitBox.position.set(0, 0.5, 0);
         this.mesh.add(hitBox);
+
+        // Ensure frustum culling is disabled on all parts to prevent flickering
+        this.mesh.frustumCulled = false;
+        this.bodyGroup.frustumCulled = false;
+        this.bodyGroup.traverse(child => {
+            child.frustumCulled = false;
+        });
     }
 
     updateAI(dt) {
@@ -671,6 +684,9 @@ export class Starfighter extends Animal {
         if (this.bodyGroup) {
             this.bodyGroup.quaternion.copy(this.flightQuaternion);
         }
+
+        // Force matrix update to prevent flickering from stale transforms
+        this.mesh.updateMatrixWorld(true);
 
         // Update laser projectiles
         this.updateLasers(dt);

@@ -178,10 +178,15 @@ export class InputManager {
                 }
             }
 
-            // Merlin Panel Toggle (M) - blocked when other panels open
-            if (e.code === 'KeyM' && !this.game.agent.isChatOpen && !isPanelOpen) {
+            // Merlin Panel Toggle (M) - can close even when open (if input not focused)
+            if (e.code === 'KeyM' && !this.game.agent.isChatOpen) {
                 if (this.game.uiManager && this.game.uiManager.merlinPanel) {
-                    this.game.uiManager.merlinPanel.toggle();
+                    const merlinPanel = this.game.uiManager.merlinPanel;
+                    // If panel is open, allow closing it (input focus already checked above)
+                    // If panel is closed, only open if no other panels are open
+                    if (merlinPanel.isVisible || !isPanelOpen) {
+                        merlinPanel.toggle();
+                    }
                 }
             }
 

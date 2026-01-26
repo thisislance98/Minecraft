@@ -11,6 +11,11 @@ export class RideWandItem extends Item {
         const hitAnimal = game.physicsManager.getHitAnimal();
         if (hitAnimal) {
             player.mountEntity(hitAnimal);
+
+            // Trigger arm swing animation
+            if (player.swingArm) {
+                player.swingArm();
+            }
             return true;
         }
         return false;

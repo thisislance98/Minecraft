@@ -371,6 +371,12 @@ function setupRoomEventHandlers(socket: any, roomId: string, worldId: string) {
         socket.to(roomId).emit('soccer:ball_kick', data);
     });
 
+    // Relay kick requests from non-host clients to the host
+    socket.on('soccer:kick_request', (data: { playerPos: any; kickDir: any; kickPower: number; playerId: string }) => {
+        // Broadcast to all (host will process, others will ignore)
+        socket.to(roomId).emit('soccer:kick_request', data);
+    });
+
     socket.on('soccer:goal', (data: { scoringSide: string; scores: { blue: number; orange: number } }) => {
         socket.to(roomId).emit('soccer:goal', data);
     });
@@ -1488,6 +1494,13 @@ io.on('connection', (socket) => {
         socket.on('soccer:ball_kick', (data: { playerId: string }) => {
             if (!roomId) return;
             socket.to(roomId).emit('soccer:ball_kick', data);
+        });
+
+        // Handle kick request from non-host client (relay to host)
+        socket.on('soccer:kick_request', (data: { playerPos: any; kickDir: any; kickPower: number; playerId: string }) => {
+            if (!roomId) return;
+            // Broadcast to all (host will process, others will ignore)
+            socket.to(roomId).emit('soccer:kick_request', data);
         });
 
         // Handle goal scored event (includes scores)

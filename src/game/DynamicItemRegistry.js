@@ -97,15 +97,26 @@ export function registerDynamicItem(definition) {
 
         // CRITICAL: Register the instance with ItemManager so the item can be used!
         // This is what makes onUseDown/onPrimaryDown work
+        // BUT: Do NOT overwrite existing items with the same ID (protect core items like 'wand')
         if (itemManagerRef) {
-            itemManagerRef.register(testInstance);
-            console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' with ItemManager (isTool: ${testInstance.isTool})`);
+            const existingItem = itemManagerRef.getItem(itemId);
+            if (existingItem) {
+                console.log(`[DynamicItemRegistry] ⚠️ Item id '${itemId}' already exists in ItemManager, skipping registration to prevent overwrite`);
+            } else {
+                itemManagerRef.register(testInstance);
+                console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' with ItemManager (isTool: ${testInstance.isTool})`);
+            }
         } else {
             console.warn(`[DynamicItemRegistry] ⚠️ No ItemManager reference - item '${itemId}' won't be usable until game restart`);
             // Try to get it from window.__VOXEL_GAME__ as fallback
             if (window.__VOXEL_GAME__?.itemManager) {
-                window.__VOXEL_GAME__.itemManager.register(testInstance);
-                console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' via window.__VOXEL_GAME__.itemManager`);
+                const existingItem = window.__VOXEL_GAME__.itemManager.getItem(itemId);
+                if (existingItem) {
+                    console.log(`[DynamicItemRegistry] ⚠️ Item id '${itemId}' already exists, skipping`);
+                } else {
+                    window.__VOXEL_GAME__.itemManager.register(testInstance);
+                    console.log(`[DynamicItemRegistry] ✅ Registered item instance '${itemId}' via window.__VOXEL_GAME__.itemManager`);
+                }
             }
         }
 

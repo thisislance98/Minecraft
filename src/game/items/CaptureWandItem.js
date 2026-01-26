@@ -39,7 +39,10 @@ export class CaptureWandItem extends Item {
                     game.animals.splice(index, 1);
                 }
 
-                // Visual feedback?
+                // Trigger arm swing animation
+                if (player.swingArm) {
+                    player.swingArm();
+                }
                 console.log(`Captured ${animalName}!`);
                 return true;
             } else {

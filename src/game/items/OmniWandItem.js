@@ -35,7 +35,10 @@ export class OmniWandItem extends Item {
         // Position slightly in front of player
         game.spellSystem.execute(spell, player, camDir);
 
-        // Visual feedback (swing?)
+        // Trigger arm swing animation
+        if (player.swingArm) {
+            player.swingArm();
+        }
         return true; // Handled
     }
 

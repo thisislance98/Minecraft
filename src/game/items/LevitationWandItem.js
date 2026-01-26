@@ -23,6 +23,11 @@ export class LevitationWandItem extends Item {
         // So passing direction vector is fine.
 
         game.spawnLevitationProjectile(spawnPos, camDir);
+
+        // Trigger arm swing animation
+        if (player.swingArm) {
+            player.swingArm();
+        }
         return true;
     }
 

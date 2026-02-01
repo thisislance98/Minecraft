@@ -23,10 +23,8 @@ export class Starfighter extends Animal {
         this.gravity = 0;
         this.isRideable = true;
 
-        // Camera settings
-        this.preferFarCamera = true;
-        this.cameraDistance = 15;
-        this.cameraHeightOffset = 4;
+        // Camera settings - keep first person for immersive cockpit view
+        this.preferFarCamera = false;
 
         // Flight state - using quaternion for smooth rotation
         this.flightQuaternion = new THREE.Quaternion();
@@ -680,15 +678,93 @@ export class Starfighter extends Animal {
         // The base class sets mesh.rotation.y = this.rotation, but we use bodyGroup quaternion
         this.mesh.rotation.y = 0;
 
-        // Apply the flight quaternion to the body group for visual rotation
-        if (this.bodyGroup) {
+        // Handle remote-controlled Starfighter: smoothly interpolate quaternion
+        if (this.isRemoteControlled && this.targetQuaternion && this.bodyGroup) {
+            // Smoothly interpolate quaternion toward target (faster for responsive feel)
+            this.flightQuaternion.slerp(this.targetQuaternion, 0.2);
+            this.bodyGroup.quaternion.copy(this.flightQuaternion);
+        } else if (this.bodyGroup) {
+            // Apply the flight quaternion to the body group for visual rotation
             this.bodyGroup.quaternion.copy(this.flightQuaternion);
         }
 
         // Force matrix update to prevent flickering from stale transforms
         this.mesh.updateMatrixWorld(true);
 
-        // Update laser projectiles
-        this.updateLasers(dt);
+        // Update laser projectiles (only for local control)
+        if (!this.isRemoteControlled) {
+            this.updateLasers(dt);
+        }
+
+        // More frequent sync when being ridden (for smooth multiplayer)
+        if (this.rider && this.game.socketManager?.isConnected()) {
+            this._syncTimer = (this._syncTimer || 0) + dt;
+            // Sync at ~20Hz when being ridden (every 50ms)
+            if (this._syncTimer > 0.05) {
+                this._syncTimer = 0;
+                this.game.socketManager.sendEntityUpdate(this.serialize());
+            }
+        }
+    }
+
+    /**
+     * Override serialize to include flight quaternion and rider state
+     */
+    serialize() {
+        const base = super.serialize();
+        return {
+            ...base,
+            // Include flight rotation as quaternion components
+            qx: this.flightQuaternion.x,
+            qy: this.flightQuaternion.y,
+            qz: this.flightQuaternion.z,
+            qw: this.flightQuaternion.w,
+            // Include flight angles for reconstruction
+            pitch: this.pitch,
+            yaw: this.yaw,
+            roll: this.roll,
+            // Include speed for smooth interpolation
+            currentSpeed: this.currentSpeed,
+            // Rider state - just indicate if being ridden
+            hasRider: !!this.rider
+        };
+    }
+
+    /**
+     * Override deserialize to apply flight quaternion
+     */
+    deserialize(data, isRemoteUpdate = false) {
+        super.deserialize(data, isRemoteUpdate);
+
+        // Apply quaternion if present
+        if (data.qx !== undefined && data.qy !== undefined &&
+            data.qz !== undefined && data.qw !== undefined) {
+
+            if (isRemoteUpdate) {
+                // Store target quaternion for smooth interpolation
+                if (!this.targetQuaternion) {
+                    this.targetQuaternion = new THREE.Quaternion();
+                }
+                this.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
+                this.isRemoteControlled = true;
+            } else {
+                // Direct set for initial load
+                this.flightQuaternion.set(data.qx, data.qy, data.qz, data.qw);
+                this.targetQuaternion.copy(this.flightQuaternion);
+            }
+        }
+
+        // Apply flight angles if present
+        if (data.pitch !== undefined) this.pitch = data.pitch;
+        if (data.yaw !== undefined) this.yaw = data.yaw;
+        if (data.roll !== undefined) this.roll = data.roll;
+        if (data.currentSpeed !== undefined) this.currentSpeed = data.currentSpeed;
+
+        // Update visuals immediately if bodyGroup exists
+        if (this.bodyGroup && isRemoteUpdate) {
+            // Smoothly interpolate toward target quaternion
+            this.flightQuaternion.slerp(this.targetQuaternion, 0.3);
+            this.bodyGroup.quaternion.copy(this.flightQuaternion);
+        }
     }
 }

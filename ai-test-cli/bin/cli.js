@@ -712,12 +712,249 @@ program
 // ============================================================
 
 program
-    .command('drive')
-    .description('Start the generic Game Driver (MCP-style) for multi-session automation')
-    .action(async () => {
-        const { GameDriver } = await import('../src/driver.js');
-        const driver = new GameDriver();
-        await driver.startInteractive();
+    .command('drive [script]')
+    .description('Execute JavaScript in the game with SDK access')
+    .option('-f, --file <path>', 'Script file to execute')
+    .option('--headless', 'Run browser in headless mode', false)
+    .option('-k, --keep-open <ms>', 'Keep browser open after script (default: 5000)', '5000')
+    .option('-i, --interactive', 'Start interactive REPL after script')
+    .action(async (script, options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const fsPromises = await import('fs/promises');
+
+        // Get script from argument, file, or show help
+        let code = script;
+        if (options.file) {
+            code = await fsPromises.readFile(options.file, 'utf-8');
+        }
+
+        if (!code && !options.interactive) {
+            console.log(chalk.blue('\n═══ SDK Script Runner ═══'));
+            console.log(chalk.dim('Execute JavaScript in the game with full SDK access\n'));
+            console.log('Usage:');
+            console.log(chalk.cyan('  # Inline script:'));
+            console.log(`  ai-test drive "VoxelWorld.createObject('sphere').attach('mesh',{parts:[{type:'sphere',size:[2],color:0xff0000}]}).register(); VoxelWorld.spawn('sphere');"\n`);
+            console.log(chalk.cyan('  # From file:'));
+            console.log('  ai-test drive -f test.js\n');
+            console.log(chalk.cyan('  # Interactive REPL:'));
+            console.log('  ai-test drive -i\n');
+            console.log(chalk.blue('Available in scripts:'));
+            console.log('  VoxelWorld    - SDK API (createObject, spawn, giveItem, setBlock, fill, etc.)');
+            console.log('  game          - Game instance (__VOXEL_GAME__)');
+            console.log('  player        - Local player');
+            console.log('  THREE         - Three.js library');
+            console.log('  detect()       - Raycast to see what\'s in front of player');
+            console.log('  detectAround() - Find ALL objects within radius (default 50)');
+            return;
+        }
+
+        // Launch browser
+        console.log(chalk.blue('\n🎮 Launching game...'));
+        const browser = new GameBrowser({ headless: options.headless });
+        await browser.launch();
+        await browser.waitForGameLoad();
+        console.log(chalk.green('✓ Game loaded\n'));
+
+        // Execute script if provided
+        if (code) {
+            console.log(chalk.cyan('📜 Executing script...'));
+            console.log(chalk.dim(code.length > 200 ? code.substring(0, 200) + '...' : code));
+            console.log();
+
+            try {
+                const result = await browser.evaluate((scriptCode) => {
+                    // Set up convenient globals
+                    const game = window.__VOXEL_GAME__;
+                    const player = game?.player;
+                    const VoxelWorld = window.VoxelWorld;
+                    const THREE = window.THREE;
+
+                    // Detect function - raycast in front of player
+                    const detect = (maxDist = 50) => {
+                        const raycaster = new THREE.Raycaster();
+                        const direction = new THREE.Vector3();
+                        game.camera.getWorldDirection(direction);
+                        raycaster.set(game.camera.position, direction);
+                        raycaster.far = maxDist;
+
+                        const result = { block: null, entity: null, sdkObject: null };
+
+                        // Check block
+                        if (game.physicsManager?.targetBlock) {
+                            const tb = game.physicsManager.targetBlock;
+                            result.block = { type: tb.type, position: { x: tb.x, y: tb.y, z: tb.z } };
+                        }
+
+                        // Check entities - filter out sprites
+                        if (game.animals) {
+                            const meshes = game.animals.filter(a => a.mesh && !a.mesh.isSprite).map(a => a.mesh);
+                            try {
+                                const hits = raycaster.intersectObjects(meshes, true);
+                                if (hits.length > 0) {
+                                    const animal = game.animals.find(a => a.mesh === hits[0].object || a.mesh === hits[0].object.parent);
+                                    if (animal) {
+                                        result.entity = { type: animal.constructor.name, distance: hits[0].distance.toFixed(2) };
+                                    }
+                                }
+                            } catch (e) { /* ignore raycast errors */ }
+                        }
+
+                        // Check SDK objects
+                        if (VoxelWorld?._instances?.size > 0) {
+                            const sdkMeshes = [...VoxelWorld._instances].filter(i => i.mesh && !i.mesh.isSprite).map(i => i.mesh);
+                            try {
+                                const hits = raycaster.intersectObjects(sdkMeshes, true);
+                                if (hits.length > 0) {
+                                    const inst = [...VoxelWorld._instances].find(i => i.mesh === hits[0].object || i.mesh === hits[0].object.parent);
+                                    if (inst) {
+                                        result.sdkObject = { name: inst.name, distance: hits[0].distance.toFixed(2) };
+                                    }
+                                }
+                            } catch (e) { /* ignore raycast errors */ }
+                        }
+
+                        return result;
+                    };
+
+                    // DetectAround function - find ALL objects within radius
+                    const detectAround = (radius = 50) => {
+                        const playerPos = player.position;
+                        const results = {
+                            playerPosition: { x: Math.round(playerPos.x), y: Math.round(playerPos.y), z: Math.round(playerPos.z) },
+                            radius,
+                            sdkObjects: [],
+                            animals: [],
+                            sceneMeshes: []
+                        };
+
+                        const inRange = (pos) => {
+                            if (!pos) return false;
+                            const dx = pos.x - playerPos.x;
+                            const dy = pos.y - playerPos.y;
+                            const dz = pos.z - playerPos.z;
+                            return Math.sqrt(dx * dx + dy * dy + dz * dz) <= radius;
+                        };
+
+                        // Check SDK instances
+                        if (VoxelWorld?._instances) {
+                            for (const inst of VoxelWorld._instances) {
+                                if (inst._destroyed) continue;
+                                if (inst.position && inRange(inst.position)) {
+                                    results.sdkObjects.push({
+                                        name: inst.name,
+                                        id: inst.id,
+                                        position: { x: Math.round(inst.position.x), y: Math.round(inst.position.y), z: Math.round(inst.position.z) },
+                                        hasMesh: !!inst.mesh,
+                                        meshInScene: inst.mesh?.parent?.type === 'Scene',
+                                        scripts: inst._scripts?.map(s => s.type || s.constructor?.name).filter(Boolean) || []
+                                    });
+                                }
+                            }
+                        }
+
+                        // Check animals
+                        if (game.animals) {
+                            for (const animal of game.animals) {
+                                if (animal.position && inRange(animal.position)) {
+                                    results.animals.push({
+                                        type: animal.constructor.name,
+                                        position: { x: Math.round(animal.position.x), y: Math.round(animal.position.y), z: Math.round(animal.position.z) }
+                                    });
+                                }
+                            }
+                        }
+
+                        results.summary = { sdkObjectCount: results.sdkObjects.length, animalCount: results.animals.length };
+                        return results;
+                    };
+
+                    try {
+                        // Execute the script
+                        const fn = new Function('VoxelWorld', 'game', 'player', 'THREE', 'detect', 'detectAround', scriptCode);
+                        const result = fn(VoxelWorld, game, player, THREE, detect, detectAround);
+                        return { success: true, result };
+                    } catch (e) {
+                        return { success: false, error: e.message, stack: e.stack };
+                    }
+                }, code);
+
+                if (result.success) {
+                    console.log(chalk.green('✓ Script executed'));
+                    if (result.result !== undefined) {
+                        console.log(chalk.dim('  Result:'), result.result);
+                    }
+                } else {
+                    console.log(chalk.red('✗ Script error:'), result.error);
+                    if (result.stack) console.log(chalk.dim(result.stack));
+                }
+            } catch (e) {
+                console.log(chalk.red('✗ Execution error:'), e.message);
+            }
+        }
+
+        // Interactive REPL
+        if (options.interactive) {
+            const readline = await import('readline');
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout,
+                prompt: chalk.cyan('sdk> ')
+            });
+
+            console.log(chalk.blue('\n═══ SDK REPL ═══'));
+            console.log(chalk.dim('Type JavaScript with SDK access. "exit" to quit.\n'));
+            rl.prompt();
+
+            rl.on('line', async (line) => {
+                const input = line.trim();
+                if (!input) { rl.prompt(); return; }
+                if (input === 'exit' || input === 'quit') {
+                    await browser.close();
+                    process.exit(0);
+                }
+
+                try {
+                    const result = await browser.evaluate((code) => {
+                        const game = window.__VOXEL_GAME__;
+                        const player = game?.player;
+                        const VoxelWorld = window.VoxelWorld;
+                        const THREE = window.THREE;
+                        try {
+                            const fn = new Function('VoxelWorld', 'game', 'player', 'THREE', `return (${code})`);
+                            return { success: true, result: fn(VoxelWorld, game, player, THREE) };
+                        } catch (e) {
+                            // Try as statement
+                            try {
+                                const fn = new Function('VoxelWorld', 'game', 'player', 'THREE', code);
+                                fn(VoxelWorld, game, player, THREE);
+                                return { success: true };
+                            } catch (e2) {
+                                return { success: false, error: e2.message };
+                            }
+                        }
+                    }, input);
+
+                    if (result.success) {
+                        if (result.result !== undefined) {
+                            console.log(chalk.green('→'), JSON.stringify(result.result, null, 2));
+                        }
+                    } else {
+                        console.log(chalk.red('Error:'), result.error);
+                    }
+                } catch (e) {
+                    console.log(chalk.red('Error:'), e.message);
+                }
+                rl.prompt();
+            });
+        } else {
+            // Keep open then close
+            const keepOpen = parseInt(options.keepOpen);
+            if (keepOpen > 0) {
+                console.log(chalk.yellow(`\nKeeping browser open for ${keepOpen}ms...`));
+                await new Promise(r => setTimeout(r, keepOpen));
+            }
+            await browser.close();
+        }
     });
 
 // ============================================================

@@ -202,6 +202,7 @@ export class PlayerSyncManager {
             case 'ride_wand': itemMesh = ItemFactory.createWand(0x8B4513); break;
             case 'wizard_tower_wand': itemMesh = ItemFactory.createWand(0x8A2BE2); break;
             case 'capture_wand': itemMesh = ItemFactory.createWand(0xFFA500); break;
+            case 'firework_wand': itemMesh = ItemFactory.createWand(0xFF4500); break;
             case 'apple': itemMesh = ItemFactory.createFood('apple'); break;
             case 'bread': itemMesh = ItemFactory.createFood('bread'); break;
             case 'chocolate_bar': itemMesh = ItemFactory.createFood('chocolate_bar'); break;

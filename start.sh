@@ -27,8 +27,9 @@ fi
 
 sleep 1
 
-# Explicitly set PORT for Minecraft server (don't inherit from other projects)
-export PORT=2567
+# Explicitly set MINECRAFT_PORT for Minecraft server (don't inherit generic PORT from other projects)
+export MINECRAFT_PORT=2567
+unset PORT  # Clear any inherited PORT to avoid conflicts
 
 if [ "$1" == "--no-server" ]; then
     echo "Starting in CUSTOM CLIENT-ONLY mode..."

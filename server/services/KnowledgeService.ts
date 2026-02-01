@@ -23,11 +23,13 @@ export interface KnowledgeEntry {
 const knowledgeCache = new Map<string, KnowledgeEntry>();
 
 /**
- * Initialize the knowledge service - load from Firebase
+ * Initialize the knowledge service - load from Firebase or seed data
  */
 export async function initKnowledgeService(): Promise<void> {
     if (!db) {
         console.warn('[KnowledgeService] No database available, using in-memory only');
+        // Load seed data when no database is available
+        await loadSeedData();
         return;
     }
 
@@ -38,8 +40,41 @@ export async function initKnowledgeService(): Promise<void> {
             knowledgeCache.set(doc.id, entry);
         });
         console.log(`[KnowledgeService] Loaded ${knowledgeCache.size} knowledge entries`);
+
+        // If cache is empty, seed it
+        if (knowledgeCache.size === 0) {
+            console.log('[KnowledgeService] No entries in database, loading seed data...');
+            await loadSeedData();
+        }
     } catch (e) {
         console.error('[KnowledgeService] Failed to load knowledge:', e);
+        // Fallback to seed data
+        await loadSeedData();
+    }
+}
+
+/**
+ * Load seed data from the seed files
+ */
+async function loadSeedData(): Promise<void> {
+    try {
+        // Import seed data dynamically
+        const { SEED_DATA } = await import('../knowledge/seedData');
+        console.log(`[KnowledgeService] Loading ${SEED_DATA.length} seed entries...`);
+
+        for (const entry of SEED_DATA) {
+            const fullEntry: KnowledgeEntry = {
+                ...entry,
+                id: `seed_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                createdAt: Date.now(),
+                useCount: 0
+            };
+            knowledgeCache.set(fullEntry.id!, fullEntry);
+        }
+
+        console.log(`[KnowledgeService] Loaded ${knowledgeCache.size} seed entries`);
+    } catch (e) {
+        console.error('[KnowledgeService] Failed to load seed data:', e);
     }
 }
 

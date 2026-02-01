@@ -15,10 +15,10 @@
         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         font-src 'self' https://fonts.gstatic.com;
         img-src 'self' data: blob: https:;
-        connect-src 'self' ws: wss: http://localhost:* https://generativelanguage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net https://www.google-analytics.com;
+        connect-src 'self' ws: wss: http://localhost:* https://generativelanguage.googleapis.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://*.googleapis.com https://cdn.jsdelivr.net https://www.google-analytics.com https://*.run.app;
         media-src 'self' blob:;
         worker-src 'self' blob:;
-        frame-src https://accounts.google.com;
+        frame-src https://accounts.google.com https://trackit-8b903.firebaseapp.com https://*.firebaseapp.com;
     ">
     <title>Voxel World - Minecraft Clone</title>
     <link rel="stylesheet" href="/src/styles/index.css">
@@ -95,6 +95,9 @@
     <div id="drag-icon" class="hidden"></div>
 
     <div id="fps-counter">FPS: <span id="fps">0</span></div>
+
+    <!-- Network Status Indicator -->
+    <div id="network-status" class="disconnected">⚡ Connecting...</div>
 
     <button id="auth-btn">👤 Sign In</button>
 
@@ -383,7 +386,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1300</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1373</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
         <div id="remote-players-list"></div>
@@ -427,8 +430,7 @@
             <button id="close-chat">×</button>
         </div>
         <div class="chat-tabs">
-            <button class="chat-tab active" data-mode="group"><span class="tab-icon">👥</span>Group</button>
-            <button class="chat-tab" data-mode="player"><span class="tab-icon">💬</span>Player</button>
+            <button class="chat-tab active" data-mode="player"><span class="tab-icon">💬</span>Player</button>
             <button class="chat-tab merlin-tab" onclick="window.merlinPanelUI?.toggle(); document.getElementById('chat-panel').classList.add('hidden');"><span class="tab-icon">🧙</span>Merlin (M)</button>
         </div>
         <div id="chat-messages-ai" class="chat-messages-container">
@@ -437,10 +439,7 @@
                 <div class="message-content">Press M to open Merlin's Workshop for AI assistance.</div>
             </div>
         </div>
-        <div id="chat-messages-group" class="chat-messages-container active">
-            <!-- Group Messages -->
-        </div>
-        <div id="chat-messages-player" class="chat-messages-container">
+        <div id="chat-messages-player" class="chat-messages-container active">
             <!-- Player Chat Messages -->
         </div>
         <div class="chat-input-container">

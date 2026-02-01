@@ -771,6 +771,194 @@ class FearWaveEffect {
 // - Works on all animals EXCEPT Merlin
 // - 5 second cooldown between uses`,
         tags: ['wand', 'fear', 'flee', 'scare', 'repel', 'creature', 'animal', 'spell', 'magic', 'aura', 'wave', 'effect', 'crowd', 'control', 'run', 'away', 'escape', 'duration', 'timed', 'status', 'debuff']
+    },
+
+    // MUSHROOM HOUSE BUILDING TEMPLATE
+    {
+        category: 'template',
+        title: 'Mushroom House Building Template',
+        content: `// ========================================
+// MUSHROOM HOUSE BUILDING TEMPLATE
+// ========================================
+// This template shows how to build a mushroom house structure
+// in front of the player using the set_blocks tool.
+//
+// The mushroom house has:
+// - A tall stem (using log or white_plaster blocks)
+// - A red spotted cap (using terracotta/brick for red, white_plaster for spots)
+// - A door entrance
+// - Optional windows
+// - Interior space for the player
+
+// ==========================================
+// POSITIONING: BUILD IN FRONT OF PLAYER
+// ==========================================
+// The context provides:
+// - context.position: player's current position {x, y, z}
+// - context.rotation: player's facing direction
+//
+// To build in front of the player:
+// 1. Get player position from context
+// 2. Calculate forward direction from rotation.y (yaw)
+// 3. Offset the build by ~5-8 blocks in that direction
+//
+// Example calculation:
+// const px = Math.floor(context.position.x);
+// const py = Math.floor(context.position.y);
+// const pz = Math.floor(context.position.z);
+// const yaw = context.rotation.y;
+// const forwardX = -Math.sin(yaw);
+// const forwardZ = -Math.cos(yaw);
+// const distance = 6;
+// const baseX = Math.floor(px + forwardX * distance);
+// const baseZ = Math.floor(pz + forwardZ * distance);
+// const baseY = py; // Ground level
+
+// ==========================================
+// BLOCK TYPES TO USE
+// ==========================================
+// Stem: 'log', 'birch_wood', 'white_plaster', or 'plank'
+// Cap (red): 'terracotta', 'brick', or any red-ish block
+// Spots (white): 'white_plaster', 'snow', or 'sandstone'
+// Door area: 'air' to create entrance
+// Windows: 'glass'
+// Floor: 'plank' or 'dark_planks'
+
+// ==========================================
+// MUSHROOM HOUSE STRUCTURE
+// ==========================================
+// The house is built with these parts:
+//
+// 1. STEM (hollow cylinder, 3x3 outer, walkable inside)
+//    Height: 5-6 blocks
+//    Use log or white_plaster for mushroom-like appearance
+//
+// 2. CAP (dome/sphere shape)
+//    Radius: 4-5 blocks
+//    Red blocks with white spot pattern
+//    Overhangs the stem slightly
+//
+// 3. DOOR (2 high, 1 wide opening in stem)
+//
+// 4. INTERIOR (optional floor, maybe a window)
+
+// ==========================================
+// EXAMPLE: BUILDING A MUSHROOM HOUSE
+// ==========================================
+function buildMushroomHouse(context) {
+    const blocks = [];
+
+    // Calculate position in front of player
+    const px = Math.floor(context.position.x);
+    const py = Math.floor(context.position.y);
+    const pz = Math.floor(context.position.z);
+    const yaw = context.rotation ? context.rotation.y : 0;
+    const forwardX = -Math.sin(yaw);
+    const forwardZ = -Math.cos(yaw);
+    const distance = 7;
+
+    // Base position (center of mushroom)
+    const cx = Math.floor(px + forwardX * distance);
+    const cz = Math.floor(pz + forwardZ * distance);
+    const cy = py; // Ground level
+
+    // Door direction (facing player)
+    const doorX = Math.round(forwardX);
+    const doorZ = Math.round(forwardZ);
+
+    // ========== STEM (hollow cylinder) ==========
+    const stemHeight = 5;
+    const stemRadius = 2;
+
+    for (let y = 0; y < stemHeight; y++) {
+        for (let dx = -stemRadius; dx <= stemRadius; dx++) {
+            for (let dz = -stemRadius; dz <= stemRadius; dz++) {
+                const distSq = dx*dx + dz*dz;
+                // Outer ring of stem (cylinder wall)
+                if (distSq <= stemRadius*stemRadius && distSq > (stemRadius-1)*(stemRadius-1)) {
+                    // Check if this is the door position
+                    const isDoor = (dx === doorX || dx === -doorX) &&
+                                   (dz === doorZ || dz === -doorZ) &&
+                                   y < 3 && Math.abs(dx) + Math.abs(dz) === 1;
+
+                    if (!isDoor) {
+                        blocks.push({ x: cx + dx, y: cy + y, z: cz + dz, id: 'white_plaster' });
+                    }
+                }
+            }
+        }
+    }
+
+    // ========== CAP (dome shape) ==========
+    const capRadius = 4;
+    const capBaseY = cy + stemHeight - 1; // Cap starts at top of stem
+
+    for (let dy = 0; dy <= capRadius; dy++) {
+        // Current radius at this height (hemisphere)
+        const sliceRadius = Math.sqrt(capRadius*capRadius - dy*dy);
+
+        for (let dx = -capRadius; dx <= capRadius; dx++) {
+            for (let dz = -capRadius; dz <= capRadius; dz++) {
+                const distSq = dx*dx + dz*dz;
+
+                // Inside the hemisphere slice
+                if (distSq <= sliceRadius*sliceRadius) {
+                    // Outer shell only (hollow inside)
+                    const innerRadius = sliceRadius - 1;
+                    const isShell = distSq > innerRadius*innerRadius || dy === 0 || dy >= capRadius - 1;
+
+                    if (isShell) {
+                        // Determine if this is a white spot
+                        // Spots at regular intervals
+                        const isSpot = ((dx + dz) % 3 === 0 && (dx - dz) % 3 === 0 && dy > 0);
+
+                        const blockId = isSpot ? 'white_plaster' : 'terracotta';
+                        blocks.push({ x: cx + dx, y: capBaseY + dy, z: cz + dz, id: blockId });
+                    }
+                }
+            }
+        }
+    }
+
+    // ========== FLOOR ==========
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+            blocks.push({ x: cx + dx, y: cy, z: cz + dz, id: 'dark_planks' });
+        }
+    }
+
+    // ========== WINDOW (opposite door) ==========
+    blocks.push({ x: cx - doorX, y: cy + 2, z: cz - doorZ, id: 'glass' });
+
+    return blocks;
+}
+
+// ==========================================
+// SIMPLIFIED BLOCKS ARRAY FOR set_blocks TOOL
+// ==========================================
+// When using the set_blocks tool, provide the blocks array directly:
+//
+// Use tool: set_blocks with blocks parameter containing array like:
+// [
+//   { "x": 10, "y": 64, "z": 20, "id": "white_plaster" },
+//   { "x": 11, "y": 64, "z": 20, "id": "white_plaster" },
+//   ...
+// ]
+//
+// The blocks array should be computed based on player position from context.
+
+// ==========================================
+// KEY TIPS FOR BUILDING MUSHROOM HOUSES
+// ==========================================
+// 1. Always calculate position relative to player's position and rotation
+// 2. Use context.position for player location
+// 3. Use context.rotation.y (yaw) to determine forward direction
+// 4. Leave door opening facing the player
+// 5. Make stem hollow so player can walk inside
+// 6. Cap should overhang the stem for mushroom look
+// 7. Add white spots on red cap for classic mushroom appearance
+// 8. Consider terrain - may need to check ground height`,
+        tags: ['build', 'structure', 'mushroom', 'house', 'home', 'building', 'set_blocks', 'blocks', 'construction', 'shelter', 'dome', 'cap', 'stem', 'red', 'white', 'spots', 'fairy', 'fantasy', 'cute']
     }
 ];
 

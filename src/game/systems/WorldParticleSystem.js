@@ -468,4 +468,70 @@ export class WorldParticleSystem {
         }
         this.leaves.geometry.attributes.position.needsUpdate = true;
     }
+
+    /**
+     * Create a spawn effect at the given position
+     * Shows a magical sparkle burst where creatures spawn
+     * @param {THREE.Vector3} position - Where to spawn the effect
+     * @param {object} options - Optional settings (color, particleCount, radius, etc.)
+     */
+    spawnEffect(position, options = {}) {
+        const {
+            color = 0x00ffff,       // Cyan/magical color by default
+            secondaryColor = 0xffffff, // White sparkles
+            particleCount = 30,
+            radius = 1.5,
+            life = 1.5,
+            riseSpeed = 3
+        } = options;
+
+        console.log(`[WorldParticleSystem] Spawn effect at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
+
+        // Spawn particles in a ring/burst pattern
+        for (let i = 0; i < particleCount; i++) {
+            // Angle around the spawn point
+            const angle = (i / particleCount) * Math.PI * 2;
+
+            // Random height offset for varied effect
+            const heightOffset = Math.random() * 2;
+
+            // Calculate position around spawn point
+            const spawnX = position.x + Math.cos(angle) * radius * (0.5 + Math.random() * 0.5);
+            const spawnY = position.y + heightOffset;
+            const spawnZ = position.z + Math.sin(angle) * radius * (0.5 + Math.random() * 0.5);
+
+            // Velocity - particles rise upward with slight outward drift
+            const velocityX = Math.cos(angle) * (0.5 + Math.random() * 0.5);
+            const velocityY = riseSpeed + Math.random() * 2;
+            const velocityZ = Math.sin(angle) * (0.5 + Math.random() * 0.5);
+
+            // Alternate between main color and secondary color
+            const particleColor = i % 3 === 0 ? secondaryColor : color;
+
+            this.spawn({
+                position: new THREE.Vector3(spawnX, spawnY, spawnZ),
+                velocity: new THREE.Vector3(velocityX, velocityY, velocityZ),
+                color: particleColor,
+                life: life + Math.random() * 0.5
+            });
+        }
+
+        // Also spawn some central sparkles that rise straight up
+        for (let i = 0; i < 10; i++) {
+            const spawnX = position.x + (Math.random() - 0.5) * 0.5;
+            const spawnY = position.y;
+            const spawnZ = position.z + (Math.random() - 0.5) * 0.5;
+
+            this.spawn({
+                position: new THREE.Vector3(spawnX, spawnY, spawnZ),
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.3,
+                    riseSpeed * 1.5 + Math.random() * 3,
+                    (Math.random() - 0.5) * 0.3
+                ),
+                color: 0xffff00, // Yellow central sparkles
+                life: life * 0.8
+            });
+        }
+    }
 }

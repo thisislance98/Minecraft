@@ -104,10 +104,27 @@ export class HUDManager {
     updateNetworkStatus(status, role, roomId) {
         const statusEl = document.getElementById('network-status');
         if (statusEl) {
-            if (roomId) {
-                statusEl.textContent = `${status} (${role}) - ${roomId}`;
+            // Remove all status classes
+            statusEl.classList.remove('connected', 'disconnected', 'reconnecting');
+
+            // Determine state class based on status
+            const statusLower = (status || '').toLowerCase();
+            if (statusLower.includes('disconnect')) {
+                statusEl.classList.add('disconnected');
+                statusEl.textContent = `⚠️ Disconnected`;
+            } else if (statusLower.includes('reconnect')) {
+                statusEl.classList.add('reconnecting');
+                statusEl.textContent = `🔄 Reconnecting...`;
+            } else if (statusLower.includes('connect') || statusLower.includes('in world')) {
+                statusEl.classList.add('connected');
+                if (roomId) {
+                    statusEl.textContent = `✓ ${status} (${role})`;
+                } else {
+                    statusEl.textContent = `✓ ${status}`;
+                }
             } else {
-                statusEl.textContent = status;
+                // Unknown state, show as-is
+                statusEl.textContent = status || 'Unknown';
             }
         }
     }

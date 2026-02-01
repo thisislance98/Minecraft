@@ -132,11 +132,26 @@ export class UIManager {
      */
     onWorldJoined(data) {
         const isOwner = data.permissions?.isOwner === true;
+        const isGlobalWorld = data.world?.id === 'global';
+        const isAdmin = this.isAdmin();
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+        // Show reset button if: running locally, OR owner, OR admin in global world
+        const canReset = isLocalhost || isOwner || (isGlobalWorld && isAdmin);
+
         const resetBtn = document.getElementById('reset-world-btn');
         if (resetBtn) {
-            resetBtn.style.display = isOwner ? 'block' : 'none';
+            resetBtn.style.display = canReset ? 'block' : 'none';
         }
-        console.log(`[UIManager] World joined: ${data.world?.name}, isOwner: ${isOwner}`);
+        console.log(`[UIManager] World joined: ${data.world?.name}, isOwner: ${isOwner}, isLocalhost: ${isLocalhost}, canReset: ${canReset}`);
+    }
+
+    /**
+     * Check if current user is an admin
+     */
+    isAdmin() {
+        const user = auth.currentUser;
+        return user && user.email === 'thisislance98@gmail.com';
     }
 
     /**

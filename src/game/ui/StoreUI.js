@@ -1,4 +1,4 @@
-import { auth, googleProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../../config/firebase-client.js';
+import { auth, googleProvider, signInWithRedirect, getRedirectResult, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from '../../config/firebase-client.js';
 
 export class StoreUI {
     constructor(game) {
@@ -17,6 +17,9 @@ export class StoreUI {
 
         // Setup auth modal interactions
         this.setupAuthModal();
+
+        // Handle redirect result from Google sign-in
+        this.handleRedirectResult();
 
         // Listen for auth state
         auth.onAuthStateChanged((user) => {
@@ -348,18 +351,36 @@ export class StoreUI {
     }
 
     async signInWithGoogle() {
+        console.log('[StoreUI] signInWithGoogle called');
+        console.log('[StoreUI] auth:', auth);
+        console.log('[StoreUI] googleProvider:', googleProvider);
         try {
-            const result = await signInWithPopup(auth, googleProvider);
-            console.log('User signed in with Google:', result.user);
-            this.syncWithBackend();
+            // Use redirect instead of popup to avoid COOP issues
+            console.log('[StoreUI] Calling signInWithRedirect...');
+            await signInWithRedirect(auth, googleProvider);
+            console.log('[StoreUI] signInWithRedirect returned (should not see this - page should redirect)');
         } catch (error) {
-            console.error('Google sign in failed:', error);
-            if (error.code === 'auth/popup-closed-by-user') {
-                // User closed popup, no need to show error
-                return;
-            } else if (error.code === 'auth/popup-blocked') {
-                alert('Popup was blocked. Please allow popups for this site.');
+            console.error('[StoreUI] Google sign in failed:', error);
+            alert('Google sign in failed: ' + error.message);
+        }
+    }
+
+    async handleRedirectResult() {
+        console.log('[StoreUI] Checking for redirect result...');
+        try {
+            const result = await getRedirectResult(auth);
+            console.log('[StoreUI] Redirect result:', result);
+            if (result) {
+                console.log('[StoreUI] User signed in with Google (redirect):', result.user);
+                this.syncWithBackend();
             } else {
+                console.log('[StoreUI] No redirect result (normal page load or redirect not completed)');
+            }
+        } catch (error) {
+            console.error('[StoreUI] Google redirect sign in failed:', error);
+            console.error('[StoreUI] Error code:', error.code);
+            console.error('[StoreUI] Error message:', error.message);
+            if (error.code !== 'auth/popup-closed-by-user') {
                 alert('Google sign in failed: ' + error.message);
             }
         }

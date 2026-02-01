@@ -470,6 +470,49 @@ canvas {
     color: #ff4444;
 }
 
+/* Network Status Indicator */
+#network-status {
+    position: fixed;
+    top: 100px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: 'VT323', monospace;
+    z-index: 3000;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.3s, color 0.3s, opacity 0.5s;
+}
+
+#network-status.connected {
+    background: rgba(0, 100, 0, 0.8);
+    color: #90EE90;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#network-status.disconnected {
+    background: rgba(139, 0, 0, 0.9);
+    color: #ff6b6b;
+    animation: pulse-warning 1.5s ease-in-out infinite;
+}
+
+#network-status.reconnecting {
+    background: rgba(139, 119, 0, 0.9);
+    color: #ffd93d;
+    animation: pulse-warning 1s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 /* Debug Panel */
 #debug {
     position: fixed;

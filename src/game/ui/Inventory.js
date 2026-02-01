@@ -907,6 +907,37 @@ export class Inventory {
                         <circle cx="32" cy="14" r="4" fill="#E6E6FA" filter="url(#glow-wizard-wand)"/>
                         <rect x="30" y="30" width="4" height="20" fill="#9370DB" opacity="0.5"/>
                     </svg>`,
+            tree_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-tree-wand">
+                                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#8B4513" stroke="#5C3317" stroke-width="2"/>
+                        <polygon points="32,4 20,20 24,20 18,32 44,32 38,20 42,20" fill="#228B22" filter="url(#glow-tree-wand)"/>
+                        <polygon points="32,8 24,18 28,18 22,28 42,28 36,18 40,18" fill="#32CD32" opacity="0.6"/>
+                        <rect x="30" y="28" width="4" height="8" fill="#654321"/>
+                    </svg>`,
+            firework_wand: `<svg viewBox="0 0 64 64" width="100%" height="100%">
+                        <defs>
+                             <filter id="glow-firework-wand">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
+                        <circle cx="32" cy="16" r="10" fill="#FF4500" filter="url(#glow-firework-wand)"/>
+                        <circle cx="32" cy="16" r="8" fill="#FFD700" opacity="0.8"/>
+                        <circle cx="32" cy="16" r="4" fill="#FFFFFF" opacity="0.9"/>
+                        <path d="M24 8 L26 12 M40 8 L38 12 M32 4 L32 8" stroke="#FFD700" stroke-width="2" stroke-linecap="round"/>
+                    </svg>`,
 
             // ===== NEW BUILDING BLOCK ICONS =====
             cobblestone: `<svg viewBox="0 0 64 64" width="100%" height="100%">

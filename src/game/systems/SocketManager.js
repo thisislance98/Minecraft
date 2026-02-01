@@ -65,7 +65,7 @@ export class SocketManager {
         // Soccer Ball Multiplayer State
         this.isSoccerBallHost = false;  // First player in Soccer World becomes host
         this.lastSoccerBallUpdate = 0;
-        this.soccerBallSyncRate = 50;   // ms between updates (20Hz)
+        this.soccerBallSyncRate = 33;   // ms between updates (30Hz for smoother sync)
 
         this.connect();
     }
@@ -86,15 +86,10 @@ export class SocketManager {
             this.socketId = this.socket.id;
             this.game.uiManager?.updateNetworkStatus('Connected');
 
-            // Check if URL specifies a world ID (e.g., /world/abc123)
-            const worldIdFromUrl = this.getWorldIdFromUrl();
-            if (worldIdFromUrl) {
-                console.log(`[SocketManager] Joining world from URL: ${worldIdFromUrl}`);
-                this.joinWorld(worldIdFromUrl);
-            } else {
-                // Fall back to legacy join_game for backward compatibility
-                this.joinGame();
-            }
+            // Get world ID from URL (e.g., /world/abc123) - defaults to 'global'
+            const worldId = this.getWorldIdFromUrl() || 'global';
+            console.log(`[SocketManager] Joining world: ${worldId}`);
+            this.joinWorld(worldId);
 
             // Initialize voice chat
             if (this.voiceChatManager.isEnabled()) {
@@ -104,7 +99,13 @@ export class SocketManager {
 
         // Handle world:joined event (new multi-world system)
         this.socket.on('world:joined', (data) => {
-            console.log('[SocketManager] Joined world:', data);
+            console.log('[SocketManager] world:joined event received');
+            console.log('[SocketManager] World data:', JSON.stringify({
+                roomId: data.roomId,
+                worldId: data.worldId,
+                seed: data.world?.seed,
+                isHost: data.isHost
+            }));
             this.roomId = data.roomId;
             this.worldId = data.worldId;
             this.world = data.world;
@@ -113,18 +114,29 @@ export class SocketManager {
             const role = data.isHost ? 'Host' : 'Client';
             this.game.uiManager?.updateNetworkStatus('In World', role, data.worldId);
 
-            // Apply world settings
-            if (data.world?.seed && this.game.setWorldSeed) {
-                console.log(`[SocketManager] World Seed: ${data.world.seed}`);
+            // IMPORTANT: Apply world customizations FIRST (landscape settings affect terrain generation)
+            // This must happen BEFORE setWorldSeed so terrain height calculations are correct
+            console.log('[SocketManager] Applying world customizations...');
+            this.applyWorldCustomizations(data.world);
+
+            // Apply world seed - this will regenerate terrain with the new seed
+            // and respawn the player at the correct ground level
+            if (data.world?.seed !== undefined && this.game.setWorldSeed) {
+                console.log(`[SocketManager] Applying world seed: ${data.world.seed} (game current seed: ${this.game.worldSeed})`);
+                this.game.setWorldSeed(data.world.seed);
+            } else {
+                console.warn('[SocketManager] No world seed in data or setWorldSeed not available');
+                // If no seed provided, trigger initial spawn anyway
+                if (this.game._initialSpawnPending && this.game.initialSpawnPlayer) {
+                    console.log('[SocketManager] Triggering initial spawn with default seed');
+                    this.game.initialSpawnPlayer();
+                }
             }
 
             if (data.time !== undefined && this.game.environment) {
                 this.game.environment.setTimeOfDay(data.time);
                 console.log(`[SocketManager] Initial World Time: ${data.time}`);
             }
-
-            // Apply world customizations (sky color, gravity, creature filter)
-            this.applyWorldCustomizations(data.world);
 
             // Sync existing players
             if (data.playerStates) {
@@ -140,7 +152,7 @@ export class SocketManager {
                 }
             }
 
-            // Send our initial position
+            // Send our initial position (after potential respawn from seed change)
             if (this.game.player) {
                 this.sendPosition(this.game.player.position, this.game.player.rotation.y);
                 if (this.game.inventory) {
@@ -159,12 +171,6 @@ export class SocketManager {
         this.socket.on('world:error', (error) => {
             console.error('[SocketManager] World error:', error);
             this.game.uiManager?.showNotification(`Failed to join world: ${error.message}`, 'error');
-
-            // Fall back to global world on error
-            if (error.code === 'WORLD_NOT_FOUND' || error.code === 'ACCESS_DENIED') {
-                console.log('[SocketManager] Falling back to global world');
-                this.joinGame();
-            }
         });
 
         // Handle world settings changed by owner
@@ -208,59 +214,6 @@ export class SocketManager {
 
         this.socket.on('reconnect', () => {
             this._hasLoggedConnectError = false; // Reset for next disconnect
-        });
-
-        this.socket.on('room:joined', (data) => {
-            console.log('[SocketManager] Joined room:', data.roomId, 'socketId:', this.socketId);
-            console.log('[SocketManager] playerStates received:', data.playerStates ? Object.keys(data.playerStates) : 'none');
-            this.roomId = data.roomId;
-
-            const role = data.isHost ? 'Host' : 'Client';
-            this.game.uiManager?.updateNetworkStatus('In Room', role, data.roomId);
-
-            // Notify game of initial state if needed
-            if (data.worldSeed && this.game.setWorldSeed) {
-                // Potentially re-seed world here if game implementation supports it
-                console.log(`[SocketManager] Room World Seed: ${data.worldSeed}`);
-            }
-
-            if (data.time !== undefined && this.game.environment) {
-                this.game.environment.setTimeOfDay(data.time);
-                console.log(`[SocketManager] Initial Room Time: ${data.time}`);
-            }
-
-            // Sync existing players
-            if (data.playerStates) {
-                console.log('[SocketManager] Syncing existing players:', Object.keys(data.playerStates).length);
-                for (const [pid, state] of Object.entries(data.playerStates)) {
-                    if (pid === this.socketId) continue; // Skip self
-
-                    if (state.pos) {
-                        console.log(`[SocketManager] Creating mesh for existing player ${pid} at`, state.pos);
-                        this.updatePlayerMesh(pid, state.pos, state.rotY);
-                        // Update HUD with existing player info
-                        this.game.uiManager?.updateRemotePlayerStatus(pid, state.pos, state.rotY, state.name);
-                        if (state.heldItem) {
-                            console.log(`[SocketManager] Syncing held item for ${pid}: ${state.heldItem}`);
-                            this.updateRemoteHeldItem(pid, state.heldItem);
-                        }
-                    }
-                }
-            }
-
-            // Send our initial position immediately so server has it for others
-            if (this.game.player) {
-                this.sendPosition(this.game.player.position, this.game.player.rotation.y);
-
-                // Force sync held item to populate server state immediately
-                if (this.game.inventory) {
-                    const item = this.game.inventory.getSelectedItem();
-                    if (item && item.item) {
-                        console.log(`[SocketManager] Force syncing initial held item: ${item.item}`);
-                        this.sendHeldItem(item.item);
-                    }
-                }
-            }
         });
 
         this.socket.on('player:joined', (data) => {
@@ -444,7 +397,17 @@ export class SocketManager {
                 // instead of snapping directly (which causes jitter)
                 ball.targetPosition = ball.targetPosition || new THREE.Vector3();
                 ball.targetPosition.set(data.pos.x, data.pos.y, data.pos.z);
-                ball.velocity.set(data.vel.x, data.vel.y, data.vel.z);
+
+                // Store target velocity for prediction sync
+                ball.targetVelocity = ball.targetVelocity || new THREE.Vector3();
+                ball.targetVelocity.set(data.vel.x, data.vel.y, data.vel.z);
+
+                // Immediately sync velocity if significantly different (e.g., after a kick)
+                const velDiff = ball.velocity.distanceTo(ball.targetVelocity);
+                if (velDiff > 5) {
+                    ball.velocity.copy(ball.targetVelocity);
+                }
+
                 ball.hasNetworkTarget = true;
             }
         });
@@ -547,6 +510,46 @@ export class SocketManager {
         this.socket.on('soccer:request_host_response', (data) => {
             this.isSoccerBallHost = data.isHost;
             console.log(`[SocketManager] Soccer host request response: ${data.isHost}`);
+        });
+
+        // Host receives request for ball state from new player
+        this.socket.on('soccer:request_ball_state', (data) => {
+            if (!this.isSoccerBallHost) return;
+
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball && !ball.isDead) {
+                console.log(`[SocketManager] Sending ball state to new player: ${data.requesterId}`);
+                this.socket.emit('soccer:ball_state_response', {
+                    requesterId: data.requesterId,
+                    pos: { x: ball.position.x, y: ball.position.y, z: ball.position.z },
+                    vel: { x: ball.velocity.x, y: ball.velocity.y, z: ball.velocity.z },
+                    scores: ball.scores
+                });
+            }
+        });
+
+        // Non-host receives initial ball state when joining
+        this.socket.on('soccer:initial_state', (data) => {
+            if (this.isSoccerBallHost) return;
+
+            const ball = this.game.spaceShipManager?.soccerBall;
+            if (ball && !ball.isDead) {
+                console.log(`[SocketManager] Received initial ball state:`, data.pos);
+                // Set position and velocity directly for initial sync
+                ball.position.set(data.pos.x, data.pos.y, data.pos.z);
+                ball.velocity.set(data.vel.x, data.vel.y, data.vel.z);
+                ball.targetPosition = ball.targetPosition || new THREE.Vector3();
+                ball.targetPosition.copy(ball.position);
+                ball.hasNetworkTarget = true;
+
+                // Sync scores
+                if (data.scores) {
+                    ball.scores = { ...data.scores };
+                    if (this.game.uiManager) {
+                        this.game.uiManager.updateSoccerScoreboard(ball.scores.blue, ball.scores.orange);
+                    }
+                }
+            }
         });
 
         // Handle world reset (triggered by settings menu)
@@ -1025,40 +1028,38 @@ export class SocketManager {
         }
 
         // Apply landscape settings (rivers, oceans, sea level, etc.)
-        // These affect terrain generation
+        // These affect terrain generation - must be applied BEFORE terrain is regenerated
         if (customizations?.landscapeSettings && this.game.worldGen) {
             const landscape = customizations.landscapeSettings;
+            let landscapeChanged = false;
 
             // Apply rivers setting
             if (landscape.enableRivers !== undefined) {
                 this.game.worldGen.setRiversEnabled(landscape.enableRivers);
                 console.log(`[SocketManager] Applied rivers enabled: ${landscape.enableRivers}`);
+                landscapeChanged = true;
             }
 
             // Apply oceans setting
             if (landscape.enableOceans !== undefined) {
                 this.game.worldGen.setOceansEnabled(landscape.enableOceans);
                 console.log(`[SocketManager] Applied oceans enabled: ${landscape.enableOceans}`);
+                landscapeChanged = true;
             }
 
             // Apply sea level setting
             if (landscape.seaLevel !== undefined) {
                 this.game.worldGen.setSeaLevel(landscape.seaLevel);
                 console.log(`[SocketManager] Applied sea level: ${landscape.seaLevel}`);
+                landscapeChanged = true;
             }
-        }
-    }
 
-    joinGame() {
-        if (this.socket && this.socket.connected) {
-            const playerName = localStorage.getItem('communityUsername') || `Player_${Date.now().toString(36).slice(-4)}`;
-            const shirtColor = localStorage.getItem('settings_shirt_color');
-
-            console.log('[SocketManager] Requesting to join game as:', playerName, 'with color:', shirtColor);
-            this.socket.emit('join_game', {
-                name: playerName,
-                shirtColor: shirtColor ? parseInt(shirtColor) : null
-            });
+            // Clear terrain cache if landscape settings changed
+            // This ensures terrain height calculations use the new settings
+            if (landscapeChanged && this.game.worldGen.clearTerrainCache) {
+                this.game.worldGen.clearTerrainCache();
+                console.log(`[SocketManager] Cleared terrain cache after landscape settings change`);
+            }
         }
     }
 
@@ -1429,11 +1430,17 @@ export class SocketManager {
             case 'levitation':
                 this.game.spawnLevitationProjectile(position, velocity, true);
                 break;
+            case 'spin':
+                this.game.spawnSpinProjectile(position, velocity, true);
+                break;
             case 'giant':
                 this.game.spawnGiantProjectile(position, velocity, true);
                 break;
             case 'growth':
                 this.game.spawnGrowthProjectile(position, velocity, true);
+                break;
+            case 'firework':
+                this.game.spawnFireworkProjectile(position, velocity, true);
                 break;
             default:
                 console.warn(`[SocketManager] Unknown remote projectile type: ${type}`);
@@ -1511,12 +1518,14 @@ export class SocketManager {
             case 'bow': itemMesh = ItemFactory.createBow(); break;
             case 'wand': itemMesh = ItemFactory.createWand(0xFF00FF); break;
             case 'levitation_wand': itemMesh = ItemFactory.createWand(0xFFFF00); break;
+            case 'spin_wand': itemMesh = ItemFactory.createWand(0x00FFFF); break;
             case 'shrink_wand': itemMesh = ItemFactory.createWand(0x00FFFF); break;
             case 'growth_wand': itemMesh = ItemFactory.createWand(0x00FF00); break;
             case 'ride_wand': itemMesh = ItemFactory.createWand(0x8B4513); break;
             case 'wizard_tower_wand': itemMesh = ItemFactory.createWand(0x8A2BE2); break;
             // Add capture_wand?
             case 'capture_wand': itemMesh = ItemFactory.createWand(0xFFA500); break; // Orange
+            case 'firework_wand': itemMesh = ItemFactory.createWand(0xFF4500); break; // OrangeRed
 
             case 'apple': itemMesh = ItemFactory.createFood('apple'); break;
             case 'bread': itemMesh = ItemFactory.createFood('bread'); break;

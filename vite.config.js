@@ -18,6 +18,11 @@ export default defineConfig({
     open: false,
     hmr: false,
     allowedHosts: true,
+    headers: {
+      // Allow Firebase Auth popup to work properly
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'Cross-Origin-Embedder-Policy': 'credentialless'
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:2567',

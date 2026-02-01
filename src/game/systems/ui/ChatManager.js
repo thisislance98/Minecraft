@@ -1,5 +1,5 @@
 /**
- * ChatManager - Handles chat panel, messages, modes (AI, Group, Player)
+ * ChatManager - Handles chat panel, messages, modes (AI, Player)
  */
 export class ChatManager {
     constructor(game, uiManager) {
@@ -9,17 +9,16 @@ export class ChatManager {
         // Chat Panel elements
         this.chatPanel = document.getElementById('chat-panel');
         this.chatMessagesAI = document.getElementById('chat-messages-ai');
-        this.chatMessagesGroup = document.getElementById('chat-messages-group');
         this.chatMessagesPlayer = document.getElementById('chat-messages-player');
-        this.chatMessages = this.chatMessagesGroup; // Default to Group
+        this.chatMessages = this.chatMessagesPlayer; // Default to Player
         this.chatInput = document.getElementById('chat-input');
         this.sendBtn = document.getElementById('send-chat');
         this.closeBtn = document.getElementById('close-chat');
         this.copyChatBtn = document.getElementById('copy-chat');
         this.clearChatBtn = document.getElementById('clear-chat');
 
-        // Chat mode state: 'ai', 'group', 'player'
-        this.chatMode = 'group';
+        // Chat mode state: 'ai', 'player'
+        this.chatMode = 'player';
 
         // Chat scroll state
         this.userHasScrolledUp = false;
@@ -83,7 +82,7 @@ export class ChatManager {
 
     /**
      * Switch between chat modes
-     * @param {'ai' | 'group' | 'player'} mode - The chat mode to switch to
+     * @param {'ai' | 'player'} mode - The chat mode to switch to
      */
     setChatMode(mode) {
         this.chatMode = mode;
@@ -102,9 +101,6 @@ export class ChatManager {
         if (this.chatMessagesAI) {
             this.chatMessagesAI.classList.toggle('active', mode === 'ai');
         }
-        if (this.chatMessagesGroup) {
-            this.chatMessagesGroup.classList.toggle('active', mode === 'group');
-        }
         if (this.chatMessagesPlayer) {
             this.chatMessagesPlayer.classList.toggle('active', mode === 'player');
         }
@@ -112,8 +108,6 @@ export class ChatManager {
         // Update chatMessages reference for current mode
         if (mode === 'ai') {
             this.chatMessages = this.chatMessagesAI;
-        } else if (mode === 'group') {
-            this.chatMessages = this.chatMessagesGroup;
         } else if (mode === 'player') {
             this.chatMessages = this.chatMessagesPlayer;
         }
@@ -122,7 +116,6 @@ export class ChatManager {
         if (this.chatInput) {
             const placeholders = {
                 'ai': 'Ask the AI wizard...',
-                'group': 'Message everyone...',
                 'player': 'Say something (speech bubble)...'
             };
             this.chatInput.placeholder = placeholders[mode] || 'Type a message...';
@@ -189,12 +182,6 @@ export class ChatManager {
                 this.addChatMessage('user', message);
                 this.chatInput.value = '';
                 this.game.agent.sendTextMessage(message);
-            }
-        } else if (this.chatMode === 'group') {
-            // Send group chat via SocketManager
-            if (this.game.socketManager) {
-                this.game.socketManager.sendChatMessage(message);
-                this.chatInput.value = '';
             }
         } else if (this.chatMode === 'player') {
             // Show as speech bubble

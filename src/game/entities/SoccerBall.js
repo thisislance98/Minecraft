@@ -147,18 +147,32 @@ export class SoccerBall {
         if (this.isNetworked && !isHost) {
             this.checkLocalPlayerCollisionAndRequestKick(dt);
 
-            // Non-host: smoothly interpolate towards network target position
-            // This prevents jitter from discrete network updates
+            // Non-host: use server-authoritative position with local physics prediction
             if (this.hasNetworkTarget && this.targetPosition) {
-                // Use velocity-based prediction combined with lerp to target
-                // Apply velocity for local prediction
+                // Apply local physics simulation (gravity, drag) for smoother visuals
+                this.velocity.y += this.gravity * dt;
+                this.velocity.multiplyScalar(this.drag);
+
+                // Update local predicted position
                 this.position.add(this.velocity.clone().multiplyScalar(dt));
 
-                // Smoothly correct towards authoritative position
-                // Higher lerp = more responsive but potentially more jittery
-                // Lower lerp = smoother but may lag behind
-                const lerpFactor = Math.min(1, dt * 10); // ~10 corrections per second
-                this.position.lerp(this.targetPosition, lerpFactor);
+                // Calculate distance to authoritative target
+                const distToTarget = this.position.distanceTo(this.targetPosition);
+
+                // If very far off (>3 units), snap immediately to prevent large divergence
+                // This handles kicks and sudden velocity changes
+                if (distToTarget > 3) {
+                    this.position.copy(this.targetPosition);
+                    // Also sync velocity from target if available
+                    if (this.targetVelocity) {
+                        this.velocity.copy(this.targetVelocity);
+                    }
+                } else {
+                    // Aggressive lerp to stay close to authoritative state
+                    // Use higher rate to quickly converge after kicks
+                    const lerpFactor = Math.min(1, dt * 25);
+                    this.position.lerp(this.targetPosition, lerpFactor);
+                }
             }
         }
 
@@ -315,6 +329,25 @@ export class SoccerBall {
                 kickDir.y = Math.max(kickDir.y, 0.2);
                 kickDir.normalize();
 
+                // Apply immediate local prediction so the kick feels responsive
+                // The host will send authoritative state, but this reduces perceived latency
+                const localKickDir = kickDir.clone();
+                this.velocity.add(localKickDir.multiplyScalar(kickPower));
+
+                // Push ball out of player locally
+                const collisionDist = this.radius + Config.PLAYER.WIDTH / 2;
+                const overlap = collisionDist - distance;
+                this.position.add(kickDir.clone().normalize().multiplyScalar(overlap + 0.1));
+
+                // Update target position to match our local prediction
+                // This prevents lerping back to the old position while waiting for server
+                if (this.targetPosition) {
+                    this.targetPosition.copy(this.position);
+                }
+                if (this.targetVelocity) {
+                    this.targetVelocity.copy(this.velocity);
+                }
+
                 // Send kick request to host via server
                 if (this.game.socketManager) {
                     this.game.socketManager.sendSoccerKickRequest({
@@ -329,7 +362,7 @@ export class SoccerBall {
                     this.game.soundManager.playSound('hit');
                 }
 
-                console.log(`[SoccerBall] Local player kick request sent, power: ${kickPower.toFixed(1)}`);
+                console.log(`[SoccerBall] Local player kick applied + request sent, power: ${kickPower.toFixed(1)}`);
             }
         }
     }

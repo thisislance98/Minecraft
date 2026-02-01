@@ -88,12 +88,6 @@ export class DebugPanel {
                     <label><input type="checkbox" id="dbg-fps"> Show FPS</label>
                     <p>Entities: <span id="dbg-entity-count">0</span></p>
                     <p>Chunks: <span id="dbg-chunk-count">0</span></p>
-                    <button id="dbg-profiler-test" class="spawn-btn full-width" style="margin-top: 12px;">
-                        🔬 Start Profiler Test Scene
-                    </button>
-                    <p id="dbg-profiler-hint" style="display: none; font-size: 0.85em; color: #0f0; margin-top: 8px;">
-                        Use ← → arrow keys to change stages
-                    </p>
                 </div>
             </div>
 
@@ -343,18 +337,6 @@ export class DebugPanel {
             });
         });
 
-        // Profiler Test Scene Button
-        const profilerTestBtn = document.getElementById('dbg-profiler-test');
-        if (profilerTestBtn) {
-            profilerTestBtn.addEventListener('click', () => {
-                if (this.game.profilerTestScene) {
-                    this.game.profilerTestScene.toggle();
-                    const isActive = this.game.profilerTestScene.isActive;
-                    profilerTestBtn.textContent = isActive ? '⏹ Stop Profiler Test' : '🔬 Start Profiler Test Scene';
-                    document.getElementById('dbg-profiler-hint').style.display = isActive ? 'block' : 'none';
-                }
-            });
-        }
     }
 
     bindCheckbox(id, callback) {
@@ -394,6 +376,11 @@ export class DebugPanel {
             this.container.classList.add('hidden');
             this.stopPerfMonitor();
             this.stopStatsMonitor(); // Stop stats polling
+
+            // Return focus to game container so hotkeys work
+            if (this.game.container) {
+                this.game.container.focus();
+            }
         }
     }
 

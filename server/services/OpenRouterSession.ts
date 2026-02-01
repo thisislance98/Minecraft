@@ -61,7 +61,10 @@ export class OpenRouterSession {
     private lastRAGResult: RAGResult | null = null;
 
     // Settings for RAG
-    private ragEnabled: boolean = true;
+    private ragEnabled: boolean = false;
+
+    // Message history limit (to control token usage)
+    private readonly MAX_HISTORY_TURNS = 3; // Keep last N user/assistant exchanges
 
     constructor(ws: WebSocket, req: IncomingMessage) {
         this.ws = ws;
@@ -247,6 +250,9 @@ export class OpenRouterSession {
 
         this.messages.push({ role: 'user', content: fullMessage });
 
+        // OPTIMIZATION: Trim message history to control token usage
+        this.trimMessageHistory();
+
         try {
             await this.generateAndProcess();
         } catch (e: any) {
@@ -254,6 +260,34 @@ export class OpenRouterSession {
                 console.error('[OpenRouter] Error:', e);
                 this.sendError('AI Error: ' + e.message);
             }
+        }
+    }
+
+    /**
+     * Trim message history to prevent token bloat
+     * Keeps system message + last N turns of conversation
+     */
+    private trimMessageHistory() {
+        if (this.messages.length <= 1) return; // Just system message
+
+        const systemMessage = this.messages[0]; // Always keep system prompt
+        const conversationMessages = this.messages.slice(1);
+
+        // Count turns (a turn = user message + assistant response + any tool messages)
+        // We'll keep the last MAX_HISTORY_TURNS worth of user messages and their responses
+        const userMessageIndices: number[] = [];
+        conversationMessages.forEach((msg, idx) => {
+            if (msg.role === 'user') userMessageIndices.push(idx);
+        });
+
+        // If we have more than MAX_HISTORY_TURNS user messages, trim
+        if (userMessageIndices.length > this.MAX_HISTORY_TURNS) {
+            const keepFromIndex = userMessageIndices[userMessageIndices.length - this.MAX_HISTORY_TURNS];
+            const trimmedConversation = conversationMessages.slice(keepFromIndex);
+
+            const oldLength = this.messages.length;
+            this.messages = [systemMessage, ...trimmedConversation];
+            console.log(`[OpenRouter] Trimmed message history: ${oldLength} -> ${this.messages.length} messages`);
         }
     }
 
@@ -278,7 +312,10 @@ export class OpenRouterSession {
             };
         }
 
-        console.log(`[OpenRouter] Sending request to ${this.model}...`);
+        console.log(`[OpenRouter] Sending request to ${this.model} with ${tools.length} tools`);
+        console.log(`[OpenRouter] Tools: ${tools.map((t: any) => t.function.name).join(', ')}`);
+        console.log(`[OpenRouter] User message: "${this.messages[this.messages.length - 1]?.content?.substring(0, 100)}..."`);
+
 
         const response = await fetch(OPENROUTER_API_URL, {
             method: 'POST',
@@ -377,6 +414,10 @@ export class OpenRouterSession {
         }
         this.messages.push(assistantMessage);
 
+        // Debug: log what the AI returned
+        console.log(`[OpenRouter] AI Response: "${accumulatedContent.substring(0, 200)}..." (${accumulatedContent.length} chars)`);
+        console.log(`[OpenRouter] Tool calls: ${accumulatedToolCalls.length > 0 ? JSON.stringify(accumulatedToolCalls.map(t => t.function.name)) : 'none'}`);
+
         // Handle tool calls
         if (accumulatedToolCalls.length > 0) {
             await this.executeTools(accumulatedToolCalls);
@@ -449,8 +490,12 @@ export class OpenRouterSession {
     }
 
     private isClientTool(name: string): boolean {
-        return ['spawn_creature', 'teleport_player', 'get_scene_info', 'update_entity',
-                'patch_entity', 'set_blocks', 'run_verification', 'capture_screenshot', 'give_item'].includes(name);
+        return ['spawn_creature', 'spawn', 'teleport_player', 'get_scene_info', 'update_entity',
+                'patch_entity', 'set_blocks', 'run_verification', 'capture_screenshot', 'give_item',
+                // SDK Tools (execute on client via VoxelWorld SDK)
+                'sdk_create', 'sdk_create_item', 'sdk_create_entity', 'sdk_create_projectile',
+                // World/structure tools
+                'spawn_tree', 'fill_blocks', 'remove_block'].includes(name);
     }
 
     private async executeServerTool(name: string, args: any): Promise<any> {

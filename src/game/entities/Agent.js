@@ -360,9 +360,21 @@ Max 25 words total.
         try {
             console.log(`[Agent] Executing Client Tool: ${name}`, args);
 
-            // Force refresh 1
-            if (name === 'spawn_creature') {
-                result = await this.spawnCreature(args.creature, args.count);
+            // SDK Tool (unified)
+            if (name === 'sdk_create') {
+                result = await this.sdkCreate(args);
+            }
+            // Legacy SDK tools (for backwards compatibility)
+            else if (name === 'sdk_create_item') {
+                result = await this.sdkCreateItem(args);
+            } else if (name === 'sdk_create_entity') {
+                result = await this.sdkCreateEntity(args);
+            } else if (name === 'sdk_create_projectile') {
+                result = await this.sdkCreateProjectile(args);
+            }
+            // Game tools
+            else if (name === 'spawn' || name === 'spawn_creature') {
+                result = await this.spawnCreature(args.name || args.creature, args.count);
             } else if (name === 'teleport_player') {
                 result = this.teleportPlayer(args.location);
             } else if (name === 'get_scene_info') {
@@ -373,6 +385,10 @@ Max 25 words total.
                 result = this.patchEntity(args);
             } else if (name === 'set_blocks') {
                 result = await this.setBlocks(args.blocks);
+            } else if (name === 'spawn_tree') {
+                result = await this.spawnTree(args);
+            } else if (name === 'fill_blocks') {
+                result = await this.fillBlocks(args);
             } else if (name === 'run_verification') {
                 result = this.runVerification(args);
             } else if (name === 'capture_screenshot') {
@@ -425,6 +441,180 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
     }
 
     // =========================================================================
+    // SDK TOOL HANDLERS - VoxelWorld SDK Integration
+    // =========================================================================
+
+    /**
+     * Create a game object using the unified SDK
+     * @param {Object} config - { name, scripts: [{ type, ...props }] }
+     */
+    async sdkCreate(config) {
+        console.log('[Agent] SDK Create:', config);
+
+        try {
+            if (!config.name) {
+                return { error: 'Missing required field: name' };
+            }
+
+            if (!window.VoxelWorld) {
+                return { error: 'VoxelWorld SDK not initialized' };
+            }
+
+            // Use the unified create method
+            const obj = window.VoxelWorld.create(config);
+
+            // Determine what was created based on scripts
+            const hasItem = config.scripts?.some(s => s.type === 'item');
+            const hasEntity = config.scripts?.some(s => s.type === 'entity');
+            const hasProjectile = config.scripts?.some(s => s.type === 'projectile');
+
+            const id = config.name.toLowerCase().replace(/\s+/g, '_');
+
+            let hint = '';
+            if (hasItem) {
+                hint = `Use give_item with item="${id}" to add to inventory`;
+            } else if (hasEntity) {
+                hint = `Use spawn with name="${config.name}" to spawn`;
+            } else if (hasProjectile) {
+                hint = `Projectile "${id}" is ready for use`;
+            }
+
+            console.log(`[Agent] SDK Created: ${config.name}`);
+            return {
+                success: true,
+                message: `Created: ${config.name}`,
+                id: id,
+                hint: hint
+            };
+        } catch (e) {
+            console.error('[Agent] SDK Create failed:', e);
+            return { error: `Creation failed: ${e.message}` };
+        }
+    }
+
+    /**
+     * Create an item using the VoxelWorld SDK (legacy)
+     * @param {Object} config - Item configuration (id, name, icon, etc.)
+     */
+    async sdkCreateItem(config) {
+        console.log('[Agent] SDK Creating Item:', config);
+
+        try {
+            // Validate required fields
+            if (!config.id || !config.name || !config.icon) {
+                return { error: 'Missing required fields: id, name, and icon are required' };
+            }
+
+            // Check if VoxelWorld SDK is available
+            if (!window.VoxelWorld) {
+                return { error: 'VoxelWorld SDK not initialized' };
+            }
+
+            // Create the item using SDK
+            const ItemClass = window.VoxelWorld.createItem(config);
+
+            // Register with ItemManager if available
+            if (this.game.itemManager) {
+                const instance = new ItemClass();
+                this.game.itemManager.register(instance);
+                console.log(`[Agent] SDK Item registered with ItemManager: ${config.id}`);
+            }
+
+            // Broadcast to other players via socket (for multiplayer sync)
+            if (this.game.socketManager?.isConnected() && this.game.socketManager.socket) {
+                this.game.socketManager.socket.emit('dynamic_item_created', {
+                    id: config.id,
+                    name: config.name,
+                    icon: config.icon,
+                    config: config
+                });
+            }
+
+            console.log(`[Agent] SDK Item created: ${config.id} (${config.name})`);
+            return {
+                success: true,
+                message: `Created item: ${config.name}`,
+                id: config.id,
+                hint: `Use give_item with id="${config.id}" to add to inventory`
+            };
+        } catch (e) {
+            console.error('[Agent] SDK Item creation failed:', e);
+            return { error: `Item creation failed: ${e.message}` };
+        }
+    }
+
+    /**
+     * Create an entity/creature using the VoxelWorld SDK
+     * @param {Object} config - Entity configuration
+     */
+    async sdkCreateEntity(config) {
+        console.log('[Agent] SDK Creating Entity:', config);
+
+        try {
+            // Validate required fields
+            if (!config.name) {
+                return { error: 'Missing required field: name' };
+            }
+
+            // Check if VoxelWorld SDK is available
+            if (!window.VoxelWorld) {
+                return { error: 'VoxelWorld SDK not initialized' };
+            }
+
+            // Create the entity using SDK
+            const EntityClass = window.VoxelWorld.createEntity(config);
+
+            // Register with AnimalRegistry for spawn_creature compatibility
+            const AnimalModule = await import('../AnimalRegistry.js');
+            AnimalModule.AnimalClasses[config.name] = EntityClass;
+            console.log(`[Agent] SDK Entity registered with AnimalRegistry: ${config.name}`);
+
+            return {
+                success: true,
+                message: `Created entity class: ${config.name}`,
+                name: config.name,
+                hint: `Use spawn_creature with creature="${config.name}" to spawn`
+            };
+        } catch (e) {
+            console.error('[Agent] SDK Entity creation failed:', e);
+            return { error: `Entity creation failed: ${e.message}` };
+        }
+    }
+
+    /**
+     * Create a projectile using the VoxelWorld SDK
+     * @param {Object} config - Projectile configuration
+     */
+    async sdkCreateProjectile(config) {
+        console.log('[Agent] SDK Creating Projectile:', config);
+
+        try {
+            // Validate required fields
+            if (!config.id) {
+                return { error: 'Missing required field: id' };
+            }
+
+            // Check if VoxelWorld SDK is available
+            if (!window.VoxelWorld) {
+                return { error: 'VoxelWorld SDK not initialized' };
+            }
+
+            // Create the projectile using SDK
+            const ProjectileClass = window.VoxelWorld.createProjectile(config);
+
+            return {
+                success: true,
+                message: `Created projectile: ${config.id}`,
+                id: config.id,
+                hint: `Reference this projectile in item's projectile.prefab: "${config.id}"`
+            };
+        } catch (e) {
+            console.error('[Agent] SDK Projectile creation failed:', e);
+            return { error: `Projectile creation failed: ${e.message}` };
+        }
+    }
+
+    // =========================================================================
     // GAME ACTIONS (Ported from original Agent.js)
     // =========================================================================
 
@@ -451,6 +641,111 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
 
         console.log(`[Agent] Finished placing ${count} blocks.`);
         return { success: true, message: `Placed ${count} blocks.` };
+    }
+
+    /**
+     * Spawn a tree at position
+     */
+    async spawnTree(args) {
+        const { type = 'oak', x, y, z, relative = true } = args;
+
+        // Calculate position
+        let treeX, treeY, treeZ;
+
+        if (relative || (x === undefined && z === undefined)) {
+            // Position relative to player
+            const player = this.game.player;
+            const offsetX = x || (Math.random() * 10 - 5);
+            const offsetZ = z || (Math.random() * 10 - 5);
+            treeX = Math.floor(player.position.x + offsetX);
+            treeZ = Math.floor(player.position.z + offsetZ);
+            // Get terrain height at that position
+            treeY = y || this.game.worldGenerator?.getTerrainHeight(treeX, treeZ) || Math.floor(player.position.y);
+        } else {
+            treeX = x;
+            treeZ = z;
+            treeY = y || this.game.worldGenerator?.getTerrainHeight(treeX, treeZ) || 64;
+        }
+
+        // Use VoxelWorld SDK if available
+        if (window.VoxelWorld?.spawnTree) {
+            const result = window.VoxelWorld.spawnTree(type, treeX, treeY, treeZ);
+            if (result.success) {
+                console.log(`[Agent] Spawned ${type} tree at ${treeX}, ${treeY}, ${treeZ}`);
+                return { success: true, message: `Spawned ${type} tree at ${treeX}, ${treeY}, ${treeZ}` };
+            }
+            return result;
+        }
+
+        // Fallback to direct structure generator
+        const gen = this.game.worldGenerator?.structureGenerator;
+        if (!gen) {
+            return { error: 'Structure generator not available' };
+        }
+
+        try {
+            const treeType = type.toLowerCase();
+            switch (treeType) {
+                case 'oak': gen.generateOakTree(treeX, treeY, treeZ); break;
+                case 'birch': gen.generateBirchTree(treeX, treeY, treeZ); break;
+                case 'pine':
+                case 'spruce': gen.generatePineTree(treeX, treeY, treeZ); break;
+                case 'acacia': gen.generateAcaciaTree(treeX, treeY, treeZ); break;
+                case 'palm': gen.generatePalmTree(treeX, treeY, treeZ); break;
+                case 'willow': gen.generateWillowTree(treeX, treeY, treeZ); break;
+                case 'dark_oak':
+                case 'darkoak': gen.generateDarkOakTree(treeX, treeY, treeZ); break;
+                case 'giant': gen.generateGiantTree(treeX, treeY, treeZ); break;
+                case 'cactus': gen.generateCactus(treeX, treeY, treeZ); break;
+                default: gen.generateOakTree(treeX, treeY, treeZ);
+            }
+            console.log(`[Agent] Spawned ${treeType} tree at ${treeX}, ${treeY}, ${treeZ}`);
+            return { success: true, message: `Spawned ${treeType} tree at ${treeX}, ${treeY}, ${treeZ}` };
+        } catch (e) {
+            console.error('[Agent] Failed to spawn tree:', e);
+            return { error: e.message };
+        }
+    }
+
+    /**
+     * Fill a region with blocks
+     */
+    async fillBlocks(args) {
+        const { x1, y1, z1, x2, y2, z2, block } = args;
+
+        if (x1 === undefined || y1 === undefined || z1 === undefined ||
+            x2 === undefined || y2 === undefined || z2 === undefined || !block) {
+            return { error: 'Missing required parameters: x1, y1, z1, x2, y2, z2, block' };
+        }
+
+        // Use VoxelWorld SDK if available
+        if (window.VoxelWorld?.fill) {
+            return window.VoxelWorld.fill(x1, y1, z1, x2, y2, z2, block);
+        }
+
+        // Fallback
+        const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+        const minZ = Math.min(z1, z2), maxZ = Math.max(z1, z2);
+
+        // Limit size to prevent huge fills
+        const volume = (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+        if (volume > 10000) {
+            return { error: `Fill region too large (${volume} blocks). Maximum 10000.` };
+        }
+
+        let count = 0;
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                    this.game.setBlock(x, y, z, block);
+                    count++;
+                }
+            }
+        }
+
+        console.log(`[Agent] Filled ${count} blocks with ${block}`);
+        return { success: true, message: `Filled ${count} blocks with ${block}` };
     }
 
     teleportPlayer(location) {

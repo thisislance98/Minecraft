@@ -3,7 +3,7 @@
  */
 
 const CLI_SECRET = process.env.CLI_SECRET || 'asdf123';
-const BASE_URL = process.env.API_URL || 'http://localhost:2567';
+const BASE_URL = process.env.API_URL || 'http://127.0.0.1:2567';
 
 export class WorldClient {
     constructor(baseUrl = BASE_URL) {

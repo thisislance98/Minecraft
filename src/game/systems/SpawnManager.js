@@ -178,7 +178,10 @@ export class SpawnManager {
     // ============ Remote Entity Handling ============
 
     handleRemoteSpawn(data) {
+        console.log(`[SpawnManager] handleRemoteSpawn called with:`, data);
+
         if (this.entityRegistry.has(data.id)) {
+            console.log(`[SpawnManager] Entity ${data.id} already exists, updating...`);
             const entity = this.entityRegistry.get(data.id);
             entity.deserialize(data, false);
             return;
@@ -186,15 +189,32 @@ export class SpawnManager {
 
         const AnimalClass = this.entityRegistry.findAnimalClass(data.type);
         if (AnimalClass) {
-            console.log(`[SpawnManager] Spawning remote/persisted ${data.type} (${data.id})`);
+            console.log(`[SpawnManager] Spawning remote/persisted ${data.type} (${data.id}) at (${data.x?.toFixed(1)}, ${data.y?.toFixed(1)}, ${data.z?.toFixed(1)})`);
             const animal = new AnimalClass(this.game, data.x, data.y, data.z, data.seed);
             animal.id = data.id;
             animal.deserialize(data, false);
             this.game.animals.push(animal);
             this.game.scene.add(animal.mesh);
             this.entityRegistry.register(animal.id, animal);
+
+            // Force mesh matrix update for raycasting to work
+            animal.mesh.updateMatrixWorld(true);
+
+            console.log(`[SpawnManager] Remote spawn complete. Mesh children: ${animal.mesh.children.length}, position: (${animal.mesh.position.x.toFixed(1)}, ${animal.mesh.position.y.toFixed(1)}, ${animal.mesh.position.z.toFixed(1)})`);
+            console.log(`[SpawnManager] Total animals in game: ${this.game.animals.length}`);
+
+            // Trigger spawn effect for remote spawns too
+            if (this.game.worldParticleSystem) {
+                this.game.worldParticleSystem.spawnEffect(animal.mesh.position.clone(), {
+                    color: 0x00ffff,
+                    secondaryColor: 0xffffff,
+                    particleCount: 30,
+                    radius: 1.5,
+                    life: 1.5
+                });
+            }
         } else {
-            console.warn(`[SpawnManager] Unknown animal type: ${data.type}`);
+            console.warn(`[SpawnManager] Unknown animal type: ${data.type}. Available types:`, Object.keys(AnimalClasses).slice(0, 10), '...');
         }
     }
 
@@ -487,6 +507,13 @@ export class SpawnManager {
         this.game.scene.add(animal.mesh);
         this.entityRegistry.register(animal.id, animal);
         console.log(`[SpawnManager] ${AnimalClass.name} added to scene and registry, total animals: ${this.game.animals.length}`);
+
+        // Broadcast spawn to other players
+        if (this.game.socketManager && this.game.socketManager.isConnected()) {
+            console.log(`[SpawnManager] Broadcasting spawn of ${AnimalClass.name} to other players`);
+            this.game.socketManager.sendEntitySpawn(animal.serialize());
+        }
+
         return animal;
     }
 
@@ -630,8 +657,10 @@ export class SpawnManager {
         const worldGen = this.game.worldGen;
         const rng = SeededRandom.fromSeeds(Date.now(), count, spread);
 
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.camera.quaternion);
-        forward.y = 0;
+        // Calculate forward direction from player's Y rotation (horizontal facing direction)
+        // This ignores camera pitch so entities spawn in front regardless of looking up/down
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
         forward.normalize();
 
         const spawnX = player.position.x + forward.x * distance;

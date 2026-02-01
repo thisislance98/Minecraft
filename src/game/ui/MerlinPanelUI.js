@@ -864,6 +864,11 @@ export class MerlinPanelUI {
         panel.classList.add('hidden');
         this.isVisible = false;
 
+        // Return focus to game container so hotkeys work
+        if (this.game.container) {
+            this.game.container.focus();
+        }
+
         console.log('[MerlinPanelUI] Panel hidden');
     }
 

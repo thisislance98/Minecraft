@@ -141,8 +141,17 @@ export class Environment {
             return;
         }
 
+        const previousWorld = this.currentWorld;
         console.log(`[Environment] Switching to ${worldName} world`);
         this.currentWorld = worldName;
+
+        // Hide soccer UI when leaving soccer world
+        if (previousWorld === 'soccer' && worldName !== 'soccer') {
+            if (this.game?.uiManager) {
+                this.game.uiManager.hideSoccerScoreboard();
+                this.game.uiManager.hideSoccerWinScreen();
+            }
+        }
 
         const preset = this.worldPresets[worldName];
 

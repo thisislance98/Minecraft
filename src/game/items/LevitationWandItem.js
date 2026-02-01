@@ -7,9 +7,17 @@ export class LevitationWandItem extends Item {
         super('levitation_wand', 'Levitation Wand');
         this.maxStack = 1;
         this.isTool = true;
+        this.lastFireTime = 0;
+        this.fireCooldown = 1000; // 1 second cooldown between shots to prevent spam
     }
 
     onUseDown(game, player) {
+        // Cooldown check to prevent spamming
+        const now = performance.now();
+        if (now - this.lastFireTime < this.fireCooldown) {
+            return false;
+        }
+        this.lastFireTime = now;
         const camDir = new THREE.Vector3();
         game.camera.getWorldDirection(camDir);
 

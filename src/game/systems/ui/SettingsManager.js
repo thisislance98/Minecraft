@@ -138,7 +138,7 @@ export class SettingsManager {
 
         // Model Mode toggle
         if (this.modelModeToggle) {
-            const savedModelMode = localStorage.getItem('settings_model_mode') || 'smart';
+            const savedModelMode = localStorage.getItem('settings_model_mode') || 'cheap';
             this.modelModeToggle.checked = savedModelMode === 'smart';
             if (window.merlinClient) {
                 window.merlinClient.modelMode = savedModelMode;
@@ -207,6 +207,10 @@ export class SettingsManager {
         if (this.settingsClose) {
             this.settingsClose.addEventListener('click', () => {
                 this.settingsModal.classList.add('hidden');
+                // Return focus to game container so hotkeys work
+                if (this.game.container) {
+                    this.game.container.focus();
+                }
             });
         }
 
@@ -214,6 +218,10 @@ export class SettingsManager {
         this.settingsModal.addEventListener('click', (e) => {
             if (e.target === this.settingsModal) {
                 this.settingsModal.classList.add('hidden');
+                // Return focus to game container so hotkeys work
+                if (this.game.container) {
+                    this.game.container.focus();
+                }
             }
         });
 
@@ -528,7 +536,7 @@ export class SettingsManager {
 
         // Request world reset from socket manager
         if (this.game.socketManager) {
-            this.game.socketManager.requestWorldReset();
+            this.game.socketManager.sendWorldReset();
         }
     }
 

@@ -129,15 +129,6 @@ export class InputManager {
                 return;
             }
 
-            // Arrow keys for profiler test scene
-            if (this.game.profilerTestScene && this.game.profilerTestScene.isActive) {
-                if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
-                    e.preventDefault();
-                    this.game.profilerTestScene.handleKeyDown(e.code);
-                    return;
-                }
-            }
-
             // Check if any panel is open - block most hotkeys if so
             const isPanelOpen = this.game.uiManager && this.game.uiManager.isAnyPanelOpen();
 
@@ -658,6 +649,9 @@ export class InputManager {
 
     // Helper to unlock/lock
     lock() {
+        // Always focus container so hotkeys work (even in mobile mode)
+        this.game.container.focus();
+
         if (this.game.gameState.flags.mobileControls) return;
         this.game.container.requestPointerLock().catch((err) => {
             // Ignore SecurityError when user exits lock before request completes

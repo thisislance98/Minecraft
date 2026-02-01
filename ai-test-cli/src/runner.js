@@ -177,7 +177,7 @@ export class TestRunner {
 
         // Send prompt through the browser's Agent (so tool_request goes to browser)
         // Open chat panel first so user can see the interaction
-        await this.browser.evaluate((prompt) => {
+        await this.browser.evaluate(async (prompt) => {
             const game = window.__VOXEL_GAME__;
             if (game && game.agent && game.uiManager) {
                 // Open chat panel
@@ -190,12 +190,18 @@ export class TestRunner {
                     chatInput.focus();
                 }
 
-                // Simulate send button click to trigger proper UI flow
-                setTimeout(() => {
-                    game.uiManager.handleSendMessage();
-                }, 100);
+                // Wait a bit then send
+                await new Promise(r => setTimeout(r, 100));
+
+                // Send message directly via agent instead of handleSendMessage
+                // to ensure it goes through even if chat mode isn't set
+                console.log('[TestRunner] Sending prompt directly via agent:', prompt);
+                game.agent.sendTextMessage(prompt);
+
+                return { sent: true, prompt };
             } else {
                 console.error('Game, Agent, or UIManager not available');
+                return { sent: false, error: 'Missing game components' };
             }
         }, testCase.prompt);
 
@@ -334,6 +340,109 @@ export class TestRunner {
                     } else {
                         const msg = result?.message || 'Custom code returned false';
                         throw new Error(`Verification failed: ${msg}`);
+                    }
+                    break;
+                }
+
+                // ==================== SDK VERIFICATIONS ====================
+                case 'sdkObjectExists': {
+                    const exists = await this.browser.evaluate((objId) => {
+                        const vw = window.VoxelWorld;
+                        return vw?._objects?.has(objId) || false;
+                    }, check.objectId);
+
+                    if (exists) {
+                        console.log(chalk.green(`  ✓ SDK object registered: ${check.objectId}`));
+                    } else {
+                        throw new Error(`SDK object not found in registry: ${check.objectId}`);
+                    }
+                    break;
+                }
+
+                case 'sdkItemExists': {
+                    const exists = await this.browser.evaluate((itemId) => {
+                        const vw = window.VoxelWorld;
+                        return vw?._items?.has(itemId) || false;
+                    }, check.itemId);
+
+                    if (exists) {
+                        console.log(chalk.green(`  ✓ SDK item registered: ${check.itemId}`));
+                    } else {
+                        throw new Error(`SDK item not found: ${check.itemId}`);
+                    }
+                    break;
+                }
+
+                case 'sdkEntityExists': {
+                    const exists = await this.browser.evaluate((entityId) => {
+                        const vw = window.VoxelWorld;
+                        return vw?._entities?.has(entityId) || false;
+                    }, check.entityId);
+
+                    if (exists) {
+                        console.log(chalk.green(`  ✓ SDK entity registered: ${check.entityId}`));
+                    } else {
+                        throw new Error(`SDK entity not found: ${check.entityId}`);
+                    }
+                    break;
+                }
+
+                case 'sdkInstanceCount': {
+                    const count = await this.browser.evaluate((objId) => {
+                        const vw = window.VoxelWorld;
+                        if (!vw?._instances) return 0;
+                        let matches = 0;
+                        for (const inst of vw._instances) {
+                            if (!objId || inst.name?.toLowerCase() === objId?.toLowerCase() || inst.id === objId) {
+                                matches++;
+                            }
+                        }
+                        return matches;
+                    }, check.objectId || null);
+
+                    const minCount = check.minCount || 1;
+                    const maxCount = check.maxCount || Infinity;
+
+                    if (count >= minCount && count <= maxCount) {
+                        console.log(chalk.green(`  ✓ SDK instances: ${count} (expected ${minCount}-${maxCount})`));
+                    } else {
+                        throw new Error(`SDK instance count ${count} not in expected range ${minCount}-${maxCount}`);
+                    }
+                    break;
+                }
+
+                case 'sdkBlockPlaced': {
+                    const block = await this.browser.evaluate((x, y, z) => {
+                        const vw = window.VoxelWorld;
+                        return vw?.getBlock(x, y, z);
+                    }, check.x, check.y, check.z);
+
+                    if (check.type === null || check.type === 'air') {
+                        // Expecting no block (air)
+                        if (!block || block === 0) {
+                            console.log(chalk.green(`  ✓ Block at (${check.x}, ${check.y}, ${check.z}) is air`));
+                        } else {
+                            throw new Error(`Expected air at (${check.x}, ${check.y}, ${check.z}), found ${block}`);
+                        }
+                    } else {
+                        if (block && (block === check.type || block.toString() === check.type)) {
+                            console.log(chalk.green(`  ✓ Block at (${check.x}, ${check.y}, ${check.z}) is ${check.type}`));
+                        } else {
+                            throw new Error(`Expected ${check.type} at (${check.x}, ${check.y}, ${check.z}), found ${block}`);
+                        }
+                    }
+                    break;
+                }
+
+                case 'inventoryHasItem': {
+                    const GameCommands = await import('./game-commands.js');
+                    const result = await GameCommands.checkItemInInventory(this.browser, check.item);
+                    const minCount = check.minCount || 1;
+
+                    if (result.found && result.totalCount >= minCount) {
+                        console.log(chalk.green(`  ✓ Inventory has ${result.totalCount}x ${check.item}`));
+                    } else {
+                        throw new Error(`Expected ${minCount}x ${check.item} in inventory, found ${result.totalCount || 0}`);
                     }
                     break;
                 }

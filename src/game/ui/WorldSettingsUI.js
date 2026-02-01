@@ -519,6 +519,11 @@ export class WorldSettingsUI {
         const panel = document.getElementById('world-settings-panel');
         panel.classList.add('hidden');
         this.isVisible = false;
+
+        // Return focus to game container so hotkeys work
+        if (this.game.container) {
+            this.game.container.focus();
+        }
     }
 
     populateSettings() {

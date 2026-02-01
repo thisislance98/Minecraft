@@ -7,6 +7,8 @@ export class OmniWandItem extends Item {
         super('omni_wand', 'Omni Wand');
         this.maxStack = 1;
         this.isTool = true;
+        this.lastFireTime = 0;
+        this.fireCooldown = 1000; // 1 second cooldown between shots to prevent spam
 
         // Default spells
         this.spells = [
@@ -23,6 +25,13 @@ export class OmniWandItem extends Item {
     }
 
     onUseDown(game, player) {
+        // Cooldown check to prevent spamming
+        const now = performance.now();
+        if (now - this.lastFireTime < this.fireCooldown) {
+            return false;
+        }
+        this.lastFireTime = now;
+
         if (!this.currentSpell) {
             game.uiManager.addChatMessage("system", "No spell selected! Press 'K' to create one.");
             return false;

@@ -13,12 +13,15 @@ import { Arrow } from './entities/projectiles/Arrow.js';
 import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
 import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
 import { LevitationProjectile } from './entities/projectiles/LevitationProjectile.js';
+import { SpinProjectile } from './entities/projectiles/SpinProjectile.js';
 import { GiantProjectile } from './entities/projectiles/GiantProjectile.js';
 import { WizardTowerProjectile } from './entities/projectiles/WizardTowerProjectile.js';
 import { GiantTreeProjectile } from './entities/projectiles/GiantTreeProjectile.js';
 
 import { GrowthProjectile } from './entities/projectiles/GrowthProjectile.js';
+import { FireworkProjectile } from './entities/projectiles/FireworkProjectile.js';
 import { FloatingBlock } from './entities/FloatingBlock.js';
+import { SpinningBlock } from './entities/SpinningBlock.js';
 import { ControllableBlock } from './entities/ControllableBlock.js';
 import { EntityManager } from './systems/EntityManager.js';
 import { InputManager } from './systems/InputManager.js';
@@ -47,6 +50,7 @@ import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
 import { Starfighter } from './entities/animals/Starfighter.js';
 import { setItemManager } from './DynamicItemRegistry.js';
+import { initSDK as initVoxelWorldSDK } from './sdk/integration.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
@@ -63,7 +67,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GrassSystem } from './systems/GrassSystem.js';
-import { ProfilerTestScene } from './systems/ProfilerTestScene.js';
 
 import { ThreePerf } from 'three-perf';
 
@@ -80,7 +83,7 @@ export class VoxelGame {
         window.THREE = THREE;
         // Expose Verification Utils for CLI testing
         window.VerificationUtils = VerificationUtils;
-
+        
         this.container = document.getElementById('game-container');
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
@@ -226,6 +229,10 @@ export class VoxelGame {
         this.itemManager = new ItemManager(this);
         // Set ItemManager reference for DynamicItemRegistry so dynamic items can be used
         setItemManager(this.itemManager);
+
+        // Initialize VoxelWorld SDK
+        this.initSDK();
+
         this.inventory = new Inventory(this, this.inventoryManager); // Inventory is now UI
         this.player = new Player(this);
         this.agent = new Agent(this);
@@ -262,7 +269,6 @@ export class VoxelGame {
         this.AnimalClasses = AnimalClasses;
         this.parkourManager = new ParkourManager(this);
         this.questSystem = new QuestSystem(this);
-        this.profilerTestScene = new ProfilerTestScene(this);
         this.updateTimeStop = (dt) => {
             if (this.gameState?.timers?.timeStop > 0) {
                 this.gameState.timers.timeStop -= dt;
@@ -304,8 +310,15 @@ export class VoxelGame {
         this._lastSentRotY = 0;
         this._isCurrentlyMoving = false;
 
-        this.spawnPlayer();
+        // DEFER player spawn until socket provides correct world seed
+        // This prevents spawning at wrong height when joining worlds with different seeds
+        // The actual spawn happens in SocketManager.world:joined handler via setWorldSeed
+        // or in initialSpawnPlayer() for offline/cli modes
+        this._initialSpawnPending = true;
+        console.log('[Game] Player spawn deferred until socket provides world seed');
 
+        // Position player off-screen while waiting (won't fall due to _initialSpawnPending check)
+        this.player.position.set(Config.PLAYER.SPAWN_POINT.x, 200, Config.PLAYER.SPAWN_POINT.z);
         this.camera.position.copy(this.player.position);
         this.camera.position.y += Config.PLAYER.EYE_HEIGHT; // Eye height
 
@@ -331,14 +344,15 @@ export class VoxelGame {
         // Check for offline mode via URL parameter - urlParams already declared at top of constructor
         if (this.isOffline || this.isUIOnly) {
             console.log('[Game] Offline Mode: Network disabled.');
+            // In offline mode, spawn player immediately with default seed
+            this.initialSpawnPlayer();
         } else {
             console.log('[Game] Singleplayer Mode.');
+            // Multiplayer logic - check for username first
+            this.checkAndPromptUsername().then(() => {
+                this.socketManager = new SocketManager(this);
+            });
         }
-
-        // Multiplayer logic - check for username first
-        this.checkAndPromptUsername().then(() => {
-            this.socketManager = new SocketManager(this);
-        });
 
 
         // Agent debug command handler
@@ -388,6 +402,7 @@ export class VoxelGame {
 
         // Floating Blocks
         this.floatingBlocks = [];
+        this.spinningBlocks = [];
         this.targetedFloatingBlocks = [];
 
         // Controllable Blocks
@@ -719,6 +734,19 @@ export class VoxelGame {
     }
 
 
+    /**
+     * Initialize the VoxelWorld SDK
+     * This exposes window.VoxelWorld for dynamic item/entity creation
+     */
+    initSDK() {
+        try {
+            initVoxelWorldSDK(this);
+            console.log('[Game] VoxelWorld SDK initialized');
+        } catch (e) {
+            console.error('[Game] Failed to initialize SDK:', e);
+        }
+    }
+
     spawnPlayer() {
         const spawnPoint = Config.PLAYER.SPAWN_POINT;
 
@@ -766,18 +794,22 @@ export class VoxelGame {
             }
         }
 
-        // Find ground level (avoids spawning on trees)
+        // Find ground level using terrain height (noise-based, works without chunks)
         const terrainHeight = this.worldGen.getTerrainHeight(finalX, finalZ);
         let finalY = terrainHeight + 1;
 
+        // Try to find exact ground if chunks are loaded (avoids spawning in trees)
         if (this.spawnManager) {
             const groundY = this.spawnManager.findGroundLevel(finalX, terrainHeight + 5, finalZ);
             if (groundY !== null) {
+                console.log(`[Game] findGroundLevel found ground at Y=${groundY}`);
                 finalY = groundY;
+            } else {
+                console.log(`[Game] findGroundLevel returned null (chunks not loaded), using terrainHeight=${terrainHeight}`);
             }
         }
 
-        console.log(`[Game] Spawning player on ground at: ${finalX}, ${finalY}, ${finalZ}`);
+        console.log(`[Game] Spawning player at: ${finalX}, ${finalY}, ${finalZ} (terrainHeight=${terrainHeight}, seed=${this.worldSeed})`);
 
         this.spawnPoint = new THREE.Vector3(finalX, finalY, finalZ);
         this.player.position.copy(this.spawnPoint);
@@ -795,7 +827,36 @@ export class VoxelGame {
         this.camera.position.y += 1.6;
     }
 
+    /**
+     * Initial player spawn for offline mode or when socket doesn't provide seed.
+     * Uses the default hardcoded seed and waits for ground to be ready.
+     */
+    initialSpawnPlayer() {
+        if (!this._initialSpawnPending) {
+            console.log('[Game] initialSpawnPlayer: already spawned, skipping');
+            return;
+        }
+        console.log('[Game] initialSpawnPlayer: spawning with default seed', this.worldSeed);
+        this._initialSpawnPending = false;
+        this._waitingForGround = true;
+        this.player.velocity.set(0, 0, 0);
+        this.player.isFlying = true;
 
+        // Position player near terrain height so chunks are generated in the right area
+        const spawnPoint = Config.PLAYER.SPAWN_POINT;
+        const terrainHeight = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z);
+        this.player.position.set(spawnPoint.x, terrainHeight + 5, spawnPoint.z);
+        this.camera.position.set(spawnPoint.x, terrainHeight + 5 + 1.6, spawnPoint.z);
+        console.log(`[Game] Positioned player near terrain for chunk generation: Y=${terrainHeight + 5}`);
+
+        // Reset chunk tracking to force regeneration around new position
+        this.lastChunkX = null;
+        this.lastChunkZ = null;
+
+        this.checkChunks();
+        this.updateChunks();
+        this._checkGroundReady();
+    }
 
     spawnAnimals() {
         // Delegate to SpawnManager
@@ -1180,6 +1241,40 @@ export class VoxelGame {
         }
 
         return projectile;
+    }
+
+    spawnFireworkProjectile(pos, vel, skipBroadcast = false) {
+        console.log('[VoxelGame] spawnFireworkProjectile called', pos, vel);
+        try {
+            const projectile = this.spawnProjectile(FireworkProjectile, pos, vel);
+            console.log('[VoxelGame] Firework projectile spawned successfully:', projectile);
+            
+            if (!skipBroadcast && this.socketManager?.isConnected()) {
+                this.socketManager.sendProjectileSpawn('firework', pos, vel);
+            }
+            
+            return projectile;
+        } catch (error) {
+            console.error('[VoxelGame] Error spawning firework projectile:', error);
+            throw error;
+        }
+    }
+
+    spawnSpinProjectile(pos, vel, skipBroadcast = false) {
+        const projectile = this.spawnProjectile(SpinProjectile, pos, vel);
+
+        if (!skipBroadcast && this.socketManager?.isConnected()) {
+            this.socketManager.sendProjectileSpawn('spin', pos, vel);
+        }
+
+        return projectile;
+    }
+
+    spawnSpinningBlock(x, y, z, blockType) {
+        const sb = new SpinningBlock(this, x, y, z, blockType);
+        this.spinningBlocks.push(sb);
+        this.scene.add(sb.mesh);
+        return sb;
     }
 
     spawnGiantProjectile(pos, vel, skipBroadcast = false) {
@@ -2064,8 +2159,10 @@ export class VoxelGame {
         // Delta distance: distance ray travels to go 1 step in X/Y/Z
         // If dx is 0, delta is Infinity (handled by large number / logic)
 
-        // Ray direction
-        const rayDir = new THREE.Vector3().subVectors(end, start).normalize();
+        // PERFORMANCE: Reuse pre-allocated vector instead of creating new one every call
+        // Note: _losRayDir is initialized in animate() loop
+        if (!this._losRayDir) this._losRayDir = new THREE.Vector3();
+        const rayDir = this._losRayDir.subVectors(end, start).normalize();
 
         // Distance to traverse 1 unit in each direction
         const deltaDistX = (dx === 0) ? Infinity : Math.abs(1 / rayDir.x);
@@ -2285,39 +2382,31 @@ export class VoxelGame {
             return;
         }
 
-        // Profiler Test Mode: Skip ALL game systems for clean isolated testing
-        if (this.profilerTestScene && this.profilerTestScene.isActive) {
-            this.renderer.render(this.scene, this.camera);
-            if (this.perf) this.perf.end();
-            this.stats.end();
-            return;
-        }
-
         // Update physics and player
         // Always update player physics (gravity) but only allow input when locked/mobile
+        // Skip player physics while waiting for initial spawn or ground after world switch
         this.updateTimeStop(deltaTime);
-        // this.profiler.start('Player');
-        this.player.update(deltaTime, this.controls.isLocked || this.gameState.flags.mobileControls);
-        // this.profiler.end('Player');
+        if (!this._waitingForGround && !this._initialSpawnPending) {
+            // this.profiler.start('Player');
+            this.player.update(deltaTime, this.controls.isLocked || this.gameState.flags.mobileControls);
+            // this.profiler.end('Player');
 
-        // this.profiler.start('Physics');
-        this.physicsManager.update();
-        // this.profiler.end('Physics')
+            // this.profiler.start('Physics');
+            this.physicsManager.update();
+            // this.profiler.end('Physics');
+        }
 
 
         // Always update chunks and check for new ones, so the world generates around you even before starting
-        // SKIP when in profiler test mode for clean isolated testing
-        if (!this.profilerTestScene || !this.profilerTestScene.isActive) {
-            // Throttle chunk checking (Faster check for smoother generation)
-            if (this.frameCount % 5 === 0) {
-                this.checkChunks();
-            }
-
-            // Update dirty chunks every frame (throttled internally)
-            // this.profiler.start('ChunkMeshing');
-            this.updateChunks();
-            // this.profiler.end('ChunkMeshing');
+        // Throttle chunk checking (Faster check for smoother generation)
+        if (this.frameCount % 5 === 0) {
+            this.checkChunks();
         }
+
+        // Update dirty chunks every frame (throttled internally)
+        // this.profiler.start('ChunkMeshing');
+        this.updateChunks();
+        // this.profiler.end('ChunkMeshing');
 
         this.frameCount = (this.frameCount || 0) + 1;
 
@@ -2327,9 +2416,11 @@ export class VoxelGame {
         // Update animals
         // this.profiler.start('Entities');
 
-        // Optimization Reuse Objects
+        // PERFORMANCE: Reuse pre-allocated objects to avoid GC pressure
         if (!this._cullingSphere) {
             this._cullingSphere = new THREE.Sphere(new THREE.Vector3(), 2.0); // 2.0 radius covers all mobs
+            this._entityCenter = new THREE.Vector3(); // Reusable vector for entity center calculations
+            this._losRayDir = new THREE.Vector3(); // Reusable vector for line-of-sight calculations
         }
 
         for (let i = this.animals.length - 1; i >= 0; i--) {
@@ -2380,12 +2471,24 @@ export class VoxelGame {
                 // Only check if visible in frustum to save CPU
                 // Check from Camera to Entity Center (approx)
                 // Offset entity position up slightly (center of mass)
-                const entityCenter = animal.position.clone();
-                entityCenter.y += (animal.height || 1.0) * 0.5;
+                // PERFORMANCE: Reuse pre-allocated vector instead of clone()
+                this._entityCenter.copy(animal.position);
+                this._entityCenter.y += (animal.height || 1.0) * 0.5;
 
-                // Optimization: Don't raycast every frame? Or stride?
-                // For now, simple raycast every frame is fine if efficient.
-                const hasLOS = this.checkLineOfSight(this.camera.position, entityCenter);
+                // PERFORMANCE: Only check LOS every 10 frames per entity (staggered)
+                // This reduces raycast calls by 90% while maintaining visual quality
+                // Use entity index + frameCount to stagger checks across entities
+                const shouldCheckLOS = ((i + this.frameCount) % 10) === 0;
+
+                let hasLOS;
+                if (shouldCheckLOS) {
+                    hasLOS = this.checkLineOfSight(this.camera.position, this._entityCenter);
+                    // Cache the result on the animal
+                    animal._cachedLOS = hasLOS;
+                } else {
+                    // Use cached result, default to visible if no cache
+                    hasLOS = animal._cachedLOS !== undefined ? animal._cachedLOS : true;
+                }
 
                 if (!hasLOS) {
                     // Blocked!
@@ -2437,6 +2540,11 @@ export class VoxelGame {
                 this.animals.splice(i, 1);
             }
             // --- OPTIMIZATION END ---
+        }
+
+        // Update SDK instances (VoxelWorld GameObjects)
+        if (window.VoxelWorld && window.VoxelWorld._instances?.size > 0) {
+            window.VoxelWorld.update(deltaTime);
         }
 
         // Update mini-games
@@ -2532,6 +2640,18 @@ export class VoxelGame {
                 if (!keep) {
                     this.scene.remove(fb.mesh);
                     this.floatingBlocks.splice(i, 1);
+                }
+            }
+        }
+
+        // Update Spinning Blocks
+        if (this.spinningBlocks) {
+            for (let i = this.spinningBlocks.length - 1; i >= 0; i--) {
+                const sb = this.spinningBlocks[i];
+                const keep = this.safelyUpdateEntity(sb, deltaTime);
+                if (!keep) {
+                    this.scene.remove(sb.mesh);
+                    this.spinningBlocks.splice(i, 1);
                 }
             }
         }
@@ -2632,10 +2752,7 @@ export class VoxelGame {
 
         // Visual Improvements: Use EffectComposer for post-processing (Bloom)
         // Render Scene
-        // Skip composer when in profiler test mode for clean isolated rendering
-        if (this.profilerTestScene && this.profilerTestScene.isActive) {
-            this.renderer.render(this.scene, this.camera);
-        } else if (this.composer) {
+        if (this.composer) {
             this.composer.render();
         } else {
             this.renderer.render(this.scene, this.camera);
@@ -2679,6 +2796,56 @@ export class VoxelGame {
         }
     }
 
+    /**
+     * Set the world seed and regenerate terrain with the new seed.
+     * This is called by SocketManager when joining a world.
+     * @param {number} seed - The new world seed
+     */
+    setWorldSeed(seed) {
+        const isInitialSpawn = this._initialSpawnPending;
+
+        // If this is the initial spawn, we need to spawn player regardless of seed match
+        if (isInitialSpawn) {
+            console.log(`[Game] setWorldSeed: initial spawn with seed ${seed}`);
+            this._initialSpawnPending = false;
+
+            if (seed !== this.worldSeed) {
+                console.log('[Game] setWorldSeed: seed differs, regenerating world');
+                this.regenerateWithSeed(seed);
+            } else {
+                console.log('[Game] setWorldSeed: seed matches, spawning player on terrain');
+                // Seed matches but we still need to spawn player properly
+                this._waitingForGround = true;
+                this.player.velocity.set(0, 0, 0);
+                this.player.isFlying = true;
+
+                // Position player near terrain height so chunks are generated in the right area
+                const spawnPoint = Config.PLAYER.SPAWN_POINT;
+                const terrainHeight = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z);
+                this.player.position.set(spawnPoint.x, terrainHeight + 5, spawnPoint.z);
+                this.camera.position.set(spawnPoint.x, terrainHeight + 5 + 1.6, spawnPoint.z);
+                console.log(`[Game] Positioned player near terrain for chunk generation: Y=${terrainHeight + 5}`);
+
+                // Reset chunk tracking to force regeneration around new position
+                this.lastChunkX = null;
+                this.lastChunkZ = null;
+
+                this.checkChunks();
+                this.updateChunks();
+                this._checkGroundReady();
+            }
+            return;
+        }
+
+        // Subsequent seed changes (world switching while already in game)
+        if (seed === this.worldSeed) {
+            console.log('[Game] setWorldSeed: seed unchanged, skipping regeneration');
+            return;
+        }
+        console.log('[Game] setWorldSeed: changing from', this.worldSeed, 'to', seed);
+        this.regenerateWithSeed(seed);
+    }
+
     regenerateWithSeed(seed) {
         console.log('[Game] Regenerating world with seed:', seed);
 
@@ -2707,14 +2874,117 @@ export class VoxelGame {
             this.spawnManager.spawnedChunks.clear();
         }
 
-        // Respawn player at new surface
-        this.spawnPlayer();
+        // Freeze player to prevent falling while chunks load
+        this.player.velocity.set(0, 0, 0);
+        this.player.isFlying = true;
+        this._waitingForGround = true;
 
-        // Regenerate around player
+        // Set player position using terrain height (works without chunks)
+        const spawnPoint = Config.PLAYER.SPAWN_POINT;
+        const terrainHeight = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z);
+        const spawnY = terrainHeight + 2; // Slightly above ground
+        this.player.position.set(spawnPoint.x, spawnY, spawnPoint.z);
+        this.camera.position.set(spawnPoint.x, spawnY + 1.6, spawnPoint.z);
+        console.log(`[Game] Player positioned at ${spawnPoint.x}, ${spawnY}, ${spawnPoint.z} while waiting for chunks`);
+
+        // Regenerate chunks around player
         this.checkChunks();
         this.updateChunks();
 
+        // Wait for ground to be ready, then finalize spawn
+        this._checkGroundReady();
+
         console.log('[Game] World regenerated with seed:', seed);
+    }
+
+    /**
+     * Check if ground is ready under player and finalize spawn when it is.
+     * Called after regenerateWithSeed to wait for chunks to load.
+     */
+    _checkGroundReady() {
+        if (!this._waitingForGround) return;
+
+        // Initialize retry counter
+        if (this._groundCheckRetries === undefined) {
+            this._groundCheckRetries = 0;
+        }
+        this._groundCheckRetries++;
+
+        const spawnPoint = Config.PLAYER.SPAWN_POINT;
+        const terrainHeight = this.worldGen.getTerrainHeight(spawnPoint.x, spawnPoint.z);
+        const px = Math.floor(spawnPoint.x);
+        const pz = Math.floor(spawnPoint.z);
+
+        // Check if the chunk at spawn position is loaded
+        const { cx, cy, cz } = this.worldToChunk(px, Math.floor(terrainHeight), pz);
+        const chunkKey = this.getChunkKey(cx, cy, cz);
+        const chunk = this.chunks.get(chunkKey);
+
+        // Log only every 30 retries to reduce spam
+        if (this._groundCheckRetries % 30 === 1) {
+            console.log(`[Game] _checkGroundReady: attempt ${this._groundCheckRetries}, chunk=${chunkKey}, loaded=${!!chunk}, terrainHeight=${terrainHeight}`);
+        }
+
+        // Timeout fallback after 300 attempts (~5 seconds) - use terrain height directly
+        if (this._groundCheckRetries > 300) {
+            console.log(`[Game] _checkGroundReady: timeout reached, using terrain height ${terrainHeight}`);
+            this._finalizeSpawn(px, terrainHeight + 1, pz);
+            return;
+        }
+
+        // If chunk not loaded yet, keep waiting
+        if (!chunk) {
+            this.checkChunks();
+            this.updateChunks();
+            requestAnimationFrame(() => this._checkGroundReady());
+            return;
+        }
+
+        // Chunk is loaded - search for solid ground
+        const searchY = terrainHeight + 10;
+        let groundFound = false;
+        let groundY = terrainHeight + 1;
+
+        for (let y = Math.floor(searchY); y > searchY - 30 && y > 0; y--) {
+            const block = this.getBlock(px, y, pz);
+            if (block && block.type && block.type !== 'air' && block.type !== 'water') {
+                groundFound = true;
+                groundY = y + 1;
+                console.log(`[Game] Ground found at Y=${y} (block=${block.type}), spawning player at Y=${groundY}`);
+                break;
+            }
+        }
+
+        if (groundFound) {
+            this._finalizeSpawn(px, groundY, pz);
+        } else {
+            // Chunk loaded but no ground found (might be above a cave)
+            // Use terrain height as fallback
+            console.log(`[Game] No solid ground found in chunk, using terrain height ${terrainHeight}`);
+            this._finalizeSpawn(px, terrainHeight + 1, pz);
+        }
+    }
+
+    /**
+     * Finalize the player spawn at the given position
+     */
+    _finalizeSpawn(x, y, z) {
+        this._waitingForGround = false;
+        this._groundCheckRetries = 0;
+        this.player.isFlying = false;
+        this.player.velocity.set(0, 0, 0);
+        this.player.position.set(x, y, z);
+        this.camera.position.set(x, y + 1.6, z);
+        this.player.highestY = y;
+        this.spawnPoint = new THREE.Vector3(x, y, z);
+
+        // Reset death state
+        this.player.isDead = false;
+        if (this.uiManager) {
+            this.uiManager.hideDeathScreen();
+        }
+
+        console.log(`[Game] Player spawned at (${x}, ${y}, ${z})`);
     }
 
     toggleTerrainShadows(enabled) {

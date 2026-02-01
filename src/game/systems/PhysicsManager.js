@@ -14,6 +14,8 @@ export class PhysicsManager {
         // Raycaster for interactions
         this.raycaster = new THREE.Raycaster();
         this.raycaster.far = 6;
+        // PERFORMANCE: Pre-allocate reusable vector to avoid GC pressure
+        this._rayOrigin = new THREE.Vector2(0, 0);
 
         // Highlight box for block selection
         this.highlightBox = this.createHighlightBox();
@@ -140,7 +142,8 @@ export class PhysicsManager {
      * Get the block targeted by the player's crosshair
      */
     getTargetBlock() {
-        this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
+        // PERFORMANCE: Reuse pre-allocated vector instead of creating new one every frame
+        this.raycaster.setFromCamera(this._rayOrigin, this.game.camera);
 
         // Optimization: Only check chunks near the player
         const playerChunk = this.game.worldToChunk(

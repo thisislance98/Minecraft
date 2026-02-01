@@ -53,6 +53,15 @@ export class MerlinClient {
             // For now, simple reconnect is safest to pick up new token (or lack thereof).
             this.connect();
         });
+
+        // Also connect immediately in case auth state doesn't fire soon
+        // This ensures we have a working connection even before auth resolves
+        setTimeout(() => {
+            if (!this.ws && !this.isConnected) {
+                console.log('[MerlinClient] Connecting immediately (fallback)...');
+                this.connect();
+            }
+        }, 500);
     }
 
     setGame(game) {

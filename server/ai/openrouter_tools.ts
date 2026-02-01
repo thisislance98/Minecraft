@@ -1,122 +1,104 @@
 /**
- * Tool Definitions for OpenRouter (OpenAI-compatible format)
- * Used with Claude and other models via OpenRouter
+ * Tool Definitions for OpenRouter - GameObject + Scripts SDK
  */
 
 export function getOpenRouterTools() {
     return [
         // ============================================================
-        // FILE SYSTEM TOOLS
+        // SDK TOOL - Single unified creation tool
         // ============================================================
         {
             type: 'function',
             function: {
-                name: 'view_file',
-                description: 'Read the contents of a file on the server.',
+                name: 'sdk_create',
+                description: 'Create a game object with scripts. Use scripts to define behavior: mesh (3D visual), item (inventory), entity (spawnable creature), physics (movement), ai (behavior), health, shooter (projectiles), projectile, particle.',
                 parameters: {
                     type: 'object',
                     properties: {
-                        AbsolutePath: { type: 'string', description: 'Path to the file to read' },
-                        StartLine: { type: 'integer', description: 'Optional start line (1-indexed)' },
-                        EndLine: { type: 'integer', description: 'Optional end line' }
+                        name: { type: 'string', description: 'PascalCase name for the object' },
+                        scripts: {
+                            type: 'array',
+                            description: 'Array of scripts to attach',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    type: {
+                                        type: 'string',
+                                        description: 'Script type: mesh, item, entity, physics, ai, health, collider, shooter, projectile, particle'
+                                    },
+                                    // MeshScript
+                                    parts: {
+                                        type: 'array',
+                                        description: 'For mesh script: array of { type, size, color, position, emissive }',
+                                        items: { type: 'object' }
+                                    },
+                                    // ItemScript
+                                    icon: { type: 'string', description: 'For item script: SVG with viewBox="0 0 64 64"' },
+                                    category: { type: 'string', description: 'For item script: tool|block|food|material|misc' },
+                                    stackable: { type: 'boolean' },
+                                    // PhysicsScript
+                                    mode: { type: 'string', description: 'For physics script: walking|hopping|flying|swimming' },
+                                    speed: { type: 'number' },
+                                    gravity: { type: 'boolean' },
+                                    // AIScript
+                                    behavior: { type: 'string', description: 'For ai script: passive|neutral|hostile|pet' },
+                                    wander: { type: 'boolean' },
+                                    // HealthScript
+                                    max: { type: 'number', description: 'For health script: max HP' },
+                                    damage: { type: 'number', description: 'Damage this entity deals' },
+                                    // ColliderScript
+                                    width: { type: 'number' },
+                                    height: { type: 'number' },
+                                    // ShooterScript
+                                    projectile: { type: 'string', description: 'For shooter script: projectile ID to fire' },
+                                    cooldown: { type: 'number', description: 'ms between shots' },
+                                    // ProjectileScript
+                                    lifetime: { type: 'number', description: 'For projectile script: seconds' },
+                                    // ParticleScript
+                                    trail: { type: 'boolean' },
+                                    trailColor: { type: 'integer' },
+                                    burstOnDeath: { type: 'boolean' },
+                                    burstCount: { type: 'integer' }
+                                },
+                                required: ['type']
+                            }
+                        }
                     },
-                    required: ['AbsolutePath']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'list_dir',
-                description: 'List contents of a directory.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        DirectoryPath: { type: 'string', description: 'Path to the directory' }
-                    },
-                    required: ['DirectoryPath']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'write_to_file',
-                description: 'Write content to a file. Can create new files or overwrite existing ones.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        TargetFile: { type: 'string', description: 'Path to the file' },
-                        CodeContent: { type: 'string', description: 'The full content to write' },
-                        Description: { type: 'string', description: 'Description of the change' }
-                    },
-                    required: ['TargetFile', 'CodeContent']
+                    required: ['name', 'scripts']
                 }
             }
         },
 
         // ============================================================
-        // GAME STATE TOOLS
+        // GAME TOOLS
         // ============================================================
         {
             type: 'function',
             function: {
-                name: 'spawn_creature',
-                description: 'Spawn an entity in the game world near the player.',
+                name: 'spawn',
+                description: 'Spawn a creature or object near the player.',
                 parameters: {
                     type: 'object',
                     properties: {
-                        creature: { type: 'string', description: 'Name of creature class (e.g. "Pig", "Zombie")' },
-                        count: { type: 'integer', description: 'Number to spawn', default: 1 }
+                        name: { type: 'string', description: 'Name of thing to spawn' },
+                        count: { type: 'integer', default: 1 }
                     },
-                    required: ['creature']
+                    required: ['name']
                 }
             }
         },
         {
             type: 'function',
             function: {
-                name: 'teleport_player',
-                description: 'Teleport the player to a location.',
+                name: 'give_item',
+                description: 'Add item to player inventory.',
                 parameters: {
                     type: 'object',
                     properties: {
-                        location: { type: 'string', description: 'Named location (spawn, desert) or coordinates (x,y,z)' }
+                        item: { type: 'string', description: 'Item ID' },
+                        count: { type: 'integer', default: 1 }
                     },
-                    required: ['location']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'get_scene_info',
-                description: 'Get information about the player\'s surroundings (biome, nearby entities).',
-                parameters: {
-                    type: 'object',
-                    properties: {}
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'update_entity',
-                description: 'Update properties of an existing entity (e.g. scale, color).',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        entityId: { type: 'string', description: 'ID of the entity to update' },
-                        updates: {
-                            type: 'object',
-                            description: 'Updates to apply',
-                            properties: {
-                                scale: { type: 'number', description: 'Scale factor' },
-                                color: { type: 'string', description: 'Color name or hex code' }
-                            }
-                        }
-                    },
-                    required: ['entityId', 'updates']
+                    required: ['item']
                 }
             }
         },
@@ -124,20 +106,19 @@ export function getOpenRouterTools() {
             type: 'function',
             function: {
                 name: 'set_blocks',
-                description: 'Place multiple blocks in the world to build structures.',
+                description: 'Place or remove blocks in the world. Use id="air" or id=null to remove blocks.',
                 parameters: {
                     type: 'object',
                     properties: {
                         blocks: {
                             type: 'array',
-                            description: 'List of blocks to set',
                             items: {
                                 type: 'object',
                                 properties: {
                                     x: { type: 'integer' },
                                     y: { type: 'integer' },
                                     z: { type: 'integer' },
-                                    id: { type: 'string', description: 'Block ID (e.g. "gold_block")' }
+                                    id: { type: 'string', description: 'Block type (grass, stone, wood, etc.) or "air" to remove' }
                                 },
                                 required: ['x', 'y', 'z', 'id']
                             }
@@ -150,119 +131,61 @@ export function getOpenRouterTools() {
         {
             type: 'function',
             function: {
-                name: 'create_creature',
-                description: 'Create a new creature type. Generate a JavaScript class that extends Animal.',
+                name: 'spawn_tree',
+                description: 'Spawn a tree at a position. Types: oak, birch, pine, acacia, palm, willow, dark_oak, giant, cactus',
                 parameters: {
                     type: 'object',
                     properties: {
-                        name: { type: 'string', description: 'PascalCase class name (e.g. "BouncingSlime")' },
-                        code: { type: 'string', description: 'Full JavaScript class code. Must use window.THREE for Three.js.' },
-                        description: { type: 'string', description: 'What this creature looks like and how it behaves' }
+                        type: { type: 'string', description: 'Tree type: oak, birch, pine, acacia, palm, willow, dark_oak, giant' },
+                        x: { type: 'integer', description: 'X position (or use relative to player)' },
+                        y: { type: 'integer', description: 'Y position (ground level)' },
+                        z: { type: 'integer', description: 'Z position' },
+                        relative: { type: 'boolean', description: 'If true, x/z are relative to player position' }
                     },
-                    required: ['name', 'code', 'description']
+                    required: ['type']
                 }
             }
         },
         {
             type: 'function',
             function: {
-                name: 'create_item',
-                description: 'Create a new inventory item. Generate a JavaScript class extending Item. The item is automatically added to the player inventory after creation.',
+                name: 'fill_blocks',
+                description: 'Fill a region with blocks',
                 parameters: {
                     type: 'object',
                     properties: {
-                        name: { type: 'string', description: 'PascalCase class name ending with "Item"' },
-                        code: { type: 'string', description: 'Full JavaScript class code' },
-                        icon: { type: 'string', description: 'SVG string for 64x64 inventory icon' },
-                        mesh_code: { type: 'string', description: 'JavaScript code for getMesh() method body - returns THREE.Object3D for dropped item 3D representation. Use window.THREE.' },
-                        description: { type: 'string', description: 'What this item does' }
+                        x1: { type: 'integer' },
+                        y1: { type: 'integer' },
+                        z1: { type: 'integer' },
+                        x2: { type: 'integer' },
+                        y2: { type: 'integer' },
+                        z2: { type: 'integer' },
+                        block: { type: 'string', description: 'Block type to fill with' }
                     },
-                    required: ['name', 'code', 'icon', 'mesh_code']
+                    required: ['x1', 'y1', 'z1', 'x2', 'y2', 'z2', 'block']
                 }
             }
         },
         {
             type: 'function',
             function: {
-                name: 'give_item',
-                description: 'Add an item to the player inventory.',
+                name: 'teleport_player',
+                description: 'Teleport player to location.',
                 parameters: {
                     type: 'object',
                     properties: {
-                        item: { type: 'string', description: 'Item ID (snake_case)' },
-                        count: { type: 'integer', description: 'Number of items (default 1)' }
+                        location: { type: 'string', description: 'Coordinates or named location' }
                     },
-                    required: ['item']
-                }
-            }
-        },
-
-        // ============================================================
-        // KNOWLEDGE TOOLS
-        // ============================================================
-        {
-            type: 'function',
-            function: {
-                name: 'search_knowledge',
-                description: 'Search the knowledge base for templates, guides, or past examples.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        query: { type: 'string', description: 'Search query' },
-                        category: { type: 'string', description: 'Optional: "template", "gotcha", "howto", or "error"' }
-                    },
-                    required: ['query']
+                    required: ['location']
                 }
             }
         },
         {
             type: 'function',
             function: {
-                name: 'add_knowledge',
-                description: 'Store a lesson learned for future reference.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        category: { type: 'string', description: '"template", "gotcha", "howto", or "error"' },
-                        title: { type: 'string', description: 'Short descriptive title' },
-                        content: { type: 'string', description: 'Detailed explanation or code snippet' },
-                        tags: { type: 'array', items: { type: 'string' }, description: 'Keywords for search' }
-                    },
-                    required: ['category', 'title', 'content']
-                }
-            }
-        },
-
-        // ============================================================
-        // VERIFICATION TOOLS
-        // ============================================================
-        {
-            type: 'function',
-            function: {
-                name: 'run_verification',
-                description: 'Execute JavaScript verification code in the browser to check if an action succeeded.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        code: { type: 'string', description: 'JavaScript code to execute. Has access to V helper object.' },
-                        description: { type: 'string', description: 'What is being verified' }
-                    },
-                    required: ['code', 'description']
-                }
-            }
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'capture_screenshot',
-                description: 'Capture a screenshot of the current game view.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        label: { type: 'string', description: 'Short label for the screenshot' }
-                    },
-                    required: ['label']
-                }
+                name: 'get_scene_info',
+                description: 'Get info about player surroundings.',
+                parameters: { type: 'object', properties: {} }
             }
         }
     ];

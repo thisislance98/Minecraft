@@ -169,7 +169,8 @@ export async function ragLookup(input: string): Promise<RAGResult> {
 
         console.log(`[RAG] Semantic search query: "${searchQuery.substring(0, 80)}..."`);
 
-        const semanticResults = await semanticSearch(searchQuery, 4, 0.3);
+        // OPTIMIZED: Limit to 2 templates to reduce token usage (was 4)
+        const semanticResults = await semanticSearch(searchQuery, 2, 0.3);
         console.log(`[RAG] Semantic search returned ${semanticResults.length} results`);
 
         // Deduplicate by title, keeping the version with most content

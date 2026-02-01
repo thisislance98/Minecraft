@@ -193,6 +193,11 @@ export class SpawnUI {
             cancelAnimationFrame(this.previewRenderer.frameId);
             this.previewRenderer.frameId = null;
         }
+
+        // Return focus to game container so hotkeys work
+        if (this.game.container) {
+            this.game.container.focus();
+        }
     }
 
     populateList() {
@@ -429,6 +434,20 @@ export class SpawnUI {
             const AnimalClass = AnimalClasses[className];
             if (AnimalClass) {
                 console.log(`[SpawnUI] Creating ${className} at spawn position (y+2)`);
+
+                // Create the spawn effect at the creature's spawn location
+                const effectPos = new THREE.Vector3(spawnPos.x, spawnPos.y + 2, spawnPos.z);
+                if (this.game.worldParticleSystem) {
+                    this.game.worldParticleSystem.spawnEffect(effectPos, {
+                        color: 0x00ffff,      // Cyan magical color
+                        secondaryColor: 0xffffff,
+                        particleCount: 30,
+                        radius: 1.5,
+                        life: 1.5
+                    });
+                    console.log(`[SpawnUI] Spawn effect triggered at (${effectPos.x.toFixed(1)}, ${effectPos.y.toFixed(1)}, ${effectPos.z.toFixed(1)})`);
+                }
+
                 const animal = this.game.spawnManager.createAnimal(AnimalClass, spawnPos.x, spawnPos.y + 2, spawnPos.z, false);
                 console.log(`[SpawnUI] createAnimal returned:`, animal);
             } else {

@@ -30,9 +30,21 @@ export class GameDriver {
             inventory: ['give_item', 'equip_item', 'get_inventory', 'select_slot', 'open_inventory', 'close_inventory'],
             recording: ['start_recording', 'stop_recording', 'screenshot', 'screenshot_burst'],
             spawning: ['spawn_creature', 'spawn_creature_at'],
-            observation: ['get_game_state', 'get_position', 'look_at', 'get_entities', 'get_drops'],
+            observation: ['get_game_state', 'get_position', 'look_at', 'get_entities', 'get_drops', 'detect', 'detect_around'],
             debug: ['debug_creatures', 'creature_errors', 'execute_script'],
-            utility: ['wait', 'input_inject']
+            utility: ['wait', 'input_inject'],
+            ai: ['prompt', 'get_chat', 'sdk_objects'],
+            sdk: [
+                'sdk_create',       // Create and register an SDK object
+                'sdk_spawn',        // Spawn a registered SDK object
+                'sdk_give',         // Give SDK item to player
+                'sdk_set_block',    // Set a single block
+                'sdk_fill',         // Fill a region with blocks
+                'sdk_spawn_tree',   // Spawn a tree structure
+                'sdk_find',         // Find objects in radius
+                'sdk_list_types',   // List available block/tree types
+                'sdk_instances'     // Get all active SDK instances
+            ]
         };
     }
 
@@ -295,6 +307,87 @@ export class GameDriver {
 
             case 'creature_errors':
                 return await GameCommands.getCreatureErrors(browser);
+
+            // ==================== AI / MERLIN ====================
+            case 'prompt':
+            case 'ask':
+            case 'chat':
+                return await GameCommands.sendChatMessage(browser, args.text || args.message || args.prompt);
+
+            case 'get_chat':
+            case 'chat_history':
+                return await GameCommands.getChatMessages(browser);
+
+            case 'sdk_objects':
+            case 'get_sdk_objects':
+                return await browser.evaluate(() => {
+                    const vw = window.VoxelWorld;
+                    if (!vw) return { error: 'VoxelWorld not initialized' };
+                    return {
+                        objects: Array.from(vw._objects?.keys() || []),
+                        items: Array.from(vw._items?.keys() || []),
+                        entities: Array.from(vw._entities?.keys() || []),
+                        icons: Array.from(vw._icons?.keys() || [])
+                    };
+                });
+
+            // ==================== SDK CREATION ====================
+            case 'sdk_create':
+                // Create and register an SDK object
+                // args: { name, scripts: [{ type, ...config }] }
+                return await GameCommands.sdkCreate(browser, args);
+
+            case 'sdk_spawn':
+                // Spawn a registered SDK object into the world
+                // args: { id, x, y, z, options }
+                return await GameCommands.sdkSpawn(browser, args.id, args.x, args.y, args.z, args.options || {});
+
+            case 'sdk_give':
+                // Give an SDK item to the player
+                // args: { id, count }
+                return await GameCommands.sdkGive(browser, args.id, args.count || 1);
+
+            // ==================== SDK BLOCKS ====================
+            case 'sdk_set_block':
+                // Set a single block
+                // args: { x, y, z, type }
+                return await GameCommands.sdkSetBlock(browser, args.x, args.y, args.z, args.type);
+
+            case 'sdk_fill':
+                // Fill a region with blocks
+                // args: { x1, y1, z1, x2, y2, z2, type }
+                return await GameCommands.sdkFill(browser, args.x1, args.y1, args.z1, args.x2, args.y2, args.z2, args.type);
+
+            case 'sdk_spawn_tree':
+                // Spawn a tree structure
+                // args: { type, x, y, z }
+                return await GameCommands.sdkSpawnTree(browser, args.type, args.x, args.y, args.z);
+
+            // ==================== SDK QUERIES ====================
+            case 'sdk_find':
+                // Find objects within radius
+                // args: { x, y, z, radius }
+                return await GameCommands.sdkFindInRadius(browser, args.x, args.y, args.z, args.radius || 50);
+
+            case 'sdk_list_types':
+                // List available block and tree types
+                return await GameCommands.sdkListTypes(browser);
+
+            case 'sdk_instances':
+                // Get all active SDK instances
+                return await GameCommands.sdkGetInstances(browser);
+
+            case 'detect':
+            case 'look':
+            case 'whats_in_front':
+                // Detect what's in front of the player
+                return await GameCommands.detectInFront(browser, args.distance || 50);
+
+            case 'detect_around':
+            case 'scan':
+            case 'nearby':
+                // Detect ALL objects around the player
+                return await GameCommands.detectAround(browser, args.radius || 50);
 
             default:
                 return {

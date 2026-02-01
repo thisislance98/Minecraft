@@ -735,6 +735,11 @@ export class CommunityUI {
             this.updateCommunityButtonBadge();
             // Focus input
             setTimeout(() => this.container.querySelector('#comm-input').focus(), 50);
+        } else {
+            // Return focus to game container so hotkeys work
+            if (this.game.container) {
+                this.game.container.focus();
+            }
         }
     }
 

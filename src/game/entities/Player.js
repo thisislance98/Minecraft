@@ -83,6 +83,12 @@ export class Player {
 
         this.createBody();
         this.createSpeechBubble();
+
+        // PERFORMANCE: Pre-allocate reusable objects to avoid GC pressure
+        this._raycaster = new THREE.Raycaster();
+        this._rayOrigin = new THREE.Vector2(0, 0);
+        this._camDir = new THREE.Vector3();
+        this._rightVec = new THREE.Vector3();
     }
 
     /**
@@ -374,8 +380,8 @@ export class Player {
         this.position.copy(entity.position);
         this.velocity.set(0, 0, 0);
 
-        // Switch to far follow camera for vehicles/aircraft
-        if (entity.constructor.name === 'Spaceship' || entity.constructor.name === 'Starfighter' || entity.preferFarCamera) {
+        // Switch to far follow camera for vehicles/aircraft that prefer it
+        if (entity.constructor.name === 'Spaceship' || entity.preferFarCamera) {
             // Save current camera state before changing it
             this._preMountCameraMode = this.cameraMode;
             this._preMountCameraDistance = this.thirdPersonCamera.distance;
@@ -399,11 +405,11 @@ export class Player {
     dismount() {
         if (this.mount) {
             const wasVehicleWithCamera = this.mount.constructor.name === 'Spaceship' ||
-                               this.mount.constructor.name === 'Starfighter' ||
                                this.mount.preferFarCamera;
+            const hadDetachRider = typeof this.mount.detachRider === 'function';
 
             // Detach rider from vehicle if it has a detachRider method
-            if (typeof this.mount.detachRider === 'function') {
+            if (hadDetachRider) {
                 this.mount.detachRider(this);
             }
 
@@ -427,9 +433,16 @@ export class Player {
                 }
                 this.thirdPersonCamera.reset(this);
 
-                // Fix: Restore body attachment based on camera mode
-                // The detachRider() method adds body to scene, but if we're restoring
-                // to first person mode, we need to re-attach body to camera
+                // Clear saved values
+                this._preMountCameraMode = undefined;
+                this._preMountCameraDistance = undefined;
+                this._preMountCameraHeight = undefined;
+            }
+
+            // Always restore body visibility/attachment after dismounting from vehicles
+            // that had a detachRider method (which moved the body to the vehicle)
+            if (hadDetachRider) {
+                // Restore body attachment based on current camera mode
                 if (this.cameraMode === 0) {
                     // First person - attach body to camera and hide parts
                     if (this.body.parent) {
@@ -450,11 +463,6 @@ export class Player {
                     if (this.leftLegPivot) this.leftLegPivot.visible = true;
                     if (this.rightLegPivot) this.rightLegPivot.visible = true;
                 }
-
-                // Clear saved values
-                this._preMountCameraMode = undefined;
-                this._preMountCameraDistance = undefined;
-                this._preMountCameraHeight = undefined;
             }
         }
     }
@@ -500,6 +508,7 @@ export class Player {
 
         this.createRideWand();
         this.createWizardTowerWand();
+        this.createFireworkWand();
         this.createBroom();
         this.createBinoculars();
         this.createFoodModels();
@@ -562,6 +571,10 @@ export class Player {
 
     createWizardTowerWand() {
         this.wizardTowerWand = this.createWandModel(0x8A2BE2); // BlueViolet
+    }
+
+    createFireworkWand() {
+        this.fireworkWand = this.createWandModel(0xFF4500); // OrangeRed
     }
 
     createBroom() {
@@ -895,6 +908,7 @@ export class Player {
 
         if (this.rideWand) this.rideWand.visible = itemType === 'ride_wand';
         if (this.wizardTowerWand) this.wizardTowerWand.visible = itemType === 'wizard_tower_wand';
+        if (this.fireworkWand) this.fireworkWand.visible = itemType === 'firework_wand';
         if (this.broom) {
             // Held broom: Only show if selected AND not flying (when flying we show riding version)
             this.broom.visible = (itemType === 'flying_broom' && !this.isFlying);
@@ -920,7 +934,7 @@ export class Player {
                     this.pickaxe, this.sword, this.bow, this.binoculars,
                     this.apple, this.bread, this.chocolateBar,
                     this.wand, this.levitationWand, this.shrinkWand, this.growthWand,
-                    this.rideWand, this.wizardTowerWand, this.broom,
+                    this.rideWand, this.wizardTowerWand, this.fireworkWand, this.broom,
                     this.chairModel, this.tableModel, this.couchModel
                 ].some(model => model && model.visible);
 
@@ -1027,10 +1041,10 @@ export class Player {
     checkCrosshairTarget(dt) {
         if (!this.game.camera || !this.tooltipElement) return;
 
-        // Raycast from camera center
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.game.camera);
-        raycaster.far = 10.0; // Check up to 10 blocks away
+        // PERFORMANCE: Reuse pre-allocated raycaster instead of creating new one every frame
+        this._raycaster.setFromCamera(this._rayOrigin, this.game.camera);
+        this._raycaster.far = 10.0; // Check up to 10 blocks away
+        const raycaster = this._raycaster;
 
         // 1. Check Entities (Animals/Monsters)
         // We need to check all meshes in the scene that are children of Animals
@@ -1219,8 +1233,9 @@ export class Player {
 
                 this.flightTime += deltaTime;
 
-                const camDir = new THREE.Vector3();
-                this.game.camera.getWorldDirection(camDir);
+                // PERFORMANCE: Reuse pre-allocated vectors instead of creating new ones every frame
+                this.game.camera.getWorldDirection(this._camDir);
+                const camDir = this._camDir;
 
                 // Calculate move direction based on camera
                 if (Math.abs(moveForward) > 0) {
@@ -1238,14 +1253,16 @@ export class Player {
                 // Reduced frequency from 3.0 to 2.0
                 const bobbing = Math.cos(this.flightTime * 2.0) * (0.005 * REF_FPS); // Scale bobbing velocity?
                 // Actually bobbing is usually position offset or velocity?
-                // Original: velocity.y += bobbing. 
+                // Original: velocity.y += bobbing.
                 // bobbing was result of cos() * 0.005. 0.005 units/frame.
                 this.velocity.y += bobbing;
 
                 if (moveRight !== 0) {
-                    const right = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
-                    this.velocity.x += right.x * currentFlightSpeed * moveRight;
-                    this.velocity.z += right.z * currentFlightSpeed * moveRight;
+                    // PERFORMANCE: Reuse pre-allocated vector
+                    this._rightVec.set(0, 1, 0);
+                    this._rightVec.crossVectors(camDir, this._rightVec).normalize();
+                    this.velocity.x += this._rightVec.x * currentFlightSpeed * moveRight;
+                    this.velocity.z += this._rightVec.z * currentFlightSpeed * moveRight;
                 }
 
                 // Vertical controls (Space to go straight up)

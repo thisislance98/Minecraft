@@ -40,10 +40,13 @@ export class InventoryManager {
         this.addItemToSlot(5, 'bow', 1, 'tool');
         // 7. Levitate Wand
         this.addItemToSlot(6, 'levitation_wand', 1, 'wand');
-        // 8. Parkour Block
-        this.addItemToSlot(7, 'parkour_block', 64, 'block');
+        // 8. Tree Wand
+        this.addItemToSlot(7, 'tree_wand', 1, 'wand');
         // 9. Control Block (WASD controllable flying block)
         this.addItemToSlot(8, 'control_block', 64, 'item');
+
+        // Extra items in main inventory
+        this.addItemToSlot(30, 'parkour_block', 64, 'block');
 
 
         // Add some materials for testing
@@ -83,7 +86,9 @@ export class InventoryManager {
         this.addItemToSlot(36, 'couch', 5, 'couch');
 
         // ===== WEAPONS =====
-        this.addItemToSlot(38, 'sword', 1, 'tool');  // Sword moved to inventory
+        this.addItemToSlot(37, 'spin_wand', 1, 'wand');
+        this.addItemToSlot(38, 'firework_wand', 1, 'wand');
+        this.addItemToSlot(39, 'sword', 1, 'tool');  // Sword moved to inventory
         this.addItemToSlot(39, 'mob_waves_block', 10, 'block');
         this.addItemToSlot(41, 'slime', 64, 'block');
     }

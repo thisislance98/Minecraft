@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 
 // Config from civit/web-app/services/auth.ts
 const firebaseConfig = {
@@ -15,6 +15,20 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Handle redirect result immediately on module load (before game initializes)
+// This is critical because getRedirectResult must be called early
+getRedirectResult(auth)
+    .then((result) => {
+        if (result) {
+            console.log('[Firebase] Google redirect sign-in successful:', result.user.email);
+        } else {
+            console.log('[Firebase] No pending redirect result');
+        }
+    })
+    .catch((error) => {
+        console.error('[Firebase] Redirect result error:', error.code, error.message);
+    });
+
 // Initialize Analytics
 import { getAnalytics, logEvent } from 'firebase/analytics';
 let analytics = null;
@@ -24,4 +38,4 @@ try {
     console.warn("Firebase Analytics failed to initialize (possibly missing measurementId):", e);
 }
 
-export { auth, analytics, logEvent, googleProvider, signInWithPopup, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword };
+export { auth, analytics, logEvent, googleProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword };

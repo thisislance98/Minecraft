@@ -1,382 +1,246 @@
 # VoxelWorld SDK
 
-Unity-style scripting for the voxel game engine.
-
-## Quick Start
+## Presets (Fastest Way)
 
 ```javascript
-// Create a spinning cube
-class SpinScript {
-  speed = 2;
+// Creature - AI, physics, health auto-configured
+// IMPORTANT: Use an array of parts for good-looking creatures!
+VoxelWorld.createCreature('Frog', {
+  mesh: [
+    // Body
+    { type: 'box', size: [0.5, 0.4, 0.6], color: 0x228B22, position: [0, 0.3, 0], name: 'body' },
+    // Head (wider)
+    { type: 'box', size: [0.55, 0.3, 0.4], color: 0x228B22, position: [0, 0.45, 0.35], name: 'head' },
+    // Eyes (bulging on top) - white + pupil
+    { type: 'sphere', size: [0.12], color: 0xffffff, position: [-0.18, 0.7, 0.4] },
+    { type: 'sphere', size: [0.12], color: 0xffffff, position: [0.18, 0.7, 0.4] },
+    { type: 'sphere', size: [0.06], color: 0x000000, position: [-0.18, 0.7, 0.5] },
+    { type: 'sphere', size: [0.06], color: 0x000000, position: [0.18, 0.7, 0.5] },
+    // Mouth line
+    { type: 'box', size: [0.3, 0.02, 0.02], color: 0x145214, position: [0, 0.35, 0.55] },
+    // Front legs (named for animation)
+    { type: 'box', size: [0.1, 0.15, 0.1], color: 0x228B22, position: [-0.25, 0.1, 0.3], name: 'leg_fl' },
+    { type: 'box', size: [0.1, 0.15, 0.1], color: 0x228B22, position: [0.25, 0.1, 0.3], name: 'leg_fr' },
+    // Back legs (bigger, named for animation)
+    { type: 'box', size: [0.15, 0.2, 0.25], color: 0x228B22, position: [-0.28, 0.15, -0.2], name: 'leg_bl' },
+    { type: 'box', size: [0.15, 0.2, 0.25], color: 0x228B22, position: [0.28, 0.15, -0.2], name: 'leg_br' }
+  ],
+  behavior: 'passive',  // passive | neutral | hostile | pet
+  health: 10,
+  speed: 2
+}).register();
+VoxelWorld.spawn('frog');
 
-  Start() {
-    this.angle = 0;
-  }
+// Item - for inventory (use multi-part for detail!)
+VoxelWorld.createItem('MagicStaff', {
+  mesh: [
+    { type: 'cylinder', size: [0.04, 0.04, 0.8], color: 0x5c4033, position: [0, 0, 0] },  // Shaft
+    { type: 'torus', size: [0.06, 0.015], color: 0xFFD700, position: [0, 0.4, 0], rotation: [90, 0, 0] },  // Gold ring
+    { type: 'sphere', size: [0.05], color: 0x9900ff, position: [0, 0.45, 0], emissive: true }  // Glowing crystal
+  ],
+  icon: '<svg viewBox="0 0 32 32"><rect x="15" y="8" width="2" height="20" fill="#5c4033"/><circle cx="16" cy="6" r="3" fill="#9900ff"/></svg>',
+  category: 'tool'  // tool | block | food | material | misc
+}).register();
+VoxelWorld.giveItem('magicstaff');
 
-  Update() {
-    this.angle += this.speed * Time.deltaTime;
-    this.transform.rotation.y = this.angle;
-    this.gameObject.syncTransform();
-  }
-}
-
-VoxelWorld.createObject('spinner')
-  .attach('mesh', { parts: [{ type: 'box', size: [2, 2, 2], color: 0x00ff00 }] })
-  .attach(SpinScript)
-  .register();
-
-VoxelWorld.spawn('spinner');
+// Projectile - auto physics + optional trail
+VoxelWorld.createProjectile('Fireball', {
+  mesh: { meshType: 'sphere', size: [0.3], color: 0xff4400, emissive: true },
+  damage: 15,
+  trail: true
+}).register();
 ```
 
----
-
-## Scripts (Components)
-
-Scripts are attached to GameObjects and provide behavior. They follow Unity conventions.
-
-### Lifecycle Methods
-
-| Method | Description |
-|--------|-------------|
-| `Awake()` | Called once when script is first attached |
-| `Start()` | Called before first Update |
-| `Update()` | Called every frame |
-| `OnDestroy()` | Called when object is destroyed |
-| `OnCollisionEnter(other)` | Called on collision |
-| `OnTriggerEnter(other)` | Called on trigger enter |
-| `OnUse(player)` | Called when player uses the object |
-| `OnDamage(amount, attacker)` | Called when taking damage |
-| `OnDeath()` | Called when health reaches 0 |
-
-### Script Properties
-
-Every script has access to:
+## Manual Creation
 
 ```javascript
-this.gameObject   // The GameObject this script is attached to
-this.transform    // Shortcut to gameObject.transform
-Time.deltaTime    // Time since last frame (seconds)
-Time.time         // Total time elapsed
-```
-
-### Example Scripts
-
-**Spinning Object:**
-```javascript
-class Spin {
-  speed = 2;
-
-  Update() {
-    this.transform.rotation.y += this.speed * Time.deltaTime;
-    this.gameObject.syncTransform();
-  }
-}
-```
-
-**Hovering Object:**
-```javascript
-class Hover {
-  amplitude = 0.5;
-  speed = 2;
-
-  Start() {
-    this.startY = this.transform.position.y;
-    this.time = 0;
-  }
-
-  Update() {
-    this.time += Time.deltaTime * this.speed;
-    this.transform.position.y = this.startY + Math.sin(this.time) * this.amplitude;
-    this.gameObject.syncTransform();
-  }
-}
-```
-
-**Auto-Destroy After Time:**
-```javascript
-class AutoDestroy {
-  lifetime = 5;
-
-  Start() {
-    this.timer = 0;
-  }
-
-  Update() {
-    this.timer += Time.deltaTime;
-    if (this.timer >= this.lifetime) {
-      this.gameObject.destroy();
-    }
-  }
-}
-```
-
-**Projectile:**
-```javascript
-class Projectile {
-  speed = 20;
-  damage = 10;
-
-  Start() {
-    this.direction = new THREE.Vector3(0, 0, 1);
-  }
-
-  Update() {
-    const move = this.direction.clone().multiplyScalar(this.speed * Time.deltaTime);
-    this.transform.position.add(move);
-    this.gameObject.syncTransform();
-  }
-
-  OnCollisionEnter(other) {
-    const health = other.GetComponent('health');
-    if (health) {
-      health.TakeDamage(this.damage);
-    }
-    this.gameObject.destroy();
-  }
-}
-```
-
----
-
-## Creating Objects
-
-### Basic Object
-
-```javascript
-VoxelWorld.createObject('cube')
-  .attach('mesh', { parts: [{ type: 'box', size: [1, 1, 1], color: 0x00ff00 }] })
-  .attach(SpinScript, { speed: 3 })  // Pass config to override defaults
-  .register();
-```
-
-### Item (Goes in Inventory)
-
-```javascript
-class FireWand {
-  OnUse(player) {
-    console.log('Casting fire!');
-    VoxelWorld.spawn('fireball',
-      player.position.x,
-      player.position.y + 1,
-      player.position.z
-    );
-  }
-}
-
-VoxelWorld.createObject('fire_wand')
-  .attach('mesh', { parts: [
-    { type: 'cylinder', size: [0.1, 0.8], color: 0x5c4033 },
-    { type: 'sphere', size: [0.15], color: 0xff4500, emissive: true, position: [0, 0.4, 0] }
-  ]})
-  .attach('item', {
-    icon: '<svg viewBox="0 0 32 32"><rect x="14" y="4" width="4" height="20" fill="#5c4033"/><circle cx="16" cy="4" r="4" fill="orange"/></svg>',
-    category: 'tool'
-  })
-  .attach(FireWand)
-  .register();
-
-VoxelWorld.giveItem('fire_wand');
-```
-
-### Entity (Creature)
-
-```javascript
-class WanderAI {
-  speed = 2;
-
-  Start() {
-    this.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-    this.changeTime = 0;
-  }
-
-  Update() {
-    this.changeTime += Time.deltaTime;
-    if (this.changeTime > 3) {
-      this.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-      this.changeTime = 0;
-    }
-
-    this.transform.Translate(
-      this.direction.x * this.speed * Time.deltaTime,
-      0,
-      this.direction.z * this.speed * Time.deltaTime
-    );
-  }
-}
-
-VoxelWorld.createObject('slime')
-  .attach('mesh', { parts: [{ type: 'sphere', size: [0.8], color: 0x00ff00 }] })
-  .attach('entity')
+VoxelWorld.createObject('name')
+  .attach('mesh', { meshType: 'box', size: [1,1,1], color: 0xff0000 })
+  .attach('ai', { behavior: 'passive' })  // physics auto-attached!
   .attach('health', { max: 20 })
-  .attach(WanderAI, { speed: 3 })
   .register();
-
-VoxelWorld.spawn('slime');
+VoxelWorld.spawn('name');  // No coords = in front of player
+VoxelWorld.spawn('name', x, y, z);
 ```
 
----
+## Smart Defaults
 
-## Built-in Scripts
+| If you attach... | SDK auto-adds... |
+|------------------|------------------|
+| AIScript | PhysicsScript (for movement) |
+| ProjectileScript | PhysicsScript (flying mode) |
+| AnimationScript + AIScript | Auto-links walk/idle to movement |
 
-### mesh
+## Mesh Options
+
 ```javascript
 .attach('mesh', {
-  parts: [
-    { type: 'box', size: [w, h, d], color: 0xff0000 },
-    { type: 'sphere', size: [radius], color: 0x00ff00, emissive: true },
-    { type: 'cylinder', size: [radius, height], color: 0x0000ff, position: [x, y, z] },
-    { type: 'cone', size: [radius, height], color: 0xffff00, rotation: [rx, ry, rz] }
-  ]
+  meshType: 'box',      // box, sphere, cylinder, cone, capsule, torus, plane
+  size: [w, h, d],      // dimensions (varies by type)
+  color: 0xff0000,      // hex color
+  emissive: true,       // makes it glow
+  emissiveIntensity: 0.5
 })
 ```
 
-### item
+Mesh types:
+- `box`: size=[width, height, depth]
+- `sphere`: size=[radius]
+- `cylinder`: size=[radiusTop, radiusBottom, height]
+- `cone`: size=[radius, height]
+- `capsule`: size=[radius, length]
+
+## Built-in Scripts (11)
+
+| Script | Config | Description |
+|--------|--------|-------------|
+| `mesh` | `[{ type, size, color }]` | 3D visuals |
+| `item` | `{ icon: '<svg>...</svg>', category: 'tool' }` | Inventory item |
+| `health` | `{ max: 20, damage: 5 }` | Health system |
+| `physics` | `{ mode: 'walking'\|'hopping'\|'flying', speed: 3, collider: true }` | Movement + collision |
+| `ai` | `{ behavior: 'passive'\|'neutral'\|'hostile'\|'pet', speed: 2 }` | AI with smart wandering |
+| `shooter` | `{ projectile: 'id', speed: 20, cooldown: 500 }` | Fire projectiles |
+| `projectile` | `{ damage: 10, lifetime: 3, gravity: 0 }` | Projectile behavior |
+| `particle` | `{ trail: true, trailColor: 0xffffff }` | Particle effects |
+| `animation` | `{ animations: {...}, defaultAnimation: 'idle' }` | Skeletal animation |
+| `sound` | `{ sounds: { name: url }, autoPlay: 'name' }` | 3D positional audio |
+| `debug` | `{ showCollider: true, showPath: true }` | Visual debug helpers |
+
+## AI Behaviors
+
+- `passive` - Wanders, flees from player
+- `neutral` - Wanders, fights back if attacked
+- `hostile` - Actively hunts player
+- `pet` - Follows player
+
+## Custom Scripts
+
 ```javascript
-.attach('item', {
-  icon: '<svg>...</svg>',  // Required - SVG string
-  category: 'tool',        // tool | block | food | material
-  stackable: false,
-  maxStack: 1
-})
+class MyScript {
+  speed = 2;  // Default properties
+
+  Start() { this.time = 0; }
+  Update() {
+    this.time += Time.deltaTime;
+    this.transform.position.y = Math.sin(this.time) * this.speed;
+    this.gameObject.syncTransform();  // REQUIRED after transform changes
+  }
+  OnUse(player) {}
+  OnDamage(amount, attacker) {}
+  OnDeath() {}
+}
+
+.attach(MyScript, { speed: 3 })
 ```
 
-### entity
-```javascript
-.attach('entity')  // Marks as spawnable creature
-```
-
-### health
-```javascript
-.attach('health', {
-  max: 20,
-  regenerate: false
-})
-```
-
-### projectile
-```javascript
-.attach('projectile', {
-  damage: 10,
-  lifetime: 3,
-  gravity: 0.5,
-  destroyOnHit: true
-})
-```
-
----
+**Script has access to:** `this.gameObject`, `this.transform`, `Time.deltaTime`, `Time.time`
 
 ## Transform
 
 ```javascript
-// Position
-this.transform.position.x = 10;
 this.transform.position.set(x, y, z);
-
-// Rotation (radians)
 this.transform.rotation.y += 0.1;
-
-// Scale
-this.transform.scale.set(2, 2, 2);
-
-// Helper methods
-this.transform.Translate(dx, dy, dz);  // Move relative
-this.transform.Rotate(rx, ry, rz);     // Rotate relative
-this.transform.LookAt(target);         // Face target
-
-// Always call after modifying transform
-this.gameObject.syncTransform();
+this.transform.Translate(dx, dy, dz);
+this.transform.LookAt(target);
+this.gameObject.syncTransform();  // Always call after changes!
 ```
-
----
 
 ## World API
 
 ```javascript
-// Spawn objects
-VoxelWorld.spawn('slime');                    // In front of player
-VoxelWorld.spawn('slime', x, y, z);           // At position
-
-// Items
-VoxelWorld.giveItem('wand');
-VoxelWorld.giveItem('wand', 5);               // Quantity
+// Player
+VoxelWorld.localPlayer;           // Player with .transform.position, .transform.forward
+VoxelWorld.playerPosition;        // {x,y,z} shortcut
+VoxelWorld.inFront(distance);     // Position in front of player
 
 // Blocks
 VoxelWorld.setBlock(x, y, z, 'stone');
-VoxelWorld.setBlock(x, y, z, null);           // Remove
 VoxelWorld.fill(x1, y1, z1, x2, y2, z2, 'brick');
-
-// Trees
 VoxelWorld.spawnTree('oak', x, y, z);
-// Types: oak, birch, pine, acacia, palm, willow, dark_oak, giant
 
-// Query
-VoxelWorld.findInRadius(position, radius);
-VoxelWorld.localPlayer;
-```
+// Items
+VoxelWorld.giveItem('name', quantity);
 
----
+// Find entities
+VoxelWorld.findEntities('type');
+VoxelWorld.findNearestEntity('type');
+VoxelWorld.findInRadius(pos, radius);
 
-## GameObject API
-
-```javascript
-// Get component
-const health = this.gameObject.GetComponent('health');
+// Modify existing
+VoxelWorld.addScript('type', ScriptClass);
+VoxelWorld.addParts('type', [{ type:'sphere', size:[0.2], color:0xfff, position:[0,1,0] }]);
 
 // Destroy
-this.gameObject.destroy();
-GameObject.Destroy(obj, 2);  // Destroy after 2 seconds
-
-// Active state
-this.gameObject.SetActive(false);  // Hide
-this.gameObject.SetActive(true);   // Show
-
-// Tags
-this.gameObject.tag = 'Enemy';
+VoxelWorld.destroyEntity(entity);
+VoxelWorld.destroyAllOfType('type');
+VoxelWorld.undoLast();
 ```
 
----
-
-## Time
+## Vec3 Helper
 
 ```javascript
-Time.deltaTime   // Seconds since last frame (~0.016 at 60fps)
-Time.time        // Total elapsed time
-Time.frameCount  // Total frames rendered
+Vec3.add(a, b);  Vec3.sub(a, b);  Vec3.mul(v, scalar);
+Vec3.normalize(v);  Vec3.distance(a, b);
+
+// Spawn in front of player
+const p = VoxelWorld.localPlayer;
+const pos = Vec3.add(p.transform.position, Vec3.mul(p.transform.forward, 5));
+VoxelWorld.spawn('obj', pos.x, pos.y, pos.z);
 ```
 
----
+## Fluent Callbacks
+
+```javascript
+VoxelWorld.createObject('orb')
+  .attach('mesh', [{ type: 'sphere', size: [0.5], color: 0x00ffff }])
+  .on('use', (obj, player) => { /* on use */ })
+  .on('update', (obj, dt) => { obj.transform.rotation.y += dt; obj.syncTransform(); })
+  .register();
+```
+
+## Accessing Mesh Parts
+
+```javascript
+Start() {
+  this.eye = this.gameObject.mesh.getObjectByName('eye');  // Cache in Start
+}
+Update() {
+  if (this.eye) this.eye.position.x = Math.sin(Time.time);  // Modify directly
+}
+```
+
+## Creature Design Best Practices
+
+Good creatures need **multiple parts** - not just a single primitive!
+
+### Essential parts for a creature:
+1. **Body** - main shape
+2. **Head** - separate from body
+3. **Eyes** - white sphere/box + smaller black pupil positioned slightly in front
+4. **Facial features** - nose/snout, mouth, ears
+5. **Limbs** - legs for quadrupeds, arms for bipeds
+
+### Eye pattern (always use this!):
+```javascript
+// White of eye
+{ type: 'sphere', size: [0.12], color: 0xffffff, position: [-0.2, 0.8, 0.4] },
+// Black pupil (slightly in front, smaller)
+{ type: 'sphere', size: [0.06], color: 0x000000, position: [-0.2, 0.8, 0.48] },
+```
+
+### Color tips:
+- Use 3-5 colors minimum: body, eye white (0xffffff), pupil (0x000000), accent
+- Hooves/feet slightly darker than body
+- Belly/underside slightly lighter
 
 ## Colors
 
-| Color  | Hex      |
-|--------|----------|
-| Red    | 0xff0000 |
-| Green  | 0x00ff00 |
-| Blue   | 0x0000ff |
-| Orange | 0xff4500 |
-| Yellow | 0xffff00 |
-| Purple | 0x800080 |
-| Cyan   | 0x00ffff |
-| Brown  | 0x5c4033 |
-| White  | 0xffffff |
-| Black  | 0x000000 |
+Red=0xff0000, Green=0x00ff00, Blue=0x0000ff, Yellow=0xffff00, Orange=0xff4500, Purple=0x800080, Cyan=0x00ffff, Brown=0x5c4033, White=0xffffff, Black=0x000000
 
----
+## Block Types
 
-## CLI Testing
+grass, dirt, stone, cobblestone, sand, gravel, clay, brick, glass, wood, leaves, water, lava, ice, snow, obsidian, bedrock, ore_coal, ore_iron, ore_gold, ore_diamond
 
-```bash
-# Run script
-ai-test drive "VoxelWorld.spawn('sphere');"
+## Tree Types
 
-# Run script file
-ai-test drive -f my_script.js
-
-# Interactive REPL
-ai-test drive -i
-
-# Keep browser open longer
-ai-test drive "..." -k 30000
-```
-
-**Available in scripts:** `VoxelWorld`, `game`, `player`, `THREE`, `Time`, `detect()`, `detectAround()`
+oak, birch, pine, acacia, palm, willow, dark_oak, giant, cactus

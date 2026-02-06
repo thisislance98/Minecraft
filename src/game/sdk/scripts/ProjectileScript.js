@@ -1,28 +1,64 @@
 /**
  * ProjectileScript - Makes a game object act as a projectile
+ *
+ * @description Handles projectile physics, collision detection, and damage dealing.
+ * Checks against both legacy game entities and SDK-spawned entities.
+ *
+ * @example
+ * VoxelWorld.createProjectile('Fireball', {
+ *   mesh: [{ type: 'sphere', size: [0.3], color: 0xff4400 }],
+ *   damage: 15,
+ *   lifetime: 5,
+ *   gravity: 0.5
+ * }).register();
  */
 import * as THREE from 'three';
+
+/** @type {number} Default projectile lifetime in seconds */
+const DEFAULT_LIFETIME = 3;
+/** @type {number} Default projectile damage */
+const DEFAULT_DAMAGE = 10;
+/** @type {number} Default projectile velocity (forward) */
+const DEFAULT_VELOCITY = -20;
+/** @type {number} Gravity multiplier for projectile physics */
+const GRAVITY_MULTIPLIER = 20;
+/** @type {number} Collision detection radius */
+const COLLISION_RADIUS = 1.0;
 
 export const ProjectileScript = {
     type: 'ProjectileScript',
 
-    // Config
-    lifetime: 3,          // seconds
-    damage: 10,
+    // ===== CONFIG =====
+    /** @type {number} Projectile lifetime in seconds before auto-destroy */
+    lifetime: DEFAULT_LIFETIME,
+    /** @type {number} Damage dealt on hit */
+    damage: DEFAULT_DAMAGE,
+    /** @type {number} Gravity multiplier (0 = no gravity, 1 = normal) */
     gravity: 0,
+    /** @type {boolean} Whether to destroy on first hit */
     destroyOnHit: true,
+    /** @type {boolean} Whether projectile can hit multiple targets */
     piercing: false,
 
-    // State
+    // ===== STATE =====
+    /** @type {THREE.Vector3|null} Current velocity vector */
     velocity: null,
+    /** @type {number} Time since spawn in seconds */
     _age: 0,
+    /** @type {Set|null} Set of entities already hit (for piercing) */
     _hitEntities: null,
 
+    /**
+     * Called when the script starts
+     */
     Start() {
-        this.velocity = this.velocity || new THREE.Vector3(0, 0, -20);
+        this.velocity = this.velocity || new THREE.Vector3(0, 0, DEFAULT_VELOCITY);
         this._hitEntities = new Set();
     },
 
+    /**
+     * Called every frame
+     */
     Update() {
         if (!this.velocity) return;
 
@@ -30,7 +66,7 @@ export const ProjectileScript = {
 
         // Apply gravity
         if (this.gravity) {
-            this.velocity.y -= this.gravity * 20 * dt;
+            this.velocity.y -= this.gravity * GRAVITY_MULTIPLIER * dt;
         }
 
         // Move
@@ -58,13 +94,35 @@ export const ProjectileScript = {
         const game = this.gameObject.game || window.__VOXEL_GAME__;
         if (!game) return;
 
-        // Check against entities
-        const entities = game.animals || [];
+        // Collect all entities from both game.animals AND VoxelWorld SDK instances
+        const entities = [];
+
+        // Add legacy game animals
+        if (game.animals) {
+            entities.push(...game.animals);
+        }
+
+        // Add SDK-spawned entities from VoxelWorld
+        if (window.VoxelWorld?._instances) {
+            for (const instance of window.VoxelWorld._instances) {
+                // Don't collide with self
+                if (instance === this.gameObject) continue;
+                // Don't collide with other projectiles
+                if (instance.hasScript?.('ProjectileScript')) continue;
+                entities.push(instance);
+            }
+        }
+
+        // Check against all entities
         for (const entity of entities) {
             if (this._hitEntities.has(entity)) continue;
 
-            const dist = this.transform.position.distanceTo(entity.position);
-            if (dist < 1.0) {
+            // Get entity position (handle both SDK GameObjects and legacy entities)
+            const entityPos = entity.transform?.position || entity.position;
+            if (!entityPos) continue;
+
+            const dist = this.transform.position.distanceTo(entityPos);
+            if (dist < COLLISION_RADIUS) {
                 this._OnHit(entity);
                 if (!this.piercing) return;
             }

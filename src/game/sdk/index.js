@@ -14,7 +14,6 @@
  * // Create a creature
  * VoxelWorld.createObject('Slime')
  *   .attach('mesh', [{ type: 'sphere', size: [0.8], color: 0x00ff00 }])
- *   .attach('entity')
  *   .attach('physics', { mode: 'hopping', speed: 3 })
  *   .attach('ai', { behavior: 'passive' })
  *   .attach('health', { max: 20 })
@@ -31,14 +30,13 @@ export default VoxelWorld;
 export {
     MeshScript,
     ItemScript,
-    EntityScript,
     PhysicsScript,
     AIScript,
     HealthScript,
-    ColliderScript,
     ShooterScript,
     ProjectileScript,
     ParticleScript,
+    AnimationScript,
     ScriptTypes,
     getScript
 } from './scripts/index.js';
@@ -47,4 +45,4 @@ export {
 export { buildMesh, createPart } from './core/MeshBuilder.js';
 export { validateIcon } from './core/IconValidator.js';
 
-export const SDK_VERSION = '3.0.0';
+export const SDK_VERSION = '3.1.0';

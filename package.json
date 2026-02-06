@@ -14,6 +14,7 @@
   "dependencies": {
     "civitai": "^0.1.15",
     "concurrently": "^9.2.1",
+    "fengari-web": "^0.1.4",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.6.0",
     "nanoid": "^3.3.11",

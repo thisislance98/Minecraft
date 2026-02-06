@@ -367,10 +367,10 @@ export class VoxelGame {
             const chatInput = document.getElementById('chat-input');
             if (chatInput && document.activeElement === chatInput) return;
 
-            if (e.key && e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+            if (e.key && e.key.toLowerCase() === 'k' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen) && !(this.uiManager && this.uiManager.merlinPanel && this.uiManager.merlinPanel.isVisible)) {
                 this.setDaytime();
             }
-            if (e.key && e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen)) {
+            if (e.key && e.key.toLowerCase() === 'b' && !this.gameState.flags.inventoryOpen && !(this.agent && this.agent.isChatOpen) && !(this.uiManager && this.uiManager.merlinPanel && this.uiManager.merlinPanel.isVisible)) {
                 this.uiManager.openSettings();
             }
         });
@@ -745,6 +745,22 @@ export class VoxelGame {
         } catch (e) {
             console.error('[Game] Failed to initialize SDK:', e);
         }
+    }
+
+    /**
+     * Get the ground SURFACE level at a given x,z coordinate
+     * Used by SDK entities to find where to stand
+     * @param {number} x - World X coordinate
+     * @param {number} z - World Z coordinate
+     * @returns {number} The surface height (top of terrain block + 1)
+     */
+    getGroundLevel(x, z) {
+        if (this.worldGen) {
+            // getTerrainHeight returns the Y of the top block,
+            // but entities stand ON TOP of blocks, so add 1
+            return this.worldGen.getTerrainHeight(x, z) + 1;
+        }
+        return 0; // Fallback
     }
 
     spawnPlayer() {
@@ -2110,6 +2126,102 @@ export class VoxelGame {
         this.visibleChunkCount = visibleCount;
     }
 
+    /**
+     * Get all objects visible in the player's view frustum
+     * @param {Object} options
+     * @param {number} options.maxDistance - Maximum distance to check (default: 100)
+     * @param {boolean} options.includeAnimals - Include animals/entities (default: true)
+     * @param {boolean} options.includeChunks - Include terrain chunks (default: false)
+     * @param {boolean} options.checkOcclusion - Check line-of-sight occlusion (default: false, expensive)
+     * @returns {Array} Array of visible objects with type, distance, position info
+     */
+    getObjectsInView(options = {}) {
+        const {
+            maxDistance = 100,
+            includeAnimals = true,
+            includeChunks = false,
+            checkOcclusion = false
+        } = options;
+
+        // Make sure frustum is current
+        this.camera.updateMatrixWorld();
+        this.frustumMatrix.multiplyMatrices(
+            this.camera.projectionMatrix,
+            this.camera.matrixWorldInverse
+        );
+        this.frustum.setFromProjectionMatrix(this.frustumMatrix);
+
+        const visibleObjects = [];
+        const maxDistSq = maxDistance * maxDistance;
+        const cameraPos = this.camera.position;
+
+        // Reusable sphere for entity tests
+        if (!this._viewTestSphere) {
+            this._viewTestSphere = new THREE.Sphere(new THREE.Vector3(), 2.0);
+            this._viewTestCenter = new THREE.Vector3();
+        }
+
+        // Check animals/entities
+        if (includeAnimals && this.animals) {
+            for (const animal of this.animals) {
+                if (!animal.position) continue;
+
+                // Distance check
+                const distSq = animal.position.distanceToSquared(cameraPos);
+                if (distSq > maxDistSq) continue;
+
+                // Frustum check using bounding sphere
+                this._viewTestSphere.center.copy(animal.position);
+                this._viewTestSphere.radius = animal.height || 2.0;
+
+                if (this.frustum.intersectsSphere(this._viewTestSphere)) {
+                    // Optional occlusion check
+                    let occluded = false;
+                    if (checkOcclusion) {
+                        this._viewTestCenter.copy(animal.position);
+                        this._viewTestCenter.y += (animal.height || 1.0) * 0.5;
+                        occluded = !this.checkLineOfSight(cameraPos, this._viewTestCenter);
+                    }
+
+                    if (!occluded) {
+                        const dist = Math.sqrt(distSq);
+                        visibleObjects.push({
+                            type: 'entity',
+                            entityType: animal.constructor.name,
+                            id: animal.id,
+                            distance: Math.round(dist * 10) / 10,
+                            position: {
+                                x: Math.round(animal.position.x * 10) / 10,
+                                y: Math.round(animal.position.y * 10) / 10,
+                                z: Math.round(animal.position.z * 10) / 10
+                            },
+                            object: animal
+                        });
+                    }
+                }
+            }
+        }
+
+        // Check chunks
+        if (includeChunks) {
+            for (const chunk of this.chunks.values()) {
+                if (chunk.isInFrustum(this.frustum)) {
+                    visibleObjects.push({
+                        type: 'chunk',
+                        cx: chunk.cx,
+                        cz: chunk.cz,
+                        object: chunk
+                    });
+                }
+            }
+        }
+
+        // Sort by distance (closest first)
+        visibleObjects.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+
+        return visibleObjects;
+    }
+
     // Physics methods moved to PhysicsManager
     // createHighlightBox removed
     // getHitAnimal, getTargetBlock removed
@@ -2545,6 +2657,11 @@ export class VoxelGame {
         // Update SDK instances (VoxelWorld GameObjects)
         if (window.VoxelWorld && window.VoxelWorld._instances?.size > 0) {
             window.VoxelWorld.update(deltaTime);
+        }
+
+        // Update Lua runtime (Roblox-style scripts)
+        if (window.LuaRuntime) {
+            window.LuaRuntime.update(deltaTime);
         }
 
         // Update mini-games

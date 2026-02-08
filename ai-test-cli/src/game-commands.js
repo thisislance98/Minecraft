@@ -3624,3 +3624,349 @@ export function printSdkTestResults(results) {
     }
     console.log();
 }
+
+/**
+ * Get all objects visible in the player's view frustum
+ * Uses the camera's frustum to determine what the player can currently see
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {Object} options - Options for visibility check
+ * @param {number} options.maxDistance - Maximum distance to check (default: 100)
+ * @param {boolean} options.includeAnimals - Include animals/entities (default: true)
+ * @param {boolean} options.includeChunks - Include terrain chunks (default: false)
+ * @param {boolean} options.checkOcclusion - Check line-of-sight occlusion (default: false)
+ * @returns {Object} Object with visible entities, counts, and player view info
+ */
+export async function getObjectsInView(browser, options = {}) {
+    return await executeInBrowser(browser, (opts) => {
+        const game = window.__VOXEL_GAME__;
+        if (!game?.player || !game?.camera) return { error: 'Game not ready' };
+
+        const {
+            maxDistance = 100,
+            includeAnimals = true,
+            includeChunks = false,
+            checkOcclusion = false
+        } = opts;
+
+        // Use the game's built-in getObjectsInView if available
+        if (typeof game.getObjectsInView === 'function') {
+            const rawResults = game.getObjectsInView({
+                maxDistance,
+                includeAnimals,
+                includeChunks,
+                checkOcclusion
+            });
+
+            // Strip the THREE.js object references for serialization
+            const serializable = rawResults.map(obj => {
+                const { object, ...rest } = obj;
+                return rest;
+            });
+
+            // Group entities by type
+            const byType = {};
+            for (const obj of serializable) {
+                if (obj.type === 'entity') {
+                    byType[obj.entityType] = (byType[obj.entityType] || 0) + 1;
+                }
+            }
+
+            return {
+                success: true,
+                viewInfo: {
+                    playerPosition: {
+                        x: Math.round(game.player.position.x * 10) / 10,
+                        y: Math.round(game.player.position.y * 10) / 10,
+                        z: Math.round(game.player.position.z * 10) / 10
+                    },
+                    cameraDirection: {
+                        x: Math.round(game.camera.getWorldDirection(new window.THREE.Vector3()).x * 100) / 100,
+                        y: Math.round(game.camera.getWorldDirection(new window.THREE.Vector3()).y * 100) / 100,
+                        z: Math.round(game.camera.getWorldDirection(new window.THREE.Vector3()).z * 100) / 100
+                    },
+                    maxDistance,
+                    checkOcclusion
+                },
+                objects: serializable,
+                summary: {
+                    total: serializable.length,
+                    entities: serializable.filter(o => o.type === 'entity').length,
+                    chunks: serializable.filter(o => o.type === 'chunk').length,
+                    byType
+                }
+            };
+        }
+
+        return { error: 'getObjectsInView not available on game object' };
+    }, options);
+}
+
+/**
+ * Verify that a specific entity type is visible to the player
+ * Useful for testing if AI-created objects appear correctly
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} entityType - Entity type name to look for (e.g., 'Slime', 'Wolf')
+ * @param {Object} options - Additional options
+ * @param {number} options.maxDistance - Maximum distance to check (default: 50)
+ * @param {number} options.minCount - Minimum number expected (default: 1)
+ * @returns {Object} Verification result with found status and details
+ */
+export async function verifyEntityVisible(browser, entityType, options = {}) {
+    const { maxDistance = 50, minCount = 1 } = options;
+
+    const viewResult = await getObjectsInView(browser, {
+        maxDistance,
+        includeAnimals: true,
+        checkOcclusion: false
+    });
+
+    if (viewResult.error) {
+        return { success: false, error: viewResult.error };
+    }
+
+    const matchingEntities = viewResult.objects.filter(
+        obj => obj.type === 'entity' &&
+               obj.entityType.toLowerCase() === entityType.toLowerCase()
+    );
+
+    return {
+        success: matchingEntities.length >= minCount,
+        found: matchingEntities.length,
+        expected: minCount,
+        entityType,
+        entities: matchingEntities,
+        message: matchingEntities.length >= minCount
+            ? `Found ${matchingEntities.length} ${entityType}(s) in view`
+            : `Expected ${minCount} ${entityType}(s) but found ${matchingEntities.length}`
+    };
+}
+
+// ============================================================
+// ENTITY DIAGNOSTICS
+// ============================================================
+
+/**
+ * Diagnose entity health - check for common issues like falling through ground
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} entityType - Optional: filter by entity type
+ * @returns {Object} Diagnostic results with issues found
+ */
+export async function diagnoseEntities(browser, entityType = null) {
+    return await executeInBrowser(browser, (filterType) => {
+        const game = window.__VOXEL_GAME__;
+        const VoxelWorld = window.VoxelWorld;
+        if (!game) return { error: 'Game not ready' };
+
+        const results = {
+            timestamp: Date.now(),
+            issues: [],
+            healthy: [],
+            summary: { total: 0, healthy: 0, issues: 0 }
+        };
+
+        // Check SDK instances
+        const sdkInstances = VoxelWorld?._instances ? [...VoxelWorld._instances] : [];
+
+        // Check game animals
+        const animals = game.animals || [];
+
+        // Combine all entities
+        const allEntities = [
+            ...sdkInstances.map(e => ({ source: 'sdk', entity: e, name: e.name })),
+            ...animals.map(e => ({ source: 'animal', entity: e, name: e.constructor?.name || 'Unknown' }))
+        ];
+
+        for (const { source, entity, name } of allEntities) {
+            if (filterType && name.toLowerCase() !== filterType.toLowerCase()) continue;
+
+            results.summary.total++;
+
+            const issues = [];
+            let pos = null;
+
+            // Get position
+            if (entity.mesh?.position) {
+                pos = entity.mesh.position;
+            } else if (entity.position) {
+                pos = entity.position;
+            } else if (entity.transform?.position) {
+                pos = entity.transform.position;
+            }
+
+            if (!pos) {
+                issues.push('NO_POSITION: Entity has no position');
+            } else {
+                // Check if below world (falling through ground)
+                if (pos.y < -10) {
+                    issues.push(`FELL_THROUGH_GROUND: Y=${pos.y.toFixed(1)} (below -10)`);
+                }
+
+                // Check if way too high (stuck in sky)
+                if (pos.y > 200) {
+                    issues.push(`TOO_HIGH: Y=${pos.y.toFixed(1)} (above 200)`);
+                }
+
+                // Get expected ground level
+                if (game.getGroundLevel && pos.y < -10) {
+                    const groundY = game.getGroundLevel(pos.x, pos.z);
+                    issues.push(`GROUND_LEVEL_AT_POS: ${groundY}`);
+                }
+            }
+
+            // Check for mesh
+            if (!entity.mesh) {
+                issues.push('NO_MESH: Entity has no visible mesh');
+            }
+
+            // Check SDK-specific issues
+            if (source === 'sdk') {
+                const hasPhysics = entity.hasScript?.('PhysicsScript');
+                const hasAI = entity.hasScript?.('AIScript');
+
+                if (hasPhysics) {
+                    const physics = entity.getScript('PhysicsScript');
+                    if (physics && !physics.grounded && pos && pos.y < 0) {
+                        issues.push('PHYSICS_NOT_GROUNDED: Physics says not grounded but Y < 0');
+                    }
+                }
+
+                if (!hasPhysics && hasAI) {
+                    issues.push('AI_WITHOUT_PHYSICS: Has AI but no physics (cannot move properly)');
+                }
+            }
+
+            const entityInfo = {
+                name,
+                source,
+                position: pos ? { x: pos.x.toFixed(2), y: pos.y.toFixed(2), z: pos.z.toFixed(2) } : null,
+                issues
+            };
+
+            if (issues.length > 0) {
+                results.issues.push(entityInfo);
+                results.summary.issues++;
+            } else {
+                results.healthy.push(entityInfo);
+                results.summary.healthy++;
+            }
+        }
+
+        return results;
+    }, entityType);
+}
+
+/**
+ * Watch an entity's position over time to detect falling/stuck issues
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} entityName - Name of entity to watch
+ * @param {number} duration - How long to watch in ms (default 3000)
+ * @param {number} interval - Check interval in ms (default 500)
+ */
+export async function watchEntity(browser, entityName, duration = 3000, interval = 500) {
+    const samples = [];
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < duration) {
+        const sample = await executeInBrowser(browser, (name) => {
+            const VoxelWorld = window.VoxelWorld;
+            const game = window.__VOXEL_GAME__;
+
+            // Find in SDK instances
+            let entity = null;
+            if (VoxelWorld?._instances) {
+                entity = [...VoxelWorld._instances].find(e =>
+                    e.name?.toLowerCase() === name.toLowerCase()
+                );
+            }
+
+            // Find in game animals
+            if (!entity && game?.animals) {
+                entity = game.animals.find(a =>
+                    a.constructor?.name?.toLowerCase() === name.toLowerCase()
+                );
+            }
+
+            if (!entity) return { error: 'Entity not found', name };
+
+            let pos = entity.mesh?.position || entity.position || entity.transform?.position;
+            if (!pos) return { error: 'No position', name };
+
+            const groundY = game?.getGroundLevel?.(pos.x, pos.z) ?? null;
+
+            return {
+                time: Date.now(),
+                y: pos.y,
+                x: pos.x,
+                z: pos.z,
+                groundY,
+                grounded: entity.getScript?.('PhysicsScript')?.grounded ?? null
+            };
+        }, entityName);
+
+        samples.push(sample);
+        await new Promise(r => setTimeout(r, interval));
+    }
+
+    // Analyze samples
+    const analysis = {
+        entityName,
+        samples,
+        issues: []
+    };
+
+    if (samples.length >= 2 && !samples[0].error) {
+        const firstY = samples[0].y;
+        const lastY = samples[samples.length - 1].y;
+        const deltaY = lastY - firstY;
+
+        // Check if continuously falling
+        if (deltaY < -5) {
+            analysis.issues.push(`FALLING: Dropped ${Math.abs(deltaY).toFixed(1)} units over ${duration}ms`);
+        }
+
+        // Check if below ground
+        if (lastY < -10) {
+            analysis.issues.push(`BELOW_WORLD: Final Y=${lastY.toFixed(1)}`);
+        }
+
+        // Check if below terrain
+        const lastSample = samples[samples.length - 1];
+        if (lastSample.groundY !== null && lastY < lastSample.groundY - 2) {
+            analysis.issues.push(`BELOW_TERRAIN: Y=${lastY.toFixed(1)}, ground=${lastSample.groundY}`);
+        }
+    }
+
+    analysis.healthy = analysis.issues.length === 0;
+    return analysis;
+}
+
+/**
+ * Print entity diagnostics in a nice format
+ */
+export function printDiagnostics(results) {
+    if (results.error) {
+        console.log(chalk.red(`Error: ${results.error}`));
+        return;
+    }
+
+    console.log(chalk.blue('\n═══ Entity Diagnostics ═══'));
+    console.log(`Total: ${results.summary.total} | Healthy: ${chalk.green(results.summary.healthy)} | Issues: ${chalk.red(results.summary.issues)}`);
+
+    if (results.issues.length > 0) {
+        console.log(chalk.red('\n─── Issues Found ───'));
+        for (const entity of results.issues) {
+            console.log(chalk.yellow(`\n${entity.name} (${entity.source}):`));
+            console.log(`  Position: ${entity.position ? `(${entity.position.x}, ${entity.position.y}, ${entity.position.z})` : 'N/A'}`);
+            for (const issue of entity.issues) {
+                console.log(chalk.red(`  ⚠ ${issue}`));
+            }
+        }
+    }
+
+    if (results.healthy.length > 0 && results.healthy.length <= 10) {
+        console.log(chalk.green('\n─── Healthy Entities ───'));
+        for (const entity of results.healthy) {
+            console.log(`  ✓ ${entity.name} at (${entity.position?.x}, ${entity.position?.y}, ${entity.position?.z})`);
+        }
+    }
+}

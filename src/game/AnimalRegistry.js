@@ -38,6 +38,11 @@ import { Rhinoceros } from './entities/animals/Rhinoceros.js';
 import { Hippopotamus } from './entities/animals/Hippopotamus.js';
 import { Crocodile } from './entities/animals/Crocodile.js';
 import { Ostrich } from './entities/animals/Ostrich.js';
+import { Wolf } from './entities/animals/Wolf.js';
+import { Pig } from './entities/animals/Pig.js';
+import { Cow } from './entities/animals/Cow.js';
+import { Sheep } from './entities/animals/Sheep.js';
+import { Chicken } from './entities/animals/Chicken.js';
 AnimalClasses['Slime'] = Slime;
 AnimalClasses['Firefly'] = Firefly;
 AnimalClasses['Bee'] = Bee;
@@ -49,7 +54,12 @@ AnimalClasses['Rhinoceros'] = Rhinoceros;
 AnimalClasses['Hippopotamus'] = Hippopotamus;
 AnimalClasses['Crocodile'] = Crocodile;
 AnimalClasses['Ostrich'] = Ostrich;
-console.log('[AnimalRegistry] Manually registered Firefly, Bee, Hedgehog, and Merlin.');
+AnimalClasses['Wolf'] = Wolf;
+AnimalClasses['Pig'] = Pig;
+AnimalClasses['Cow'] = Cow;
+AnimalClasses['Sheep'] = Sheep;
+AnimalClasses['Chicken'] = Chicken;
+console.log('[AnimalRegistry] Manually registered common animals: Wolf, Pig, Cow, Sheep, Chicken.');
 console.log('[AnimalRegistry] Final AnimalClasses keys:', Object.keys(AnimalClasses));
 
 // Expose Animal base class to window for dynamic creature creation

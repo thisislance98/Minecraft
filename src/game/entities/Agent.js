@@ -10,6 +10,7 @@ import {
     CREATURE_ALIASES,
     MAX_SPAWN_COUNT
 } from '../constants.js';
+import { validateSDKCode, getSDKHintsForError, formatValidationResult } from '../sdk/SDKValidator.js';
 
 export class Agent {
     constructor(game) {
@@ -354,14 +355,22 @@ Max 25 words total.
     }
 
     async handleToolRequest(msg) {
-        const { id, name, args } = msg;
+        const { id, name, args, taskId } = msg;
         let result = {};
 
         try {
             console.log(`[Agent] Executing Client Tool: ${name}`, args);
 
-            // SDK Tool (unified)
-            if (name === 'sdk_create') {
+            // Primary tool: execute_lua - runs Roblox-style Lua code
+            if (name === 'execute_lua') {
+                result = await this.executeLua(args.code, taskId);
+            }
+            // Legacy tool: execute_code - runs JavaScript SDK code
+            else if (name === 'execute_code') {
+                result = await this.executeCode(args.code, taskId);
+            }
+            // Legacy SDK Tool (unified)
+            else if (name === 'sdk_create') {
                 result = await this.sdkCreate(args);
             }
             // Legacy SDK tools (for backwards compatibility)
@@ -443,6 +452,147 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
     // =========================================================================
     // SDK TOOL HANDLERS - VoxelWorld SDK Integration
     // =========================================================================
+
+    /**
+     * Execute arbitrary SDK code - the primary tool for Merlin
+     * @param {string} code - JavaScript code to execute
+     * @param {string} taskId - Optional task ID for undo tracking
+     */
+    async executeCode(code, taskId = null) {
+        console.log('[Agent] Executing code:', code);
+
+        try {
+            if (!code || typeof code !== 'string') {
+                return { error: 'No code provided' };
+            }
+
+            // STEP 1: Static validation - catch common mistakes BEFORE runtime
+            const validation = validateSDKCode(code);
+            if (!validation.valid) {
+                const validationMsg = formatValidationResult(validation);
+                console.warn('[Agent] SDK Validation failed:', validationMsg);
+                return {
+                    error: 'SDK Validation Failed - please fix these issues',
+                    validationErrors: validation.errors,
+                    validationWarnings: validation.warnings,
+                    suggestion: validationMsg
+                };
+            }
+
+            // Log warnings but don't block execution
+            if (validation.warnings.length > 0) {
+                console.warn('[Agent] SDK Warnings:', validation.warnings);
+            }
+
+            // Set up the execution context
+            const game = this.game;
+            const player = this.game.player;
+            const VoxelWorld = window.VoxelWorld;
+            const THREE = window.THREE;
+
+            // Start undo tracking if we have a taskId
+            if (taskId && VoxelWorld) {
+                VoxelWorld.beginTracking(taskId);
+            }
+
+            // Create a function with the SDK context
+            const fn = new Function('VoxelWorld', 'game', 'player', 'THREE', code);
+
+            // Execute the code
+            const result = fn(VoxelWorld, game, player, THREE);
+
+            // End undo tracking and get the record
+            let undoRecord = null;
+            if (taskId && VoxelWorld) {
+                undoRecord = VoxelWorld.endTracking();
+            }
+
+            console.log('[Agent] Code executed successfully');
+            return {
+                success: true,
+                message: 'Code executed',
+                result: result !== undefined ? result : null,
+                undoRecord: undoRecord,
+                warnings: validation.warnings.length > 0 ? validation.warnings : undefined
+            };
+        } catch (e) {
+            // End tracking even on error
+            if (taskId && window.VoxelWorld) {
+                window.VoxelWorld.endTracking();
+            }
+            console.error('[Agent] Code execution failed:', e);
+
+            // Get helpful hints based on the error
+            const hints = getSDKHintsForError(e.message);
+
+            return {
+                error: `Execution failed: ${e.message}`,
+                stack: e.stack,
+                sdkHints: hints.length > 0 ? hints : undefined
+            };
+        }
+    }
+
+    /**
+     * Execute Roblox-style Lua code using the LuaRuntime
+     * @param {string} code - Lua code to execute
+     * @param {string} taskId - Optional task ID for undo tracking
+     */
+    async executeLua(code, taskId = null) {
+        console.log('[Agent] Executing Lua code:', code);
+
+        try {
+            if (!code || typeof code !== 'string') {
+                return { error: 'No Lua code provided' };
+            }
+
+            // Check if LuaRuntime is available
+            if (!window.LuaRuntime) {
+                console.error('[Agent] LuaRuntime not available');
+                return { error: 'Lua runtime not initialized. The game may need to be restarted.' };
+            }
+
+            // Start undo tracking if we have a taskId
+            if (taskId && window.VoxelWorld) {
+                window.VoxelWorld.beginTracking(taskId);
+            }
+
+            // Execute the Lua code
+            const result = window.LuaRuntime.execute(code, 'merlin_script');
+
+            // End undo tracking and get the record
+            let undoRecord = null;
+            if (taskId && window.VoxelWorld) {
+                undoRecord = window.VoxelWorld.endTracking();
+            }
+
+            if (result.success) {
+                console.log('[Agent] Lua code executed successfully');
+                return {
+                    success: true,
+                    message: 'Lua code executed',
+                    undoRecord: undoRecord
+                };
+            } else {
+                console.error('[Agent] Lua execution error:', result.error);
+                return {
+                    error: `Lua error: ${result.error}`,
+                    undoRecord: undoRecord
+                };
+            }
+        } catch (e) {
+            // End tracking even on error
+            if (taskId && window.VoxelWorld) {
+                window.VoxelWorld.endTracking();
+            }
+            console.error('[Agent] Lua execution failed:', e);
+
+            return {
+                error: `Lua execution failed: ${e.message}`,
+                stack: e.stack
+            };
+        }
+    }
 
     /**
      * Create a game object using the unified SDK

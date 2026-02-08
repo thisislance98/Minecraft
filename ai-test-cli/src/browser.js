@@ -1,5 +1,11 @@
 import puppeteer from 'puppeteer';
 import { ensureServerRunning } from './server-check.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+// File to store browser connection info
+const BROWSER_INFO_FILE = path.join(os.tmpdir(), 'ai-test-browser.json');
 
 /**
  * Browser automation for running game client during CLI tests
@@ -14,6 +20,99 @@ export class GameBrowser {
         this.gameUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'cli=true&secret=asdf123';
         this.headless = options.headless ?? false; // Always headed for visual debugging
         this.quiet = options.quiet ?? false; // Suppress browser logs when true
+    }
+
+    /**
+     * Get stored browser info
+     */
+    static getBrowserInfo() {
+        try {
+            if (fs.existsSync(BROWSER_INFO_FILE)) {
+                return JSON.parse(fs.readFileSync(BROWSER_INFO_FILE, 'utf-8'));
+            }
+        } catch (e) {
+            // Ignore
+        }
+        return null;
+    }
+
+    /**
+     * Save browser connection info for later reconnection
+     */
+    saveBrowserInfo() {
+        if (this.browser) {
+            const info = {
+                wsEndpoint: this.browser.wsEndpoint(),
+                timestamp: Date.now()
+            };
+            fs.writeFileSync(BROWSER_INFO_FILE, JSON.stringify(info, null, 2));
+            console.log(`  📝 Browser info saved to ${BROWSER_INFO_FILE}`);
+            return info;
+        }
+        return null;
+    }
+
+    /**
+     * Connect to an existing browser session
+     */
+    async connect() {
+        const info = GameBrowser.getBrowserInfo();
+        if (!info) {
+            throw new Error('No running browser found. Use "ai-test browser" to start one first.');
+        }
+
+        console.log(`🔗 Connecting to existing browser...`);
+        try {
+            this.browser = await puppeteer.connect({
+                browserWSEndpoint: info.wsEndpoint
+            });
+
+            // Get the first page (should be our game)
+            const pages = await this.browser.pages();
+            this.page = pages.find(p => p.url().includes('localhost:3000')) || pages[0];
+
+            if (!this.page) {
+                throw new Error('No game page found in browser');
+            }
+
+            // Re-attach console listener
+            this._attachConsoleListener();
+
+            console.log(`  ✓ Connected to browser (${pages.length} pages)`);
+            return this;
+        } catch (e) {
+            // Clear stale info
+            try { fs.unlinkSync(BROWSER_INFO_FILE); } catch (_) {}
+            throw new Error(`Failed to connect: ${e.message}. Browser may have been closed.`);
+        }
+    }
+
+    _attachConsoleListener() {
+        this.page.on('console', msg => {
+            const type = msg.type();
+            const text = msg.text();
+
+            // Skip noisy messages
+            if (text.includes('THREE.WebGLRenderer')) return;
+
+            // Skip all non-essential logs in quiet mode
+            if (this.quiet && type !== 'error') return;
+
+            // Highlight AI-related messages
+            const isAIMessage = text.includes('[Agent]') || text.includes('[AI]') ||
+                text.includes('Tool:') || text.includes('Thought:') ||
+                text.includes('Executing Client Tool');
+
+            if (type === 'error') {
+                console.log(`  [Browser Error] ${text}`);
+            } else if (type === 'warn') {
+                console.log(`  [Browser Warn] ${text}`);
+            } else if (isAIMessage) {
+                console.log(`  🤖 ${text}`);
+            } else if (type === 'log' || type === 'info') {
+                console.log(`  [Browser] ${text}`);
+            }
+        });
     }
 
     /**
@@ -48,31 +147,7 @@ export class GameBrowser {
         await this.page.setViewport({ width: 1280, height: 720 });
 
         // Log console messages from the game
-        this.page.on('console', msg => {
-            const type = msg.type();
-            const text = msg.text();
-
-            // Skip noisy messages
-            if (text.includes('THREE.WebGLRenderer')) return;
-
-            // Skip all non-essential logs in quiet mode
-            if (this.quiet && type !== 'error') return;
-
-            // Highlight AI-related messages
-            const isAIMessage = text.includes('[Agent]') || text.includes('[AI]') ||
-                text.includes('Tool:') || text.includes('Thought:') ||
-                text.includes('Executing Client Tool');
-
-            if (type === 'error') {
-                console.log(`  [Browser Error] ${text}`);
-            } else if (type === 'warn') {
-                console.log(`  [Browser Warn] ${text}`);
-            } else if (isAIMessage) {
-                console.log(`  🤖 ${text}`);
-            } else if (type === 'log' || type === 'info') {
-                console.log(`  [Browser] ${text}`);
-            }
-        });
+        this._attachConsoleListener();
 
         console.log(`  Navigating to ${this.gameUrl}...`);
         await this.page.goto(this.gameUrl, { waitUntil: 'domcontentloaded' });

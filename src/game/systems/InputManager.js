@@ -32,6 +32,15 @@ export class InputManager {
             secondaryAction: localStorage.getItem('hotkey_secondary_action') || 'KeyE'
         };
 
+        // Merlin Voice Hold-to-talk state
+        this.merlinHoldState = {
+            isHolding: false,
+            holdStartTime: 0,
+            isVoiceActive: false,
+            holdThreshold: 200, // ms before voice mode activates
+            checkTimer: null
+        };
+
         // Mobile / Touch Support
         this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         this.touchLookSensitivity = 0.005;
@@ -169,15 +178,22 @@ export class InputManager {
                 }
             }
 
-            // Merlin Panel Toggle (M) - can close even when open (if input not focused)
-            if (e.code === 'KeyM' && !this.game.agent.isChatOpen) {
-                if (this.game.uiManager && this.game.uiManager.merlinPanel) {
-                    const merlinPanel = this.game.uiManager.merlinPanel;
-                    // If panel is open, allow closing it (input focus already checked above)
-                    // If panel is closed, only open if no other panels are open
-                    if (merlinPanel.isVisible || !isPanelOpen) {
-                        merlinPanel.toggle();
-                    }
+            // Merlin Panel Toggle (M) / Hold-to-talk Voice Mode
+            // Short press = toggle panel, Hold = voice input for tasks
+            if (e.code === 'KeyM' && !e.repeat && !this.game.agent.isChatOpen) {
+                if (!this.merlinHoldState.isHolding) {
+                    this.merlinHoldState.isHolding = true;
+                    this.merlinHoldState.holdStartTime = Date.now();
+                    this.merlinHoldState.isVoiceActive = false;
+
+                    // Start a timer to check if user is holding
+                    this.merlinHoldState.checkTimer = setTimeout(() => {
+                        // User held long enough - start voice recognition
+                        if (this.merlinHoldState.isHolding) {
+                            this.merlinHoldState.isVoiceActive = true;
+                            this.startMerlinVoiceInput();
+                        }
+                    }, this.merlinHoldState.holdThreshold);
                 }
             }
 
@@ -342,6 +358,36 @@ export class InputManager {
 
             if (e.code === 'KeyE') {
                 // Removed specific KeyE up logic as it's now Inventory toggle
+            }
+
+            // Merlin M key release - handle voice mode or panel toggle
+            if (e.code === 'KeyM' && this.merlinHoldState.isHolding) {
+                // Clear the hold timer
+                if (this.merlinHoldState.checkTimer) {
+                    clearTimeout(this.merlinHoldState.checkTimer);
+                    this.merlinHoldState.checkTimer = null;
+                }
+
+                const holdDuration = Date.now() - this.merlinHoldState.holdStartTime;
+
+                if (this.merlinHoldState.isVoiceActive) {
+                    // Was in voice mode - stop listening and send transcript
+                    this.stopMerlinVoiceInput();
+                } else if (holdDuration < this.merlinHoldState.holdThreshold) {
+                    // Short press - toggle panel as before
+                    if (this.game.uiManager && this.game.uiManager.merlinPanel) {
+                        const merlinPanel = this.game.uiManager.merlinPanel;
+                        const isPanelOpen = this.game.gameState.flags.inventoryOpen ||
+                            (this.game.uiManager && this.game.uiManager.settingsManager && this.game.uiManager.settingsManager.isOpen) ||
+                            (this.game.uiManager && this.game.uiManager.debugPanel && this.game.uiManager.debugPanel.isVisible);
+                        if (merlinPanel.isVisible || !isPanelOpen) {
+                            merlinPanel.toggle();
+                        }
+                    }
+                }
+
+                this.merlinHoldState.isHolding = false;
+                this.merlinHoldState.isVoiceActive = false;
             }
         });
 
@@ -661,5 +707,261 @@ export class InputManager {
         });
     }
     unlock() { document.exitPointerLock(); }
+
+    /**
+     * Start voice input for Merlin task creation (hold M key)
+     */
+    startMerlinVoiceInput() {
+        console.log('[InputManager] Starting Merlin voice input...');
+
+        // Show the voice indicator UI
+        this.showMerlinVoiceIndicator();
+
+        // Initialize speech recognition if needed
+        if (!this.merlinVoiceRecognition) {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.warn('[InputManager] Speech Recognition not supported');
+                this.hideMerlinVoiceIndicator();
+                this.merlinHoldState.isVoiceActive = false;
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            this.merlinVoiceRecognition = new SpeechRecognition();
+            this.merlinVoiceRecognition.continuous = true; // Keep listening while held
+            this.merlinVoiceRecognition.interimResults = true; // Show partial results
+            this.merlinVoiceRecognition.lang = 'en-US';
+            this.merlinVoiceRecognition.maxAlternatives = 1;
+
+            this.merlinVoiceTranscript = '';
+
+            this.merlinVoiceRecognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                if (finalTranscript) {
+                    this.merlinVoiceTranscript += finalTranscript;
+                }
+
+                // Update the indicator with current transcript
+                this.updateMerlinVoiceIndicator(this.merlinVoiceTranscript + interimTranscript);
+            };
+
+            this.merlinVoiceRecognition.onerror = (event) => {
+                console.error('[InputManager] Voice recognition error:', event.error);
+                if (event.error !== 'aborted') {
+                    this.hideMerlinVoiceIndicator();
+                }
+            };
+
+            this.merlinVoiceRecognition.onend = () => {
+                // If still holding and voice active, recognition ended unexpectedly
+                if (this.merlinHoldState.isVoiceActive && this.merlinHoldState.isHolding) {
+                    // Restart recognition
+                    try {
+                        this.merlinVoiceRecognition.start();
+                    } catch (e) {
+                        console.warn('[InputManager] Could not restart recognition:', e);
+                    }
+                }
+            };
+        }
+
+        // Reset transcript
+        this.merlinVoiceTranscript = '';
+
+        // Start listening
+        try {
+            this.merlinVoiceRecognition.start();
+        } catch (e) {
+            console.warn('[InputManager] Could not start recognition:', e);
+        }
+    }
+
+    /**
+     * Stop voice input and send transcript as a task
+     */
+    stopMerlinVoiceInput() {
+        console.log('[InputManager] Stopping Merlin voice input...');
+
+        // Stop recognition
+        if (this.merlinVoiceRecognition) {
+            try {
+                this.merlinVoiceRecognition.stop();
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // Hide indicator
+        this.hideMerlinVoiceIndicator();
+
+        // Send transcript as a task if we have one
+        const transcript = this.merlinVoiceTranscript?.trim();
+        if (transcript && transcript.length > 0) {
+            console.log('[InputManager] Sending voice task:', transcript);
+
+            // Create task via TaskManager
+            if (window.merlinClient && window.merlinClient.taskManager) {
+                window.merlinClient.taskManager.createTask(transcript, 'custom');
+
+                // Show feedback
+                if (this.game.uiManager && this.game.uiManager.chatManager) {
+                    this.game.uiManager.chatManager.addChatMessage('system', `🎤 Task created: "${transcript}"`);
+                }
+            }
+        }
+
+        this.merlinVoiceTranscript = '';
+    }
+
+    /**
+     * Show the voice input indicator UI
+     */
+    showMerlinVoiceIndicator() {
+        if (!this.merlinVoiceIndicator) {
+            const div = document.createElement('div');
+            div.id = 'merlin-voice-hold-indicator';
+            div.innerHTML = `
+                <div class="voice-hold-content">
+                    <div class="voice-hold-icon">🎤</div>
+                    <div class="voice-hold-text">
+                        <div class="voice-hold-title">Speak to Merlin</div>
+                        <div class="voice-hold-transcript">Listening...</div>
+                    </div>
+                    <div class="voice-hold-hint">Release M to send</div>
+                </div>
+            `;
+            document.body.appendChild(div);
+            this.merlinVoiceIndicator = div;
+
+            // Add styles
+            if (!document.getElementById('merlin-voice-hold-styles')) {
+                const style = document.createElement('style');
+                style.id = 'merlin-voice-hold-styles';
+                style.textContent = `
+                    #merlin-voice-hold-indicator {
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        z-index: 3000;
+                        background: linear-gradient(135deg, rgba(75, 0, 130, 0.95), rgba(138, 43, 226, 0.95));
+                        border: 3px solid #9060ff;
+                        border-radius: 20px;
+                        padding: 30px 40px;
+                        font-family: 'VT323', monospace;
+                        box-shadow:
+                            0 0 30px rgba(150, 100, 255, 0.6),
+                            0 0 60px rgba(150, 100, 255, 0.3),
+                            inset 0 0 30px rgba(200, 160, 255, 0.1);
+                        animation: voice-hold-pulse 1.5s ease-in-out infinite;
+                        min-width: 300px;
+                        max-width: 500px;
+                    }
+
+                    .voice-hold-content {
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 15px;
+                    }
+
+                    .voice-hold-icon {
+                        font-size: 48px;
+                        animation: voice-icon-bounce 0.5s ease-in-out infinite alternate;
+                    }
+
+                    .voice-hold-text {
+                        text-align: center;
+                    }
+
+                    .voice-hold-title {
+                        color: #fff;
+                        font-size: 28px;
+                        font-weight: bold;
+                        text-shadow: 0 0 10px rgba(200, 160, 255, 0.8);
+                        margin-bottom: 10px;
+                    }
+
+                    .voice-hold-transcript {
+                        color: #c8a0ff;
+                        font-size: 22px;
+                        min-height: 30px;
+                        max-height: 100px;
+                        overflow-y: auto;
+                        padding: 10px;
+                        background: rgba(0, 0, 0, 0.3);
+                        border-radius: 10px;
+                        word-wrap: break-word;
+                    }
+
+                    .voice-hold-hint {
+                        color: rgba(255, 255, 255, 0.7);
+                        font-size: 16px;
+                        padding: 8px 16px;
+                        background: rgba(0, 0, 0, 0.3);
+                        border-radius: 12px;
+                    }
+
+                    @keyframes voice-hold-pulse {
+                        0%, 100% {
+                            box-shadow:
+                                0 0 30px rgba(150, 100, 255, 0.6),
+                                0 0 60px rgba(150, 100, 255, 0.3),
+                                inset 0 0 30px rgba(200, 160, 255, 0.1);
+                            border-color: #9060ff;
+                        }
+                        50% {
+                            box-shadow:
+                                0 0 50px rgba(255, 68, 68, 0.8),
+                                0 0 100px rgba(255, 68, 68, 0.4),
+                                inset 0 0 40px rgba(255, 100, 100, 0.2);
+                            border-color: #ff4444;
+                        }
+                    }
+
+                    @keyframes voice-icon-bounce {
+                        0% { transform: scale(1); }
+                        100% { transform: scale(1.2); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+
+        this.merlinVoiceIndicator.style.display = 'block';
+        this.updateMerlinVoiceIndicator('Listening...');
+    }
+
+    /**
+     * Update the voice indicator with current transcript
+     */
+    updateMerlinVoiceIndicator(text) {
+        if (this.merlinVoiceIndicator) {
+            const transcriptEl = this.merlinVoiceIndicator.querySelector('.voice-hold-transcript');
+            if (transcriptEl) {
+                transcriptEl.textContent = text || 'Listening...';
+            }
+        }
+    }
+
+    /**
+     * Hide the voice input indicator
+     */
+    hideMerlinVoiceIndicator() {
+        if (this.merlinVoiceIndicator) {
+            this.merlinVoiceIndicator.style.display = 'none';
+        }
+    }
 }
 

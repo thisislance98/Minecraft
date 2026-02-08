@@ -13,6 +13,7 @@ export class TaskManager {
         this.tasks = new Map(); // taskId -> task object
         this.taskQueue = []; // Array of taskIds in order
         this.currentTaskId = null;
+        this.lastRunningTaskId = null; // Track last running task for late-arriving messages like cost_info
         this.nextTaskId = 1;
         this.listeners = new Set();
 
@@ -110,6 +111,7 @@ export class TaskManager {
         task.status = 'running';
         task.startedAt = Date.now();
         this.currentTaskId = taskId;
+        this.lastRunningTaskId = taskId; // Track for late-arriving messages
 
         console.log(`[TaskManager] Starting task ${taskId}`);
         this.notifyListeners('task_started', task);
@@ -189,12 +191,39 @@ export class TaskManager {
 
             case 'tool_start':
                 if (task) {
+                    // Capture executed code for display in code tab
+                    // Support both legacy execute_code and new execute_lua tools
+                    if ((msg.name === 'execute_code' || msg.name === 'execute_lua') && msg.args?.code) {
+                        if (!task.executedCode) {
+                            task.executedCode = [];
+                        }
+                        task.executedCode.push({
+                            code: msg.args.code,
+                            language: msg.name === 'execute_lua' ? 'lua' : 'javascript',
+                            timestamp: Date.now(),
+                            status: 'running'
+                        });
+                    }
                     this.notifyListeners('task_tool_start', { task, tool: msg.name, args: msg.args });
                 }
                 break;
 
             case 'tool_end':
                 if (task) {
+                    // Update executed code status with result
+                    // Support both legacy execute_code and new execute_lua tools
+                    if ((msg.name === 'execute_code' || msg.name === 'execute_lua') && task.executedCode?.length > 0) {
+                        const lastExec = task.executedCode[task.executedCode.length - 1];
+                        if (lastExec.status === 'running') {
+                            lastExec.status = msg.result?.error ? 'error' : 'success';
+                            lastExec.result = msg.result;
+                            // Store undo record if available
+                            if (msg.result?.undoRecord) {
+                                lastExec.undoRecord = msg.result.undoRecord;
+                                task.canUndo = true;
+                            }
+                        }
+                    }
                     this.notifyListeners('task_tool_end', { task, tool: msg.name, result: msg.result });
                 }
                 break;
@@ -218,19 +247,32 @@ export class TaskManager {
                 break;
 
             case 'cost_info':
-                // Handle cost information for task
-                if (task) {
-                    task.costInfo = {
+                // Handle cost/token information for task
+                // Use lastRunningTaskId as fallback since cost_info may arrive after task completes
+                let costTask = task;
+                let costTaskId = taskId;
+                if (!costTask && this.lastRunningTaskId) {
+                    costTask = this.tasks.get(this.lastRunningTaskId);
+                    costTaskId = this.lastRunningTaskId;
+                    console.log(`[TaskManager] cost_info: using lastRunningTaskId ${costTaskId} as fallback`);
+                }
+
+                if (costTask) {
+                    costTask.costInfo = {
                         inputTokens: msg.inputTokens,
                         outputTokens: msg.outputTokens,
+                        cachedTokens: msg.cachedTokens || 0,
+                        cacheWriteTokens: msg.cacheWriteTokens || 0,
                         inputCostUSD: msg.inputCostUSD,
                         outputCostUSD: msg.outputCostUSD,
                         totalCostUSD: msg.totalCostUSD,
                         gameTokens: msg.gameTokens,
                         model: msg.model
                     };
-                    console.log(`[TaskManager] Task ${taskId} cost: $${msg.totalCostUSD?.toFixed(6)} (${msg.inputTokens} in / ${msg.outputTokens} out)`);
-                    this.notifyListeners('task_cost_received', task);
+                    console.log(`[TaskManager] Task ${costTaskId} tokens: ${msg.inputTokens} in / ${msg.outputTokens} out${msg.cachedTokens > 0 ? ` (${msg.cachedTokens} cached)` : ''}`);
+                    this.notifyListeners('task_cost_received', costTask);
+                } else {
+                    console.warn(`[TaskManager] cost_info received but no task found! taskId=${taskId}, lastRunningTaskId=${this.lastRunningTaskId}`);
                 }
                 break;
         }
@@ -286,6 +328,71 @@ export class TaskManager {
 
         // Process next task in queue
         setTimeout(() => this.processQueue(), 500);
+    }
+
+    /**
+     * Undo a task's changes
+     * @param {string} taskId
+     * @returns {Object} Result of the undo operation
+     */
+    undoTask(taskId) {
+        const task = this.tasks.get(taskId);
+        if (!task) {
+            return { success: false, error: 'Task not found' };
+        }
+
+        if (!task.canUndo) {
+            return { success: false, error: 'Task cannot be undone' };
+        }
+
+        // Use VoxelWorld's undo system
+        const VoxelWorld = window.VoxelWorld;
+        if (!VoxelWorld) {
+            return { success: false, error: 'VoxelWorld not available' };
+        }
+
+        const result = VoxelWorld.undoTask(taskId);
+
+        if (result.success) {
+            task.canUndo = false;
+            task.undone = true;
+            this.notifyListeners('task_undone', task);
+            this.showNotification('Changes reverted', 'success');
+        }
+
+        return result;
+    }
+
+    /**
+     * Undo the most recent task
+     * @returns {Object} Result of the undo operation
+     */
+    undoLastTask() {
+        const VoxelWorld = window.VoxelWorld;
+        if (!VoxelWorld) {
+            return { success: false, error: 'VoxelWorld not available' };
+        }
+
+        const undoableIds = VoxelWorld.getUndoableTaskIds();
+        if (undoableIds.length === 0) {
+            return { success: false, error: 'Nothing to undo' };
+        }
+
+        const lastTaskId = undoableIds[undoableIds.length - 1];
+        return this.undoTask(lastTaskId);
+    }
+
+    /**
+     * Remove a task from the list (close without undo)
+     * @param {string} taskId
+     */
+    closeTask(taskId) {
+        const task = this.tasks.get(taskId);
+        if (!task) return;
+
+        this.tasks.delete(taskId);
+        this.notifyListeners('task_closed', task);
+        console.log(`[TaskManager] Task ${taskId} closed`);
     }
 
     /**

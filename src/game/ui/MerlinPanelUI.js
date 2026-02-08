@@ -107,8 +107,21 @@ export class MerlinPanelUI {
                             <span class="task-detail-status" id="task-detail-status"></span>
                         </div>
                         <div class="task-detail-prompt" id="task-detail-prompt"></div>
-                        <div class="task-detail-response" id="task-detail-response">
+
+                        <!-- Tabs for Response/Code -->
+                        <div class="task-detail-tabs" id="task-detail-tabs">
+                            <button class="task-tab active" data-tab="response">💬 Response</button>
+                            <button class="task-tab" data-tab="code">💻 Code</button>
+                        </div>
+
+                        <!-- Response Tab Content -->
+                        <div class="task-detail-response task-tab-content active" id="task-detail-response" data-tab="response">
                             <p class="response-placeholder">No response yet...</p>
+                        </div>
+
+                        <!-- Code Tab Content -->
+                        <div class="task-detail-code task-tab-content" id="task-detail-code" data-tab="code">
+                            <p class="code-placeholder">No code executed yet...</p>
                         </div>
                         <!-- Follow-up Suggestions -->
                         <div class="task-followup-suggestions hidden" id="task-followup-suggestions">
@@ -203,6 +216,15 @@ export class MerlinPanelUI {
             this.hideTaskDetail();
         });
 
+        // Task detail tabs
+        addListener('task-detail-tabs', 'click', (e) => {
+            const tabBtn = e.target.closest('.task-tab');
+            if (tabBtn) {
+                const tabName = tabBtn.dataset.tab;
+                this.switchTaskDetailTab(tabName);
+            }
+        });
+
         // Task follow-up send button
         addListener('task-followup-send', 'click', () => {
             this.sendFollowUp();
@@ -254,7 +276,7 @@ export class MerlinPanelUI {
 
             const merlinBtn = document.createElement('button');
             merlinBtn.id = 'merlin-btn';
-            merlinBtn.title = "Merlin's Workshop (M)";
+            merlinBtn.title = "Merlin's Workshop (M) • Hold M to speak";
             merlinBtn.textContent = '🧙';
             merlinBtn.addEventListener('click', () => this.toggle());
 
@@ -464,23 +486,38 @@ export class MerlinPanelUI {
                </div>`
             : `<span class="task-icon">${icon}</span>`;
 
-        // Show cost badge if enabled and completed
-        const showCost = window.merlinClient?.showCost || localStorage.getItem('settings_show_cost') === 'true';
-        const costBadge = (showCost && task.costInfo && task.status === 'completed')
-            ? `<span class="task-cost-badge">$${task.costInfo.totalCostUSD?.toFixed(4) || '0.0000'}</span>`
+        // Show token count badge by default (always visible for completed tasks)
+        const tokenBadge = (task.costInfo && task.status === 'completed')
+            ? `<span class="task-token-badge" title="Click for details">
+                   ${this.formatTokenCount(task.costInfo.inputTokens || 0)} / ${this.formatTokenCount(task.costInfo.outputTokens || 0)}
+               </span>`
             : '';
 
+        // Action buttons for completed tasks
+        let actionButtons = '';
+        if (task.status === 'pending' || task.status === 'running') {
+            actionButtons = `<button class="task-cancel-btn" onclick="event.stopPropagation(); window.merlinPanelUI.cancelTask('${task.id}')" title="Cancel">✕</button>`;
+        } else if (task.status === 'completed' || task.status === 'error') {
+            const undoBtn = task.canUndo && !task.undone
+                ? `<button class="task-undo-btn" onclick="event.stopPropagation(); window.merlinPanelUI.undoTask('${task.id}')" title="Undo changes">↩</button>`
+                : '';
+            const closeBtn = `<button class="task-close-btn" onclick="event.stopPropagation(); window.merlinPanelUI.closeTask('${task.id}')" title="Remove">✕</button>`;
+            actionButtons = `<div class="task-actions">${undoBtn}${closeBtn}</div>`;
+        }
+
+        // Show "undone" indicator
+        const undoneIndicator = task.undone ? '<span class="task-undone-badge">undone</span>' : '';
+
         return `
-            <div class="task-item ${statusClass}" data-task-id="${task.id}">
+            <div class="task-item ${statusClass} ${task.undone ? 'task-undone' : ''}" data-task-id="${task.id}">
                 ${iconHtml}
                 <div class="task-content">
                     <span class="task-prompt">${this.escapeHtml(shortPrompt)}</span>
                     ${statusText}
+                    ${undoneIndicator}
                 </div>
-                ${costBadge}
-                ${task.status === 'pending' || task.status === 'running' ? `
-                    <button class="task-cancel-btn" onclick="window.merlinPanelUI.cancelTask('${task.id}')">✕</button>
-                ` : ''}
+                ${tokenBadge}
+                ${actionButtons}
             </div>
         `;
     }
@@ -492,6 +529,37 @@ export class MerlinPanelUI {
         if (this.taskManager) {
             this.taskManager.cancelTask(taskId);
             this.updateTaskList();
+        }
+    }
+
+    /**
+     * Undo a task's changes
+     */
+    undoTask(taskId) {
+        if (this.taskManager) {
+            const result = this.taskManager.undoTask(taskId);
+            if (!result.success) {
+                console.warn('[MerlinPanelUI] Undo failed:', result.error);
+            }
+            this.updateTaskList();
+            // Also update detail view if showing this task
+            if (this.selectedTaskId === taskId) {
+                this.updateTaskDetailView();
+            }
+        }
+    }
+
+    /**
+     * Close/remove a task from the list
+     */
+    closeTask(taskId) {
+        if (this.taskManager) {
+            this.taskManager.closeTask(taskId);
+            this.updateTaskList();
+            // Hide detail view if showing this task
+            if (this.selectedTaskId === taskId) {
+                this.hideTaskDetail();
+            }
         }
     }
 
@@ -510,6 +578,8 @@ export class MerlinPanelUI {
             case 'tasks_cleared':
             case 'task_followups_received':
             case 'task_cost_received':
+            case 'task_undone':
+            case 'task_closed':
                 this.updateTaskList();
                 // Also update detail view if viewing this task
                 if (this.isDetailView && this.selectedTaskId) {
@@ -603,6 +673,12 @@ export class MerlinPanelUI {
         // Auto-scroll response to bottom
         responseEl.scrollTop = responseEl.scrollHeight;
 
+        // Update code tab content
+        this.updateCodeTabContent(task);
+
+        // Update tab visibility based on whether code exists
+        this.updateCodeTabVisibility(task);
+
         // Render cost info if available and setting is enabled
         this.renderCostInfo(task);
 
@@ -611,51 +687,193 @@ export class MerlinPanelUI {
     }
 
     /**
-     * Render cost information for a task
+     * Update the code tab content
+     */
+    updateCodeTabContent(task) {
+        const codeEl = document.getElementById('task-detail-code');
+        if (!codeEl) return;
+
+        if (task.executedCode && task.executedCode.length > 0) {
+            let codeHtml = '<div class="executed-code-list">';
+
+            task.executedCode.forEach((exec, index) => {
+                const statusIcon = exec.status === 'success' ? '✅' :
+                    exec.status === 'error' ? '❌' :
+                    exec.status === 'running' ? '⏳' : '❓';
+
+                const statusClass = `code-status-${exec.status}`;
+
+                codeHtml += `
+                    <div class="executed-code-block ${statusClass}">
+                        <div class="code-block-header">
+                            <span class="code-block-label">${statusIcon} Code Execution ${index + 1}</span>
+                            <button class="code-copy-btn" data-code-index="${index}" title="Copy code">📋</button>
+                        </div>
+                        <pre class="code-display"><code>${this.escapeHtml(exec.code)}</code></pre>
+                        ${exec.result ? `<div class="code-result ${exec.result.error ? 'code-result-error' : 'code-result-success'}">
+                            <strong>Result:</strong> ${this.escapeHtml(exec.result.error || exec.result.message || JSON.stringify(exec.result))}
+                        </div>` : ''}
+                    </div>
+                `;
+            });
+
+            codeHtml += '</div>';
+            codeEl.innerHTML = codeHtml;
+
+            // Add copy button handlers
+            codeEl.querySelectorAll('.code-copy-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const index = parseInt(btn.dataset.codeIndex);
+                    const code = task.executedCode[index]?.code;
+                    if (code) {
+                        navigator.clipboard.writeText(code).then(() => {
+                            btn.textContent = '✓';
+                            setTimeout(() => btn.textContent = '📋', 1500);
+                        });
+                    }
+                };
+            });
+        } else {
+            codeEl.innerHTML = '<p class="code-placeholder">No code executed yet...</p>';
+        }
+    }
+
+    /**
+     * Update code tab visibility based on whether code exists
+     */
+    updateCodeTabVisibility(task) {
+        const tabsEl = document.getElementById('task-detail-tabs');
+        const codeTab = tabsEl?.querySelector('.task-tab[data-tab="code"]');
+        if (!codeTab) return;
+
+        const hasCode = task.executedCode && task.executedCode.length > 0;
+
+        // Show/hide code tab and add indicator
+        if (hasCode) {
+            codeTab.classList.remove('hidden');
+            // Add badge with count
+            const count = task.executedCode.length;
+            if (!codeTab.querySelector('.code-count-badge')) {
+                const badge = document.createElement('span');
+                badge.className = 'code-count-badge';
+                badge.textContent = count;
+                codeTab.appendChild(badge);
+            } else {
+                codeTab.querySelector('.code-count-badge').textContent = count;
+            }
+
+            // Auto-switch to code tab when code is first executed
+            if (task.executedCode.some(e => e.status === 'running')) {
+                this.switchTaskDetailTab('code');
+            }
+        }
+    }
+
+    /**
+     * Switch between Response and Code tabs in task detail
+     */
+    switchTaskDetailTab(tabName) {
+        const tabsEl = document.getElementById('task-detail-tabs');
+        const detailEl = document.getElementById('merlin-task-detail');
+        if (!tabsEl || !detailEl) return;
+
+        // Update tab buttons
+        tabsEl.querySelectorAll('.task-tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+
+        // Update tab content
+        detailEl.querySelectorAll('.task-tab-content').forEach(content => {
+            content.classList.toggle('active', content.dataset.tab === tabName);
+        });
+    }
+
+    /**
+     * Render token usage information for a task (always visible)
+     * Cost details are shown when showCost setting is enabled
      */
     renderCostInfo(task) {
-        // Get or create cost info container
-        let costContainer = document.getElementById('task-cost-info');
-        if (!costContainer) {
+        // Get or create token info container
+        let tokenContainer = document.getElementById('task-token-info');
+        if (!tokenContainer) {
             // Create it after the response element
             const responseEl = document.getElementById('task-detail-response');
-            costContainer = document.createElement('div');
-            costContainer.id = 'task-cost-info';
-            costContainer.className = 'task-cost-info hidden';
-            responseEl.parentNode.insertBefore(costContainer, responseEl.nextSibling);
+            tokenContainer = document.createElement('div');
+            tokenContainer.id = 'task-token-info';
+            tokenContainer.className = 'task-token-info';
+            responseEl.parentNode.insertBefore(tokenContainer, responseEl.nextSibling);
         }
 
-        // Check if show cost setting is enabled
-        const showCost = window.merlinClient?.showCost || localStorage.getItem('settings_show_cost') === 'true';
-
-        if (!showCost || !task.costInfo) {
-            costContainer.classList.add('hidden');
+        // Hide if no cost info available
+        if (!task.costInfo) {
+            tokenContainer.classList.add('hidden');
             return;
         }
 
         const cost = task.costInfo;
-        costContainer.classList.remove('hidden');
-        costContainer.innerHTML = `
-            <div class="cost-header">💰 Task Cost</div>
-            <div class="cost-details">
-                <div class="cost-row">
-                    <span class="cost-label">Model:</span>
-                    <span class="cost-value">${this.escapeHtml(cost.model || 'Unknown')}</span>
+        const showCost = window.merlinClient?.showCost || localStorage.getItem('settings_show_cost') === 'true';
+
+        tokenContainer.classList.remove('hidden');
+
+        // Build the token usage display
+        let html = `
+            <div class="token-summary" id="token-summary">
+                <span class="token-icon">🔢</span>
+                <span class="token-counts">
+                    <span class="token-in">${cost.inputTokens?.toLocaleString() || 0} in</span>
+                    <span class="token-separator">/</span>
+                    <span class="token-out">${cost.outputTokens?.toLocaleString() || 0} out</span>
+                </span>
+                <span class="token-expand-hint">ⓘ</span>
+            </div>
+            <div class="token-details hidden" id="token-details">
+                <div class="token-detail-row">
+                    <span class="token-label">Model:</span>
+                    <span class="token-value">${this.escapeHtml(cost.model || 'Unknown')}</span>
                 </div>
-                <div class="cost-row">
-                    <span class="cost-label">Input:</span>
-                    <span class="cost-value">${cost.inputTokens?.toLocaleString() || 0} tokens ($${cost.inputCostUSD?.toFixed(6) || '0.000000'})</span>
+                <div class="token-detail-row">
+                    <span class="token-label">Input tokens:</span>
+                    <span class="token-value">${cost.inputTokens?.toLocaleString() || 0}</span>
                 </div>
-                <div class="cost-row">
-                    <span class="cost-label">Output:</span>
-                    <span class="cost-value">${cost.outputTokens?.toLocaleString() || 0} tokens ($${cost.outputCostUSD?.toFixed(6) || '0.000000'})</span>
+                <div class="token-detail-row">
+                    <span class="token-label">Output tokens:</span>
+                    <span class="token-value">${cost.outputTokens?.toLocaleString() || 0}</span>
                 </div>
-                <div class="cost-row cost-total">
-                    <span class="cost-label">Total:</span>
-                    <span class="cost-value">$${cost.totalCostUSD?.toFixed(6) || '0.000000'}</span>
+                ${cost.cachedTokens > 0 ? `
+                <div class="token-detail-row token-cached">
+                    <span class="token-label">Cached (90% off):</span>
+                    <span class="token-value">${cost.cachedTokens?.toLocaleString() || 0}</span>
                 </div>
+                ` : ''}
+                ${showCost ? `
+                <div class="token-detail-divider"></div>
+                <div class="token-detail-row">
+                    <span class="token-label">Input cost:</span>
+                    <span class="token-value token-cost">$${cost.inputCostUSD?.toFixed(6) || '0.000000'}</span>
+                </div>
+                <div class="token-detail-row">
+                    <span class="token-label">Output cost:</span>
+                    <span class="token-value token-cost">$${cost.outputCostUSD?.toFixed(6) || '0.000000'}</span>
+                </div>
+                <div class="token-detail-row token-total">
+                    <span class="token-label">Total cost:</span>
+                    <span class="token-value token-cost">$${cost.totalCostUSD?.toFixed(6) || '0.000000'}</span>
+                </div>
+                ` : ''}
             </div>
         `;
+
+        tokenContainer.innerHTML = html;
+
+        // Add click handler to toggle details
+        const summary = tokenContainer.querySelector('#token-summary');
+        const details = tokenContainer.querySelector('#token-details');
+        if (summary && details) {
+            summary.addEventListener('click', () => {
+                details.classList.toggle('hidden');
+                summary.classList.toggle('expanded');
+            });
+        }
     }
 
     /**
@@ -850,8 +1068,12 @@ export class MerlinPanelUI {
         // Update task list
         this.updateTaskList();
 
-        // Don't auto-focus input - let player keep playing
-        // They can click into the input when ready
+        // Focus the custom input textbox so user can start typing immediately
+        const input = document.getElementById('merlin-custom-input');
+        if (input) {
+            // Use setTimeout to ensure the panel is visible before focusing
+            setTimeout(() => input.focus(), 50);
+        }
 
         console.log('[MerlinPanelUI] Panel shown');
     }
@@ -870,6 +1092,16 @@ export class MerlinPanelUI {
         }
 
         console.log('[MerlinPanelUI] Panel hidden');
+    }
+
+    /**
+     * Format token count (e.g., 1234 -> "1.2k")
+     */
+    formatTokenCount(count) {
+        if (!count) return '0';
+        if (count < 1000) return count.toString();
+        if (count < 10000) return (count / 1000).toFixed(1) + 'k';
+        return Math.round(count / 1000) + 'k';
     }
 
     /**
@@ -1191,7 +1423,184 @@ export class MerlinPanelUI {
                 color: #ccc;
             }
 
+            /* Task Detail Tabs */
+            .task-detail-tabs {
+                display: flex;
+                gap: 0;
+                margin-bottom: 0;
+            }
+
+            .task-tab {
+                background: rgba(40, 40, 80, 0.5);
+                border: 1px solid #3a3a6a;
+                border-bottom: none;
+                border-radius: 8px 8px 0 0;
+                color: #a0a0d0;
+                cursor: pointer;
+                padding: 10px 18px;
+                font-family: inherit;
+                font-size: 14px;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .task-tab:hover {
+                background: rgba(60, 60, 100, 0.7);
+                color: #fff;
+            }
+
+            .task-tab.active {
+                background: rgba(30, 30, 60, 0.6);
+                color: #fff;
+                border-color: #5a5a9a;
+            }
+
+            .task-tab.hidden {
+                display: none;
+            }
+
+            .code-count-badge {
+                background: #4a7c59;
+                color: #fff;
+                padding: 2px 8px;
+                border-radius: 10px;
+                font-size: 11px;
+                min-width: 18px;
+                text-align: center;
+            }
+
+            /* Tab Content */
+            .task-tab-content {
+                display: none;
+                flex: 1;
+                background: rgba(30, 30, 60, 0.6);
+                border: 1px solid #3a3a6a;
+                border-radius: 0 8px 8px 8px;
+                padding: 15px;
+                overflow-y: auto;
+                min-height: 150px;
+                max-height: 300px;
+            }
+
+            .task-tab-content.active {
+                display: block;
+            }
+
             .task-detail-response {
+                border-radius: 0 8px 8px 8px;
+            }
+
+            .task-detail-code {
+                border-radius: 0 8px 8px 8px;
+            }
+
+            /* Code Tab Styles */
+            .code-placeholder {
+                color: #666;
+                font-style: italic;
+                text-align: center;
+                padding: 20px;
+            }
+
+            .executed-code-list {
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .executed-code-block {
+                background: rgba(20, 25, 35, 0.8);
+                border: 1px solid #3a3a6a;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .executed-code-block.code-status-success {
+                border-color: rgba(76, 175, 80, 0.5);
+            }
+
+            .executed-code-block.code-status-error {
+                border-color: rgba(244, 67, 54, 0.5);
+            }
+
+            .executed-code-block.code-status-running {
+                border-color: rgba(255, 193, 7, 0.5);
+                animation: pulse-border 1.5s ease-in-out infinite;
+            }
+
+            @keyframes pulse-border {
+                0%, 100% { border-color: rgba(255, 193, 7, 0.3); }
+                50% { border-color: rgba(255, 193, 7, 0.8); }
+            }
+
+            .code-block-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 8px 12px;
+                background: rgba(50, 55, 70, 0.6);
+                border-bottom: 1px solid #3a3a6a;
+            }
+
+            .code-block-label {
+                font-size: 13px;
+                color: #a0a0d0;
+                font-weight: 500;
+            }
+
+            .code-copy-btn {
+                background: transparent;
+                border: 1px solid #3a3a6a;
+                border-radius: 4px;
+                color: #a0a0d0;
+                cursor: pointer;
+                padding: 4px 8px;
+                font-size: 12px;
+                transition: all 0.2s;
+            }
+
+            .code-copy-btn:hover {
+                background: rgba(60, 60, 100, 0.7);
+                color: #fff;
+            }
+
+            .code-display {
+                margin: 0;
+                padding: 12px;
+                background: rgba(10, 12, 18, 0.8);
+                font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+                font-size: 13px;
+                line-height: 1.5;
+                color: #e0e0e0;
+                overflow-x: auto;
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+
+            .code-display code {
+                color: #b8d4e8;
+            }
+
+            .code-result {
+                padding: 10px 12px;
+                font-size: 13px;
+                border-top: 1px solid #3a3a6a;
+            }
+
+            .code-result-success {
+                color: #81c784;
+                background: rgba(76, 175, 80, 0.1);
+            }
+
+            .code-result-error {
+                color: #ef5350;
+                background: rgba(244, 67, 54, 0.1);
+            }
+
+            /* Legacy - keeping for compatibility */
+            .task-detail-response.legacy {
                 flex: 1;
                 background: rgba(30, 30, 60, 0.6);
                 border: 1px solid #3a3a6a;
@@ -1268,57 +1677,9 @@ export class MerlinPanelUI {
                 color: #666;
             }
 
-            /* Cost Info */
-            .task-cost-info {
-                margin: 10px 0;
-                padding: 12px;
-                background: rgba(60, 50, 30, 0.4);
-                border: 1px solid rgba(200, 170, 100, 0.3);
-                border-radius: 8px;
-            }
-
+            /* Legacy Cost Info - kept for backwards compatibility */
             .task-cost-info.hidden {
                 display: none;
-            }
-
-            .cost-header {
-                font-size: 14px;
-                color: #e0c080;
-                margin-bottom: 8px;
-                font-weight: bold;
-            }
-
-            .cost-details {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-
-            .cost-row {
-                display: flex;
-                justify-content: space-between;
-                font-size: 13px;
-            }
-
-            .cost-label {
-                color: #a0a0a0;
-            }
-
-            .cost-value {
-                color: #ddd;
-                font-family: 'Courier New', monospace;
-            }
-
-            .cost-row.cost-total {
-                margin-top: 6px;
-                padding-top: 6px;
-                border-top: 1px solid rgba(200, 170, 100, 0.2);
-            }
-
-            .cost-row.cost-total .cost-label,
-            .cost-row.cost-total .cost-value {
-                font-weight: bold;
-                color: #e0c080;
             }
 
             /* Follow-up Suggestions */
@@ -1452,15 +1813,190 @@ export class MerlinPanelUI {
                 background: rgba(70, 40, 40, 0.4);
             }
 
-            .task-cost-badge {
+            .task-undone {
+                opacity: 0.6;
+                background: rgba(50, 50, 60, 0.4);
+            }
+
+            .task-undone .task-prompt {
+                text-decoration: line-through;
+            }
+
+            .task-undone-badge {
+                font-size: 10px;
+                color: #999;
+                background: rgba(60, 60, 70, 0.6);
+                border-radius: 8px;
+                padding: 2px 6px;
+                margin-left: 6px;
+            }
+
+            .task-actions {
+                display: flex;
+                gap: 4px;
+                flex-shrink: 0;
+            }
+
+            .task-undo-btn, .task-close-btn {
+                background: rgba(60, 60, 100, 0.6);
+                border: 1px solid #4a4a7a;
+                border-radius: 4px;
+                color: #a0a0d0;
+                cursor: pointer;
+                padding: 4px 8px;
                 font-size: 12px;
-                color: #e0c080;
-                background: rgba(80, 60, 20, 0.6);
-                border: 1px solid rgba(200, 170, 100, 0.3);
+                transition: all 0.2s;
+            }
+
+            .task-undo-btn:hover {
+                background: rgba(70, 100, 70, 0.7);
+                border-color: #5a8a5a;
+                color: #90d090;
+            }
+
+            .task-close-btn:hover {
+                background: rgba(100, 60, 60, 0.7);
+                border-color: #8a5a5a;
+                color: #d09090;
+            }
+
+            /* Token count badge on task list items */
+            .task-token-badge {
+                font-size: 11px;
+                color: #a0c0e0;
+                background: rgba(40, 60, 80, 0.6);
+                border: 1px solid rgba(100, 150, 200, 0.3);
                 border-radius: 10px;
                 padding: 2px 8px;
                 white-space: nowrap;
                 flex-shrink: 0;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .task-token-badge:hover {
+                background: rgba(60, 80, 100, 0.8);
+                color: #c0e0ff;
+            }
+
+            /* Token usage display in task detail view */
+            .task-token-info {
+                margin: 10px 0;
+            }
+
+            .task-token-info.hidden {
+                display: none;
+            }
+
+            .token-summary {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                background: rgba(40, 60, 80, 0.4);
+                border: 1px solid rgba(100, 150, 200, 0.3);
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .token-summary:hover {
+                background: rgba(50, 70, 90, 0.5);
+                border-color: rgba(120, 170, 220, 0.4);
+            }
+
+            .token-summary.expanded {
+                border-radius: 8px 8px 0 0;
+                border-bottom-color: transparent;
+            }
+
+            .token-icon {
+                font-size: 14px;
+            }
+
+            .token-counts {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+                font-family: 'Courier New', monospace;
+            }
+
+            .token-in {
+                color: #80c0ff;
+            }
+
+            .token-separator {
+                color: #666;
+            }
+
+            .token-out {
+                color: #a0e0a0;
+            }
+
+            .token-expand-hint {
+                margin-left: auto;
+                font-size: 12px;
+                color: #666;
+                transition: transform 0.2s;
+            }
+
+            .token-summary.expanded .token-expand-hint {
+                transform: rotate(180deg);
+            }
+
+            .token-details {
+                padding: 10px 12px;
+                background: rgba(30, 50, 70, 0.4);
+                border: 1px solid rgba(100, 150, 200, 0.3);
+                border-top: none;
+                border-radius: 0 0 8px 8px;
+            }
+
+            .token-details.hidden {
+                display: none;
+            }
+
+            .token-detail-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 3px 0;
+                font-size: 12px;
+            }
+
+            .token-label {
+                color: #888;
+            }
+
+            .token-value {
+                color: #ccc;
+                font-family: 'Courier New', monospace;
+            }
+
+            .token-value.token-cost {
+                color: #e0c080;
+            }
+
+            .token-detail-row.token-cached .token-value {
+                color: #80e080;
+            }
+
+            .token-detail-row.token-total {
+                padding-top: 6px;
+                margin-top: 4px;
+                border-top: 1px solid rgba(100, 150, 200, 0.2);
+            }
+
+            .token-detail-row.token-total .token-label,
+            .token-detail-row.token-total .token-value {
+                font-weight: bold;
+                color: #e0c080;
+            }
+
+            .token-detail-divider {
+                height: 1px;
+                background: rgba(100, 150, 200, 0.2);
+                margin: 8px 0;
             }
 
             .task-icon {

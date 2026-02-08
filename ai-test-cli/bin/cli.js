@@ -712,12 +712,182 @@ program
 // ============================================================
 
 program
+    .command('browser')
+    .description('Start a persistent browser session for testing')
+    .option('--headless', 'Run browser in headless mode', false)
+    .action(async (options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+
+        console.log(chalk.blue('\n🎮 Starting persistent browser session...'));
+        const browser = new GameBrowser({ headless: options.headless });
+        await browser.launch();
+        await browser.waitForGameLoad();
+
+        // Save browser info for reconnection
+        const info = browser.saveBrowserInfo();
+
+        console.log(chalk.green('\n✓ Browser ready!'));
+        console.log(chalk.cyan('\nRun commands in another terminal:'));
+        console.log(chalk.dim('  ai-test exec "VoxelWorld.spawn(\'slime\')"'));
+        console.log(chalk.dim('  ai-test exec "diagnose()"'));
+        console.log(chalk.dim('  ai-test exec -i   # Interactive REPL'));
+        console.log(chalk.yellow('\nPress Ctrl+C to close the browser.\n'));
+
+        // Keep process alive
+        await new Promise(() => {});
+    });
+
+program
+    .command('exec [script]')
+    .description('Execute JavaScript in a running browser (use "ai-test browser" first)')
+    .option('-f, --file <path>', 'Script file to execute')
+    .option('-i, --interactive', 'Start interactive REPL')
+    .action(async (script, options) => {
+        const { GameBrowser } = await import('../src/browser.js');
+        const fsPromises = await import('fs/promises');
+
+        // Connect to existing browser
+        const browser = new GameBrowser();
+        try {
+            await browser.connect();
+        } catch (e) {
+            console.error(chalk.red(`\n❌ ${e.message}`));
+            console.log(chalk.yellow('Start a browser first with: ai-test browser\n'));
+            process.exit(1);
+        }
+
+        // Get script from argument or file
+        let code = script;
+        if (options.file) {
+            code = await fsPromises.readFile(options.file, 'utf-8');
+        }
+
+        // Execute or start REPL
+        if (code) {
+            try {
+                const result = await browser.evaluate((scriptCode) => {
+                    const game = window.__VOXEL_GAME__;
+                    const player = game?.player;
+                    const VoxelWorld = window.VoxelWorld;
+                    const THREE = window.THREE;
+
+                    // Helper: diagnose all SDK entities
+                    const diagnose = () => {
+                        if (!VoxelWorld) return { error: 'VoxelWorld not loaded' };
+                        const instances = Array.from(VoxelWorld._instances || []);
+                        return instances.map(e => {
+                            const mesh = e.mesh;
+                            const physics = e.getScript?.('PhysicsScript');
+                            return {
+                                name: e.name,
+                                position: mesh?.position ? {
+                                    x: mesh.position.x.toFixed(1),
+                                    y: mesh.position.y.toFixed(1),
+                                    z: mesh.position.z.toFixed(1)
+                                } : null,
+                                hasPhysics: !!physics,
+                                hasAI: !!e.getScript?.('AIScript'),
+                                grounded: physics?.grounded
+                            };
+                        });
+                    };
+
+                    try {
+                        return eval(scriptCode);
+                    } catch (e) {
+                        return { error: e.message, stack: e.stack };
+                    }
+                }, code);
+
+                if (result?.error) {
+                    console.log(chalk.red(`Error: ${result.error}`));
+                } else {
+                    console.log(chalk.green('Result:'), result);
+                }
+            } catch (e) {
+                console.error(chalk.red(`Execution error: ${e.message}`));
+            }
+        }
+
+        if (options.interactive) {
+            // Start REPL
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            console.log(chalk.green('\n🎮 Interactive mode - type JavaScript to execute'));
+            console.log(chalk.dim('Available: VoxelWorld, game, player, THREE, diagnose()'));
+            console.log(chalk.dim('Type "exit" to quit\n'));
+
+            const prompt = () => {
+                rl.question(chalk.cyan('> '), async (input) => {
+                    if (input.toLowerCase() === 'exit') {
+                        rl.close();
+                        process.exit(0);
+                    }
+
+                    try {
+                        const result = await browser.evaluate((scriptCode) => {
+                            const game = window.__VOXEL_GAME__;
+                            const player = game?.player;
+                            const VoxelWorld = window.VoxelWorld;
+                            const THREE = window.THREE;
+
+                            const diagnose = () => {
+                                if (!VoxelWorld) return { error: 'VoxelWorld not loaded' };
+                                const instances = Array.from(VoxelWorld._instances || []);
+                                return instances.map(e => {
+                                    const mesh = e.mesh;
+                                    const physics = e.getScript?.('PhysicsScript');
+                                    return {
+                                        name: e.name,
+                                        position: mesh?.position ? {
+                                            x: mesh.position.x.toFixed(1),
+                                            y: mesh.position.y.toFixed(1),
+                                            z: mesh.position.z.toFixed(1)
+                                        } : null,
+                                        hasPhysics: !!physics,
+                                        grounded: physics?.grounded
+                                    };
+                                });
+                            };
+
+                            try {
+                                return eval(scriptCode);
+                            } catch (e) {
+                                return { error: e.message };
+                            }
+                        }, input);
+
+                        if (result?.error) {
+                            console.log(chalk.red(`Error: ${result.error}`));
+                        } else if (result !== undefined) {
+                            console.log(result);
+                        }
+                    } catch (e) {
+                        console.log(chalk.red(`Error: ${e.message}`));
+                    }
+
+                    prompt();
+                });
+            };
+
+            prompt();
+            return; // Don't exit
+        }
+
+        process.exit(0);
+    });
+
+program
     .command('drive [script]')
-    .description('Execute JavaScript in the game with SDK access')
+    .description('Execute JavaScript in the game with SDK access (launches new browser)')
     .option('-f, --file <path>', 'Script file to execute')
     .option('--headless', 'Run browser in headless mode', false)
     .option('-k, --keep-open <ms>', 'Keep browser open after script (default: 5000)', '5000')
     .option('-i, --interactive', 'Start interactive REPL after script')
+    .option('-c, --connect', 'Connect to existing browser instead of launching new one')
     .action(async (script, options) => {
         const { GameBrowser } = await import('../src/browser.js');
         const fsPromises = await import('fs/promises');
@@ -738,6 +908,8 @@ program
             console.log('  ai-test drive -f test.js\n');
             console.log(chalk.cyan('  # Interactive REPL:'));
             console.log('  ai-test drive -i\n');
+            console.log(chalk.cyan('  # Connect to running browser:'));
+            console.log('  ai-test drive -c "VoxelWorld.spawn(\'slime\')"\n');
             console.log(chalk.blue('Available in scripts:'));
             console.log('  VoxelWorld    - SDK API (createObject, spawn, giveItem, setBlock, fill, etc.)');
             console.log('  game          - Game instance (__VOXEL_GAME__)');
@@ -748,12 +920,25 @@ program
             return;
         }
 
-        // Launch browser
-        console.log(chalk.blue('\n🎮 Launching game...'));
-        const browser = new GameBrowser({ headless: options.headless });
-        await browser.launch();
-        await browser.waitForGameLoad();
-        console.log(chalk.green('✓ Game loaded\n'));
+        let browser;
+        if (options.connect) {
+            // Connect to existing browser
+            browser = new GameBrowser();
+            try {
+                await browser.connect();
+            } catch (e) {
+                console.error(chalk.red(`\n❌ ${e.message}`));
+                console.log(chalk.yellow('Start a browser first with: ai-test browser\n'));
+                process.exit(1);
+            }
+        } else {
+            // Launch new browser
+            console.log(chalk.blue('\n🎮 Launching game...'));
+            browser = new GameBrowser({ headless: options.headless });
+            await browser.launch();
+            await browser.waitForGameLoad();
+            console.log(chalk.green('✓ Game loaded\n'));
+        }
 
         // Execute script if provided
         if (code) {
@@ -1001,6 +1186,8 @@ program
                 console.log('  pos            - Show player position');
                 console.log('  tp <x> <y> <z> - Teleport player');
                 console.log('  spawn <type>   - Spawn creature');
+                console.log('  diagnose [type] - Check all entities for issues (falling, stuck, etc)');
+                console.log('  watch <name> [ms] - Watch entity position over time');
                 console.log('  prompt <text>  - Send AI prompt');
                 console.log('  wait <ms>      - Wait milliseconds');
                 console.log('  screenshot [file] - Take a screenshot');
@@ -1116,6 +1303,32 @@ program
                     if (result.available) console.log(chalk.dim(`Available: ${result.available.join(', ')}`));
                 } else {
                     console.log(chalk.green(`Spawned ${result.count} ${result.type}(s)`));
+                }
+            },
+            diagnose: async (entityType) => {
+                console.log(chalk.blue('Running entity diagnostics...'));
+                const results = await gc.diagnoseEntities(browser, entityType || null);
+                gc.printDiagnostics(results);
+            },
+            watch: async (entityName, duration = '3000') => {
+                if (!entityName) { console.log(chalk.red('Usage: watch <entityName> [duration_ms]')); return; }
+                console.log(chalk.blue(`Watching ${entityName} for ${duration}ms...`));
+                const results = await gc.watchEntity(browser, entityName, parseInt(duration));
+                console.log(chalk.blue('\n═══ Watch Results ═══'));
+                console.log(`Entity: ${results.entityName}`);
+                if (results.samples[0]?.error) {
+                    console.log(chalk.red(`Error: ${results.samples[0].error}`));
+                } else {
+                    console.log(`Samples: ${results.samples.length}`);
+                    const firstY = results.samples[0]?.y?.toFixed(2);
+                    const lastY = results.samples[results.samples.length - 1]?.y?.toFixed(2);
+                    console.log(`Y: ${firstY} → ${lastY}`);
+                    if (results.issues.length > 0) {
+                        console.log(chalk.red('\nIssues:'));
+                        results.issues.forEach(i => console.log(chalk.red(`  ⚠ ${i}`)));
+                    } else {
+                        console.log(chalk.green('\n✓ Entity appears healthy'));
+                    }
                 }
             },
             prompt: async (...words) => {

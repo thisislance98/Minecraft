@@ -148,11 +148,24 @@ export class OpenRouterSession {
             }
         }
 
-        // Initialize with system prompt
+        // Initialize with system prompt using prompt caching
+        // OpenRouter supports cache_control for Claude models to reduce costs
         const systemPrompt = getMerlinSystemPrompt();
-        this.messages.push({ role: 'system', content: systemPrompt });
+        this.messages.push({
+            role: 'system',
+            content: [
+                {
+                    type: 'text',
+                    text: systemPrompt,
+                    cache_control: {
+                        type: 'ephemeral',
+                        ttl: '1h'  // 1 hour TTL since system prompt is static
+                    }
+                }
+            ]
+        });
 
-        console.log(`[OpenRouter] Session initialized with model: ${this.model}`);
+        console.log(`[OpenRouter] Session initialized with model: ${this.model} (prompt caching enabled)`);
         this.authReadyResolve();
     }
 
@@ -396,6 +409,7 @@ export class OpenRouterSession {
                             // Capture usage data
                             if (parsed.usage) {
                                 usageData = parsed.usage;
+                                console.log('[OpenRouter] Raw usage data:', JSON.stringify(usageData));
                             }
                         } catch (e) {
                             // Ignore parse errors for incomplete chunks
@@ -429,7 +443,10 @@ export class OpenRouterSession {
             let costInfo = null;
             if (usageData) {
                 costInfo = this.calculateCost(usageData);
+                console.log('[OpenRouter] Sending cost_info:', JSON.stringify(costInfo));
                 this.send('cost_info', costInfo);
+            } else {
+                console.log('[OpenRouter] No usage data available, skipping cost_info');
             }
 
             this.send('complete', {});
@@ -490,12 +507,17 @@ export class OpenRouterSession {
     }
 
     private isClientTool(name: string): boolean {
-        return ['spawn_creature', 'spawn', 'teleport_player', 'get_scene_info', 'update_entity',
-                'patch_entity', 'set_blocks', 'run_verification', 'capture_screenshot', 'give_item',
-                // SDK Tools (execute on client via VoxelWorld SDK)
-                'sdk_create', 'sdk_create_item', 'sdk_create_entity', 'sdk_create_projectile',
-                // World/structure tools
-                'spawn_tree', 'fill_blocks', 'remove_block'].includes(name);
+        return [
+            // Primary SDK tool - Roblox-style Lua execution
+            'execute_lua',
+            // Legacy SDK tool - JavaScript execution
+            'execute_code',
+            // Legacy tools (for backwards compatibility)
+            'spawn_creature', 'spawn', 'teleport_player', 'get_scene_info', 'update_entity',
+            'patch_entity', 'set_blocks', 'run_verification', 'capture_screenshot', 'give_item',
+            'sdk_create', 'sdk_create_item', 'sdk_create_entity', 'sdk_create_projectile',
+            'spawn_tree', 'fill_blocks', 'remove_block'
+        ].includes(name);
     }
 
     private async executeServerTool(name: string, args: any): Promise<any> {
@@ -646,16 +668,33 @@ export class OpenRouterSession {
 
     /**
      * Calculate cost info from usage data (without deducting tokens)
+     * Accounts for prompt caching - cached tokens are 90% cheaper
      */
     private calculateCost(usage: any) {
-        const inputCost = (usage.prompt_tokens / 1000000) * this.PRICE_INPUT_1M;
+        // OpenRouter returns cache info in prompt_tokens_details when prompt caching is active
+        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || usage.cache_read_input_tokens || 0;
+        const cacheWriteTokens = usage.prompt_tokens_details?.cache_write_tokens || usage.cache_creation_input_tokens || 0;
+        const uncachedTokens = usage.prompt_tokens - cachedTokens;
+
+        // Cached tokens cost 10% of normal price (90% discount)
+        const CACHE_DISCOUNT = 0.1;
+        const inputCost = ((uncachedTokens / 1000000) * this.PRICE_INPUT_1M) +
+                          ((cachedTokens / 1000000) * this.PRICE_INPUT_1M * CACHE_DISCOUNT);
         const outputCost = (usage.completion_tokens / 1000000) * this.PRICE_OUTPUT_1M;
         const totalCost = (inputCost + outputCost) * this.OVERHEAD_MULTIPLIER;
         const tokensToDeduct = Math.max(1, Math.ceil(totalCost / this.USD_PER_GAME_TOKEN));
 
+        // Log cache statistics
+        if (cachedTokens > 0 || cacheWriteTokens > 0) {
+            const savingsPercent = cachedTokens > 0 ? Math.round((cachedTokens / usage.prompt_tokens) * 90) : 0;
+            console.log(`[OpenRouter] Prompt caching: ${cachedTokens} cached tokens, ${cacheWriteTokens} written to cache, ~${savingsPercent}% input savings`);
+        }
+
         return {
             inputTokens: usage.prompt_tokens,
             outputTokens: usage.completion_tokens,
+            cachedTokens: cachedTokens,
+            cacheWriteTokens: cacheWriteTokens,
             inputCostUSD: inputCost,
             outputCostUSD: outputCost,
             totalCostUSD: totalCost,
@@ -667,10 +706,9 @@ export class OpenRouterSession {
     private async deductTokens(usage: any) {
         if (!this.userId) return;
 
-        const inputCost = (usage.prompt_tokens / 1000000) * this.PRICE_INPUT_1M;
-        const outputCost = (usage.completion_tokens / 1000000) * this.PRICE_OUTPUT_1M;
-        const totalCost = (inputCost + outputCost) * this.OVERHEAD_MULTIPLIER;
-        const tokensToDeduct = Math.max(1, Math.ceil(totalCost / this.USD_PER_GAME_TOKEN));
+        // Use the same caching-aware calculation as calculateCost
+        const costInfo = this.calculateCost(usage);
+        const tokensToDeduct = costInfo.gameTokens;
 
         console.log(`[OpenRouter] Cost: $${totalCost.toFixed(6)} -> ${tokensToDeduct} tokens`);
 

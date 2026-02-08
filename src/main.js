@@ -45,6 +45,21 @@ window.addEventListener('load', () => {
     if (window.merlinClient) {
         window.merlinClient.setGame(game);
     }
+    if (window.fewShotClient) {
+        window.fewShotClient.setGame(game);
+
+        // Wire up FewShotClient to TaskManager
+        if (window.merlinClient?.taskManager) {
+            window.merlinClient.taskManager.setFewShotClient(window.fewShotClient);
+
+            // Add listener to route FewShotClient messages to TaskManager
+            window.fewShotClient.addListener((msg) => {
+                window.merlinClient.taskManager.handleMessage(msg);
+            });
+
+            console.log('[Main] FewShotClient wired to TaskManager');
+        }
+    }
 
     // Check for new version badge
     checkVersionBadge();

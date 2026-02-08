@@ -6,6 +6,10 @@ import express from 'express';
 import { ragLookup, classifyTask, summarizeRAGResult } from '../services/RAGTemplateService';
 import { getAllKnowledge, deleteAllKnowledge } from '../services/KnowledgeService';
 import { getItem, getAllItems } from '../services/DynamicItemService';
+import { FewShotAI, availableModels } from '../ai/few_shot_system';
+import { findBestCreatureExamples } from '../ai/examples/creatures';
+import { findBestItemExamples } from '../ai/examples/items';
+import { findBestStructureExamples } from '../ai/examples/structures';
 
 export const aiRoutes = express.Router();
 
@@ -198,4 +202,125 @@ aiRoutes.get('/debug/items', (req, res) => {
             hasOnUseDown: i.code?.includes('onUseDown')
         }))
     });
+});
+
+// ============================================================
+// FEW-SHOT AI ENDPOINTS
+// ============================================================
+
+/**
+ * Get available models for few-shot AI
+ * GET /api/ai/fewshot/models
+ */
+aiRoutes.get('/fewshot/models', (req, res) => {
+    res.json({
+        success: true,
+        models: availableModels
+    });
+});
+
+/**
+ * Find best matching examples for a request
+ * POST /api/ai/fewshot/examples
+ * Body: { prompt: string, category?: 'creature' | 'item' | 'structure' }
+ */
+aiRoutes.post('/fewshot/examples', (req, res) => {
+    try {
+        const { prompt, category } = req.body;
+
+        if (!prompt) {
+            return res.status(400).json({ error: 'Missing prompt' });
+        }
+
+        let examples: any[] = [];
+        let usedCategory = category;
+
+        // Auto-detect category if not specified
+        if (!category) {
+            const lowerPrompt = prompt.toLowerCase();
+            if (lowerPrompt.includes('creature') || lowerPrompt.includes('animal') || lowerPrompt.includes('monster') || lowerPrompt.includes('pet')) {
+                usedCategory = 'creature';
+            } else if (lowerPrompt.includes('item') || lowerPrompt.includes('wand') || lowerPrompt.includes('sword') || lowerPrompt.includes('potion') || lowerPrompt.includes('tool')) {
+                usedCategory = 'item';
+            } else if (lowerPrompt.includes('build') || lowerPrompt.includes('house') || lowerPrompt.includes('tower') || lowerPrompt.includes('structure')) {
+                usedCategory = 'structure';
+            } else {
+                usedCategory = 'creature'; // Default
+            }
+        }
+
+        switch (usedCategory) {
+            case 'creature':
+                examples = findBestCreatureExamples(prompt, 3);
+                break;
+            case 'item':
+                examples = findBestItemExamples(prompt, 3);
+                break;
+            case 'structure':
+                examples = findBestStructureExamples(prompt, 3);
+                break;
+        }
+
+        res.json({
+            success: true,
+            category: usedCategory,
+            prompt,
+            examples: examples.map(ex => ({
+                name: ex.name,
+                description: ex.description,
+                keywords: ex.keywords,
+                codePreview: ex.code?.substring(0, 200) + '...'
+            }))
+        });
+    } catch (error: any) {
+        console.error('[AI Routes] FewShot examples error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Test few-shot AI generation (without WebSocket)
+ * POST /api/ai/fewshot/test
+ * Body: { prompt: string, model?: string }
+ */
+aiRoutes.post('/fewshot/test', async (req, res) => {
+    try {
+        const { prompt, model } = req.body;
+
+        if (!prompt) {
+            return res.status(400).json({ error: 'Missing prompt' });
+        }
+
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+        }
+
+        const ai = new FewShotAI({
+            apiKey,
+            model: model || 'anthropic/claude-3-haiku',
+            siteUrl: 'http://localhost:5173',
+            siteName: 'VoxelWorld'
+        });
+
+        console.log(`[AI Routes] Testing few-shot with prompt: "${prompt.substring(0, 50)}..."`);
+
+        const result = await ai.processRequest(prompt, {
+            playerPosition: { x: 0, y: 64, z: 0 }
+        });
+
+        res.json({
+            success: result.success,
+            type: result.type,
+            message: result.message,
+            data: result.data,
+            hasCode: !!result.code,
+            codeLength: result.code?.length,
+            hasIcon: !!result.icon,
+            error: result.error
+        });
+    } catch (error: any) {
+        console.error('[AI Routes] FewShot test error:', error);
+        res.status(500).json({ error: error.message });
+    }
 });

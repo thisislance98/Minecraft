@@ -101,7 +101,33 @@ export class AssetManager {
             'slide_block': { hardness: -1 }, // Unbreakable
             'mob_waves_block': { hardness: -1 }, // Unbreakable
             'slime': { hardness: 0.5 },
-            'control_block': { hardness: 2.0 } // Controllable block
+            'control_block': { hardness: 2.0 }, // Controllable block
+            // Wool blocks (soft, easy to break)
+            'wool_white': { hardness: 0.8 },
+            'wool_red': { hardness: 0.8 },
+            'wool_orange': { hardness: 0.8 },
+            'wool_yellow': { hardness: 0.8 },
+            'wool_green': { hardness: 0.8 },
+            'wool_blue': { hardness: 0.8 },
+            'wool_purple': { hardness: 0.8 },
+            'wool_pink': { hardness: 0.8 },
+            'wool_black': { hardness: 0.8 },
+            'wool_gray': { hardness: 0.8 },
+            'wool_brown': { hardness: 0.8 },
+            'wool_cyan': { hardness: 0.8 },
+            // Concrete blocks (harder than wool)
+            'concrete_white': { hardness: 1.8 },
+            'concrete_red': { hardness: 1.8 },
+            'concrete_orange': { hardness: 1.8 },
+            'concrete_yellow': { hardness: 1.8 },
+            'concrete_green': { hardness: 1.8 },
+            'concrete_blue': { hardness: 1.8 },
+            'concrete_purple': { hardness: 1.8 },
+            'concrete_pink': { hardness: 1.8 },
+            'concrete_black': { hardness: 1.8 },
+            'concrete_gray': { hardness: 1.8 },
+            'concrete_brown': { hardness: 1.8 },
+            'concrete_cyan': { hardness: 1.8 }
         };
     }
 
@@ -512,6 +538,20 @@ export class AssetManager {
 
         const soccerGoalNet = this.getOrCreateMat('soccer_goal_net', true);
         this.registerBlockMaterials('soccer_goal_net', soccerGoalNet);
+
+        // Wool Blocks (colored building blocks)
+        const woolColors = ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'black', 'gray', 'brown', 'cyan'];
+        woolColors.forEach(color => {
+            const woolMat = this.getOrCreateMat(`wool_${color}`);
+            this.registerBlockMaterials(`wool_${color}`, woolMat);
+        });
+
+        // Concrete Blocks (smooth colored building blocks)
+        const concreteColors = ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'black', 'gray', 'brown', 'cyan'];
+        concreteColors.forEach(color => {
+            const concreteMat = this.getOrCreateMat(`concrete_${color}`);
+            this.registerBlockMaterials(`concrete_${color}`, concreteMat);
+        });
 
         // Break Stages
         this.breakMaterials = [];

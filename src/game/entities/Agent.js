@@ -361,12 +361,8 @@ Max 25 words total.
         try {
             console.log(`[Agent] Executing Client Tool: ${name}`, args);
 
-            // Primary tool: execute_lua - runs Roblox-style Lua code
-            if (name === 'execute_lua') {
-                result = await this.executeLua(args.code, taskId);
-            }
-            // Legacy tool: execute_code - runs JavaScript SDK code
-            else if (name === 'execute_code') {
+            // Execute JavaScript SDK code
+            if (name === 'execute_code') {
                 result = await this.executeCode(args.code, taskId);
             }
             // Legacy SDK Tool (unified)
@@ -529,67 +525,6 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
                 error: `Execution failed: ${e.message}`,
                 stack: e.stack,
                 sdkHints: hints.length > 0 ? hints : undefined
-            };
-        }
-    }
-
-    /**
-     * Execute Roblox-style Lua code using the LuaRuntime
-     * @param {string} code - Lua code to execute
-     * @param {string} taskId - Optional task ID for undo tracking
-     */
-    async executeLua(code, taskId = null) {
-        console.log('[Agent] Executing Lua code:', code);
-
-        try {
-            if (!code || typeof code !== 'string') {
-                return { error: 'No Lua code provided' };
-            }
-
-            // Check if LuaRuntime is available
-            if (!window.LuaRuntime) {
-                console.error('[Agent] LuaRuntime not available');
-                return { error: 'Lua runtime not initialized. The game may need to be restarted.' };
-            }
-
-            // Start undo tracking if we have a taskId
-            if (taskId && window.VoxelWorld) {
-                window.VoxelWorld.beginTracking(taskId);
-            }
-
-            // Execute the Lua code
-            const result = window.LuaRuntime.execute(code, 'merlin_script');
-
-            // End undo tracking and get the record
-            let undoRecord = null;
-            if (taskId && window.VoxelWorld) {
-                undoRecord = window.VoxelWorld.endTracking();
-            }
-
-            if (result.success) {
-                console.log('[Agent] Lua code executed successfully');
-                return {
-                    success: true,
-                    message: 'Lua code executed',
-                    undoRecord: undoRecord
-                };
-            } else {
-                console.error('[Agent] Lua execution error:', result.error);
-                return {
-                    error: `Lua error: ${result.error}`,
-                    undoRecord: undoRecord
-                };
-            }
-        } catch (e) {
-            // End tracking even on error
-            if (taskId && window.VoxelWorld) {
-                window.VoxelWorld.endTracking();
-            }
-            console.error('[Agent] Lua execution failed:', e);
-
-            return {
-                error: `Lua execution failed: ${e.message}`,
-                stack: e.stack
             };
         }
     }

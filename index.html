@@ -454,8 +454,10 @@
 
     <script type="module">
         import { MerlinClient } from '/src/game/ai/MerlinClient.js';
-        // Initialize AI Client immediately, independent of Game logic
+        import { FewShotClient } from '/src/game/ai/FewShotClient.js';
+        // Initialize AI Clients immediately, independent of Game logic
         window.merlinClient = new MerlinClient();
+        window.fewShotClient = new FewShotClient();
     </script>
     <script type="module" src="/src/main.js"></script>
 </body>

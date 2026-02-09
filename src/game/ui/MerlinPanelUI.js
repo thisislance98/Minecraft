@@ -580,6 +580,7 @@ export class MerlinPanelUI {
             case 'task_cost_received':
             case 'task_undone':
             case 'task_closed':
+            case 'task_code':
                 this.updateTaskList();
                 // Also update detail view if viewing this task
                 if (this.isDetailView && this.selectedTaskId) {
@@ -693,9 +694,27 @@ export class MerlinPanelUI {
         const codeEl = document.getElementById('task-detail-code');
         if (!codeEl) return;
 
-        if (task.executedCode && task.executedCode.length > 0) {
-            let codeHtml = '<div class="executed-code-list">';
+        let hasContent = false;
+        let codeHtml = '<div class="executed-code-list">';
 
+        // Check for FewShot generated code (task.code from structure generation)
+        if (task.code) {
+            hasContent = true;
+            const description = task.codeDescription || 'Generated Code';
+            codeHtml += `
+                <div class="executed-code-block code-status-success">
+                    <div class="code-block-header">
+                        <span class="code-block-label">📝 ${this.escapeHtml(description)}</span>
+                        <button class="code-copy-btn code-copy-generated" title="Copy code">📋</button>
+                    </div>
+                    <pre class="code-display"><code>${this.escapeHtml(task.code)}</code></pre>
+                </div>
+            `;
+        }
+
+        // Check for executedCode (from SDK/Merlin system)
+        if (task.executedCode && task.executedCode.length > 0) {
+            hasContent = true;
             task.executedCode.forEach((exec, index) => {
                 const statusIcon = exec.status === 'success' ? '✅' :
                     exec.status === 'error' ? '❌' :
@@ -716,12 +735,26 @@ export class MerlinPanelUI {
                     </div>
                 `;
             });
+        }
 
-            codeHtml += '</div>';
+        codeHtml += '</div>';
+
+        if (hasContent) {
             codeEl.innerHTML = codeHtml;
 
-            // Add copy button handlers
-            codeEl.querySelectorAll('.code-copy-btn').forEach(btn => {
+            // Add copy button handler for generated code
+            const generatedCopyBtn = codeEl.querySelector('.code-copy-generated');
+            if (generatedCopyBtn && task.code) {
+                generatedCopyBtn.onclick = () => {
+                    navigator.clipboard.writeText(task.code).then(() => {
+                        generatedCopyBtn.textContent = '✓';
+                        setTimeout(() => generatedCopyBtn.textContent = '📋', 1500);
+                    });
+                };
+            }
+
+            // Add copy button handlers for executed code
+            codeEl.querySelectorAll('.code-copy-btn:not(.code-copy-generated)').forEach(btn => {
                 btn.onclick = () => {
                     const index = parseInt(btn.dataset.codeIndex);
                     const code = task.executedCode[index]?.code;
@@ -746,13 +779,19 @@ export class MerlinPanelUI {
         const codeTab = tabsEl?.querySelector('.task-tab[data-tab="code"]');
         if (!codeTab) return;
 
-        const hasCode = task.executedCode && task.executedCode.length > 0;
+        const hasExecutedCode = task.executedCode && task.executedCode.length > 0;
+        const hasGeneratedCode = !!task.code;
+        const hasCode = hasExecutedCode || hasGeneratedCode;
 
         // Show/hide code tab and add indicator
         if (hasCode) {
             codeTab.classList.remove('hidden');
-            // Add badge with count
-            const count = task.executedCode.length;
+
+            // Calculate count for badge
+            let count = 0;
+            if (hasGeneratedCode) count += 1;
+            if (hasExecutedCode) count += task.executedCode.length;
+
             if (!codeTab.querySelector('.code-count-badge')) {
                 const badge = document.createElement('span');
                 badge.className = 'code-count-badge';
@@ -762,8 +801,8 @@ export class MerlinPanelUI {
                 codeTab.querySelector('.code-count-badge').textContent = count;
             }
 
-            // Auto-switch to code tab when code is first executed
-            if (task.executedCode.some(e => e.status === 'running')) {
+            // Auto-switch to code tab when code is first available
+            if (hasGeneratedCode || (hasExecutedCode && task.executedCode.some(e => e.status === 'running'))) {
                 this.switchTaskDetailTab('code');
             }
         }

@@ -157,4 +157,32 @@ export const Blocks = {
 
     // Vehicle / Controllable Blocks
     CONTROL_BLOCK: 'control_block',         // A block that can be controlled with WASD
+
+    // Wool Blocks (colored)
+    WOOL_WHITE: 'wool_white',
+    WOOL_RED: 'wool_red',
+    WOOL_ORANGE: 'wool_orange',
+    WOOL_YELLOW: 'wool_yellow',
+    WOOL_GREEN: 'wool_green',
+    WOOL_BLUE: 'wool_blue',
+    WOOL_PURPLE: 'wool_purple',
+    WOOL_PINK: 'wool_pink',
+    WOOL_BLACK: 'wool_black',
+    WOOL_GRAY: 'wool_gray',
+    WOOL_BROWN: 'wool_brown',
+    WOOL_CYAN: 'wool_cyan',
+
+    // Concrete Blocks (colored, smoother texture)
+    CONCRETE_WHITE: 'concrete_white',
+    CONCRETE_RED: 'concrete_red',
+    CONCRETE_ORANGE: 'concrete_orange',
+    CONCRETE_YELLOW: 'concrete_yellow',
+    CONCRETE_GREEN: 'concrete_green',
+    CONCRETE_BLUE: 'concrete_blue',
+    CONCRETE_PURPLE: 'concrete_purple',
+    CONCRETE_PINK: 'concrete_pink',
+    CONCRETE_BLACK: 'concrete_black',
+    CONCRETE_GRAY: 'concrete_gray',
+    CONCRETE_BROWN: 'concrete_brown',
+    CONCRETE_CYAN: 'concrete_cyan',
 };

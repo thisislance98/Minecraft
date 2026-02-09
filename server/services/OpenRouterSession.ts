@@ -1,5 +1,5 @@
 /**
- * OpenRouter Session - Merlin AI using Claude via OpenRouter
+ * OpenRouterSession - Merlin AI using Claude via OpenRouter
  *
  * OpenRouter provides access to Claude and other models via a simple
  * OpenAI-compatible REST API.
@@ -8,51 +8,31 @@
 import { WebSocket } from 'ws';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { IncomingMessage } from 'http';
 
-import { auth } from '../config';
-import { addTokens, getUserTokens } from './tokenService';
+import { BaseAISession } from './BaseAISession';
 import { saveCreature } from './DynamicCreatureService';
 import { saveItem } from './DynamicItemService';
 import { searchKnowledge, addKnowledge } from './KnowledgeService';
 import { ragLookup, summarizeRAGResult, RAGResult } from './RAGTemplateService';
 import { getMerlinSystemPrompt } from '../ai/merlin_prompts';
 import { getOpenRouterTools } from '../ai/openrouter_tools';
-import { IncomingMessage } from 'http';
-
-const PENDING_TOOL_CALLS = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MAX_HISTORY_TURNS = 3; // Keep last N user/assistant exchanges
 
-export class OpenRouterSession {
-    private ws: WebSocket;
+export class OpenRouterSession extends BaseAISession {
+    protected readonly sessionName = 'OpenRouter';
+
     private messages: Array<{ role: string; content: string | any[] }> = [];
-    private userId: string | null = null;
-    private headers: any;
-    private cliMode: boolean = false;
-    private authReady: Promise<void>;
-    private authReadyResolve!: () => void;
-    private isInterrupted = false;
     private abortController: AbortController | null = null;
-
-    // Model configuration
-    private model: string;
-    private apiKey: string;
 
     // Knowledge gap detection
     private lastKnowledgeSearch: { query: string; timestamp: number; resultsCount: number } | null = null;
 
-    // Track current world context
-    private currentWorldId: string = 'global';
-
-    // Settings
-    private bypassTokens: boolean = false;
+    // Extended settings
     private thinkingEnabled: boolean = false;
-
-    // Pricing (Claude 4.5 Opus via OpenRouter)
-    private PRICE_INPUT_1M = 3.00;
-    private PRICE_OUTPUT_1M = 15.00;
-    private OVERHEAD_MULTIPLIER = 1.5;
-    private USD_PER_GAME_TOKEN = 0.001;
+    private ragEnabled: boolean = false;
 
     // Track what was created in the current turn for follow-up generation
     private lastCreation: { type: 'item' | 'creature' | 'build' | null, name: string | null } = { type: null, name: null };
@@ -60,96 +40,13 @@ export class OpenRouterSession {
     // RAG template lookup result for current request
     private lastRAGResult: RAGResult | null = null;
 
-    // Settings for RAG
-    private ragEnabled: boolean = false;
-
-    // Message history limit (to control token usage)
-    private readonly MAX_HISTORY_TURNS = 3; // Keep last N user/assistant exchanges
-
     constructor(ws: WebSocket, req: IncomingMessage) {
-        this.ws = ws;
-        this.headers = req.headers;
-
-        // Get API key and model from environment
-        this.apiKey = process.env.OPENROUTER_API_KEY || '';
-        this.model = process.env.OPENROUTER_MODEL || 'anthropic/claude-opus-4-5-20250514';
-
-        if (!this.apiKey) {
-            console.error('[OpenRouter] CRITICAL: Missing OPENROUTER_API_KEY');
-        }
-
-        // Initialize auth ready promise
-        this.authReady = new Promise((resolve) => {
-            this.authReadyResolve = resolve;
-        });
-
-        // Extract params from URL
-        const url = new URL(req.url || '', `http://${req.headers.host}`);
-        const token = url.searchParams.get('token');
-        const cliParam = url.searchParams.get('cli') === 'true';
-        const secretParam = url.searchParams.get('secret');
-
-        this.init(token, cliParam, secretParam);
+        const defaultModel = process.env.OPENROUTER_MODEL || 'anthropic/claude-opus-4-5-20250514';
+        super(ws, req, defaultModel);
     }
 
-    private async init(token: string | null, cliMode: boolean = false, secretParam: string | null = null) {
-        // Validate CLI Mode
-        // Default secret for local development (same as worlds.ts) - only require explicit CLI_SECRET in production
-        const headerSecret = this.headers['x-antigravity-secret'];
-        const validSecret = process.env.CLI_SECRET || 'asdf123';
-
-        if (validSecret && (cliMode || this.headers['x-antigravity-client'] === 'cli')) {
-            if (headerSecret === validSecret || secretParam === validSecret) {
-                this.cliMode = true;
-                console.log('[OpenRouter] CLI Mode enabled');
-            }
-        }
-
-        // Register WebSocket handlers
-        this.ws.on('error', (err) => {
-            console.error('[OpenRouter] WebSocket error:', err);
-        });
-
-        this.ws.on('close', () => {
-            console.log(`[OpenRouter] Session closed for user: ${this.userId || 'guest'}`);
-            this.isInterrupted = true;
-            this.abortController?.abort();
-        });
-
-        this.ws.on('message', async (data) => {
-            try {
-                const msg = JSON.parse(data.toString());
-                if (msg.type === 'input') {
-                    await this.handleInput(msg.text, msg.context, msg.settings);
-                } else if (msg.type === 'tool_response') {
-                    this.handleToolResponse(msg.id, msg.result, msg.error);
-                } else if (msg.type === 'interrupt') {
-                    console.log('[OpenRouter] Interrupted by client.');
-                    this.isInterrupted = true;
-                    this.abortController?.abort();
-                }
-            } catch (e: any) {
-                console.error('[OpenRouter] Error handling message:', e);
-                this.sendError(e.message);
-            }
-        });
-
-        // Verify Auth
-        if (token) {
-            try {
-                if (!auth) throw new Error('Auth service unavailable');
-                const decoded = await auth.verifyIdToken(token);
-                this.userId = decoded.uid;
-                console.log(`[OpenRouter] Authenticated user: ${this.userId}`);
-                this.sendBalanceUpdate();
-            } catch (e) {
-                console.error('[OpenRouter] Auth failed:', e);
-                this.send('error', { message: 'Authentication failed' });
-            }
-        }
-
+    protected async onInit(): Promise<void> {
         // Initialize with system prompt using prompt caching
-        // OpenRouter supports cache_control for Claude models to reduce costs
         const systemPrompt = getMerlinSystemPrompt();
         this.messages.push({
             role: 'system',
@@ -159,69 +56,61 @@ export class OpenRouterSession {
                     text: systemPrompt,
                     cache_control: {
                         type: 'ephemeral',
-                        ttl: '1h'  // 1 hour TTL since system prompt is static
+                        ttl: '1h'
                     }
                 }
             ]
         });
 
-        console.log(`[OpenRouter] Session initialized with model: ${this.model} (prompt caching enabled)`);
-        this.authReadyResolve();
+        console.log(`[OpenRouter] Prompt caching enabled`);
     }
 
-    private send(type: string, payload: any) {
-        if (this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type, ...payload }));
+    protected onClose(): void {
+        this.abortController?.abort();
+    }
+
+    protected async handleMessage(msg: any): Promise<void> {
+        switch (msg.type) {
+            case 'input':
+                await this.handleInput(msg.text, msg.context, msg.settings);
+                break;
+            case 'tool_response':
+                this.handleToolResponse(msg.id, msg.result, msg.error);
+                break;
+            case 'interrupt':
+                console.log('[OpenRouter] Interrupted by client.');
+                this.isInterrupted = true;
+                this.abortController?.abort();
+                break;
         }
     }
 
-    private sendError(message: string) {
-        this.send('error', { message });
-    }
+    protected updateSettings(settings: any) {
+        super.updateSettings(settings);
 
-    private async sendBalanceUpdate() {
-        if (!this.userId) return;
-        const balance = await getUserTokens(this.userId);
-        this.send('balance_update', { tokens: balance });
-    }
-
-    private async handleInput(text: string, context: any, settings?: any) {
-        await this.authReady;
-
-        if (!this.apiKey) {
-            this.sendError('OpenRouter API key not configured');
-            return;
-        }
-
-        // Update world context
-        if (context?.worldId) {
-            this.currentWorldId = context.worldId;
-        }
-
-        // Update settings
-        if (settings?.bypassTokens !== undefined) {
-            this.bypassTokens = settings.bypassTokens;
-        }
         if (settings?.thinkingEnabled !== undefined) {
             this.thinkingEnabled = settings.thinkingEnabled;
         }
         if (settings?.ragEnabled !== undefined) {
             this.ragEnabled = settings.ragEnabled;
         }
+    }
 
-        // Check auth & balance
-        const skipTokenChecks = this.cliMode || this.bypassTokens;
-        if (!this.userId && !skipTokenChecks) {
-            this.send('error', { message: 'Authentication required.' });
+    private async handleInput(text: string, context: any, settings?: any) {
+        await this.authReady;
+
+        if (!this.hasApiKey()) {
+            this.sendError('OpenRouter API key not configured');
             return;
         }
 
-        if (this.userId && !skipTokenChecks) {
-            const balance = await getUserTokens(this.userId);
-            if (balance < 5) {
-                this.send('error', { message: 'Insufficient tokens.' });
-                return;
-            }
+        // Update context and settings
+        this.updateWorldContext(context);
+        this.updateSettings(settings);
+
+        // Check auth & balance
+        if (!await this.verifyTokenBalance()) {
+            return;
         }
 
         this.isInterrupted = false;
@@ -263,7 +152,7 @@ export class OpenRouterSession {
 
         this.messages.push({ role: 'user', content: fullMessage });
 
-        // OPTIMIZATION: Trim message history to control token usage
+        // Trim message history to control token usage
         this.trimMessageHistory();
 
         try {
@@ -287,15 +176,14 @@ export class OpenRouterSession {
         const conversationMessages = this.messages.slice(1);
 
         // Count turns (a turn = user message + assistant response + any tool messages)
-        // We'll keep the last MAX_HISTORY_TURNS worth of user messages and their responses
         const userMessageIndices: number[] = [];
         conversationMessages.forEach((msg, idx) => {
             if (msg.role === 'user') userMessageIndices.push(idx);
         });
 
         // If we have more than MAX_HISTORY_TURNS user messages, trim
-        if (userMessageIndices.length > this.MAX_HISTORY_TURNS) {
-            const keepFromIndex = userMessageIndices[userMessageIndices.length - this.MAX_HISTORY_TURNS];
+        if (userMessageIndices.length > MAX_HISTORY_TURNS) {
+            const keepFromIndex = userMessageIndices[userMessageIndices.length - MAX_HISTORY_TURNS];
             const trimmedConversation = conversationMessages.slice(keepFromIndex);
 
             const oldLength = this.messages.length;
@@ -327,8 +215,9 @@ export class OpenRouterSession {
 
         console.log(`[OpenRouter] Sending request to ${this.model} with ${tools.length} tools`);
         console.log(`[OpenRouter] Tools: ${tools.map((t: any) => t.function.name).join(', ')}`);
-        console.log(`[OpenRouter] User message: "${this.messages[this.messages.length - 1]?.content?.substring(0, 100)}..."`);
-
+        const lastMessage = this.messages[this.messages.length - 1]?.content;
+        const messagePreview = typeof lastMessage === 'string' ? lastMessage.substring(0, 100) : '[complex content]';
+        console.log(`[OpenRouter] User message: "${messagePreview}..."`);
 
         const response = await fetch(OPENROUTER_API_URL, {
             method: 'POST',
@@ -440,22 +329,41 @@ export class OpenRouterSession {
             await this.generateFollowUpSuggestions();
 
             // Calculate and send cost info
-            let costInfo = null;
             if (usageData) {
-                costInfo = this.calculateCost(usageData);
+                const costInfo = this.calculateUsageCost(usageData);
                 console.log('[OpenRouter] Sending cost_info:', JSON.stringify(costInfo));
                 this.send('cost_info', costInfo);
+
+                // Deduct tokens
+                if (!this.shouldSkipTokenChecks()) {
+                    await this.deductTokens(costInfo.gameTokens, 'OpenRouter Generation');
+                }
             } else {
                 console.log('[OpenRouter] No usage data available, skipping cost_info');
             }
 
             this.send('complete', {});
-
-            // Deduct tokens if usage data available
-            if (usageData && this.userId && !this.cliMode && !this.bypassTokens) {
-                await this.deductTokens(usageData);
-            }
         }
+    }
+
+    /**
+     * Calculate cost from OpenRouter usage data
+     */
+    private calculateUsageCost(usage: any) {
+        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || usage.cache_read_input_tokens || 0;
+        const cacheWriteTokens = usage.prompt_tokens_details?.cache_write_tokens || usage.cache_creation_input_tokens || 0;
+
+        // Log cache statistics
+        if (cachedTokens > 0 || cacheWriteTokens > 0) {
+            const savingsPercent = cachedTokens > 0 ? Math.round((cachedTokens / usage.prompt_tokens) * 90) : 0;
+            console.log(`[OpenRouter] Prompt caching: ${cachedTokens} cached tokens, ${cacheWriteTokens} written to cache, ~${savingsPercent}% input savings`);
+        }
+
+        const costInfo = this.calculateCost(usage.prompt_tokens, usage.completion_tokens, cachedTokens);
+        return {
+            ...costInfo,
+            cacheWriteTokens
+        };
     }
 
     private async executeTools(toolCalls: any[]) {
@@ -508,9 +416,7 @@ export class OpenRouterSession {
 
     private isClientTool(name: string): boolean {
         return [
-            // Primary SDK tool - Roblox-style Lua execution
-            'execute_lua',
-            // Legacy SDK tool - JavaScript execution
+            // Primary SDK tool - JavaScript execution
             'execute_code',
             // Legacy tools (for backwards compatibility)
             'spawn_creature', 'spawn', 'teleport_player', 'get_scene_info', 'update_entity',
@@ -639,84 +545,6 @@ export class OpenRouterSession {
 
             default:
                 return { error: `Unknown server tool: ${name}` };
-        }
-    }
-
-    private async executeClientTool(name: string, args: any): Promise<any> {
-        return new Promise((resolve) => {
-            const callId = Math.random().toString(36).substring(7);
-            PENDING_TOOL_CALLS.set(callId, { resolve, reject: resolve });
-
-            this.send('tool_request', { id: callId, name, args });
-
-            setTimeout(() => {
-                if (PENDING_TOOL_CALLS.has(callId)) {
-                    PENDING_TOOL_CALLS.delete(callId);
-                    resolve({ error: 'Client timed out' });
-                }
-            }, 30000);
-        });
-    }
-
-    private handleToolResponse(id: string, result: any, error: any) {
-        const pending = PENDING_TOOL_CALLS.get(id);
-        if (pending) {
-            PENDING_TOOL_CALLS.delete(id);
-            pending.resolve(error ? { error } : result);
-        }
-    }
-
-    /**
-     * Calculate cost info from usage data (without deducting tokens)
-     * Accounts for prompt caching - cached tokens are 90% cheaper
-     */
-    private calculateCost(usage: any) {
-        // OpenRouter returns cache info in prompt_tokens_details when prompt caching is active
-        const cachedTokens = usage.prompt_tokens_details?.cached_tokens || usage.cache_read_input_tokens || 0;
-        const cacheWriteTokens = usage.prompt_tokens_details?.cache_write_tokens || usage.cache_creation_input_tokens || 0;
-        const uncachedTokens = usage.prompt_tokens - cachedTokens;
-
-        // Cached tokens cost 10% of normal price (90% discount)
-        const CACHE_DISCOUNT = 0.1;
-        const inputCost = ((uncachedTokens / 1000000) * this.PRICE_INPUT_1M) +
-                          ((cachedTokens / 1000000) * this.PRICE_INPUT_1M * CACHE_DISCOUNT);
-        const outputCost = (usage.completion_tokens / 1000000) * this.PRICE_OUTPUT_1M;
-        const totalCost = (inputCost + outputCost) * this.OVERHEAD_MULTIPLIER;
-        const tokensToDeduct = Math.max(1, Math.ceil(totalCost / this.USD_PER_GAME_TOKEN));
-
-        // Log cache statistics
-        if (cachedTokens > 0 || cacheWriteTokens > 0) {
-            const savingsPercent = cachedTokens > 0 ? Math.round((cachedTokens / usage.prompt_tokens) * 90) : 0;
-            console.log(`[OpenRouter] Prompt caching: ${cachedTokens} cached tokens, ${cacheWriteTokens} written to cache, ~${savingsPercent}% input savings`);
-        }
-
-        return {
-            inputTokens: usage.prompt_tokens,
-            outputTokens: usage.completion_tokens,
-            cachedTokens: cachedTokens,
-            cacheWriteTokens: cacheWriteTokens,
-            inputCostUSD: inputCost,
-            outputCostUSD: outputCost,
-            totalCostUSD: totalCost,
-            gameTokens: tokensToDeduct,
-            model: this.model
-        };
-    }
-
-    private async deductTokens(usage: any) {
-        if (!this.userId) return;
-
-        // Use the same caching-aware calculation as calculateCost
-        const costInfo = this.calculateCost(usage);
-        const tokensToDeduct = costInfo.gameTokens;
-
-        console.log(`[OpenRouter] Cost: $${totalCost.toFixed(6)} -> ${tokensToDeduct} tokens`);
-
-        try {
-            await addTokens(this.userId, -tokensToDeduct, 'ai_usage', 'OpenRouter Generation');
-            this.sendBalanceUpdate();
-        } catch (e) {
-            console.error('[OpenRouter] Failed to deduct tokens:', e);
         }
     }
 

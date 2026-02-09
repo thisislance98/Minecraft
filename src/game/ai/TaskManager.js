@@ -43,12 +43,21 @@ export class TaskManager {
 
     /**
      * Get the active AI client based on settings
+     * Default: Use FewShot client when available (faster, cheaper, specialized for code generation)
+     * Falls back to main Merlin client only if FewShot is explicitly disabled or unavailable
      */
     getActiveClient() {
-        const useFewShot = window.useFewShot || localStorage.getItem('settings_fewshot') === 'true';
-        if (useFewShot && this.fewShotClient) {
+        // Check if FewShot is explicitly disabled via settings
+        const fewShotDisabled = localStorage.getItem('settings_fewshot') === 'false';
+
+        // Use FewShot by default when available, unless explicitly disabled
+        if (!fewShotDisabled && this.fewShotClient && this.fewShotClient.ws && this.fewShotClient.ws.readyState === WebSocket.OPEN) {
+            console.log('[TaskManager] Using FewShot AI client');
             return this.fewShotClient;
         }
+
+        // Fallback to main Merlin client
+        console.log('[TaskManager] Using main Merlin AI client');
         return this.merlinClient;
     }
 
@@ -187,6 +196,9 @@ export class TaskManager {
         const taskId = msg.taskId || this.currentTaskId;
         const task = taskId ? this.tasks.get(taskId) : null;
 
+        // Debug logging for task routing
+        console.log(`[TaskManager] handleMessage type=${msg.type}, msg.taskId=${msg.taskId}, currentTaskId=${this.currentTaskId}, resolved taskId=${taskId}, task found=${!!task}`);
+
         switch (msg.type) {
             case 'token':
                 if (task) {
@@ -257,6 +269,17 @@ export class TaskManager {
                     };
                     console.log(`[TaskManager] Task ${taskId} cost: $${msg.totalCostUSD?.toFixed(6)} (${msg.inputTokens} in / ${msg.outputTokens} out)`);
                     this.notifyListeners('task_cost_received', task);
+                }
+                break;
+
+            case 'code':
+                // Handle generated code (for displaying in the Code panel)
+                if (task) {
+                    task.code = msg.code;
+                    task.codeLanguage = msg.language || 'javascript';
+                    task.codeDescription = msg.description;
+                    console.log(`[TaskManager] Task ${taskId} received code: ${msg.code?.substring(0, 50)}...`);
+                    this.notifyListeners('task_code', { task, code: msg.code, language: msg.language, description: msg.description });
                 }
                 break;
         }

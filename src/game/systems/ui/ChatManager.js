@@ -8,17 +8,13 @@ export class ChatManager {
 
         // Chat Panel elements
         this.chatPanel = document.getElementById('chat-panel');
-        this.chatMessagesAI = document.getElementById('chat-messages-ai');
         this.chatMessagesPlayer = document.getElementById('chat-messages-player');
-        this.chatMessages = this.chatMessagesPlayer; // Default to Player
+        this.chatMessages = this.chatMessagesPlayer;
         this.chatInput = document.getElementById('chat-input');
         this.sendBtn = document.getElementById('send-chat');
         this.closeBtn = document.getElementById('close-chat');
         this.copyChatBtn = document.getElementById('copy-chat');
         this.clearChatBtn = document.getElementById('clear-chat');
-
-        // Chat mode state: 'ai', 'player'
-        this.chatMode = 'player';
 
         // Chat scroll state
         this.userHasScrolledUp = false;
@@ -36,7 +32,6 @@ export class ChatManager {
     }
 
     initialize() {
-        this.setupChatTabListeners();
         this.setupChatPanelListeners();
         this.setupChatListener();
     }
@@ -59,69 +54,13 @@ export class ChatManager {
                 document.activeElement.tagName !== 'TEXTAREA') {
                 e.preventDefault();
                 this.toggleChatPanel(true);
-                // Always default to Merlin (AI) tab when pressing 't'
-                this.setChatMode('ai');
-                console.log('[ChatManager] T key pressed - opening chat with AI (Merlin) mode');
+                console.log('[ChatManager] T key pressed - opening player chat');
                 setTimeout(() => this.chatInput?.focus(), 100);
             } else if (e.code === 'Escape' && !this.chatPanel.classList.contains('hidden')) {
                 e.preventDefault();
                 this.toggleChatPanel(false);
             }
         });
-    }
-
-    setupChatTabListeners() {
-        const tabs = document.querySelectorAll('.chat-tab');
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const mode = tab.dataset.mode;
-                this.setChatMode(mode);
-            });
-        });
-    }
-
-    /**
-     * Switch between chat modes
-     * @param {'ai' | 'player'} mode - The chat mode to switch to
-     */
-    setChatMode(mode) {
-        this.chatMode = mode;
-
-        // Update tab active states
-        const tabs = document.querySelectorAll('.chat-tab');
-        tabs.forEach(tab => {
-            if (tab.dataset.mode === mode) {
-                tab.classList.add('active');
-            } else {
-                tab.classList.remove('active');
-            }
-        });
-
-        // Show/hide message containers
-        if (this.chatMessagesAI) {
-            this.chatMessagesAI.classList.toggle('active', mode === 'ai');
-        }
-        if (this.chatMessagesPlayer) {
-            this.chatMessagesPlayer.classList.toggle('active', mode === 'player');
-        }
-
-        // Update chatMessages reference for current mode
-        if (mode === 'ai') {
-            this.chatMessages = this.chatMessagesAI;
-        } else if (mode === 'player') {
-            this.chatMessages = this.chatMessagesPlayer;
-        }
-
-        // Update placeholder text
-        if (this.chatInput) {
-            const placeholders = {
-                'ai': 'Ask the AI wizard...',
-                'player': 'Say something (speech bubble)...'
-            };
-            this.chatInput.placeholder = placeholders[mode] || 'Type a message...';
-        }
-
-        console.log(`[ChatManager] Chat mode switched to: ${mode}`);
     }
 
     setupChatPanelListeners() {
@@ -175,20 +114,10 @@ export class ChatManager {
         const message = this.chatInput?.value?.trim();
         if (!message) return;
 
-        // Handle differently based on chat mode
-        if (this.chatMode === 'ai') {
-            // Send to AI Agent
-            if (this.game.agent) {
-                this.addChatMessage('user', message);
-                this.chatInput.value = '';
-                this.game.agent.sendTextMessage(message);
-            }
-        } else if (this.chatMode === 'player') {
-            // Show as speech bubble
-            if (this.game.socketManager) {
-                this.game.socketManager.sendPlayerSpeech(message);
-                this.chatInput.value = '';
-            }
+        // Send player chat as speech bubble
+        if (this.game.socketManager) {
+            this.game.socketManager.sendPlayerSpeech(message);
+            this.chatInput.value = '';
         }
     }
 

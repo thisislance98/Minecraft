@@ -2151,6 +2151,96 @@ export function generateTexture(type, size = 16) {
             break;
         }
 
+        // ===== WOOL BLOCKS (colored) =====
+        case 'wool_white':
+        case 'wool_red':
+        case 'wool_orange':
+        case 'wool_yellow':
+        case 'wool_green':
+        case 'wool_blue':
+        case 'wool_purple':
+        case 'wool_pink':
+        case 'wool_black':
+        case 'wool_gray':
+        case 'wool_brown':
+        case 'wool_cyan': {
+            const woolColors = {
+                'wool_white': ['#FFFFFF', '#F5F5F5', '#EFEFEF'],
+                'wool_red': ['#B02020', '#A01818', '#901515'],
+                'wool_orange': ['#D86010', '#C85808', '#B85005'],
+                'wool_yellow': ['#C8C820', '#B8B818', '#A8A815'],
+                'wool_green': ['#35A030', '#309028', '#288020'],
+                'wool_blue': ['#3040B0', '#2838A0', '#203090'],
+                'wool_purple': ['#8030B0', '#7028A0', '#602090'],
+                'wool_pink': ['#D870A0', '#C86898', '#B86090'],
+                'wool_black': ['#202020', '#181818', '#101010'],
+                'wool_gray': ['#707070', '#686868', '#606060'],
+                'wool_brown': ['#6A4020', '#5A3818', '#4A3010'],
+                'wool_cyan': ['#209090', '#188080', '#107070'],
+            };
+            const colors = woolColors[type];
+            // Fluffy wool texture with noise
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const noise = seededRandom(seed++);
+                    ctx.fillStyle = colors[Math.floor(noise * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Add some lighter fluffy specks
+            const lighterColor = colors[0];
+            ctx.fillStyle = lighterColor;
+            for (let i = 0; i < 8; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+            break;
+        }
+
+        // ===== CONCRETE BLOCKS (colored, smoother) =====
+        case 'concrete_white':
+        case 'concrete_red':
+        case 'concrete_orange':
+        case 'concrete_yellow':
+        case 'concrete_green':
+        case 'concrete_blue':
+        case 'concrete_purple':
+        case 'concrete_pink':
+        case 'concrete_black':
+        case 'concrete_gray':
+        case 'concrete_brown':
+        case 'concrete_cyan': {
+            const concreteColors = {
+                'concrete_white': ['#CFCFCF', '#D8D8D8', '#E0E0E0'],
+                'concrete_red': ['#8E2020', '#9A2424', '#A62828'],
+                'concrete_orange': ['#C05000', '#D05808', '#E06010'],
+                'concrete_yellow': ['#C0B000', '#D0C008', '#E0D010'],
+                'concrete_green': ['#408030', '#488838', '#509040'],
+                'concrete_blue': ['#2840A0', '#3048B0', '#3850C0'],
+                'concrete_purple': ['#6020A0', '#6828B0', '#7030C0'],
+                'concrete_pink': ['#C06090', '#C86898', '#D070A0'],
+                'concrete_black': ['#101010', '#181818', '#202020'],
+                'concrete_gray': ['#505050', '#585858', '#606060'],
+                'concrete_brown': ['#5A3820', '#624028', '#6A4830'],
+                'concrete_cyan': ['#107080', '#187888', '#208090'],
+            };
+            const colors = concreteColors[type];
+            // Smooth concrete texture with minimal noise
+            ctx.fillStyle = colors[1];
+            ctx.fillRect(0, 0, size, size);
+            // Add very subtle texture variation
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    if (seededRandom(seed++) > 0.8) {
+                        ctx.fillStyle = colors[Math.floor(seededRandom(seed++) * colors.length)];
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+            break;
+        }
+
         default:
             // Fallback: Generate a visible debug texture (magenta/pink checkered)
             // This makes missing textures obvious rather than pure black

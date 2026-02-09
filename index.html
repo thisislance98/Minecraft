@@ -386,7 +386,7 @@
 
     <div id="debug">
         <button class="debug-close-btn" onclick="this.parentElement.classList.add('hidden')" title="Close">×</button>
-        <p><span id="version-text">v1.0.1448</span><span id="version-badge" class="hidden">NEW</span></p>
+        <p><span id="version-text">v1.0.1467</span><span id="version-badge" class="hidden">NEW</span></p>
         <p>Position: <span id="position">0, 0, 0</span></p>
         <p>Blocks: <span id="block-count">0</span></p>
         <div id="remote-players-list"></div>
@@ -422,30 +422,18 @@
 
     <div id="chat-panel" class="hidden">
         <div class="chat-header">
-            <div class="chat-title">CHAT</div>
+            <div class="chat-title">PLAYER CHAT</div>
             <button id="clear-chat" title="Clear Chat History"
                 style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">🗑️</button>
             <button id="copy-chat" title="Copy Conversation"
                 style="background: none; border: none; font-size: 20px; cursor: pointer; color: #fff; margin-right: 10px;">📋</button>
             <button id="close-chat">×</button>
         </div>
-        <div class="chat-tabs">
-            <button class="chat-tab active" data-mode="player"><span class="tab-icon">💬</span>Player</button>
-            <button class="chat-tab merlin-tab" onclick="window.merlinPanelUI?.toggle(); document.getElementById('chat-panel').classList.add('hidden');"><span class="tab-icon">🧙</span>Merlin (M)</button>
-        </div>
-        <div id="chat-messages-ai" class="chat-messages-container">
-            <!-- AI Messages (now accessed via M key / Merlin Panel) -->
-            <div class="message ai">
-                <div class="message-content">Press M to open Merlin's Workshop for AI assistance.</div>
-            </div>
-        </div>
         <div id="chat-messages-player" class="chat-messages-container active">
             <!-- Player Chat Messages -->
         </div>
         <div class="chat-input-container">
-            <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
-            <button id="idea-btn" title="Get an Idea"
-                style="background: none; border: none; font-size: 20px; cursor: pointer; margin-right: 5px;">💡</button>
+            <input type="text" id="chat-input" placeholder="Say something (speech bubble)..." autocomplete="off">
             <button id="send-chat">Send</button>
         </div>
     </div>

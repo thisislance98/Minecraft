@@ -1,5 +1,5 @@
 /**
- * Tool Definitions for OpenRouter - Lua code execution (Roblox-style API)
+ * Tool Definitions for OpenRouter - JavaScript code execution (VoxelWorld SDK)
  */
 
 export function getOpenRouterTools() {
@@ -7,26 +7,35 @@ export function getOpenRouterTools() {
         {
             type: 'function',
             function: {
-                name: 'execute_lua',
-                description: `Execute Roblox-style Lua code in the game. Uses standard Roblox APIs (Instance, Vector3, Color3, workspace, game, Players).
+                name: 'execute_code',
+                description: `Execute JavaScript code in the game using the VoxelWorld SDK and THREE.js.
 
-Game-specific extensions on workspace:
-- workspace:SetBlock(x, y, z, blockType) - Place a block
-- workspace:Fill(x1, y1, z1, x2, y2, z2, blockType) - Fill region with blocks
-- workspace:SpawnAnimal(type, position, count) - Spawn existing animal (Pig, Wolf, Cow, Sheep, Chicken, Horse, Bear, Zombie, etc.)
-- workspace:SpawnTree(type, x, y, z) - Spawn tree (oak, birch, spruce)
-- workspace:GiveItem(name, count) - Give item to player
-- workspace:Undo() - Undo last action
+Available globals:
+- game - The VoxelGame instance
+- game.player - Player object with position, inventory
+- game.world - World for block operations (setBlock, removeBlock)
+- game.spawnManager - Spawn creatures (spawnCreature)
+- game.camera - Camera for direction/position
+- THREE - THREE.js library for 3D geometry/materials
+- Animal - Base class for creatures
+- Item - Base class for items
+- window.AnimalClasses - Registry to add new creature types
 
-Instance classes: Part, Creature, Tool, Model, Sound, Script, ParticleEmitter, PointLight
+Common operations:
+- game.world.setBlock(x, y, z, blockType) - Place a block
+- game.spawnManager.spawnCreature(type, x, y, z, count) - Spawn existing animal
+- game.player.inventory.addItem(itemId, count) - Give item to player
+- game.player.position - Get player position {x, y, z}
 
-Block types: stone, cobblestone, brick, wood, planks, glass, dirt, grass, sand, gravel, iron_ore, gold_ore, diamond_ore, coal_ore, water, lava, leaves, log`,
+Block types: stone, cobblestone, brick, wood, planks, glass, dirt, grass, sand, gold_block, diamond_block, iron_block, water, lava
+
+Animal types: Pig, Wolf, Sheep, Cow, Chicken, Horse, Bear, Lion, Tiger, Elephant, Deer, Zombie, Skeleton, Bunny, Fox, Owl, Panda, TRex, Unicorn, Robot, Dog, Cat`,
                 parameters: {
                     type: 'object',
                     properties: {
                         code: {
                             type: 'string',
-                            description: 'Lua code using Roblox-style APIs'
+                            description: 'JavaScript code using VoxelWorld SDK and THREE.js'
                         }
                     },
                     required: ['code']

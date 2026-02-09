@@ -224,6 +224,12 @@ export class FewShotClient {
         if (msg.type === 'tool_request') {
             this.handleToolRequest(msg);
         }
+
+        // Handle code messages (for displaying generated code in UI)
+        if (msg.type === 'code') {
+            console.log('[FewShotClient] Code received:', msg.code?.substring(0, 100) + '...');
+            this.notifyListeners({ type: 'code', code: msg.code, language: msg.language, description: msg.description });
+        }
     }
 
     async handleToolRequest(msg) {

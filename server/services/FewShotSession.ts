@@ -6,130 +6,25 @@
 
 import { WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
-import { auth } from '../config';
-import { addTokens, getUserTokens } from './tokenService';
+import { BaseAISession } from './BaseAISession';
 import { saveCreature } from './DynamicCreatureService';
 import { saveItem } from './DynamicItemService';
 import { FewShotAI, availableModels } from '../ai/few_shot_system';
 
-const PENDING_TOOL_CALLS = new Map<string, { resolve: (value: any) => void, reject: (reason?: any) => void }>();
+const FEWSHOT_COST_TOKENS = 2; // Minimal charge for few-shot approach
 
-export class FewShotSession {
-    private ws: WebSocket;
-    private userId: string | null = null;
-    private headers: any;
-    private cliMode: boolean = false;
-    private authReady: Promise<void>;
-    private authReadyResolve!: () => void;
-    private isInterrupted = false;
+export class FewShotSession extends BaseAISession {
+    protected readonly sessionName = 'FewShot';
 
     // AI system
     private ai: FewShotAI | null = null;
 
-    // Model configuration
-    private model: string;
-    private apiKey: string;
-
-    // Track current world context
-    private currentWorldId: string = 'global';
-
-    // Settings
-    private bypassTokens: boolean = false;
-
-    // Pricing (adjusted for cheaper models)
-    private PRICE_INPUT_1M = 0.25;  // Haiku pricing as default
-    private PRICE_OUTPUT_1M = 1.25;
-    private OVERHEAD_MULTIPLIER = 1.5;
-    private USD_PER_GAME_TOKEN = 0.001;
-
     constructor(ws: WebSocket, req: IncomingMessage) {
-        this.ws = ws;
-        this.headers = req.headers;
-
-        // Get API key and model from environment
-        this.apiKey = process.env.OPENROUTER_API_KEY || '';
-        this.model = process.env.FEWSHOT_MODEL || 'anthropic/claude-3-haiku';
-
-        if (!this.apiKey) {
-            console.error('[FewShot] CRITICAL: Missing OPENROUTER_API_KEY');
-        }
-
-        // Initialize auth ready promise
-        this.authReady = new Promise((resolve) => {
-            this.authReadyResolve = resolve;
-        });
-
-        // Extract params from URL
-        const url = new URL(req.url || '', `http://${req.headers.host}`);
-        const token = url.searchParams.get('token');
-        const cliParam = url.searchParams.get('cli') === 'true';
-        const secretParam = url.searchParams.get('secret');
-        const modelParam = url.searchParams.get('model');
-
-        if (modelParam) {
-            this.model = modelParam;
-        }
-
-        this.init(token, cliParam, secretParam);
+        const defaultModel = process.env.FEWSHOT_MODEL || 'anthropic/claude-3-haiku';
+        super(ws, req, defaultModel);
     }
 
-    private async init(token: string | null, cliMode: boolean = false, secretParam: string | null = null) {
-        // Validate CLI Mode
-        const headerSecret = this.headers['x-antigravity-secret'];
-        const validSecret = process.env.CLI_SECRET || 'asdf123';
-
-        if (validSecret && (cliMode || this.headers['x-antigravity-client'] === 'cli')) {
-            if (headerSecret === validSecret || secretParam === validSecret) {
-                this.cliMode = true;
-                console.log('[FewShot] CLI Mode enabled');
-            }
-        }
-
-        // Register WebSocket handlers
-        this.ws.on('error', (err) => {
-            console.error('[FewShot] WebSocket error:', err);
-        });
-
-        this.ws.on('close', () => {
-            console.log(`[FewShot] Session closed for user: ${this.userId || 'guest'}`);
-            this.isInterrupted = true;
-        });
-
-        this.ws.on('message', async (data) => {
-            try {
-                const msg = JSON.parse(data.toString());
-                if (msg.type === 'input') {
-                    await this.handleInput(msg.text, msg.context, msg.settings);
-                } else if (msg.type === 'tool_response') {
-                    this.handleToolResponse(msg.id, msg.result, msg.error);
-                } else if (msg.type === 'interrupt') {
-                    console.log('[FewShot] Interrupted by client.');
-                    this.isInterrupted = true;
-                } else if (msg.type === 'set_model') {
-                    this.setModel(msg.model);
-                } else if (msg.type === 'get_models') {
-                    this.send('models_list', { models: availableModels });
-                }
-            } catch (e: any) {
-                console.error('[FewShot] Error handling message:', e);
-                this.sendError(e.message);
-            }
-        });
-
-        // Verify Auth
-        if (token) {
-            try {
-                if (!auth) throw new Error('Auth service unavailable');
-                const decoded = await auth.verifyIdToken(token);
-                this.userId = decoded.uid;
-                console.log(`[FewShot] Authenticated user: ${this.userId}`);
-                this.sendBalanceUpdate();
-            } catch (e) {
-                console.error('[FewShot] Auth failed:', e);
-                this.send('error', { message: 'Authentication failed' });
-            }
-        }
-
+    protected async onInit(): Promise<void> {
         // Initialize AI system
         this.ai = new FewShotAI({
             apiKey: this.apiKey,
@@ -138,12 +33,29 @@ export class FewShotSession {
             siteName: 'VoxelWorld'
         });
 
-        console.log(`[FewShot] Session initialized with model: ${this.model}`);
-
         // Send available models to client
         this.send('models_list', { models: availableModels, current: this.model });
+    }
 
-        this.authReadyResolve();
+    protected async handleMessage(msg: any): Promise<void> {
+        switch (msg.type) {
+            case 'input':
+                await this.handleInput(msg.text, msg.context, msg.settings);
+                break;
+            case 'tool_response':
+                this.handleToolResponse(msg.id, msg.result, msg.error);
+                break;
+            case 'interrupt':
+                console.log('[FewShot] Interrupted by client.');
+                this.isInterrupted = true;
+                break;
+            case 'set_model':
+                this.setModel(msg.model);
+                break;
+            case 'get_models':
+                this.send('models_list', { models: availableModels });
+                break;
+        }
     }
 
     private setModel(modelId: string) {
@@ -168,68 +80,10 @@ export class FewShotSession {
         this.send('model_changed', { model: modelId });
     }
 
-    private updatePricing(modelId: string) {
-        // Approximate pricing per million tokens (July 2025 rates from OpenRouter)
-        if (modelId.includes('opus-4.6') || modelId.includes('opus-4.5')) {
-            this.PRICE_INPUT_1M = 5.00;
-            this.PRICE_OUTPUT_1M = 25.00;
-        } else if (modelId.includes('sonnet-4.5') || modelId.includes('sonnet-4')) {
-            this.PRICE_INPUT_1M = 3.00;
-            this.PRICE_OUTPUT_1M = 15.00;
-        } else if (modelId.includes('haiku-4.5') || modelId.includes('haiku')) {
-            this.PRICE_INPUT_1M = 0.80;
-            this.PRICE_OUTPUT_1M = 4.00;
-        } else if (modelId.includes('gpt-5.2-pro')) {
-            this.PRICE_INPUT_1M = 21.00;
-            this.PRICE_OUTPUT_1M = 168.00;
-        } else if (modelId.includes('gpt-5.2-codex') || modelId.includes('gpt-5.1-codex')) {
-            this.PRICE_INPUT_1M = 1.75;
-            this.PRICE_OUTPUT_1M = 14.00;
-        } else if (modelId.includes('gpt-5.1') || modelId.includes('gpt-5.2')) {
-            this.PRICE_INPUT_1M = 1.25;
-            this.PRICE_OUTPUT_1M = 10.00;
-        } else if (modelId.includes('gpt-5-mini') || modelId.includes('gpt-4.1-mini')) {
-            this.PRICE_INPUT_1M = 0.40;
-            this.PRICE_OUTPUT_1M = 1.60;
-        } else if (modelId.includes('gemini-3-pro')) {
-            this.PRICE_INPUT_1M = 2.00;
-            this.PRICE_OUTPUT_1M = 12.00;
-        } else if (modelId.includes('gemini-3-flash')) {
-            this.PRICE_INPUT_1M = 0.50;
-            this.PRICE_OUTPUT_1M = 3.00;
-        } else if (modelId.includes('gemini-2.5-flash')) {
-            this.PRICE_INPUT_1M = 0.15;
-            this.PRICE_OUTPUT_1M = 0.60;
-        } else if (modelId.includes('deepseek')) {
-            this.PRICE_INPUT_1M = 0.14;
-            this.PRICE_OUTPUT_1M = 0.28;
-        } else {
-            // Default fallback
-            this.PRICE_INPUT_1M = 1.00;
-            this.PRICE_OUTPUT_1M = 5.00;
-        }
-    }
-
-    private send(type: string, payload: any) {
-        if (this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type, ...payload }));
-        }
-    }
-
-    private sendError(message: string) {
-        this.send('error', { message });
-    }
-
-    private async sendBalanceUpdate() {
-        if (!this.userId) return;
-        const balance = await getUserTokens(this.userId);
-        this.send('balance_update', { tokens: balance });
-    }
-
     private async handleInput(text: string, context: any, settings?: any) {
         await this.authReady;
 
-        if (!this.apiKey) {
+        if (!this.hasApiKey()) {
             this.sendError('OpenRouter API key not configured');
             return;
         }
@@ -239,32 +93,17 @@ export class FewShotSession {
             return;
         }
 
-        // Update world context
-        if (context?.worldId) {
-            this.currentWorldId = context.worldId;
-        }
+        // Update context and settings
+        this.updateWorldContext(context);
+        this.updateSettings(settings);
 
-        // Update settings
-        if (settings?.bypassTokens !== undefined) {
-            this.bypassTokens = settings.bypassTokens;
-        }
         if (settings?.model) {
             this.setModel(settings.model);
         }
 
         // Check auth & balance
-        const skipTokenChecks = this.cliMode || this.bypassTokens;
-        if (!this.userId && !skipTokenChecks) {
-            this.send('error', { message: 'Authentication required.' });
+        if (!await this.verifyTokenBalance()) {
             return;
-        }
-
-        if (this.userId && !skipTokenChecks) {
-            const balance = await getUserTokens(this.userId);
-            if (balance < 5) {
-                this.send('error', { message: 'Insufficient tokens.' });
-                return;
-            }
         }
 
         this.isInterrupted = false;
@@ -274,10 +113,16 @@ export class FewShotSession {
 
         try {
             // Process the request through the FewShot AI
+            // Handle context format: client sends { x, y, z } directly, not { position: { x, y, z } }
+            const playerPosition = context?.position || (context?.x !== undefined ? { x: context.x, y: context.y, z: context.z } : undefined);
+
+            console.log(`[FewShot] Context received:`, context);
+            console.log(`[FewShot] Player position resolved:`, playerPosition);
+
             const result = await this.ai.processRequest(text, {
-                playerPosition: context?.position,
+                playerPosition,
                 playerDirection: context?.direction,
-                worldName: context?.worldName,
+                worldName: context?.worldName || context?.worldId,
                 userId: this.userId || undefined
             });
 
@@ -326,9 +171,7 @@ export class FewShotSession {
             this.send('complete', {});
 
             // Deduct tokens (minimal for few-shot approach)
-            if (this.userId && !skipTokenChecks) {
-                await this.deductMinimalTokens();
-            }
+            await this.deductTokens(FEWSHOT_COST_TOKENS, 'FewShot Generation');
 
         } catch (e: any) {
             console.error('[FewShot] Error:', e);
@@ -405,6 +248,7 @@ export class FewShotSession {
 
     private async handleStructureResult(result: any, context: any) {
         const blocks = result.data?.blocks || [];
+        const code = result.code || '';
 
         if (blocks.length === 0) {
             this.send('token', { text: `I couldn't generate any blocks for that structure.` });
@@ -412,6 +256,11 @@ export class FewShotSession {
         }
 
         this.send('token', { text: `Building structure with ${blocks.length} blocks...` });
+
+        // Send the generated code if available
+        if (code) {
+            this.send('code', { code, language: 'javascript', description: 'Structure generation code' });
+        }
 
         // Place blocks in batches
         const batchSize = 100;
@@ -472,45 +321,6 @@ export class FewShotSession {
             this.send('token', { text: `Placed ${blocks.length} block${blocks.length > 1 ? 's' : ''}!` });
         } else {
             this.send('token', { text: `Failed to place blocks: ${setResult?.error}` });
-        }
-    }
-
-    private async executeClientTool(name: string, args: any): Promise<any> {
-        return new Promise((resolve) => {
-            const callId = Math.random().toString(36).substring(7);
-            PENDING_TOOL_CALLS.set(callId, { resolve, reject: resolve });
-
-            this.send('tool_request', { id: callId, name, args });
-
-            setTimeout(() => {
-                if (PENDING_TOOL_CALLS.has(callId)) {
-                    PENDING_TOOL_CALLS.delete(callId);
-                    resolve({ error: 'Client timed out' });
-                }
-            }, 30000);
-        });
-    }
-
-    private handleToolResponse(id: string, result: any, error: any) {
-        const pending = PENDING_TOOL_CALLS.get(id);
-        if (pending) {
-            PENDING_TOOL_CALLS.delete(id);
-            pending.resolve(error ? { error } : result);
-        }
-    }
-
-    private async deductMinimalTokens() {
-        if (!this.userId) return;
-
-        // Few-shot uses smaller prompts, so charge minimal tokens
-        const tokensToDeduct = 2; // Minimal charge for few-shot
-
-        try {
-            await addTokens(this.userId, -tokensToDeduct, 'ai_usage', 'FewShot Generation');
-            this.sendBalanceUpdate();
-            console.log(`[FewShot] Deducted ${tokensToDeduct} tokens`);
-        } catch (e) {
-            console.error('[FewShot] Failed to deduct tokens:', e);
         }
     }
 }

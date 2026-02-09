@@ -1,2 +1,0 @@
-[    1401ms] TypeError: Cannot read properties of undefined (reading 'lua')
-    at http://localhost:3000/src/game/roblox-sdk/LuaRuntime.js:9:21

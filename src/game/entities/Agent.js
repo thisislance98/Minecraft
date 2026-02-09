@@ -10,7 +10,6 @@ import {
     CREATURE_ALIASES,
     MAX_SPAWN_COUNT
 } from '../constants.js';
-import { validateSDKCode, getSDKHintsForError, formatValidationResult } from '../sdk/SDKValidator.js';
 
 export class Agent {
     constructor(game) {
@@ -361,24 +360,8 @@ Max 25 words total.
         try {
             console.log(`[Agent] Executing Client Tool: ${name}`, args);
 
-            // Execute JavaScript SDK code
-            if (name === 'execute_code') {
-                result = await this.executeCode(args.code, taskId);
-            }
-            // Legacy SDK Tool (unified)
-            else if (name === 'sdk_create') {
-                result = await this.sdkCreate(args);
-            }
-            // Legacy SDK tools (for backwards compatibility)
-            else if (name === 'sdk_create_item') {
-                result = await this.sdkCreateItem(args);
-            } else if (name === 'sdk_create_entity') {
-                result = await this.sdkCreateEntity(args);
-            } else if (name === 'sdk_create_projectile') {
-                result = await this.sdkCreateProjectile(args);
-            }
             // Game tools
-            else if (name === 'spawn' || name === 'spawn_creature') {
+            if (name === 'spawn' || name === 'spawn_creature') {
                 result = await this.spawnCreature(args.name || args.creature, args.count);
             } else if (name === 'teleport_player') {
                 result = this.teleportPlayer(args.location);
@@ -446,261 +429,7 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
     }
 
     // =========================================================================
-    // SDK TOOL HANDLERS - VoxelWorld SDK Integration
-    // =========================================================================
-
-    /**
-     * Execute arbitrary SDK code - the primary tool for Merlin
-     * @param {string} code - JavaScript code to execute
-     * @param {string} taskId - Optional task ID for undo tracking
-     */
-    async executeCode(code, taskId = null) {
-        console.log('[Agent] Executing code:', code);
-
-        try {
-            if (!code || typeof code !== 'string') {
-                return { error: 'No code provided' };
-            }
-
-            // STEP 1: Static validation - catch common mistakes BEFORE runtime
-            const validation = validateSDKCode(code);
-            if (!validation.valid) {
-                const validationMsg = formatValidationResult(validation);
-                console.warn('[Agent] SDK Validation failed:', validationMsg);
-                return {
-                    error: 'SDK Validation Failed - please fix these issues',
-                    validationErrors: validation.errors,
-                    validationWarnings: validation.warnings,
-                    suggestion: validationMsg
-                };
-            }
-
-            // Log warnings but don't block execution
-            if (validation.warnings.length > 0) {
-                console.warn('[Agent] SDK Warnings:', validation.warnings);
-            }
-
-            // Set up the execution context
-            const game = this.game;
-            const player = this.game.player;
-            const VoxelWorld = window.VoxelWorld;
-            const THREE = window.THREE;
-
-            // Start undo tracking if we have a taskId
-            if (taskId && VoxelWorld) {
-                VoxelWorld.beginTracking(taskId);
-            }
-
-            // Create a function with the SDK context
-            const fn = new Function('VoxelWorld', 'game', 'player', 'THREE', code);
-
-            // Execute the code
-            const result = fn(VoxelWorld, game, player, THREE);
-
-            // End undo tracking and get the record
-            let undoRecord = null;
-            if (taskId && VoxelWorld) {
-                undoRecord = VoxelWorld.endTracking();
-            }
-
-            console.log('[Agent] Code executed successfully');
-            return {
-                success: true,
-                message: 'Code executed',
-                result: result !== undefined ? result : null,
-                undoRecord: undoRecord,
-                warnings: validation.warnings.length > 0 ? validation.warnings : undefined
-            };
-        } catch (e) {
-            // End tracking even on error
-            if (taskId && window.VoxelWorld) {
-                window.VoxelWorld.endTracking();
-            }
-            console.error('[Agent] Code execution failed:', e);
-
-            // Get helpful hints based on the error
-            const hints = getSDKHintsForError(e.message);
-
-            return {
-                error: `Execution failed: ${e.message}`,
-                stack: e.stack,
-                sdkHints: hints.length > 0 ? hints : undefined
-            };
-        }
-    }
-
-    /**
-     * Create a game object using the unified SDK
-     * @param {Object} config - { name, scripts: [{ type, ...props }] }
-     */
-    async sdkCreate(config) {
-        console.log('[Agent] SDK Create:', config);
-
-        try {
-            if (!config.name) {
-                return { error: 'Missing required field: name' };
-            }
-
-            if (!window.VoxelWorld) {
-                return { error: 'VoxelWorld SDK not initialized' };
-            }
-
-            // Use the unified create method
-            const obj = window.VoxelWorld.create(config);
-
-            // Determine what was created based on scripts
-            const hasItem = config.scripts?.some(s => s.type === 'item');
-            const hasEntity = config.scripts?.some(s => s.type === 'entity');
-            const hasProjectile = config.scripts?.some(s => s.type === 'projectile');
-
-            const id = config.name.toLowerCase().replace(/\s+/g, '_');
-
-            let hint = '';
-            if (hasItem) {
-                hint = `Use give_item with item="${id}" to add to inventory`;
-            } else if (hasEntity) {
-                hint = `Use spawn with name="${config.name}" to spawn`;
-            } else if (hasProjectile) {
-                hint = `Projectile "${id}" is ready for use`;
-            }
-
-            console.log(`[Agent] SDK Created: ${config.name}`);
-            return {
-                success: true,
-                message: `Created: ${config.name}`,
-                id: id,
-                hint: hint
-            };
-        } catch (e) {
-            console.error('[Agent] SDK Create failed:', e);
-            return { error: `Creation failed: ${e.message}` };
-        }
-    }
-
-    /**
-     * Create an item using the VoxelWorld SDK (legacy)
-     * @param {Object} config - Item configuration (id, name, icon, etc.)
-     */
-    async sdkCreateItem(config) {
-        console.log('[Agent] SDK Creating Item:', config);
-
-        try {
-            // Validate required fields
-            if (!config.id || !config.name || !config.icon) {
-                return { error: 'Missing required fields: id, name, and icon are required' };
-            }
-
-            // Check if VoxelWorld SDK is available
-            if (!window.VoxelWorld) {
-                return { error: 'VoxelWorld SDK not initialized' };
-            }
-
-            // Create the item using SDK
-            const ItemClass = window.VoxelWorld.createItem(config);
-
-            // Register with ItemManager if available
-            if (this.game.itemManager) {
-                const instance = new ItemClass();
-                this.game.itemManager.register(instance);
-                console.log(`[Agent] SDK Item registered with ItemManager: ${config.id}`);
-            }
-
-            // Broadcast to other players via socket (for multiplayer sync)
-            if (this.game.socketManager?.isConnected() && this.game.socketManager.socket) {
-                this.game.socketManager.socket.emit('dynamic_item_created', {
-                    id: config.id,
-                    name: config.name,
-                    icon: config.icon,
-                    config: config
-                });
-            }
-
-            console.log(`[Agent] SDK Item created: ${config.id} (${config.name})`);
-            return {
-                success: true,
-                message: `Created item: ${config.name}`,
-                id: config.id,
-                hint: `Use give_item with id="${config.id}" to add to inventory`
-            };
-        } catch (e) {
-            console.error('[Agent] SDK Item creation failed:', e);
-            return { error: `Item creation failed: ${e.message}` };
-        }
-    }
-
-    /**
-     * Create an entity/creature using the VoxelWorld SDK
-     * @param {Object} config - Entity configuration
-     */
-    async sdkCreateEntity(config) {
-        console.log('[Agent] SDK Creating Entity:', config);
-
-        try {
-            // Validate required fields
-            if (!config.name) {
-                return { error: 'Missing required field: name' };
-            }
-
-            // Check if VoxelWorld SDK is available
-            if (!window.VoxelWorld) {
-                return { error: 'VoxelWorld SDK not initialized' };
-            }
-
-            // Create the entity using SDK
-            const EntityClass = window.VoxelWorld.createEntity(config);
-
-            // Register with AnimalRegistry for spawn_creature compatibility
-            const AnimalModule = await import('../AnimalRegistry.js');
-            AnimalModule.AnimalClasses[config.name] = EntityClass;
-            console.log(`[Agent] SDK Entity registered with AnimalRegistry: ${config.name}`);
-
-            return {
-                success: true,
-                message: `Created entity class: ${config.name}`,
-                name: config.name,
-                hint: `Use spawn_creature with creature="${config.name}" to spawn`
-            };
-        } catch (e) {
-            console.error('[Agent] SDK Entity creation failed:', e);
-            return { error: `Entity creation failed: ${e.message}` };
-        }
-    }
-
-    /**
-     * Create a projectile using the VoxelWorld SDK
-     * @param {Object} config - Projectile configuration
-     */
-    async sdkCreateProjectile(config) {
-        console.log('[Agent] SDK Creating Projectile:', config);
-
-        try {
-            // Validate required fields
-            if (!config.id) {
-                return { error: 'Missing required field: id' };
-            }
-
-            // Check if VoxelWorld SDK is available
-            if (!window.VoxelWorld) {
-                return { error: 'VoxelWorld SDK not initialized' };
-            }
-
-            // Create the projectile using SDK
-            const ProjectileClass = window.VoxelWorld.createProjectile(config);
-
-            return {
-                success: true,
-                message: `Created projectile: ${config.id}`,
-                id: config.id,
-                hint: `Reference this projectile in item's projectile.prefab: "${config.id}"`
-            };
-        } catch (e) {
-            console.error('[Agent] SDK Projectile creation failed:', e);
-            return { error: `Projectile creation failed: ${e.message}` };
-        }
-    }
-
-    // =========================================================================
-    // GAME ACTIONS (Ported from original Agent.js)
+    // GAME ACTIONS
     // =========================================================================
 
     async setBlocks(blocks) {
@@ -752,17 +481,7 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
             treeY = y || this.game.worldGenerator?.getTerrainHeight(treeX, treeZ) || 64;
         }
 
-        // Use VoxelWorld SDK if available
-        if (window.VoxelWorld?.spawnTree) {
-            const result = window.VoxelWorld.spawnTree(type, treeX, treeY, treeZ);
-            if (result.success) {
-                console.log(`[Agent] Spawned ${type} tree at ${treeX}, ${treeY}, ${treeZ}`);
-                return { success: true, message: `Spawned ${type} tree at ${treeX}, ${treeY}, ${treeZ}` };
-            }
-            return result;
-        }
-
-        // Fallback to direct structure generator
+        // Use structure generator
         const gen = this.game.worldGenerator?.structureGenerator;
         if (!gen) {
             return { error: 'Structure generator not available' };
@@ -803,12 +522,6 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
             return { error: 'Missing required parameters: x1, y1, z1, x2, y2, z2, block' };
         }
 
-        // Use VoxelWorld SDK if available
-        if (window.VoxelWorld?.fill) {
-            return window.VoxelWorld.fill(x1, y1, z1, x2, y2, z2, block);
-        }
-
-        // Fallback
         const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
         const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
         const minZ = Math.min(z1, z2), maxZ = Math.max(z1, z2);

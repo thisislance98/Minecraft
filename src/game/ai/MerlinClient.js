@@ -394,60 +394,6 @@ ${context?.scene ? `\nNearby: ${JSON.stringify(context.scene)}` : ''}
                 error: event.reason ? event.reason.stack : null
             });
         });
-
-        // Listen for SDK script runtime errors (from GameObject.Update)
-        window.addEventListener('sdk:script-error', (event) => {
-            const { gameObject, script, method, error, stack } = event.detail;
-            console.warn(`[MerlinClient] SDK Script Error: ${script}.${method}() on ${gameObject}:`, error);
-
-            // Report to AI if auto-fix is enabled
-            if (this.autoFixErrors) {
-                this.reportScriptError({
-                    gameObject,
-                    script,
-                    method,
-                    message: error,
-                    stack
-                });
-            }
-        });
-    }
-
-    /**
-     * Report a runtime script error to the AI
-     */
-    reportScriptError(errorDetails) {
-        // Deduplication
-        const errorKey = `${errorDetails.script}:${errorDetails.method}:${errorDetails.message}`;
-        if (this.lastSentError === errorKey) {
-            return; // Don't spam
-        }
-        this.lastSentError = errorKey;
-
-        const prompt = `SDK Script Runtime Error!
-
-Entity: ${errorDetails.gameObject}
-Script: ${errorDetails.script}
-Method: ${errorDetails.method}()
-Error: ${errorDetails.message}
-
-Stack:
-${errorDetails.stack || 'No stack available'}
-
-This error is happening every frame in the script's Update() loop. Please:
-1. Identify the bug in the script
-2. Use VoxelWorld.addScript to fix it or recreate the entity with corrected code
-3. Do NOT ask the user - just fix it automatically`;
-
-        // Send to AI
-        if (this.game && this.game.uiManager) {
-            this.game.uiManager.addChatMessage('error', `Script Error in ${errorDetails.script}.${errorDetails.method}(): ${errorDetails.message}`);
-        }
-
-        this.send({
-            type: 'input',
-            text: prompt
-        });
     }
 
     reportError(errorDetails) {

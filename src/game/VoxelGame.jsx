@@ -50,7 +50,6 @@ import { Merlin } from './entities/animals/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
 import { Starfighter } from './entities/animals/Starfighter.js';
 import { setItemManager } from './DynamicItemRegistry.js';
-import { initSDK as initVoxelWorldSDK } from './sdk/integration.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
 import { MazeManager } from './systems/MazeManager.js';
@@ -229,9 +228,6 @@ export class VoxelGame {
         this.itemManager = new ItemManager(this);
         // Set ItemManager reference for DynamicItemRegistry so dynamic items can be used
         setItemManager(this.itemManager);
-
-        // Initialize VoxelWorld SDK
-        this.initSDK();
 
         this.inventory = new Inventory(this, this.inventoryManager); // Inventory is now UI
         this.player = new Player(this);
@@ -735,21 +731,8 @@ export class VoxelGame {
 
 
     /**
-     * Initialize the VoxelWorld SDK
-     * This exposes window.VoxelWorld for dynamic item/entity creation
-     */
-    initSDK() {
-        try {
-            initVoxelWorldSDK(this);
-            console.log('[Game] VoxelWorld SDK initialized');
-        } catch (e) {
-            console.error('[Game] Failed to initialize SDK:', e);
-        }
-    }
-
-    /**
      * Get the ground SURFACE level at a given x,z coordinate
-     * Used by SDK entities to find where to stand
+     * Used by entities to find where to stand
      * @param {number} x - World X coordinate
      * @param {number} z - World Z coordinate
      * @returns {number} The surface height (top of terrain block + 1)
@@ -2654,15 +2637,6 @@ export class VoxelGame {
             // --- OPTIMIZATION END ---
         }
 
-        // Update SDK instances (VoxelWorld GameObjects)
-        if (window.VoxelWorld && window.VoxelWorld._instances?.size > 0) {
-            window.VoxelWorld.update(deltaTime);
-        }
-
-        // Update Lua runtime (Roblox-style scripts)
-        if (window.LuaRuntime) {
-            window.LuaRuntime.update(deltaTime);
-        }
 
         // Update mini-games
         if (this.survivalGameManager) this.survivalGameManager.update(deltaTime);

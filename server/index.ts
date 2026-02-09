@@ -24,7 +24,6 @@ import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreature
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { initKnowledgeService } from './services/KnowledgeService';
 import { WebSocketServer } from 'ws';
-import { OpenRouterSession } from './services/OpenRouterSession';
 import { FewShotSession } from './services/FewShotSession';
 import { logError } from './utils/logger';
 import {
@@ -97,32 +96,21 @@ export const io = new Server(httpServer, {
     }
 });
 
-// ============ Antigravity AI Agent Setup ============
-const wss = new WebSocketServer({ noServer: true });
-const wssFewShot = new WebSocketServer({ noServer: true });
+// ============ Few-Shot AI Setup ============
+const wssAI = new WebSocketServer({ noServer: true });
 
 httpServer.on('upgrade', (request, socket, head) => {
     const pathname = request.url || '';
-    if (pathname.startsWith('/api/fewshot')) {
-        // New FewShot AI endpoint
-        wssFewShot.handleUpgrade(request, socket, head, (ws) => {
-            wssFewShot.emit('connection', ws, request);
-        });
-    } else if (pathname.startsWith('/api/antigravity')) {
-        // Legacy OpenRouter endpoint
-        wss.handleUpgrade(request, socket, head, (ws) => {
-            wss.emit('connection', ws, request);
+    // Support both /api/fewshot and legacy /api/antigravity endpoints
+    if (pathname.startsWith('/api/fewshot') || pathname.startsWith('/api/antigravity')) {
+        wssAI.handleUpgrade(request, socket, head, (ws) => {
+            wssAI.emit('connection', ws, request);
         });
     }
 });
 
-wss.on('connection', (ws, req) => {
-    console.log('[AI] Client connected to AI Agent. Initializing OpenRouterSession...');
-    new OpenRouterSession(ws, req);
-});
-
-wssFewShot.on('connection', (ws, req) => {
-    console.log('[AI] Client connected to FewShot AI. Initializing FewShotSession...');
+wssAI.on('connection', (ws, req) => {
+    console.log('[AI] Client connected. Initializing FewShotSession...');
     new FewShotSession(ws, req);
 });
 

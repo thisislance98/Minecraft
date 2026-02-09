@@ -1,0 +1,361 @@
+[   73145ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[   73153ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[   73837ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[   78845ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[   80760ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[   80770ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[   83855ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[   88872ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[   92178ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[   92187ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[   93897ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[   98935ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  103970ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  109004ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  109336ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  109419ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  114061ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  119094ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  124156ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  129270ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  134428ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  135010ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  135136ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  139527ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  144680ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  149789ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  154953ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  160228ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  165147ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  165411ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  166113ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  171681ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  177285ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  182710ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  188219ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  194302ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  196272ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  196703ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  200280ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  207753ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  214739ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  221902ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  226912ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  228752ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  228928ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  238519ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  244979ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  253220ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  258694ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  262029ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  262161ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  269486ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  277329ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  284852ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  290870ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  293535ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  294361ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  300134ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  306744ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  313320ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  322686ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  326139ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  326205ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  331011ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  338753ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  346229ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  354229ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  358227ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  359755ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  362885ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  369020ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  375095ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  385053ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  390568ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  390878ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  394310ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  401328ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  406330ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  411344ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  416346ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  420572ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  420886ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  421353ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  426361ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  431386ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  436411ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  441468ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  446595ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  450845ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  451318ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  452311ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  458855ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  468560ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  476119ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  482630ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  484680ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  485051ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  490827ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  497410ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  506393ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  507399ms] [WARNING] [Game] Frame took 485.8ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1780
+[  510286ms] [WARNING] [Game] Frame took 73.0ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1780
+[  514869ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  519252ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  519569ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  521410ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  526412ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  531419ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  536427ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  541428ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  546437ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  549262ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  549577ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  551445ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  556468ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  561530ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  566636ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  571813ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  576980ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  579620ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  581795ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  585718ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  595327ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  602377ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  609233ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  611072ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  613884ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  615832ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  625833ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  632932ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  641590ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  643773ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  645949ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  646598ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  651600ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  656607ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  661608ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  666616ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  671623ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  673783ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  675965ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  676674ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  681740ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  686807ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  691972ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  697397ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  702791ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  706207ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  708330ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  709441ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  718315ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  724950ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  732840ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  740365ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  742657ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  743033ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  751556ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  760965ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  770899ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  774725ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  775447ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  778440ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  779449ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  780281ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  780456ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  781459ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  782465ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  783473ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  784481ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  785489ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  786491ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  787499ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  788507ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  789222ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  789515ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  790523ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  791531ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  792533ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  793540ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  794548ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  795556ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  796223ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  796566ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  797573ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  798575ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  799589ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  800599ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  801607ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  802616ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  803624ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  804532ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  804632ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  805648ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  806649ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  807657ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  807763ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  808321ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  808665ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  809674ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  810682ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  811683ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  812466ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  812690ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[  814393ms] [WARNING] TextureGenerator: Unknown texture type 'torch', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[  814395ms] [WARNING] TextureGenerator: Unknown texture type 'glowstone', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[  814399ms] [WARNING] Socket not found for CommunityUI, will retry when UI opens @ http://localhost:3000/src/game/ui/CommunityUI.js:686
+[  814525ms] [WARNING] [Game] Frame took 83.9ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[  814795ms] [WARNING] [Game] Frame took 269.9ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[  817191ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[  817191ms] [WARNING] [SocketManager] Connection Error (reconnecting...): websocket error @ http://localhost:3000/src/game/systems/SocketManager.js:208
+[  817629ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  817629ms] [WARNING] [FewShotClient] WebSocket error: Event @ http://localhost:3000/src/game/ai/FewShotClient.js:155
+[  819088ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=openrouter' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[  819088ms] [WARNING] [MerlinClient] WebSocket error: Event @ http://localhost:3000/src/game/ai/MerlinClient.js:202
+[  820957ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[  820979ms] [WARNING] Chunk: Missing materials for block type 'furnace'. Skipping. @ http://localhost:3000/src/world/Chunk.js:228
+[  822750ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 31.7, 22.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822766ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 36.0, 80.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822766ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 33.2, 81.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822766ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 35.1, 85.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822766ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 37.5, 86.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822766ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.5, 48.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 80.3, 46.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.1, 41.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 87.2, 44.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 86.5, 43.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -4.9, 54.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -7.7, 51.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -6.0, 51.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 26.1, 91.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 26.4, 91.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822767ms] [WARNING] [SpawnManager] Failed to find ground for BouncePod at 28.3, 86.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822768ms] [WARNING] [SpawnManager] Failed to find ground for BouncePod at 26.7, 83.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822775ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 4.6, 84.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822775ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 6.5, 78.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822775ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 72.7, 86.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822775ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 74.5, 88.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822775ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 71.3, 87.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -23.6, 37.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -24.5, 38.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -20.4, 31.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -17.7, 38.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -19.6, 38.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -17.8, 33.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 106.0, 37.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822776ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 106.1, 42.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 111.7, 35.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 108.7, 34.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 109.3, 34.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 107.4, 39.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 29.9, 106.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 26.4, 104.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 23.1, 98.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822777ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 25.2, 103.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822778ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -9.9, 87.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822778ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -27.4, 70.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822778ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.0, 65.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822778ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -36.2, 69.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822778ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.8, 70.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 8.5, 103.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 8.5, 107.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 14.6, 106.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 14.3, 105.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Unicorn at 14.9, 103.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822779ms] [WARNING] [SpawnManager] Failed to find ground for Lorax at 17.8, 108.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 105.4, 4.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 112.5, 5.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 105.1, 4.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 107.8, 8.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 111.8, 8.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 107.5, 10.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 114.3, 8.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 112.8, 8.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 106.3, 4.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 108.1, 5.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at -34.8, 36.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822781ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at -37.1, 33.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -26.1, 78.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -27.8, 78.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for MagicalCreature at -22.7, 79.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 27.3, 125.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 35.6, 117.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 29.2, 119.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 99.4, -16.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 104.2, -17.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 121.6, 30.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -41.9, 22.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -39.9, 25.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -44.7, 28.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822782ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -42.1, 21.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -39.1, 26.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -46.3, 30.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -47.0, 23.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 118.5, 29.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 68.2, -41.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Mouse at 67.2, 121.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Mouse at 68.2, 113.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Chimera at 60.7, 119.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 65.1, 113.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 61.9, 118.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 64.0, 120.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 127.9, 72.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822783ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 126.1, 77.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Pugasus at 130.6, 74.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Pugasus at 122.0, 74.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -33.3, 102.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -30.6, 106.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.8, 103.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -30.1, 108.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -9.2, -38.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -5.7, -30.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -16.6, 110.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -17.8, 110.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -16.4, 111.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Lorax at -13.6, 114.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 107.0, 80.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822784ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 110.4, 82.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 110.5, 84.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 32.1, 138.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 31.1, 147.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 19.4, 139.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 26.8, 138.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 18.8, 141.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 25.7, 136.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 20.7, 141.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 20.0, 142.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822785ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 22.1, 143.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 2.7, 127.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 6.0, 125.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 0.3, 130.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 2.7, 127.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -35.0, 101.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -38.7, 105.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -34.1, 102.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -37.2, 107.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -36.1, 107.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -29.6, 107.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for TRex at 117.4, -33.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 118.9, -27.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 121.7, -31.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822793ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 117.2, -35.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822794ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 118.3, -35.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822794ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 115.2, 97.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822794ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 113.4, 99.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822794ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at -62.8, 86.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 87.9, 132.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 80.3, 133.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 81.7, 137.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.5, 133.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 83.0, 138.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for Duck at 140.5, 0.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for Duck at 139.8, -7.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 142.7, 106.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 137.8, 107.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822796ms] [WARNING] [SpawnManager] Failed to find ground for Dragon at 143.1, 104.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822797ms] [WARNING] [SpawnManager] Failed to find ground for DuneWorm at 139.3, 106.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 132.0, 122.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 126.3, 122.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 131.6, 127.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 125.3, 128.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[  822804ms] [WARNING] [Game] Frame took 59.7ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766

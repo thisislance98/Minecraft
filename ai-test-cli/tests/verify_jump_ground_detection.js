@@ -11,7 +11,7 @@ import {
     monitorGroundState,
     testJumpWhileWalking,
     teleportPlayer
-} from '../src/game-commands.js';
+} from '../src/commands/index.js';
 import chalk from 'chalk';
 
 const TEST_URL = 'http://localhost:3000/?cli=true&secret=asdf123';

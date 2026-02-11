@@ -15,7 +15,7 @@
 
 import chalk from 'chalk';
 import { GameBrowser } from '../src/browser.js';
-import * as GameCommands from '../src/game-commands.js';
+import * as GameCommands from '../src/commands/index.js';
 import { AntigravityClient } from '../src/client.js';
 
 const TEST_TIMEOUT = 120000; // 2 minutes total

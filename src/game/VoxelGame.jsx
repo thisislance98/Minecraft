@@ -9,7 +9,8 @@ import { InventoryManager } from './systems/InventoryManager.js';
 import { ItemManager } from './systems/ItemManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { UIManager } from './systems/UIManager.js';
-import { ScriptManager } from './systems/ScriptManager.js';
+// ScriptManager is on genesis-system branch
+// import { ScriptManager } from './systems/ScriptManager.js';
 import { Arrow } from './entities/projectiles/Arrow.js';
 import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
 import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
@@ -227,7 +228,7 @@ export class VoxelGame {
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
         this.itemManager = new ItemManager(this);
-        this.scriptManager = new ScriptManager(this);
+        // this.scriptManager = new ScriptManager(this); // Genesis system branch only
         // Set ItemManager reference for DynamicItemRegistry so dynamic items can be used
         setItemManager(this.itemManager);
 

@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
     try {
         // Navigate to game
         console.log('🌐 Loading game...');
-        await page.goto('http://localhost:5173');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(3000);
 
         await page.waitForSelector('canvas', { timeout: 10000 });

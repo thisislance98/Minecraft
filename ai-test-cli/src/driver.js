@@ -1,5 +1,5 @@
 import { SessionManager } from './session-manager.js';
-import * as GameCommands from './game-commands.js';
+import * as GameCommands from './commands/index.js';
 import chalk from 'chalk';
 
 /**

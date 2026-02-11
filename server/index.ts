@@ -23,7 +23,8 @@ import { worldPersistence } from './services/WorldPersistence';
 import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature } from './services/DynamicCreatureService';
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { initKnowledgeService } from './services/KnowledgeService';
-import { initGenesisService } from './services/GenesisService';
+// Genesis system is on separate branch
+// import { initGenesisService } from './services/GenesisService';
 import { WebSocketServer } from 'ws';
 import { FewShotSession } from './services/FewShotSession';
 import { logError } from './utils/logger';
@@ -1382,8 +1383,8 @@ console.log('[Server] Startup: initializing...');
 Promise.all([
     loadAllCreatures(),
     loadAllItems(),
-    initKnowledgeService(),
-    initGenesisService()
+    initKnowledgeService()
+    // Genesis on separate branch: initGenesisService()
 ]).then(() => {
     httpServer.listen(port, '0.0.0.0', () => {
         console.log(`[Server] Listening on http://0.0.0.0:${port}`);

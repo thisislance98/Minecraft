@@ -10,6 +10,7 @@ import { FewShotAI, availableModels } from '../ai/few_shot_system';
 import { findBestCreatureExamples } from '../ai/examples/creatures';
 import { findBestItemExamples } from '../ai/examples/items';
 import { findBestStructureExamples } from '../ai/examples/structures';
+import { generateScript } from '../services/GenesisService';
 
 export const aiRoutes = express.Router();
 
@@ -321,6 +322,30 @@ aiRoutes.post('/fewshot/test', async (req, res) => {
         });
     } catch (error: any) {
         console.error('[AI Routes] FewShot test error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Genesis: Generate dynamic script
+ * POST /api/ai/genesis/generate
+ * Body: { prompt: string }
+ */
+aiRoutes.post('/genesis/generate', async (req, res) => {
+    try {
+        const { prompt } = req.body;
+        if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+
+        console.log(`[AI Routes] Genesis generation for: "${prompt}"`);
+        const result = await generateScript(prompt);
+
+        if (result.success) {
+            res.json(result);
+        } else {
+            res.status(500).json({ error: result.error, raw: result.raw });
+        }
+    } catch (error: any) {
+        console.error('[AI Routes] Genesis error:', error);
         res.status(500).json({ error: error.message });
     }
 });

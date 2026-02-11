@@ -1,0 +1,301 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1200" style="background: #1a1a2e;">
+  <defs>
+    <style>
+      .title { font: bold 28px 'Arial', sans-serif; fill: #eee; }
+      .subtitle { font: bold 16px 'Arial', sans-serif; fill: #aaa; }
+      .box-title { font: bold 14px 'Arial', sans-serif; fill: #eee; }
+      .box-text { font: 12px 'Arial', sans-serif; fill: #ccc; }
+      .label { font: 12px 'Arial', sans-serif; fill: #aaa; }
+      .arrow { stroke: #0f9; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-alt { stroke: #f90; stroke-width: 2; fill: none; marker-end: url(#arrowhead-alt); }
+      .arrow-data { stroke: #09f; stroke-width: 2; fill: none; marker-end: url(#arrowhead-data); }
+      .dotted { stroke-dasharray: 5,5; }
+
+      /* Component Styles */
+      .client-box { fill: #2d4059; stroke: #09f; stroke-width: 2; }
+      .server-box { fill: #162447; stroke: #0f9; stroke-width: 2; }
+      .ai-box { fill: #1f1833; stroke: #f90; stroke-width: 2; }
+      .storage-box { fill: #1a1a2e; stroke: #aaa; stroke-width: 2; }
+      .api-box { fill: #16213e; stroke: #f0f; stroke-width: 2; }
+
+      /* Layer backgrounds */
+      .layer-client { fill: #2d4059; opacity: 0.1; }
+      .layer-server { fill: #162447; opacity: 0.1; }
+      .layer-ai { fill: #1f1833; opacity: 0.1; }
+
+    </style>
+
+    <!-- Arrow markers -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#0f9" />
+    </marker>
+    <marker id="arrowhead-alt" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#f90" />
+    </marker>
+    <marker id="arrowhead-data" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#09f" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="700" y="35" text-anchor="middle" class="title">Genesis System Architecture</text>
+  <text x="700" y="55" text-anchor="middle" class="subtitle">Few-Shot AI Code Generation for Voxel Game</text>
+
+  <!-- Layer Backgrounds -->
+  <rect x="50" y="90" width="1300" height="180" class="layer-client" rx="8"/>
+  <text x="60" y="110" class="subtitle">Client Layer (Browser)</text>
+
+  <rect x="50" y="290" width="1300" height="350" class="layer-server" rx="8"/>
+  <text x="60" y="310" class="subtitle">Server Layer (Node.js)</text>
+
+  <rect x="50" y="660" width="1300" height="180" class="layer-ai" rx="8"/>
+  <text x="60" y="680" class="subtitle">AI Layer (External)</text>
+
+  <!-- ===================== CLIENT LAYER ===================== -->
+
+  <!-- UI Components -->
+  <g id="ui-components">
+    <rect x="80" y="130" width="200" height="120" class="client-box" rx="5"/>
+    <text x="180" y="155" text-anchor="middle" class="box-title">🎮 UI Components</text>
+    <text x="90" y="180" class="box-text">• Merlin Chat Panel</text>
+    <text x="90" y="200" class="box-text">• Task Queue UI</text>
+    <text x="90" y="220" class="box-text">• Code Preview Panel</text>
+    <text x="90" y="240" class="box-text">• Model Selector</text>
+  </g>
+
+  <!-- Task Manager -->
+  <g id="task-manager">
+    <rect x="320" y="130" width="200" height="120" class="client-box" rx="5"/>
+    <text x="420" y="155" text-anchor="middle" class="box-title">📋 TaskManager.js</text>
+    <text x="330" y="180" class="box-text">• Task Queue Management</text>
+    <text x="330" y="200" class="box-text">• State Machine (pending →</text>
+    <text x="330" y="215" class="box-text">  running → complete)</text>
+    <text x="330" y="235" class="box-text">• Context Builder</text>
+  </g>
+
+  <!-- WebSocket Clients -->
+  <g id="ws-clients">
+    <rect x="560" y="130" width="180" height="120" class="client-box" rx="5"/>
+    <text x="650" y="155" text-anchor="middle" class="box-title">🔌 WebSocket Clients</text>
+    <text x="570" y="180" class="box-text">• FewShotClient</text>
+    <text x="570" y="200" class="box-text">• MerlinClient</text>
+    <text x="570" y="220" class="box-text">• (Genesis - planned)</text>
+  </g>
+
+  <!-- Script Manager -->
+  <g id="script-manager">
+    <rect x="780" y="130" width="180" height="120" class="client-box" rx="5"/>
+    <text x="870" y="155" text-anchor="middle" class="box-title">⚙️ ScriptManager.js</text>
+    <text x="790" y="180" class="box-text">• Script Compilation</text>
+    <text x="790" y="200" class="box-text">• Entity Spawning</text>
+    <text x="790" y="220" class="box-text">• Runtime Execution</text>
+  </g>
+
+  <!-- Game Engine -->
+  <g id="game-engine">
+    <rect x="1000" y="130" width="180" height="120" class="client-box" rx="5"/>
+    <text x="1090" y="155" text-anchor="middle" class="box-title">🎲 VoxelGame.jsx</text>
+    <text x="1010" y="180" class="box-text">• Three.js Renderer</text>
+    <text x="1010" y="200" class="box-text">• Entity System</text>
+    <text x="1010" y="220" class="box-text">• World/Inventory</text>
+  </g>
+
+  <!-- Client Layer Arrows -->
+  <path d="M 280 190 L 320 190" class="arrow"/>
+  <path d="M 520 190 L 560 190" class="arrow"/>
+  <path d="M 740 190 L 780 190" class="arrow"/>
+  <path d="M 960 190 L 1000 190" class="arrow"/>
+
+  <!-- ===================== SERVER LAYER ===================== -->
+
+  <!-- Routes -->
+  <g id="routes">
+    <rect x="80" y="330" width="180" height="100" class="server-box" rx="5"/>
+    <text x="170" y="355" text-anchor="middle" class="box-title">🌐 Express Routes</text>
+    <text x="90" y="380" class="box-text">• /api/ai/genesis</text>
+    <text x="90" y="400" class="box-text">• /api/ai/fewshot</text>
+    <text x="90" y="420" class="box-text">• REST endpoints</text>
+  </g>
+
+  <!-- WebSocket Sessions -->
+  <g id="ws-sessions">
+    <rect x="300" y="330" width="200" height="100" class="server-box" rx="5"/>
+    <text x="400" y="355" text-anchor="middle" class="box-title">🔗 WebSocket Sessions</text>
+    <text x="310" y="380" class="box-text">• FewShotSession.ts</text>
+    <text x="310" y="400" class="box-text">• BaseAISession.ts</text>
+    <text x="310" y="420" class="box-text">• Session management</text>
+  </g>
+
+  <!-- AI System Core -->
+  <g id="ai-system">
+    <rect x="540" y="330" width="200" height="280" class="server-box" rx="5"/>
+    <text x="640" y="355" text-anchor="middle" class="box-title">🧠 FewShotAI System</text>
+
+    <text x="550" y="385" class="box-text" font-weight="bold">1. Router</text>
+    <text x="555" y="405" class="box-text">• Parse user intent</text>
+    <text x="555" y="420" class="box-text">• Select tool/category</text>
+
+    <text x="550" y="450" class="box-text" font-weight="bold">2. Handlers</text>
+    <text x="555" y="470" class="box-text">• handleCreateCreature</text>
+    <text x="555" y="485" class="box-text">• handleCreateItem</text>
+    <text x="555" y="500" class="box-text">• handleCreateStructure</text>
+    <text x="555" y="515" class="box-text">• handleSpawnExisting</text>
+    <text x="555" y="530" class="box-text">• handleGiveExisting</text>
+
+    <text x="550" y="560" class="box-text" font-weight="bold">3. Validation</text>
+    <text x="555" y="580" class="box-text">• Code validation</text>
+    <text x="555" y="595" class="box-text">• Auto-fix attempts</text>
+  </g>
+
+  <!-- Prompt System -->
+  <g id="prompt-system">
+    <rect x="780" y="330" width="180" height="100" class="ai-box" rx="5"/>
+    <text x="870" y="355" text-anchor="middle" class="box-title">📝 Prompt System</text>
+    <text x="790" y="380" class="box-text">• few_shot_prompts.ts</text>
+    <text x="790" y="400" class="box-text">• Category-specific</text>
+    <text x="790" y="420" class="box-text">• Example injection</text>
+  </g>
+
+  <!-- Examples Library -->
+  <g id="examples">
+    <rect x="780" y="450" width="180" height="100" class="ai-box" rx="5"/>
+    <text x="870" y="475" text-anchor="middle" class="box-title">📚 Examples Library</text>
+    <text x="790" y="500" class="box-text">• creatures.ts (20+)</text>
+    <text x="790" y="520" class="box-text">• items.ts (15+)</text>
+    <text x="790" y="540" class="box-text">• structures.ts (10+)</text>
+  </g>
+
+  <!-- Tool Definitions -->
+  <g id="tools">
+    <rect x="1000" y="330" width="180" height="100" class="ai-box" rx="5"/>
+    <text x="1090" y="355" text-anchor="middle" class="box-title">🔧 Tool Definitions</text>
+    <text x="1010" y="380" class="box-text">• few_shot_tools.ts</text>
+    <text x="1010" y="400" class="box-text">• Function schemas</text>
+    <text x="1010" y="420" class="box-text">• for OpenRouter</text>
+  </g>
+
+  <!-- Services -->
+  <g id="services">
+    <rect x="1000" y="450" width="180" height="160" class="server-box" rx="5"/>
+    <text x="1090" y="475" text-anchor="middle" class="box-title">💾 Services</text>
+    <text x="1010" y="500" class="box-text">• GenesisService.ts</text>
+    <text x="1010" y="515" class="box-text">  (OpenCode SDK)</text>
+    <text x="1010" y="535" class="box-text">• DynamicCreature</text>
+    <text x="1010" y="550" class="box-text">  Service</text>
+    <text x="1010" y="570" class="box-text">• DynamicItem</text>
+    <text x="1010" y="585" class="box-text">  Service</text>
+    <text x="1010" y="605" class="box-text">• SemanticSearch</text>
+  </g>
+
+  <!-- Server Layer Arrows -->
+  <path d="M 260 380 L 300 380" class="arrow"/>
+  <path d="M 500 380 L 540 380" class="arrow"/>
+  <path d="M 740 380 L 780 380" class="arrow-alt"/>
+  <path d="M 740 450 L 780 500" class="arrow-alt"/>
+  <path d="M 740 380 L 1000 380" class="arrow-alt"/>
+  <path d="M 740 520 L 1000 520" class="arrow-data"/>
+
+  <!-- ===================== AI LAYER ===================== -->
+
+  <!-- OpenRouter API -->
+  <g id="openrouter">
+    <rect x="80" y="700" width="280" height="120" class="api-box" rx="5"/>
+    <text x="220" y="725" text-anchor="middle" class="box-title">🤖 OpenRouter API</text>
+    <text x="90" y="750" class="box-text">• Multi-model gateway</text>
+    <text x="90" y="770" class="box-text">• Claude 4.5 Sonnet/Haiku</text>
+    <text x="90" y="790" class="box-text">• GPT-5, Gemini 3, DeepSeek</text>
+    <text x="90" y="810" class="box-text">• Function calling support</text>
+  </g>
+
+  <!-- OpenCode SDK -->
+  <g id="opencode">
+    <rect x="400" y="700" width="280" height="120" class="api-box" rx="5"/>
+    <text x="540" y="725" text-anchor="middle" class="box-title">⚡ OpenCode SDK</text>
+    <text x="410" y="750" class="box-text">• Session-based AI</text>
+    <text x="410" y="770" class="box-text">• Agent: "architect"</text>
+    <text x="410" y="790" class="box-text">• System prompt injection</text>
+    <text x="410" y="810" class="box-text">• Code block extraction</text>
+  </g>
+
+  <!-- Model Examples -->
+  <g id="models">
+    <rect x="720" y="700" width="280" height="120" class="api-box" rx="5"/>
+    <text x="860" y="725" text-anchor="middle" class="box-title">🎯 Model Selection</text>
+    <text x="730" y="750" class="box-text">• Cost-optimized routing</text>
+    <text x="730" y="770" class="box-text">• Haiku for fast/cheap tasks</text>
+    <text x="730" y="790" class="box-text">• Sonnet for complex logic</text>
+    <text x="730" y="810" class="box-text">• User-selectable models</text>
+  </g>
+
+  <!-- Alternative -->
+  <g id="alternative">
+    <rect x="1040" y="700" width="280" height="120" class="api-box" rx="5"/>
+    <text x="1180" y="725" text-anchor="middle" class="box-title">🔄 Alternative Paths</text>
+    <text x="1050" y="750" class="box-text">• Genesis (future)</text>
+    <text x="1050" y="770" class="box-text">• Claude Code integration</text>
+    <text x="1050" y="790" class="box-text">• Local model support</text>
+    <text x="1050" y="810" class="box-text">• Mock mode for testing</text>
+  </g>
+
+  <!-- ===================== VERTICAL CONNECTIONS ===================== -->
+
+  <!-- Client to Server -->
+  <path d="M 650 250 L 650 270 L 400 270 L 400 330" class="arrow"/>
+  <text x="420" y="290" class="label">WebSocket</text>
+
+  <!-- Server to AI -->
+  <path d="M 640 610 L 640 640 L 220 640 L 220 700" class="arrow-alt"/>
+  <text x="240" y="660" class="label">HTTP POST</text>
+
+  <path d="M 640 610 L 640 640 L 540 640 L 540 700" class="arrow-alt"/>
+  <text x="480" y="660" class="label">SDK Call</text>
+
+  <!-- ===================== DATA FLOW ===================== -->
+
+  <!-- User Request Flow -->
+  <g id="flow-arrows">
+    <path d="M 180 250 L 180 290 L 80 290 L 80 380 L 260 380" class="arrow-data dotted"/>
+    <text x="85" y="340" class="label">User Input</text>
+  </g>
+
+  <!-- Response Flow -->
+  <path d="M 870 820 L 870 900 L 1090 900 L 1090 250" class="arrow-data dotted"/>
+  <text x="900" y="920" class="label">Generated Code</text>
+
+  <!-- ===================== KEY / LEGEND ===================== -->
+
+  <g id="legend">
+    <rect x="80" y="890" width="1240" height="280" fill="#0f0f1e" stroke="#444" stroke-width="2" rx="8"/>
+    <text x="700" y="920" text-anchor="middle" class="box-title">📖 System Flow &amp; Key Concepts</text>
+
+    <!-- Flow Steps -->
+    <text x="100" y="955" class="box-text" font-weight="bold">Data Flow:</text>
+    <text x="100" y="980" class="box-text">1. User types request in Merlin UI → TaskManager creates task</text>
+    <text x="100" y="1000" class="box-text">2. Task sent via WebSocket (FewShotClient) → FewShotSession on server</text>
+    <text x="100" y="1020" class="box-text">3. FewShotAI.processRequest() → Routes to appropriate handler</text>
+    <text x="100" y="1040" class="box-text">4. Handler constructs prompt with examples → Calls OpenRouter API</text>
+    <text x="100" y="1060" class="box-text">5. AI generates code → Validated &amp; saved → Response sent back to client</text>
+    <text x="100" y="1080" class="box-text">6. ScriptManager compiles &amp; executes → Entity spawned in game</text>
+
+    <!-- Key Concepts -->
+    <text x="800" y="955" class="box-text" font-weight="bold">Key Features:</text>
+    <text x="800" y="980" class="box-text">• Few-Shot Learning: Uses 2-3 similar examples per request</text>
+    <text x="800" y="1000" class="box-text">• Tool-based Routing: Function calling determines intent</text>
+    <text x="800" y="1020" class="box-text">• Code Validation: Syntax &amp; structure checks with auto-fix</text>
+    <text x="800" y="1040" class="box-text">• Multi-Model: Switch between Claude, GPT, Gemini, etc.</text>
+    <text x="800" y="1060" class="box-text">• Context-Aware: Player position, direction, terrain height</text>
+    <text x="800" y="1080" class="box-text">• Runtime Execution: Dynamic script compilation in browser</text>
+
+    <!-- Genesis vs FewShot -->
+    <text x="100" y="1120" class="box-text" font-weight="bold">Genesis Service (Alternative):</text>
+    <text x="100" y="1140" class="box-text">• Uses OpenCode SDK instead of direct OpenRouter</text>
+    <text x="100" y="1160" class="box-text">• Session-based with persistent context (architect agent)</text>
+
+    <text x="800" y="1120" class="box-text" font-weight="bold">Color Legend:</text>
+    <text x="800" y="1140" class="box-text">🔵 Client (Browser)  |  🟢 Server (Node.js)  |  🟠 AI Systems  |  🟣 External APIs</text>
+  </g>
+
+  <!-- ===================== VERSION & TIMESTAMP ===================== -->
+  <text x="700" y="1195" text-anchor="middle" class="label">Generated: 2026-02-10 | Genesis System v2.0 (Few-Shot Architecture)</text>
+
+</svg>

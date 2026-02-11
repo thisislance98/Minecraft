@@ -1,0 +1,32 @@
+[     279ms] [WARNING] TextureGenerator: Unknown texture type 'torch', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[     281ms] [WARNING] TextureGenerator: Unknown texture type 'glowstone', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[     284ms] [WARNING] Socket not found for CommunityUI, will retry when UI opens @ http://localhost:3000/src/game/ui/CommunityUI.js:686
+[     378ms] [WARNING] [Game] Frame took 54.6ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[     647ms] [WARNING] [Game] Frame took 269.2ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[    2745ms] [WARNING] [Game] Frame took 2003.1ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[    2796ms] [WARNING] [Game] Frame took 50.7ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[    2809ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 31.7, 22.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2832ms] [WARNING] [SpawnManager] Failed to find ground for BouncePod at 26.7, 83.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2840ms] [WARNING] THREE.Material: parameter 'color' has value of undefined. @ http://localhost:3000/node_modules/.vite/deps/chunk-UZOV2HZI.js?v=923d3bf3:5694
+[    2840ms] [WARNING] THREE.Material: parameter 'color' has value of undefined. @ http://localhost:3000/node_modules/.vite/deps/chunk-UZOV2HZI.js?v=923d3bf3:5694
+[    2840ms] [WARNING] THREE.Material: parameter 'color' has value of undefined. @ http://localhost:3000/node_modules/.vite/deps/chunk-UZOV2HZI.js?v=923d3bf3:5694
+[    2851ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -26.1, 78.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2852ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -27.8, 78.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2854ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 104.2, -17.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2865ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 31.1, 147.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[    2875ms] [WARNING] [Game] Frame took 78.8ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[    2929ms] [WARNING] [Game] Frame took 54.7ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[    5784ms] [WARNING] Failed to load sound: click at /sounds/click.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5784ms] [WARNING] Failed to load sound: footstep_grass at /sounds/footstep_grass.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5784ms] [WARNING] Failed to load sound: cow_moo at /sounds/cow_moo.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5784ms] [WARNING] Failed to load sound: block_break at /sounds/block_break.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5784ms] [WARNING] Failed to load sound: footstep_stone at /sounds/footstep_stone.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5787ms] [WARNING] Failed to load sound: pig_oink at /sounds/pig_oink.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5791ms] [WARNING] Failed to load sound: levelup at /sounds/levelup.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5794ms] [WARNING] Failed to load sound: teleport at /sounds/teleport.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5797ms] [WARNING] Failed to load sound: rumble at /sounds/rumble.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5802ms] [WARNING] Failed to load sound: splash at /sounds/splash.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5806ms] [WARNING] Failed to load sound: block_place at /sounds/block_place.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5825ms] [WARNING] Failed to load sound: item_pickup at /sounds/item_pickup.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5825ms] [WARNING] Failed to load sound: jump at /sounds/jump.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74
+[    5825ms] [WARNING] Failed to load sound: damage at /sounds/damage.mp3 EncodingError: Unable to decode audio data @ http://localhost:3000/src/game/systems/SoundManager.js:74

@@ -359,3 +359,212 @@
 [  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 131.6, 127.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
 [  822797ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 125.3, 128.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
 [  822804ms] [WARNING] [Game] Frame took 59.7ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[ 1031323ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1032325ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1033327ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1033670ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1033688ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1033836ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1034330ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1035173ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1035192ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1035332ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1035760ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1036333ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1037336ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1037432ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1037454ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1038339ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1039341ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1039674ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1040344ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1040862ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1040990ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1041357ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1042359ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/:0
+[ 1043902ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=openrouter' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1043902ms] [WARNING] [MerlinClient] WebSocket error: Event @ http://localhost:3000/src/game/ai/MerlinClient.js:202
+[ 1043962ms] [WARNING] TextureGenerator: Unknown texture type 'torch', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[ 1043964ms] [WARNING] TextureGenerator: Unknown texture type 'glowstone', using fallback @ http://localhost:3000/src/textures/TextureGenerator.js:2246
+[ 1043969ms] [WARNING] Socket not found for CommunityUI, will retry when UI opens @ http://localhost:3000/src/game/ui/CommunityUI.js:686
+[ 1044071ms] [WARNING] [Game] Frame took 58.4ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[ 1044341ms] [WARNING] [Game] Frame took 270.6ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766
+[ 1044354ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1044378ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1044378ms] [WARNING] [FewShotClient] WebSocket error: Event @ http://localhost:3000/src/game/ai/FewShotClient.js:155
+[ 1044386ms] [WARNING] [SocketManager] Connection Error (reconnecting...): websocket error @ http://localhost:3000/src/game/systems/SocketManager.js:208
+[ 1044911ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1045404ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1045874ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1046438ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/antigravity?provider=gemini' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/MerlinClient.js:145
+[ 1046987ms] [ERROR] WebSocket connection to 'ws://localhost:2567/api/fewshot?model=anthropic%2Fclaude-haiku-4.5' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/src/game/ai/FewShotClient.js:106
+[ 1047653ms] [ERROR] WebSocket connection to 'ws://localhost:2567/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/node_modules/.vite/deps/socket__io-client.js?v=923d3bf3:1523
+[ 1051712ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 16.5, 22.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051712ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 31.7, 22.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051712ms] [WARNING] [SpawnManager] Failed to find ground for Lorax at 31.5, 18.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051712ms] [WARNING] [SpawnManager] Failed to find ground for WienerDog at 29.4, 18.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 50.1, 55.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 55.3, 54.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 49.7, 60.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for MagicalCreature at 53.5, 64.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 49.5, 57.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051716ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 55.3, 61.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051717ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 53.1, 56.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051717ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 58.1, 58.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051717ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at 21.0, 69.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051717ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at 23.3, 64.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051717ms] [WARNING] [SpawnManager] Failed to find ground for MagicalCreature at 25.4, 71.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 22.3, 68.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 21.0, 71.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 29.0, 72.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 28.7, 71.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 21.6, 65.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 21.2, 66.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 22.6, 68.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051718ms] [WARNING] [SpawnManager] Failed to find ground for ShyPlant at 29.5, 72.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051725ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 53.4, 79.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051725ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 53.5, 79.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051726ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 36.0, 80.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051726ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 33.2, 81.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 35.1, 85.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 37.5, 86.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.5, 48.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 80.3, 46.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.1, 41.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 87.2, 44.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 86.5, 43.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -4.9, 54.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -7.7, 51.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -6.0, 51.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 26.1, 91.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051727ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at 26.4, 91.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051728ms] [WARNING] [SpawnManager] Failed to find ground for BouncePod at 28.3, 86.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051728ms] [WARNING] [SpawnManager] Failed to find ground for BouncePod at 26.7, 83.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051735ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 4.6, 84.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051735ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 6.5, 78.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051735ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 72.7, 86.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051735ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 74.5, 88.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051735ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 71.3, 87.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -23.6, 37.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -24.5, 38.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -20.4, 31.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -17.7, 38.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -19.6, 38.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at -17.8, 33.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 106.0, 37.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 106.1, 42.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at 111.7, 35.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051736ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 108.7, 34.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 109.3, 34.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for CrystalPlant at 107.4, 39.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 29.9, 106.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 26.4, 104.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 23.1, 98.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051737ms] [WARNING] [SpawnManager] Failed to find ground for Reindeer at 25.2, 103.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -9.9, 87.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -27.4, 70.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.0, 65.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -36.2, 69.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.8, 70.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051738ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 8.5, 103.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051739ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 8.5, 107.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051739ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 14.6, 106.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051739ms] [WARNING] [SpawnManager] Failed to find ground for Frog at 14.3, 105.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051739ms] [WARNING] [SpawnManager] Failed to find ground for Unicorn at 14.9, 103.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051739ms] [WARNING] [SpawnManager] Failed to find ground for Lorax at 17.8, 108.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051740ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 105.4, 4.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051740ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 112.5, 5.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 105.1, 4.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Chicken at 107.8, 8.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 111.8, 8.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 107.5, 10.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 114.3, 8.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 112.8, 8.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 106.3, 4.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 108.1, 5.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at -34.8, 36.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Elephant at -37.1, 33.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -26.1, 78.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -27.8, 78.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for MagicalCreature at -22.7, 79.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 27.3, 125.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051741ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 35.6, 117.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Giraffe at 29.2, 119.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 99.4, -16.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 104.2, -17.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 121.6, 30.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -41.9, 22.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -39.9, 25.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -44.7, 28.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -42.1, 21.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -39.1, 26.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -46.3, 30.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -47.0, 23.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 118.5, 29.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at 68.2, -41.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Mouse at 67.2, 121.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Mouse at 68.2, 113.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051742ms] [WARNING] [SpawnManager] Failed to find ground for Chimera at 60.7, 119.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 65.1, 113.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 61.9, 118.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for SnapTrap at 64.0, 120.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 127.9, 72.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 126.1, 77.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Pugasus at 130.6, 74.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Pugasus at 122.0, 74.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -33.3, 102.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -30.6, 106.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -32.8, 103.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -30.1, 108.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -9.2, -38.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Tiger at -5.7, -30.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -16.6, 110.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -17.8, 110.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051743ms] [WARNING] [SpawnManager] Failed to find ground for Bunny at -16.4, 111.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Lorax at -13.6, 114.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 107.0, 80.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 110.4, 82.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Camel at 110.5, 84.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 32.1, 138.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 31.1, 147.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 19.4, 139.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 26.8, 138.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Turkey at 18.8, 141.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 25.7, 136.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 20.7, 141.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 20.0, 142.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051744ms] [WARNING] [SpawnManager] Failed to find ground for Pumpkin at 22.1, 143.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051751ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 2.7, 127.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 6.0, 125.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 0.3, 130.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 2.7, 127.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -35.0, 101.2 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -38.7, 105.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for Frog at -34.1, 102.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -37.2, 107.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -36.1, 107.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at -29.6, 107.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for TRex at 117.4, -33.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 118.9, -27.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 121.7, -31.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 117.2, -35.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for SporeCloud at 118.3, -35.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 115.2, 97.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051752ms] [WARNING] [SpawnManager] Failed to find ground for Kangaroo at 113.4, 99.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051753ms] [WARNING] [SpawnManager] Failed to find ground for Turtle at -62.8, 86.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051754ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 87.9, 132.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051754ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 80.3, 133.8 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051754ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 81.7, 137.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051754ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 85.5, 133.5 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051754ms] [WARNING] [SpawnManager] Failed to find ground for HelicopterPlant at 83.0, 138.9 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for Duck at 140.5, 0.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for Duck at 139.8, -7.0 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 142.7, 106.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for Snake at 137.8, 107.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for Dragon at 143.1, 104.4 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for DuneWorm at 139.3, 106.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 132.0, 122.6 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 126.3, 122.1 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 131.6, 127.3 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051755ms] [WARNING] [SpawnManager] Failed to find ground for HummingBlossom at 125.3, 128.7 @ http://localhost:3000/src/game/systems/SpawnManager.js:492
+[ 1051763ms] [WARNING] [Game] Frame took 110.1ms, capping dt to 50ms @ http://localhost:3000/src/game/VoxelGame.jsx:1766

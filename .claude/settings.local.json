@@ -7,8 +7,6 @@
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "playwright",
-    "context7",
-    "jira_mcp"
+    "playwright"
   ]
 }

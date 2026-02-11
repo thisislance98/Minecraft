@@ -5,6 +5,7 @@
  * Manages queue with sequential execution and parallel display
  */
 
+import * as THREE from 'three';
 import { getRandomSuggestions, getSuggestionCount } from './MerlinSuggestions.js';
 
 export class TaskManager {
@@ -172,6 +173,7 @@ export class TaskManager {
 
     /**
      * Get context for the current task
+     * Includes player position, direction, and terrain height at target location
      */
     getTaskContext() {
         const client = this.getActiveClient();
@@ -179,11 +181,48 @@ export class TaskManager {
 
         const game = client.game;
         const player = game.player;
+        const camera = game.camera;
+
+        const playerX = player?.position?.x || 0;
+        const playerY = player?.position?.y || 0;
+        const playerZ = player?.position?.z || 0;
+
+        // Get player's forward direction from camera
+        let dirX = 0, dirZ = 1;
+        if (camera) {
+            // Get camera's forward direction (negative Z in Three.js)
+            const direction = camera.getWorldDirection(new THREE.Vector3());
+            dirX = direction.x;
+            dirZ = direction.z;
+            // Normalize to get unit direction on XZ plane
+            const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+            if (len > 0.01) {
+                dirX /= len;
+                dirZ /= len;
+            }
+        }
+
+        // Calculate target position (10 blocks in front of player)
+        const targetDistance = 10;
+        const targetX = playerX + dirX * targetDistance;
+        const targetZ = playerZ + dirZ * targetDistance;
+
+        // Get terrain height at target location using worldGen
+        let targetGroundY = playerY; // Default to player's Y
+        if (game.worldGen && game.worldGen.getTerrainHeight) {
+            targetGroundY = game.worldGen.getTerrainHeight(targetX, targetZ);
+            console.log(`[TaskManager] Terrain height at target (${targetX.toFixed(1)}, ${targetZ.toFixed(1)}): ${targetGroundY}`);
+        }
 
         return {
-            x: player?.position?.x || 0,
-            y: player?.position?.y || 0,
-            z: player?.position?.z || 0,
+            x: playerX,
+            y: playerY,
+            z: playerZ,
+            dirX: dirX,
+            dirZ: dirZ,
+            targetX: targetX,
+            targetZ: targetZ,
+            targetGroundY: targetGroundY, // Ground level at the target position
             worldId: game.currentWorldId || 'global'
         };
     }

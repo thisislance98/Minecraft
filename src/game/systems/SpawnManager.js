@@ -278,8 +278,8 @@ export class SpawnManager {
         if (this.game.animals.length > SPAWN_LIMITS.MAX_ANIMALS) return;
 
         const worldSeed = currentWorld === 'EARTH' ? 1 :
-                          currentWorld === 'CRYSTAL_WORLD' ? 100 :
-                          currentWorld === 'LAVA_WORLD' ? 200 : 1;
+            currentWorld === 'CRYSTAL_WORLD' ? 100 :
+                currentWorld === 'LAVA_WORLD' ? 200 : 1;
         const chunkRng = SeededRandom.fromSeeds(this.game.worldSeed, cx, cz, worldSeed);
 
         if (chunkRng.next() > 0.40) return;
@@ -659,8 +659,15 @@ export class SpawnManager {
 
         // Calculate forward direction from player's Y rotation (horizontal facing direction)
         // This ignores camera pitch so entities spawn in front regardless of looking up/down
+        // Calculate forward direction from camera (where player is looking)
         const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+        if (this.game.camera) {
+            this.game.camera.getWorldDirection(forward);
+            forward.y = 0; // Flatten to horizontal
+        } else {
+            // Fallback to player rotation
+            forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+        }
         forward.normalize();
 
         const spawnX = player.position.x + forward.x * distance;
@@ -680,8 +687,14 @@ export class SpawnManager {
             const offsetZ = (rng.next() - 0.5) * spread;
             const x = spawnX + offsetX;
             const z = spawnZ + offsetZ;
+            // Try to find ground relative to player to handle buildings/platforms
             const terrainY = worldGen.getTerrainHeight(x, z);
-            const y = terrainY + 1;
+            let y = terrainY + 1;
+
+            const groundY = this.findGroundLevel(x, player.position.y + 2, z);
+            if (groundY !== null) {
+                y = groundY;
+            }
 
             const animal = new AnimalClass(this.game, x, y, z, rng.next());
 

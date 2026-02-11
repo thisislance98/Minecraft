@@ -9,6 +9,7 @@ import { InventoryManager } from './systems/InventoryManager.js';
 import { ItemManager } from './systems/ItemManager.js';
 import { SpawnManager } from './systems/SpawnManager.js';
 import { UIManager } from './systems/UIManager.js';
+import { ScriptManager } from './systems/ScriptManager.js';
 import { Arrow } from './entities/projectiles/Arrow.js';
 import { MagicProjectile } from './entities/projectiles/MagicProjectile.js';
 import { ShrinkProjectile } from './entities/projectiles/ShrinkProjectile.js';
@@ -82,7 +83,7 @@ export class VoxelGame {
         window.THREE = THREE;
         // Expose Verification Utils for CLI testing
         window.VerificationUtils = VerificationUtils;
-        
+
         this.container = document.getElementById('game-container');
         this.clock = new THREE.Clock();
         this.scene = new THREE.Scene();
@@ -226,6 +227,7 @@ export class VoxelGame {
         this.uiManager = new UIManager(this);
         this.inventoryManager = new InventoryManager(this);
         this.itemManager = new ItemManager(this);
+        this.scriptManager = new ScriptManager(this);
         // Set ItemManager reference for DynamicItemRegistry so dynamic items can be used
         setItemManager(this.itemManager);
 
@@ -1247,11 +1249,11 @@ export class VoxelGame {
         try {
             const projectile = this.spawnProjectile(FireworkProjectile, pos, vel);
             console.log('[VoxelGame] Firework projectile spawned successfully:', projectile);
-            
+
             if (!skipBroadcast && this.socketManager?.isConnected()) {
                 this.socketManager.sendProjectileSpawn('firework', pos, vel);
             }
-            
+
             return projectile;
         } catch (error) {
             console.error('[VoxelGame] Error spawning firework projectile:', error);
@@ -2337,7 +2339,7 @@ export class VoxelGame {
             if (frameTime > 33) { // > 30fps threshold
                 // Only log occasionally to avoid spam
                 if (!this._lastSlowFrameLog || now - this._lastSlowFrameLog > 2000) {
-                    console.warn(`[Perf] Slow frame: ${frameTime.toFixed(1)}ms (${(1000/frameTime).toFixed(0)} fps), chunks: ${this.chunks.size}, queue: ${this.chunkGenQueue.length}`);
+                    console.warn(`[Perf] Slow frame: ${frameTime.toFixed(1)}ms (${(1000 / frameTime).toFixed(0)} fps), chunks: ${this.chunks.size}, queue: ${this.chunkGenQueue.length}`);
                     this._lastSlowFrameLog = now;
                 }
             }
@@ -2468,6 +2470,7 @@ export class VoxelGame {
         // UI Update (Speech bubbles)
         // this.profiler.start('UI');
         this.uiManager.update(deltaTime);
+        if (this.scriptManager) this.scriptManager.update(deltaTime);
         // this.profiler.end('UI');
 
         // UI-Only Mode: Skip all world/entity updates

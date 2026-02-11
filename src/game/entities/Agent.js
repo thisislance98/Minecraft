@@ -117,14 +117,16 @@ export class Agent {
             return;
         }
 
+        // Get enhanced context with terrain height for structures
+        const enhancedContext = this.getEnhancedContext();
+
         window.merlinClient.send({
             type: 'input',
             text: text,
             context: {
                 ...this.agentContext,
                 ...context,
-                position: this.game.player ? this.game.player.position : null,
-                rotation: (this.game.player && this.game.player.mesh) ? this.game.player.mesh.rotation : null,
+                ...enhancedContext,
                 scene: this.getSceneInfo(),
                 worldId: this.game.socketManager?.worldId || 'global'
             }
@@ -358,11 +360,11 @@ Max 25 words total.
         let result = {};
 
         try {
-            console.log(`[Agent] Executing Client Tool: ${name}`, args);
+            console.log(`[Agent] Executing Client Tool: ${name}`, JSON.stringify(args));
 
             // Game tools
             if (name === 'spawn' || name === 'spawn_creature') {
-                result = await this.spawnCreature(args.name || args.creature, args.count);
+                result = await this.spawnCreature(args.name || args.creature || args.type, args.count);
             } else if (name === 'teleport_player') {
                 result = this.teleportPlayer(args.location);
             } else if (name === 'get_scene_info') {
@@ -576,6 +578,10 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
         const module = await import('../AnimalRegistry.js');
         let AnimalClasses = module.AnimalClasses;
 
+        if (!creatureName) {
+            return { error: 'Creature name is required' };
+        }
+
         // Check aliases
         const lower = creatureName.toLowerCase();
         let targetName = CREATURE_ALIASES[lower] || creatureName;
@@ -620,7 +626,7 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
             return { error: `Creature '${creatureName}' class not found in registry after waiting ${maxWaitMs}ms.` };
         }
 
-        const spawnResult = this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass, count);
+        const spawnResult = this.game.spawnManager.spawnEntitiesInFrontOfPlayer(CreatureClass.name, count);
 
         // Track spawned IDs for context
         if (spawnResult && spawnResult.length > 0) {
@@ -967,6 +973,65 @@ SYSTEM: Built ${blockCount} blocks! Congratulate briefly. Tell them they're read
             // Fallback for browsers without MediaRecorder or codec support
             return { success: false, error: `Video capture failed: ${e.message}. Is MediaRecorder supported and https enabled?` };
         }
+    }
+
+    /**
+     * Get enhanced context with terrain height for structures
+     * Returns flat position fields + target position with ground level
+     */
+    getEnhancedContext() {
+        const player = this.game.player;
+        const camera = this.game.camera;
+        const worldGen = this.game.worldGen;
+
+        if (!player) return {};
+
+        const playerX = player.position?.x || 0;
+        const playerY = player.position?.y || 0;
+        const playerZ = player.position?.z || 0;
+
+        // Get player's forward direction from camera
+        let dirX = 0, dirZ = 1;
+        if (camera && this.game.THREE) {
+            const direction = camera.getWorldDirection(new this.game.THREE.Vector3());
+            dirX = direction.x;
+            dirZ = direction.z;
+            // Normalize to get unit direction on XZ plane
+            const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+            if (len > 0.01) {
+                dirX /= len;
+                dirZ /= len;
+            }
+        }
+
+        // Calculate target position (10 blocks in front of player)
+        const targetDistance = 10;
+        const targetX = playerX + dirX * targetDistance;
+        const targetZ = playerZ + dirZ * targetDistance;
+
+        // Get terrain height at target location using worldGen
+        let targetGroundY = playerY;
+        if (worldGen && worldGen.getTerrainHeight) {
+            targetGroundY = worldGen.getTerrainHeight(targetX, targetZ);
+            console.log(`[Agent] Terrain height at target (${targetX.toFixed(1)}, ${targetZ.toFixed(1)}): ${targetGroundY}`);
+        }
+
+        return {
+            // Flat position fields (for compatibility)
+            x: playerX,
+            y: playerY,
+            z: playerZ,
+            // Player's forward direction
+            dirX: dirX,
+            dirZ: dirZ,
+            // Target position with correct ground level
+            targetX: targetX,
+            targetZ: targetZ,
+            targetGroundY: targetGroundY,
+            // Also include position object for backward compatibility
+            position: { x: playerX, y: playerY, z: playerZ },
+            rotation: player.mesh?.rotation || null
+        };
     }
 
     getSceneInfo() {

@@ -48,7 +48,8 @@ interface FewShotConfig {
 
 interface FewShotContext {
     playerPosition?: { x: number; y: number; z: number };
-    playerDirection?: { x: number; y: number; z: number };
+    targetPosition?: { x: number; y: number; z: number };  // Where to place structures (at ground level)
+    playerDirection?: { x: number; z: number };  // Player's facing direction (XZ plane)
     worldName?: string;
     userId?: string;
 }
@@ -483,7 +484,14 @@ export class FewShotAI {
     }
 
     private executeStructureCode(code: string, context: FewShotContext): any[] {
-        const playerPosition = context.playerPosition || { x: 0, y: 64, z: 0 };
+        // Use targetPosition (which has correct ground level) if available, otherwise fall back to playerPosition
+        const targetPosition = context.targetPosition || context.playerPosition || { x: 0, y: 64, z: 0 };
+
+        // For backwards compatibility, the generated code uses "playerPosition" variable name
+        // but we pass the targetPosition which has the correct ground level
+        const playerPosition = targetPosition;
+
+        console.log(`[FewShotAI] Executing structure code with position: x=${playerPosition.x}, y=${playerPosition.y}, z=${playerPosition.z}`);
 
         // Create a safe execution context
         const fn = new Function('playerPosition', `

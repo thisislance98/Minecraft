@@ -113,15 +113,31 @@ export class FewShotSession extends BaseAISession {
 
         try {
             // Process the request through the FewShot AI
-            // Handle context format: client sends { x, y, z } directly, not { position: { x, y, z } }
+            // Handle context format: client sends { x, y, z, targetX, targetZ, targetGroundY, dirX, dirZ }
             const playerPosition = context?.position || (context?.x !== undefined ? { x: context.x, y: context.y, z: context.z } : undefined);
 
+            // Target position is where structures should be placed (in front of player, at ground level)
+            const targetPosition = context?.targetX !== undefined ? {
+                x: context.targetX,
+                y: context.targetGroundY,  // Ground level at target
+                z: context.targetZ
+            } : playerPosition;
+
+            // Player's forward direction
+            const playerDirection = context?.dirX !== undefined ? {
+                x: context.dirX,
+                z: context.dirZ
+            } : undefined;
+
             console.log(`[FewShot] Context received:`, context);
-            console.log(`[FewShot] Player position resolved:`, playerPosition);
+            console.log(`[FewShot] Player position:`, playerPosition);
+            console.log(`[FewShot] Target position (with ground level):`, targetPosition);
+            console.log(`[FewShot] Player direction:`, playerDirection);
 
             const result = await this.ai.processRequest(text, {
                 playerPosition,
-                playerDirection: context?.direction,
+                targetPosition,  // Where structures should be placed (at correct ground level)
+                playerDirection,
                 worldName: context?.worldName || context?.worldId,
                 userId: this.userId || undefined
             });

@@ -133,9 +133,13 @@ const { chromium } = require('playwright');
 async function testStructureCreation(page, prompt, structureName) {
     console.log(`  📝 Sending prompt: "${prompt}"`);
 
-    const input = await page.locator('textarea, input[type="text"]').first();
+    // Find input and send message - use specific selector for Merlin panel
+    const input = await page.getByRole('textbox', { name: 'Enter your custom request...' });
     await input.fill(prompt);
-    await input.press('Enter');
+
+    // Click the Start Task button
+    const startButton = await page.getByRole('button', { name: '▶️ Start Task' });
+    await startButton.click();
 
     console.log('  ⏳ Waiting for AI to generate and build...');
     await page.waitForTimeout(10000); // Structures take longer

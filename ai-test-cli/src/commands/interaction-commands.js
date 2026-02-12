@@ -22,30 +22,6 @@ export async function pressKey(browser, key) {
 }
 
 /**
- * Simulate pressing a key
- */
-export async function pressKey(browser, key) {
-    await browser.page.keyboard.press(key);
-    return { pressed: key };
-}
-
-/**
- * Simulate right-click (use item)
- */
-export async function rightClick(browser, x = 400, y = 300) {
-    await browser.page.mouse.click(x, y, { button: 'right' });
-    return { clicked: 'right', x, y };
-}
-
-/**
- * Simulate pressing a key
- */
-export async function pressKey(browser, key) {
-    await browser.page.keyboard.press(key);
-    return { pressed: key };
-}
-
-/**
  * Simulate right-click (use item)
  */
 export async function rightClick(browser, x = 400, y = 300) {

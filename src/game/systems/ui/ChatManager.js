@@ -56,7 +56,7 @@ export class ChatManager {
                 this.toggleChatPanel(true);
                 console.log('[ChatManager] T key pressed - opening player chat');
                 setTimeout(() => this.chatInput?.focus(), 100);
-            } else if (e.code === 'Escape' && !this.chatPanel.classList.contains('hidden')) {
+            } else if (e.code === 'Escape' && this.chatPanel && !this.chatPanel.classList.contains('hidden')) {
                 e.preventDefault();
                 this.toggleChatPanel(false);
             }

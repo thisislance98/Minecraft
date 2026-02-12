@@ -14,18 +14,6 @@ async function executeInBrowser(browser, fn, ...args) {
 }
 
 /**
- * Print entity summary
- */
-export function printEntities(entities) {
-    console.log(chalk.blue('\n═══ Entities ═══'));
-    console.log(`Total: ${entities.count}`);
-    console.log(chalk.cyan('By Type:'));
-    for (const [type, count] of Object.entries(entities.byType)) {
-        console.log(`  ${type}: ${count}`);
-    }
-}
-
-/**
  * Break a block at specific world coordinates (or in front of player)
  */
 export async function breakBlock(browser, x, y, z) {
@@ -343,18 +331,6 @@ export async function setGravity(browser, multiplier) {
         game.gravityMultiplier = mult;
         return { success: true, gravity: mult };
     }, multiplier);
-}
-
-/**
- * Get current gravity multiplier
- */
-export async function getGravity(browser) {
-    return await executeInBrowser(browser, () => {
-        const game = window.__VOXEL_GAME__;
-        if (!game) return { error: 'Game not ready' };
-
-        return { gravity: game.gravityMultiplier ?? 1.0 };
-    });
 }
 
 /**

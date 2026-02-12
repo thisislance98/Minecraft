@@ -17,6 +17,7 @@ import { destinationRoutes } from './routes/destinations';
 import { announcementRoutes } from './routes/announcements';
 import { worldRoutes } from './routes/worlds';
 import { aiRoutes } from './routes/ai';
+import { testRoutes, initTestRoutes } from './routes/test';
 import { auth } from './config'; // Initialize config
 import { worldManagementService } from './services/WorldManagementService';
 import { worldPersistence } from './services/WorldPersistence';
@@ -75,6 +76,7 @@ app.use('/api/destinations', destinationRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/worlds', worldRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/test', testRoutes);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -97,6 +99,9 @@ export const io = new Server(httpServer, {
         methods: ["GET", "POST"]
     }
 });
+
+// Initialize test routes with Socket.IO
+initTestRoutes(io);
 
 // ============ Few-Shot AI Setup ============
 const wssAI = new WebSocketServer({ noServer: true });

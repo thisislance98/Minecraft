@@ -186,6 +186,8 @@ export class DebugPanel {
     }
 
     bindEvents() {
+        if (!this.container) return;
+
         // Tab Switching
         this.container.querySelectorAll('.debug-tab').forEach(btn => {
             btn.addEventListener('click', () => {

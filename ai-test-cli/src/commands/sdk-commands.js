@@ -13,6 +13,22 @@ async function executeInBrowser(browser, fn, ...args) {
     return await browser.evaluate(fn, ...args);
 }
 
+/**
+ * Create and register an SDK object
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {Object} config - Object configuration { name, scripts: [{ type, ...options }] }
+ * @returns {Object} Result with registration info
+ *
+ * Example config:
+ * {
+ *   name: "fire_wand",
+ *   scripts: [
+ *     { type: "mesh", parts: [{ type: "cylinder", size: [0.1, 0.8], color: 0x5c4033 }] },
+ *     { type: "item", icon: "<svg>...</svg>", category: "tool" },
+ *     { type: "shooter", speed: 25, cooldown: 500 }
+ *   ]
+ * }
+ */
 export async function sdkCreate(browser, config) {
     return await executeInBrowser(browser, (cfg) => {
         const vw = window.VoxelWorld;

@@ -146,10 +146,21 @@ export class FewShotAI {
 
         if (response.tool_calls && response.tool_calls.length > 0) {
             const toolCall = response.tool_calls[0];
-            return {
-                tool: toolCall.function.name,
-                args: JSON.parse(toolCall.function.arguments || '{}')
-            };
+            try {
+                console.log('[FewShotAI] Raw tool arguments:', toolCall.function.arguments);
+                return {
+                    tool: toolCall.function.name,
+                    args: JSON.parse(toolCall.function.arguments || '{}')
+                };
+            } catch (parseError) {
+                console.error('[FewShotAI] Failed to parse tool arguments:', toolCall.function.arguments);
+                console.error('[FewShotAI] Parse error:', parseError.message);
+                // Return empty args to continue execution
+                return {
+                    tool: toolCall.function.name,
+                    args: {}
+                };
+            }
         }
 
         // If no tool was called, treat as chat
@@ -163,9 +174,13 @@ export class FewShotAI {
         const prompt = getCreaturePrompt(description, context);
 
         const response = await this.callOpenRouter(prompt, description, null);
+        console.log('[FewShotAI] Raw creature response:', response.content?.substring(0, 500));
+        console.log('[FewShotAI] Response has content?', !!response.content, 'Length:', response.content?.length);
+        console.log('[FewShotAI] Response keys:', Object.keys(response));
         const code = this.extractCode(response.content);
 
         if (!code) {
+            console.error('[FewShotAI] Failed to extract code. Response object:', JSON.stringify(response).substring(0, 1000));
             return { success: false, type: 'error', error: 'Failed to generate creature code' };
         }
 
@@ -336,7 +351,7 @@ export class FewShotAI {
             model: this.model,
             messages,
             temperature: 0.7,
-            max_tokens: 4096
+            max_tokens: 20000
         };
 
         if (tools && tools.length > 0) {
@@ -361,6 +376,10 @@ export class FewShotAI {
         }
 
         const data = await response.json();
+        console.log('[FewShotAI] API Response data keys:', Object.keys(data));
+        console.log('[FewShotAI] API Response choices:', data.choices?.length);
+        console.log('[FewShotAI] API Response message keys:', Object.keys(data.choices?.[0]?.message || {}));
+        console.log('[FewShotAI] API Response content length:', data.choices?.[0]?.message?.content?.length);
         return data.choices[0].message;
     }
 

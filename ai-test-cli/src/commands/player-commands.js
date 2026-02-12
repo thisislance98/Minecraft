@@ -14,26 +14,6 @@ async function executeInBrowser(browser, fn, ...args) {
 }
 
 /**
- * GameCommands - General-purpose game commands for CLI testing
- * 
- * Provides functions to interact with the game client through Puppeteer:
- * - Inventory management
- * - Item usage
- * - Player state
- * - Entity inspection
- * - Dynamic content verification
- */
-
-import chalk from 'chalk';
-
-/**
- * Execute a command in the browser and return the result
- */
-async function executeInBrowser(browser, fn, ...args) {
-    return await browser.evaluate(fn, ...args);
-}
-
-/**
  * Get player position
  */
 export async function getPlayerPosition(browser) {
@@ -184,20 +164,6 @@ export async function monitorGroundState(browser, durationMs = 3000, intervalMs 
         transitionCount: transitions.length,
         samples: samples.slice(-20) // Last 20 samples for debugging
     };
-}
-
-/**
- * Get player health info
- */
-export async function getPlayerHealth(browser) {
-    return await executeInBrowser(browser, () => {
-        const game = window.__VOXEL_GAME__;
-        if (!game?.player) return { error: 'Game not ready' };
-        return {
-            health: game.player.health,
-            maxHealth: game.player.maxHealth
-        };
-    });
 }
 
 /**

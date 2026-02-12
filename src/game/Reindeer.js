@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Animal } from './Animals.js';
+import { Animal } from './entities/animals-legacy/Animal.js';
 
 export class Reindeer extends Animal {
     constructor(game, x, y, z) {

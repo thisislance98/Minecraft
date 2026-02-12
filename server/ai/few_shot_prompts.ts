@@ -25,8 +25,8 @@ export function getRouterSystemPrompt() {
    - Examples: "give me a fire sword", "create a healing potion", "make a magic staff"
 
 3. **create_structure** - For building structures in the world
-   - Use when: user wants to build something with blocks
-   - Examples: "build a house", "make a tower", "create a bridge"
+   - Use when: user wants to build something with blocks, stairs, walls, floors, additions
+   - Examples: "build a house", "make a tower", "create a bridge", "add stairs", "make spiral stairs"
 
 4. **spawn_existing** - For spawning existing creature types
    - Use for known creatures: Pig, Cow, Sheep, Chicken, Wolf, Dragon, Robot, Bunny
@@ -39,14 +39,16 @@ export function getRouterSystemPrompt() {
 6. **set_blocks** - For simple block placements (not structures)
    - Examples: "place a stone block", "clear this area"
 
-7. **chat** - For general conversation, questions, help
-   - Examples: "what can you do?", "hello", "help me"
+7. **chat** - For greetings and questions ONLY
+   - ONLY use for: "hello", "what can you do?", "help"
+   - Do NOT use chat for any building/creation requests
 
-## Rules
-- ALWAYS call a tool, never just respond with text for action requests
-- Choose the MOST SPECIFIC tool for the request
-- If unsure between create_creature and spawn_existing, prefer create_creature for custom requests
-- For structures, always use create_structure (not set_blocks) unless it's just 1-2 blocks`;
+## CRITICAL RULES
+- NEVER ask clarifying questions - just make creative decisions and BUILD
+- If the user says "just make it up" or gives vague instructions, BE CREATIVE and build something
+- ALWAYS call create_structure for ANY building-related request (stairs, walls, additions, modifications)
+- When in doubt, CREATE something rather than asking questions
+- The user wants ACTION, not conversation`;
 }
 
 // ============================================================
@@ -222,17 +224,19 @@ export function getStructurePrompt(userRequest: string, context: any) {
 
     return `You are creating a STRUCTURE for a voxel game by placing blocks.
 
-## CRITICAL RULES
-1. Generate a list of blocks to place
-2. Position RELATIVE to player (they are at playerPosition)
-3. Place structures in FRONT of player (positive X direction from player)
-4. Use only available block types
+## CRITICAL RULES - YOU MUST FOLLOW THESE
+1. ALWAYS generate JavaScript code - NEVER ask questions or give explanations
+2. If the request is vague, make creative decisions yourself
+3. Position RELATIVE to player (they are at playerPosition)
+4. Place structures in FRONT of player (positive X direction from player)
+5. Use only available block types
+6. DO NOT include any text outside the code block - ONLY return code
 
 ## Available Block Types
 ${availableBlocks.join(', ')}
 
 ## Output Format
-Return a JavaScript code block that generates an array of blocks:
+Return ONLY a JavaScript code block - no explanations, no questions:
 \`\`\`javascript
 // Structure: [Your structure name]
 const px = Math.floor(playerPosition.x) + 5; // 5 blocks in front
@@ -252,6 +256,7 @@ return blocks;
 - Leave door openings (3 blocks high, 1-2 wide)
 - Add windows with 'glass' blocks
 - Use 'air' to create hollow interiors
+- For spiral stairs: use a loop with sin/cos to place blocks in a spiral pattern
 
 ## SIMILAR WORKING EXAMPLES
 ${examples.map((ex, i) => `
@@ -271,8 +276,9 @@ Looking Direction: Forward (+Z relative to player)
 
 ## YOUR TASK
 Generate JavaScript code that creates an array of block placements.
+If the request is vague or says "make it up", be creative and build something interesting!
 The code will be executed with playerPosition available.
-Return ONLY the JavaScript code block.`;
+Return ONLY the JavaScript code block - no other text.`;
 }
 
 // ============================================================

@@ -20,7 +20,7 @@ export class FewShotSession extends BaseAISession {
     private ai: FewShotAI | null = null;
 
     constructor(ws: WebSocket, req: IncomingMessage) {
-        const defaultModel = process.env.FEWSHOT_MODEL || 'anthropic/claude-3-haiku';
+        const defaultModel = process.env.FEWSHOT_MODEL || 'anthropic/claude-sonnet-4.5';
         super(ws, req, defaultModel);
     }
 
@@ -199,6 +199,11 @@ export class FewShotSession extends BaseAISession {
         const { code, data } = result;
         const className = data?.className || 'CustomCreature';
 
+        // Send the generated code to the UI for display
+        if (code) {
+            this.send('code', { code, language: 'javascript', description: `${className} creature code` });
+        }
+
         // Save the creature
         const saveResult = await saveCreature({
             name: className,
@@ -210,26 +215,35 @@ export class FewShotSession extends BaseAISession {
 
         if (saveResult.success) {
             this.send('token', { text: `I created a new creature called **${className}**!\n\nLet me spawn it for you...` });
-
-            // Spawn the creature in front of the player
-            const spawnResult = await this.executeClientTool('spawn_creature', {
-                type: className,
-                count: 1
-            });
-
-            if (spawnResult?.success) {
-                this.send('token', { text: `\n\n${className} has been spawned in front of you!` });
-            } else {
-                this.send('token', { text: `\n\nThe creature was created but I couldn't spawn it: ${spawnResult?.error}` });
-            }
+        } else if (saveResult.error?.includes('already exists')) {
+            // Creature already exists - that's fine, we can still spawn it
+            this.send('token', { text: `**${className}** already exists in this world. Let me spawn one for you...` });
         } else {
             this.send('token', { text: `I tried to create a creature but encountered an error: ${saveResult.error}` });
+            return; // Don't try to spawn if there was a real error
+        }
+
+        // Spawn the creature in front of the player
+        const spawnResult = await this.executeClientTool('spawn_creature', {
+            type: className,
+            count: 1
+        });
+
+        if (spawnResult?.success) {
+            this.send('token', { text: `\n\n${className} has been spawned in front of you!` });
+        } else {
+            this.send('token', { text: `\n\nCouldn't spawn the creature: ${spawnResult?.error}` });
         }
     }
 
     private async handleItemResult(result: any) {
         const { code, icon, data } = result;
         const className = data?.className || 'CustomItem';
+
+        // Send the generated code to the UI for display
+        if (code) {
+            this.send('code', { code, language: 'javascript', description: `${className} item code` });
+        }
 
         // Extract item ID from the code
         const itemIdMatch = code.match(/super\s*\(\s*['"]([^'"]+)['"]/);

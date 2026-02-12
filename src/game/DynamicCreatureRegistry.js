@@ -71,6 +71,13 @@ export function registerDynamicCreature(definition) {
         AnimalClasses[name] = CreatureClass;
         DynamicCreatures[name] = definition;
 
+        // Also add to game's allowedAnimalTypes so it's visible
+        const game = window.__VOXEL_GAME__;
+        if (game && game.allowedAnimalTypes) {
+            game.allowedAnimalTypes.add(name);
+            console.log(`[DynamicCreatureRegistry] ✅ Added ${name} to allowedAnimalTypes`);
+        }
+
         console.log(`[DynamicCreatureRegistry] ✅ Registered creature: ${name}`);
         return true;
     } catch (e) {

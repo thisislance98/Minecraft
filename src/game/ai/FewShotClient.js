@@ -364,21 +364,24 @@ export class FewShotClient {
         const { blocks } = args;
         console.log(`[FewShotClient] Setting ${blocks?.length || 0} blocks`);
 
-        if (!this.game.world) {
-            return { error: 'World not available' };
+        if (!this.game) {
+            return { error: 'Game not available' };
         }
 
         try {
             for (const block of blocks) {
                 const { x, y, z, id } = block;
                 if (id === 'air' || id === null) {
-                    this.game.world.removeBlock(x, y, z);
+                    // Use game.setBlock with null to remove block
+                    this.game.setBlock(x, y, z, null);
                 } else {
-                    this.game.world.setBlock(x, y, z, id);
+                    // Use game.setBlock directly (not game.world.setBlock)
+                    this.game.setBlock(x, y, z, id);
                 }
             }
             return { success: true, count: blocks.length };
         } catch (e) {
+            console.error('[FewShotClient] Error setting blocks:', e);
             return { error: e.message };
         }
     }

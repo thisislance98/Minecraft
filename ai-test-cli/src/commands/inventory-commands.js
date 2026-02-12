@@ -14,18 +14,6 @@ async function executeInBrowser(browser, fn, ...args) {
 }
 
 /**
- * Get player position
- */
-export async function getPlayerPosition(browser) {
-    return await executeInBrowser(browser, () => {
-        const game = window.__VOXEL_GAME__;
-        if (!game?.player) return null;
-        const pos = game.player.position;
-        return { x: pos.x, y: pos.y, z: pos.z };
-    });
-}
-
-/**
  * Get player's current held item
  */
 export async function getHeldItem(browser) {
@@ -35,31 +23,6 @@ export async function getHeldItem(browser) {
         const slot = game.inventoryManager.getSelectedItem();
         return slot ? { item: slot.item, count: slot.count, type: slot.type } : null;
     });
-}
-
-/**
- * Get player's current held item
- */
-export async function getHeldItem(browser) {
-    return await executeInBrowser(browser, () => {
-        const game = window.__VOXEL_GAME__;
-        if (!game?.inventoryManager) return null;
-        const slot = game.inventoryManager.getSelectedItem();
-        return slot ? { item: slot.item, count: slot.count, type: slot.type } : null;
-    });
-}
-
-/**
- * Give an item to the player
- */
-export async function giveItem(browser, itemName, count = 1) {
-    return await executeInBrowser(browser, (name, cnt) => {
-        const game = window.__VOXEL_GAME__;
-        if (!game?.inventoryManager) return { error: 'Game not ready' };
-
-        const success = game.inventoryManager.addItem(name, cnt, 'item');
-        return { success, item: name, count: cnt };
-    }, itemName, count);
 }
 
 /**
@@ -185,22 +148,6 @@ export async function closeInventory(browser) {
         const isOpen = game?.inventory?.isInventoryOpen ||
                        !document.getElementById('inventory-screen')?.classList.contains('hidden');
         return { success: true, inventoryClosed: !isOpen };
-    });
-}
-
-/**
- * Attack the nearest entity (left-click action)
- */
-export async function attack(browser) {
-    await browser.page.mouse.click(640, 360, { button: 'left' });
-    await new Promise(r => setTimeout(r, 100));
-
-    return await executeInBrowser(browser, () => {
-        const game = window.__VOXEL_GAME__;
-        return {
-            success: true,
-            action: 'attack'
-        };
     });
 }
 
@@ -512,22 +459,6 @@ export function printItemInfo(info) {
 }
 
 /**
- * Simulate right-click (use item)
- */
-export async function rightClick(browser, x = 400, y = 300) {
-    await browser.page.mouse.click(x, y, { button: 'right' });
-    return { clicked: 'right', x, y };
-}
-
-/**
- * Simulate left-click (primary action)
- */
-export async function leftClick(browser, x = 400, y = 300) {
-    await browser.page.mouse.click(x, y, { button: 'left' });
-    return { clicked: 'left', x, y };
-}
-
-/**
  * Get all registered item classes
  */
 export async function getRegisteredItems(browser) {
@@ -537,20 +468,6 @@ export async function getRegisteredItems(browser) {
         return {
             all: Object.keys(ItemClasses),
             dynamic: Object.keys(DynamicItems)
-        };
-    });
-}
-
-/**
- * Get all registered creature classes
- */
-export async function getRegisteredCreatures(browser) {
-    return await executeInBrowser(browser, () => {
-        const AnimalClasses = window.AnimalClasses || {};
-        const DynamicCreatures = window.DynamicCreatures || {};
-        return {
-            all: Object.keys(AnimalClasses),
-            dynamic: Object.keys(DynamicCreatures)
         };
     });
 }

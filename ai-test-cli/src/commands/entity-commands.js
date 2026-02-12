@@ -50,19 +50,6 @@ export function printEntities(entities) {
 }
 
 /**
- * Teleport player to position
- */
-export async function teleportPlayer(browser, x, y, z) {
-    return await executeInBrowser(browser, (x, y, z) => {
-        const game = window.__VOXEL_GAME__;
-        if (!game?.player) return { error: 'Game not ready' };
-
-        game.player.position.set(x, y, z);
-        return { teleported: true, position: { x, y, z } };
-    }, x, y, z);
-}
-
-/**
  * Spawn a creature at player's position
  */
 export async function spawnCreature(browser, creatureType, count = 1) {
@@ -156,20 +143,6 @@ export async function spawnCreatureAt(browser, creatureType, x, y, z) {
 }
 
 /**
- * Get all registered item classes
- */
-export async function getRegisteredItems(browser) {
-    return await executeInBrowser(browser, () => {
-        const ItemClasses = window.ItemClasses || {};
-        const DynamicItems = window.DynamicItems || {};
-        return {
-            all: Object.keys(ItemClasses),
-            dynamic: Object.keys(DynamicItems)
-        };
-    });
-}
-
-/**
  * Get all registered creature classes
  */
 export async function getRegisteredCreatures(browser) {
@@ -184,19 +157,6 @@ export async function getRegisteredCreatures(browser) {
 }
 
 /**
- * Check if an item class is registered
- */
-export async function isItemRegistered(browser, itemName) {
-    return await executeInBrowser(browser, (name) => {
-        const ItemClasses = window.ItemClasses || {};
-        return {
-            registered: name in ItemClasses,
-            isDynamic: name in (window.DynamicItems || {})
-        };
-    }, itemName);
-}
-
-/**
  * Check if a creature class is registered
  */
 export async function isCreatureRegistered(browser, creatureName) {
@@ -207,32 +167,6 @@ export async function isCreatureRegistered(browser, creatureName) {
             isDynamic: name in (window.DynamicCreatures || {})
         };
     }, creatureName);
-}
-
-/**
- * Check if a creature class is registered
- */
-export async function isCreatureRegistered(browser, creatureName) {
-    return await executeInBrowser(browser, (name) => {
-        const AnimalClasses = window.AnimalClasses || {};
-        return {
-            registered: name in AnimalClasses,
-            isDynamic: name in (window.DynamicCreatures || {})
-        };
-    }, creatureName);
-}
-
-/**
- * Get all creature registration errors (for debugging AI-generated creatures)
- */
-export async function getCreatureErrors(browser) {
-    return await executeInBrowser(browser, () => {
-        const errors = window.DynamicCreatureErrors || {};
-        return {
-            count: Object.keys(errors).length,
-            errors: errors
-        };
-    });
 }
 
 /**
@@ -542,6 +476,17 @@ export async function detectAround(browser, radius = 50) {
     }, radius);
 }
 
+/**
+ * Get all objects visible in the player's view frustum
+ * Uses the camera's frustum to determine what the player can currently see
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {Object} options - Options for visibility check
+ * @param {number} options.maxDistance - Maximum distance to check (default: 100)
+ * @param {boolean} options.includeAnimals - Include animals/entities (default: true)
+ * @param {boolean} options.includeChunks - Include terrain chunks (default: false)
+ * @param {boolean} options.checkOcclusion - Check line-of-sight occlusion (default: false)
+ * @returns {Object} Object with visible entities, counts, and player view info
+ */
 export async function getObjectsInView(browser, options = {}) {
     return await executeInBrowser(browser, (opts) => {
         const game = window.__VOXEL_GAME__;
@@ -607,6 +552,16 @@ export async function getObjectsInView(browser, options = {}) {
     }, options);
 }
 
+/**
+ * Verify that a specific entity type is visible to the player
+ * Useful for testing if AI-created objects appear correctly
+ * @param {Object} browser - Puppeteer browser instance
+ * @param {string} entityType - Entity type name to look for (e.g., 'Slime', 'Wolf')
+ * @param {Object} options - Additional options
+ * @param {number} options.maxDistance - Maximum distance to check (default: 50)
+ * @param {number} options.minCount - Minimum number expected (default: 1)
+ * @returns {Object} Verification result with found status and details
+ */
 export async function verifyEntityVisible(browser, entityType, options = {}) {
     const { maxDistance = 50, minCount = 1 } = options;
 

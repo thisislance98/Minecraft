@@ -55,6 +55,17 @@ export class Environment {
         // World-specific environment state
         this.currentWorld = 'earth';
 
+        // Meteor shower state
+        this.meteorShowerActive = false;
+        this.meteorShowerTimer = 0;
+        this.meteorShowerDuration = 0;
+        this.meteorShowerSpawnTimer = 0;
+        this.meteorShowerCooldown = 0;      // nights remaining before next shower can trigger
+        this.meteorShowerIntensity = 0;      // 0-1, ramps up/down
+        this.wasNight = false;
+        this.meteorShowerCheckedThisNight = false;
+        this.nightCount = 0;                 // tracks nights elapsed
+
         // Alien world moons (multiple moons for crystal/lava worlds)
         this.alienMoons = [];
 
@@ -182,11 +193,11 @@ export class Environment {
             this.createDistantPlanets(preset.distantPlanets);
             // Hide Earth's moon and sun in deep space
             if (this.moonMesh) this.moonMesh.visible = false;
-            if (this.sunMesh) this.sunMesh.visible = false;
+            if (this.sunGroup) this.sunGroup.visible = false;
         } else {
             this.clearDistantPlanets();
             // Restore sun visibility when leaving space
-            if (this.sunMesh) this.sunMesh.visible = true;
+            if (this.sunGroup) this.sunGroup.visible = true;
         }
 
         // Handle nebula effect
@@ -298,8 +309,15 @@ export class Environment {
         this.sunLight.target.position.copy(playerPos);
         this.sunLight.target.updateMatrixWorld();
 
-        if (this.sunMesh) {
-            this.sunMesh.position.copy(this.sunLight.position);
+        // Position sun group closer to player (within camera far plane of 1000)
+        if (this.sunGroup) {
+            const sunVisualDistance = 500; // Well within camera far plane (1000)
+            const sunDirection = new THREE.Vector3(x, y, z).normalize();
+            this.sunGroup.position.set(
+                playerPos.x + sunDirection.x * sunVisualDistance,
+                playerPos.y + sunDirection.y * sunVisualDistance,
+                playerPos.z + sunDirection.z * sunVisualDistance
+            );
         }
 
         // Update shadow camera far plane based on altitude to ensure ground is shadowed
@@ -317,6 +335,9 @@ export class Environment {
         if (this.shootingStarGroup) {
             this.shootingStarGroup.position.copy(playerPos);
         }
+        if (this.meteorGroup) {
+            this.meteorGroup.position.copy(playerPos);
+        }
 
         // Update intensity and colors
         const sunAboveHorizon = Math.max(0, Math.sin(angle));
@@ -327,6 +348,11 @@ export class Environment {
         const isSunUp = sunAboveHorizon > 0.01;
         this.sunLight.castShadow = isSunUp && this.shadowsEnabled;
         this.sunLight.visible = isSunUp;
+
+        // Show/hide sun mesh and glow based on whether sun is above horizon
+        if (this.sunGroup) {
+            this.sunGroup.visible = isSunUp;
+        }
 
         // Moon Logic
         if (this.moonMesh) {
@@ -345,8 +371,14 @@ export class Environment {
                 const moonY = Math.sin(moonAngle) * distance;
                 const moonZ = Math.sin(moonAngle * 0.5) * distance * 0.2;
 
-                // Fixed Moon Position at Y=1000 (0, 1000, 0)
-                this.moonMesh.position.set(0, 1000, 0);
+                // Position moon mesh within camera far plane (like sun)
+                const moonVisualDistance = 900;
+                const moonDirection = new THREE.Vector3(moonX, moonY, moonZ).normalize();
+                this.moonMesh.position.set(
+                    playerPos.x + moonDirection.x * moonVisualDistance,
+                    playerPos.y + moonDirection.y * moonVisualDistance,
+                    playerPos.z + moonDirection.z * moonVisualDistance
+                );
                 this.moonMesh.lookAt(playerPos);
 
                 // Update Moon Light
@@ -459,6 +491,9 @@ export class Environment {
 
         // Update shooting stars
         this.updateShootingStars(dt);
+
+        // Update meteor showers
+        this.updateMeteorShower(dt);
 
         // Update alien world moons
         this.updateAlienMoons(playerPos);
@@ -588,7 +623,8 @@ export class Environment {
             uniforms: uniforms,
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
-            side: THREE.BackSide
+            side: THREE.BackSide,
+            depthWrite: false
         });
 
         this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
@@ -681,6 +717,64 @@ export class Environment {
 
             this.shootingStars.push(star);
             this.shootingStarGroup.add(line);
+        }
+
+        // Meteor shower pool (15 meteors with longer trails)
+        this.meteors = [];
+        this.meteorGroup = new THREE.Group();
+        this.meteorGroup.visible = false;
+        this.scene.add(this.meteorGroup);
+
+        const maxMeteors = 15;
+        const meteorColorTypes = ['white', 'orange', 'bluewhite', 'green'];
+
+        for (let i = 0; i < maxMeteors; i++) {
+            const trailLength = 30;
+            const positions = new Float32Array(trailLength * 3);
+            const colors = new Float32Array(trailLength * 3);
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.LineBasicMaterial({
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.95,
+                blending: THREE.AdditiveBlending
+            });
+
+            const line = new THREE.Line(geometry, material);
+            line.visible = false;
+
+            const meteor = {
+                mesh: line,
+                active: false,
+                position: new THREE.Vector3(),
+                velocity: new THREE.Vector3(),
+                trailPositions: [],
+                trailLength: trailLength,
+                life: 0,
+                maxLife: 0,
+                colorType: meteorColorTypes[i % meteorColorTypes.length]
+            };
+
+            this.meteors.push(meteor);
+            this.meteorGroup.add(line);
+        }
+
+        // Impact light pool (5 PointLights for ground flashes)
+        this.meteorImpacts = [];
+        for (let i = 0; i < 5; i++) {
+            const light = new THREE.PointLight(0xff8833, 0, 100);
+            light.visible = false;
+            this.scene.add(light);
+            this.meteorImpacts.push({
+                light: light,
+                active: false,
+                life: 0,
+                maxLife: 0.3
+            });
         }
     }
 
@@ -784,6 +878,282 @@ export class Environment {
         }
     }
 
+    // ==========================================
+    // METEOR SHOWER SYSTEM
+    // ==========================================
+
+    spawnMeteor() {
+        // Find an inactive meteor
+        const meteor = this.meteors.find(m => !m.active);
+        if (!meteor) return;
+
+        // Random starting position on the sky dome (broad coverage)
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI * 0.5 + 0.05; // Upper hemisphere
+        const radius = 1800;
+
+        meteor.position.set(
+            radius * Math.sin(phi) * Math.cos(theta),
+            radius * Math.cos(phi),
+            radius * Math.sin(phi) * Math.sin(theta)
+        );
+
+        // Faster speed than normal shooting stars (500-800 vs 300-500)
+        const speed = 500 + Math.random() * 300;
+        const dirTheta = theta + Math.PI * 0.3 + Math.random() * 0.4;
+        const dirPhi = phi + Math.PI * 0.2 + Math.random() * 0.3;
+
+        meteor.velocity.set(
+            Math.sin(dirPhi) * Math.cos(dirTheta) * speed,
+            -Math.abs(Math.cos(dirPhi)) * speed * 0.5,
+            Math.sin(dirPhi) * Math.sin(dirTheta) * speed
+        );
+
+        // Initialize trail
+        meteor.trailPositions = [];
+        for (let i = 0; i < meteor.trailLength; i++) {
+            meteor.trailPositions.push(meteor.position.clone());
+        }
+
+        // Assign random color type
+        const colorTypes = ['white', 'orange', 'bluewhite', 'green'];
+        meteor.colorType = colorTypes[Math.floor(Math.random() * colorTypes.length)];
+
+        meteor.life = 0;
+        meteor.maxLife = 1.0 + Math.random() * 1.5; // 1.0-2.5 seconds
+        meteor.active = true;
+        meteor.mesh.visible = true;
+    }
+
+    updateMeteorShower(dt) {
+        if (!this.meteorGroup) return;
+
+        // Early return if weather effects are disabled
+        if (this.game.weatherSystem && this.game.weatherSystem.enabled === false) {
+            this.meteorGroup.visible = false;
+            return;
+        }
+
+        // Earth-only: suppress in other worlds
+        if (this.currentWorld !== 'earth') {
+            this.meteorGroup.visible = false;
+            return;
+        }
+
+        const isNight = this.isNight();
+
+        // Night transition detection
+        if (isNight && !this.wasNight) {
+            // Dusk: just entered night
+            this.meteorShowerCheckedThisNight = false;
+            this.nightCount++;
+
+            // Decrement cooldown
+            if (this.meteorShowerCooldown > 0) {
+                this.meteorShowerCooldown--;
+            }
+        }
+        if (!isNight && this.wasNight) {
+            // Dawn: just left night - end any active shower
+            if (this.meteorShowerActive) {
+                this.meteorShowerActive = false;
+                this.meteorShowerIntensity = 0;
+            }
+        }
+        this.wasNight = isNight;
+
+        if (!isNight) {
+            this.meteorGroup.visible = false;
+            return;
+        }
+
+        this.meteorGroup.visible = true;
+
+        // Check if we should trigger a meteor shower this night
+        if (!this.meteorShowerActive && !this.meteorShowerCheckedThisNight && this.meteorShowerCooldown <= 0) {
+            this.meteorShowerCheckedThisNight = true;
+            if (Math.random() < 0.15) { // 15% chance per night
+                this.meteorShowerActive = true;
+                this.meteorShowerTimer = 0;
+                this.meteorShowerDuration = 30 + Math.random() * 30; // 30-60 seconds
+                this.meteorShowerSpawnTimer = 0;
+                this.meteorShowerIntensity = 0;
+                this.meteorShowerCooldown = 3; // 3-night gap before next possible shower
+
+                // Notify player
+                if (this.game.uiManager) {
+                    this.game.uiManager.showNotification('A meteor shower has begun!', 'info', 5000);
+                }
+                console.log('[Environment] Meteor shower started! Duration:', this.meteorShowerDuration.toFixed(1), 's');
+            }
+        }
+
+        // Update active meteor shower
+        if (this.meteorShowerActive) {
+            this.meteorShowerTimer += dt;
+
+            // Intensity ramp: 5s up, 5s down
+            const rampUp = 5;
+            const rampDown = 5;
+            if (this.meteorShowerTimer < rampUp) {
+                this.meteorShowerIntensity = this.meteorShowerTimer / rampUp;
+            } else if (this.meteorShowerTimer > this.meteorShowerDuration - rampDown) {
+                this.meteorShowerIntensity = Math.max(0, (this.meteorShowerDuration - this.meteorShowerTimer) / rampDown);
+            } else {
+                this.meteorShowerIntensity = 1.0;
+            }
+
+            // End shower when duration is reached
+            if (this.meteorShowerTimer >= this.meteorShowerDuration) {
+                this.meteorShowerActive = false;
+                this.meteorShowerIntensity = 0;
+                console.log('[Environment] Meteor shower ended');
+            }
+
+            // Spawn meteors based on intensity
+            // Spawn interval: 0.8s at low intensity -> 0.3s at peak
+            const spawnInterval = 0.8 - this.meteorShowerIntensity * 0.5;
+            this.meteorShowerSpawnTimer += dt;
+            if (this.meteorShowerSpawnTimer >= spawnInterval) {
+                this.meteorShowerSpawnTimer = 0;
+                this.spawnMeteor();
+            }
+        }
+
+        // Update active meteors (regardless of shower active, to let existing ones finish)
+        for (const meteor of this.meteors) {
+            if (!meteor.active) continue;
+
+            meteor.life += dt;
+
+            if (meteor.life >= meteor.maxLife) {
+                meteor.active = false;
+                meteor.mesh.visible = false;
+
+                // 30% chance of ground impact
+                if (Math.random() < 0.3) {
+                    this.triggerMeteorImpact(meteor);
+                }
+                continue;
+            }
+
+            // Move the meteor
+            meteor.position.add(meteor.velocity.clone().multiplyScalar(dt));
+
+            // Update trail
+            meteor.trailPositions.pop();
+            meteor.trailPositions.unshift(meteor.position.clone());
+
+            // Update geometry with color based on type
+            const positions = meteor.mesh.geometry.attributes.position.array;
+            const colors = meteor.mesh.geometry.attributes.color.array;
+
+            for (let i = 0; i < meteor.trailLength; i++) {
+                const pos = meteor.trailPositions[i];
+                positions[i * 3] = pos.x;
+                positions[i * 3 + 1] = pos.y;
+                positions[i * 3 + 2] = pos.z;
+
+                const t = i / meteor.trailLength;
+                const fadeOut = meteor.life / meteor.maxLife;
+                const alpha = (1 - t) * (1 - fadeOut * 0.7);
+
+                // Per-type colors
+                let r, g, b;
+                switch (meteor.colorType) {
+                    case 'orange':
+                        r = 1.0 * alpha;
+                        g = (0.6 - t * 0.3) * alpha;
+                        b = (0.1 - t * 0.1) * alpha;
+                        break;
+                    case 'bluewhite':
+                        r = (0.7 - t * 0.3) * alpha;
+                        g = (0.8 - t * 0.3) * alpha;
+                        b = 1.0 * alpha;
+                        break;
+                    case 'green':
+                        r = (0.3 - t * 0.2) * alpha;
+                        g = 1.0 * alpha;
+                        b = (0.4 - t * 0.3) * alpha;
+                        break;
+                    default: // white
+                        r = 1.0 * alpha;
+                        g = (1.0 - t * 0.2) * alpha;
+                        b = (1.0 - t * 0.5) * alpha;
+                        break;
+                }
+
+                colors[i * 3] = r;
+                colors[i * 3 + 1] = g;
+                colors[i * 3 + 2] = b;
+            }
+
+            meteor.mesh.geometry.attributes.position.needsUpdate = true;
+            meteor.mesh.geometry.attributes.color.needsUpdate = true;
+        }
+
+        // Update impact lights
+        this.updateMeteorImpacts(dt);
+    }
+
+    triggerMeteorImpact(meteor) {
+        // Find an inactive impact light
+        const impact = this.meteorImpacts.find(imp => !imp.active);
+        if (!impact) return;
+
+        // Convert sky-dome position to world coordinates (add player position)
+        const playerPos = this.game.player ? this.game.player.position : new THREE.Vector3();
+        const worldX = playerPos.x + meteor.position.x * 0.1; // Scale down from sky dome
+        const worldZ = playerPos.z + meteor.position.z * 0.1;
+
+        // Get ground height
+        let groundY = 30; // default
+        if (this.game.worldGen && this.game.worldGen.getTerrainHeight) {
+            groundY = this.game.worldGen.getTerrainHeight(worldX, worldZ) || 30;
+        }
+
+        // Activate impact light
+        impact.light.position.set(worldX, groundY + 2, worldZ);
+        impact.light.color.setHex(0xff8833);
+        impact.light.intensity = 3;
+        impact.light.distance = 100;
+        impact.light.visible = true;
+        impact.active = true;
+        impact.life = 0;
+
+        // Spawn particles if particle system available
+        if (this.game.worldParticleSystem && this.game.worldParticleSystem.spawnEffect) {
+            this.game.worldParticleSystem.spawnEffect(
+                { x: worldX, y: groundY + 1, z: worldZ },
+                'explosion',
+                {
+                    count: 15,
+                    colors: [0xff8833, 0xffaa44, 0xff6600],
+                    speed: 3,
+                    life: 0.5
+                }
+            );
+        }
+    }
+
+    updateMeteorImpacts(dt) {
+        for (const impact of this.meteorImpacts) {
+            if (!impact.active) continue;
+
+            impact.life += dt;
+            if (impact.life >= impact.maxLife) {
+                impact.active = false;
+                impact.light.visible = false;
+                impact.light.intensity = 0;
+                continue;
+            }
+
+            // Fade out over lifetime
+            const progress = impact.life / impact.maxLife;
+            impact.light.intensity = 3 * (1 - progress);
+        }
+    }
+
     createClouds() {
         this.clouds = new THREE.Group();
         const cloudCount = 20;
@@ -840,13 +1210,48 @@ export class Environment {
     }
 
     createSun() {
-        const sunGeo = new THREE.SphereGeometry(60, 32, 32);
+        // Sun group holds the core sun + glow sprites
+        this.sunGroup = new THREE.Group();
+
+        // Core sun sphere
+        const sunGeo = new THREE.SphereGeometry(40, 32, 32);
         const sunMat = new THREE.MeshBasicMaterial({
-            color: 0xffffaa, // Warm yellow
-            fog: false // Sun shouldn't be affected by fog
+            color: 0xffee88,
+            fog: false
         });
         this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
-        this.scene.add(this.sunMesh);
+        this.sunMesh.renderOrder = 1; // Render after sky
+        this.sunGroup.add(this.sunMesh);
+
+        // Sun glow sprite (soft halo around the sun)
+        const glowCanvas = document.createElement('canvas');
+        glowCanvas.width = 256;
+        glowCanvas.height = 256;
+        const ctx = glowCanvas.getContext('2d');
+        const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+        gradient.addColorStop(0, 'rgba(255, 255, 200, 1.0)');
+        gradient.addColorStop(0.2, 'rgba(255, 238, 136, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(255, 200, 50, 0.3)');
+        gradient.addColorStop(1, 'rgba(255, 200, 50, 0.0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 256, 256);
+
+        const glowTexture = new THREE.CanvasTexture(glowCanvas);
+        const glowMat = new THREE.SpriteMaterial({
+            map: glowTexture,
+            color: 0xffffcc,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            fog: false,
+            depthWrite: false
+        });
+        this.sunGlow = new THREE.Sprite(glowMat);
+        this.sunGlow.scale.set(200, 200, 1);
+        this.sunGlow.renderOrder = 1;
+        this.sunGroup.add(this.sunGlow);
+
+        this.scene.add(this.sunGroup);
     }
 
     createMoon() {

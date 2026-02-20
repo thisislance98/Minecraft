@@ -425,6 +425,7 @@ export class SpawnManager {
     }
 
     spawnPack(AnimalClass, packSizeRange, baseX, baseZ, rng) {
+        const FLYING_TYPES = ['Birds', 'Eagle', 'Bee', 'Butterflies', 'Firefly', 'Mosquitoes'];
         const [minSize, maxSize] = packSizeRange;
         const count = minSize + Math.floor(rng.next() * (maxSize - minSize + 1));
         const worldGen = this.game.worldGen;
@@ -451,6 +452,13 @@ export class SpawnManager {
                 const treePos = findTreeSpawnPosition(this.game, baseX, baseZ, terrainY);
                 if (treePos) {
                     this.createAnimal(AnimalClass, treePos.x, treePos.y, treePos.z, false, childSeed);
+                }
+            } else if (FLYING_TYPES.includes(AnimalClass.name)) {
+                // Flying creatures spawn above terrain - no ground snapping needed
+                const flyHeight = 3 + rng.next() * 8; // 3-11 blocks above terrain
+                const y = terrainY + flyHeight;
+                if (y > worldGen.seaLevel) {
+                    this.createAnimal(AnimalClass, x, y, z, false, childSeed);
                 }
             } else {
                 const y = terrainY + 1;
@@ -490,14 +498,18 @@ export class SpawnManager {
             const terrainY = this.game.worldGen.getTerrainHeight(x, z);
 
             if (groundY === null) {
-                console.warn(`[SpawnManager] Failed to find ground for ${AnimalClass.name} at ${x.toFixed(1)}, ${z.toFixed(1)}`);
-                return null;
+                // Fallback to terrain height if chunk blocks aren't loaded yet
+                if (terrainY > this.game.worldGen.seaLevel) {
+                    spawnY = terrainY + 1;
+                } else {
+                    return null;
+                }
+            } else {
+                if (Math.abs(groundY - terrainY) > 3) {
+                    console.log(`[SpawnManager] ${AnimalClass.name} ground adjusted: terrain=${terrainY.toFixed(1)} -> actual=${groundY}`);
+                }
+                spawnY = groundY;
             }
-
-            if (Math.abs(groundY - terrainY) > 3) {
-                console.log(`[SpawnManager] ${AnimalClass.name} ground adjusted: terrain=${terrainY.toFixed(1)} -> actual=${groundY}`);
-            }
-            spawnY = groundY;
         }
 
         console.log(`[SpawnManager] Creating ${AnimalClass.name} at final position (${x.toFixed(1)}, ${spawnY.toFixed(1)}, ${z.toFixed(1)})`);
@@ -520,102 +532,19 @@ export class SpawnManager {
     // ============ Special Initial Spawns ============
 
     spawnKangaroosNearPlayer() {
-        if (this.waitingForInitialSync) {
-            this._deferredKangarooSpawn = true;
-            return;
-        }
-        if (this.hasLoadedPersistedEntities) return;
-
-        const player = this.game.player;
-        const worldGen = this.game.worldGen;
-        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1001);
-        const count = 1 + Math.floor(rng.next() * 2);
-
-        for (let i = 0; i < count; i++) {
-            const angle = rng.next() * Math.PI * 2;
-            const distance = 10 + rng.next() * 15;
-            const x = player.position.x + Math.cos(angle) * distance;
-            const z = player.position.z + Math.sin(angle) * distance;
-            const y = worldGen.getTerrainHeight(x, z) + 1;
-
-            if (y > worldGen.seaLevel + 1 && AnimalClasses.Kangaroo) {
-                this.createAnimal(AnimalClasses.Kangaroo, x, y, z, true, rng.next());
-            }
-        }
+        // Archived — no creatures to spawn
     }
 
     spawnPugasusNearPlayer() {
-        if (this.waitingForInitialSync || this.hasLoadedPersistedEntities) return;
-
-        const player = this.game.player;
-        const worldGen = this.game.worldGen;
-        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1002);
-        const count = 1;
-
-        for (let i = 0; i < count; i++) {
-            const angle = rng.next() * Math.PI * 2;
-            const distance = 8 + rng.next() * 10;
-            const x = player.position.x + Math.cos(angle) * distance;
-            const z = player.position.z + Math.sin(angle) * distance;
-            const y = worldGen.getTerrainHeight(x, z) + 1;
-
-            if (y > worldGen.seaLevel + 1 && AnimalClasses.Pugasus) {
-                this.createAnimal(AnimalClasses.Pugasus, x, y, z, true, rng.next());
-            }
-        }
+        // Archived — no creatures to spawn
     }
 
     spawnSnowmenNearPlayer() {
-        if (this.waitingForInitialSync || this.hasLoadedPersistedEntities) return;
-
-        const player = this.game.player;
-        const worldGen = this.game.worldGen;
-        const biome = worldGen.getBiome(player.position.x, player.position.z);
-        if (biome !== 'SNOW') return;
-
-        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1003);
-        const count = 2 + Math.floor(rng.next() * 2);
-
-        for (let i = 0; i < count; i++) {
-            const angle = rng.next() * Math.PI * 2;
-            const distance = 10 + rng.next() * 15;
-            const x = player.position.x + Math.cos(angle) * distance;
-            const z = player.position.z + Math.sin(angle) * distance;
-            const y = worldGen.getTerrainHeight(x, z) + 1;
-
-            if (y > worldGen.seaLevel + 1 && AnimalClasses.Snowman) {
-                this.createAnimal(AnimalClasses.Snowman, x, y, z, true, rng.next());
-            }
-        }
+        // Archived — no creatures to spawn
     }
 
     spawnAvatarPlantsNearPlayer() {
-        if (this.waitingForInitialSync || this.hasLoadedPersistedEntities) return;
-
-        const player = this.game.player;
-        const worldGen = this.game.worldGen;
-        const biome = worldGen.getBiome(player.position.x, player.position.z);
-        if (!['PLAINS', 'FOREST', 'JUNGLE'].includes(biome)) return;
-
-        const rng = SeededRandom.fromSeeds(this.game.worldSeed, 1004);
-        const plantTypes = ['HelicopterPlant', 'ShyPlant', 'HummingBlossom', 'SporeCloud'];
-
-        for (const plantType of plantTypes) {
-            if (!AnimalClasses[plantType]) continue;
-            const count = 2 + Math.floor(rng.next() * 3);
-
-            for (let i = 0; i < count; i++) {
-                const angle = rng.next() * Math.PI * 2;
-                const distance = 15 + rng.next() * 25;
-                const x = player.position.x + Math.cos(angle) * distance;
-                const z = player.position.z + Math.sin(angle) * distance;
-                const y = worldGen.getTerrainHeight(x, z) + 1;
-
-                if (y > worldGen.seaLevel + 1) {
-                    this.createAnimal(AnimalClasses[plantType], x, y, z, true, rng.next());
-                }
-            }
-        }
+        // Archived — no creatures to spawn
     }
 
     // ============ Debug Functions ============

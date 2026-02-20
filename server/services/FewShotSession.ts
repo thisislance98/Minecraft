@@ -7,8 +7,8 @@
 import { WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { BaseAISession } from './BaseAISession';
-import { saveCreature } from './DynamicCreatureService';
-import { saveItem } from './DynamicItemService';
+import { saveCreature, updateCreature } from './DynamicCreatureService';
+import { saveItem, updateItem } from './DynamicItemService';
 import { FewShotAI, availableModels } from '../ai/few_shot_system';
 
 const FEWSHOT_COST_TOKENS = 2; // Minimal charge for few-shot approach
@@ -18,6 +18,11 @@ export class FewShotSession extends BaseAISession {
 
     // AI system
     private ai: FewShotAI | null = null;
+
+    // Conversation history for context
+    private conversationHistory: Array<{ role: 'user' | 'assistant'; content: string; createdItem?: string }> = [];
+    private lastCreatedItem: { type: 'creature' | 'item' | 'structure'; name: string; code?: string } | null = null;
+    private readonly MAX_HISTORY_LENGTH = 10;
 
     constructor(ws: WebSocket, req: IncomingMessage) {
         const defaultModel = process.env.FEWSHOT_MODEL || 'anthropic/claude-sonnet-4.5';
@@ -33,6 +38,9 @@ export class FewShotSession extends BaseAISession {
             siteName: 'VoxelWorld'
         });
 
+        // Update pricing based on initial model
+        this.updatePricing(this.model);
+
         // Send available models to client
         this.send('models_list', { models: availableModels, current: this.model });
     }
@@ -40,7 +48,7 @@ export class FewShotSession extends BaseAISession {
     protected async handleMessage(msg: any): Promise<void> {
         switch (msg.type) {
             case 'input':
-                await this.handleInput(msg.text, msg.context, msg.settings);
+                await this.handleInput(msg.text, msg.context, msg.settings, msg.editContext, msg.category);
                 break;
             case 'tool_response':
                 this.handleToolResponse(msg.id, msg.result, msg.error);
@@ -80,7 +88,7 @@ export class FewShotSession extends BaseAISession {
         this.send('model_changed', { model: modelId });
     }
 
-    private async handleInput(text: string, context: any, settings?: any) {
+    private async handleInput(text: string, context: any, settings?: any, editContext?: any, category?: string) {
         await this.authReady;
 
         if (!this.hasApiKey()) {
@@ -109,7 +117,10 @@ export class FewShotSession extends BaseAISession {
         this.isInterrupted = false;
 
         // Send thinking indicator
-        this.send('thinking', { message: 'Processing your request...' });
+        const thinkingMsg = editContext?.isEdit
+            ? `Editing ${editContext.type} "${editContext.name}"...`
+            : 'Processing your request...';
+        this.send('thinking', { message: thinkingMsg });
 
         try {
             // Process the request through the FewShot AI
@@ -133,14 +144,29 @@ export class FewShotSession extends BaseAISession {
             console.log(`[FewShot] Player position:`, playerPosition);
             console.log(`[FewShot] Target position (with ground level):`, targetPosition);
             console.log(`[FewShot] Player direction:`, playerDirection);
+            if (editContext?.isEdit) {
+                console.log(`[FewShot] Edit mode: ${editContext.type} "${editContext.name}"`);
+            }
 
-            const result = await this.ai.processRequest(text, {
+            // Add user message to history
+            this.conversationHistory.push({ role: 'user', content: text });
+
+            // Build the enhanced text prompt with edit context
+            let enhancedText = text;
+            if (editContext?.isEdit) {
+                enhancedText = `[EDIT MODE] I want to modify the existing ${editContext.type} named "${editContext.name}". Here is the current code:\n\n\`\`\`javascript\n${editContext.existingCode}\n\`\`\`\n\nThe user wants to: ${text}\n\nPlease update the code while keeping the same class name "${editContext.name}".`;
+            }
+
+            const result = await this.ai.processRequest(enhancedText, {
                 playerPosition,
                 targetPosition,  // Where structures should be placed (at correct ground level)
                 playerDirection,
                 worldName: context?.worldName || context?.worldId,
-                userId: this.userId || undefined
-            });
+                userId: this.userId || undefined,
+                conversationHistory: this.conversationHistory.slice(-this.MAX_HISTORY_LENGTH),
+                lastCreatedItem: this.lastCreatedItem,
+                editContext: editContext  // Pass edit context to AI
+            }, category || 'custom');
 
             console.log(`[FewShot] Result:`, result);
 
@@ -153,11 +179,11 @@ export class FewShotSession extends BaseAISession {
             // Handle each result type
             switch (result.type) {
                 case 'creature':
-                    await this.handleCreatureResult(result);
+                    await this.handleCreatureResult(result, editContext);
                     break;
 
                 case 'item':
-                    await this.handleItemResult(result);
+                    await this.handleItemResult(result, editContext);
                     break;
 
                 case 'structure':
@@ -184,10 +210,31 @@ export class FewShotSession extends BaseAISession {
                     this.send('token', { text: 'I processed your request but am not sure how to respond.' });
             }
 
+            // Send cost info if usage data is available
+            if (result.usage) {
+                const costInfo = this.calculateCost(
+                    result.usage.promptTokens,
+                    result.usage.completionTokens
+                );
+                this.send('cost_info', {
+                    inputTokens: costInfo.inputTokens,
+                    outputTokens: costInfo.outputTokens,
+                    cachedTokens: costInfo.cachedTokens,
+                    inputCostUSD: costInfo.inputCostUSD,
+                    outputCostUSD: costInfo.outputCostUSD,
+                    totalCostUSD: costInfo.totalCostUSD,
+                    model: this.model
+                });
+                console.log(`[FewShot] Cost: $${costInfo.totalCostUSD.toFixed(6)} (${costInfo.inputTokens} in / ${costInfo.outputTokens} out)`);
+            }
+
             this.send('complete', {});
 
-            // Deduct tokens (minimal for few-shot approach)
-            await this.deductTokens(FEWSHOT_COST_TOKENS, 'FewShot Generation');
+            // Deduct tokens based on actual usage or minimal fallback
+            const tokensToDeduct = result.usage
+                ? this.calculateCost(result.usage.promptTokens, result.usage.completionTokens).gameTokens
+                : FEWSHOT_COST_TOKENS;
+            await this.deductTokens(tokensToDeduct, 'FewShot Generation');
 
         } catch (e: any) {
             console.error('[FewShot] Error:', e);
@@ -195,50 +242,88 @@ export class FewShotSession extends BaseAISession {
         }
     }
 
-    private async handleCreatureResult(result: any) {
+    private async handleCreatureResult(result: any, editContext?: any) {
         const { code, data } = result;
         const className = data?.className || 'CustomCreature';
+        const isEdit = editContext?.isEdit && editContext?.type === 'creature';
 
         // Send the generated code to the UI for display
         if (code) {
             this.send('code', { code, language: 'javascript', description: `${className} creature code` });
         }
 
-        // Save the creature
-        const saveResult = await saveCreature({
-            name: className,
-            code: code,
-            description: `AI-generated creature`,
-            createdBy: this.userId || 'anonymous',
-            createdAt: Date.now()
-        }, this.currentWorldId);
+        let saveResult;
+        let responseText = '';
 
-        if (saveResult.success) {
-            this.send('token', { text: `I created a new creature called **${className}**!\n\nLet me spawn it for you...` });
-        } else if (saveResult.error?.includes('already exists')) {
-            // Creature already exists - that's fine, we can still spawn it
-            this.send('token', { text: `**${className}** already exists in this world. Let me spawn one for you...` });
+        if (isEdit) {
+            // Update existing creature
+            saveResult = await updateCreature(editContext.name, {
+                code: code,
+                description: `AI-modified creature`
+            }, this.currentWorldId);
+
+            if (saveResult.success) {
+                responseText = `I've updated the **${editContext.name}** creature!\n\nLet me spawn the updated version for you...`;
+                this.send('token', { text: responseText });
+            } else {
+                responseText = `I tried to update the creature but encountered an error: ${saveResult.error}`;
+                this.send('token', { text: responseText });
+                return;
+            }
         } else {
-            this.send('token', { text: `I tried to create a creature but encountered an error: ${saveResult.error}` });
-            return; // Don't try to spawn if there was a real error
+            // Save new creature
+            saveResult = await saveCreature({
+                name: className,
+                code: code,
+                description: `AI-generated creature`,
+                createdBy: this.userId || 'anonymous',
+                createdAt: Date.now()
+            }, this.currentWorldId);
+
+            if (saveResult.success) {
+                responseText = `I created a new creature called **${className}**!\n\nLet me spawn it for you...`;
+                this.send('token', { text: responseText });
+            } else if (saveResult.error?.includes('already exists')) {
+                // Creature already exists - that's fine, we can still spawn it
+                responseText = `**${className}** already exists in this world. Let me spawn one for you...`;
+                this.send('token', { text: responseText });
+            } else {
+                responseText = `I tried to create a creature but encountered an error: ${saveResult.error}`;
+                this.send('token', { text: responseText });
+                return; // Don't try to spawn if there was a real error
+            }
         }
+
+        // Track what was created for conversation context
+        const creatureName = isEdit ? editContext.name : className;
+        this.lastCreatedItem = { type: 'creature', name: creatureName, code };
 
         // Spawn the creature in front of the player
         const spawnResult = await this.executeClientTool('spawn_creature', {
-            type: className,
+            type: creatureName,
             count: 1
         });
 
         if (spawnResult?.success) {
-            this.send('token', { text: `\n\n${className} has been spawned in front of you!` });
+            responseText += `\n\n${creatureName} has been spawned in front of you!`;
+            this.send('token', { text: `\n\n${creatureName} has been spawned in front of you!` });
         } else {
+            responseText += `\n\nCouldn't spawn the creature: ${spawnResult?.error}`;
             this.send('token', { text: `\n\nCouldn't spawn the creature: ${spawnResult?.error}` });
         }
+
+        // Add assistant response to history
+        this.conversationHistory.push({
+            role: 'assistant',
+            content: responseText,
+            createdItem: creatureName
+        });
     }
 
-    private async handleItemResult(result: any) {
+    private async handleItemResult(result: any, editContext?: any) {
         const { code, icon, data } = result;
         const className = data?.className || 'CustomItem';
+        const isEdit = editContext?.isEdit && editContext?.type === 'item';
 
         // Send the generated code to the UI for display
         if (code) {
@@ -247,32 +332,62 @@ export class FewShotSession extends BaseAISession {
 
         // Extract item ID from the code
         const itemIdMatch = code.match(/super\s*\(\s*['"]([^'"]+)['"]/);
-        const itemId = itemIdMatch ? itemIdMatch[1] : className.replace(/Item$/, '').replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+        const itemName = isEdit ? editContext.name : className;
+        const itemId = itemIdMatch ? itemIdMatch[1] : itemName.replace(/Item$/, '').replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
 
-        // Save the item
-        const saveResult = await saveItem({
-            name: className,
-            code: code,
-            icon: icon || '',
-            description: `AI-generated item`
-        }, this.currentWorldId);
+        let saveResult;
 
-        if (saveResult.success) {
-            this.send('token', { text: `I created a new item called **${className}**!` });
+        if (isEdit) {
+            // Update existing item
+            saveResult = await updateItem(editContext.name, {
+                code: code,
+                icon: icon || editContext.existingIcon || '',
+                description: `AI-modified item`
+            }, this.currentWorldId);
 
-            // Give the item to the player
-            const giveResult = await this.executeClientTool('give_item', {
-                item: itemId,
-                count: 1
-            });
+            if (saveResult.success) {
+                this.send('token', { text: `I've updated the **${editContext.name}** item!` });
 
-            if (giveResult?.success) {
-                this.send('token', { text: `\n\nI've added ${className} to your inventory!` });
+                // Give the updated item to the player
+                const giveResult = await this.executeClientTool('give_item', {
+                    item: itemId,
+                    count: 1
+                });
+
+                if (giveResult?.success) {
+                    this.send('token', { text: `\n\nI've added the updated ${editContext.name} to your inventory!` });
+                } else {
+                    this.send('token', { text: `\n\nThe item was updated but I couldn't add it to your inventory: ${giveResult?.error}` });
+                }
             } else {
-                this.send('token', { text: `\n\nThe item was created but I couldn't add it to your inventory: ${giveResult?.error}` });
+                this.send('token', { text: `I tried to update the item but encountered an error: ${saveResult.error}` });
             }
         } else {
-            this.send('token', { text: `I tried to create an item but encountered an error: ${saveResult.error}` });
+            // Save new item
+            saveResult = await saveItem({
+                name: className,
+                code: code,
+                icon: icon || '',
+                description: `AI-generated item`
+            }, this.currentWorldId);
+
+            if (saveResult.success) {
+                this.send('token', { text: `I created a new item called **${className}**!` });
+
+                // Give the item to the player
+                const giveResult = await this.executeClientTool('give_item', {
+                    item: itemId,
+                    count: 1
+                });
+
+                if (giveResult?.success) {
+                    this.send('token', { text: `\n\nI've added ${className} to your inventory!` });
+                } else {
+                    this.send('token', { text: `\n\nThe item was created but I couldn't add it to your inventory: ${giveResult?.error}` });
+                }
+            } else {
+                this.send('token', { text: `I tried to create an item but encountered an error: ${saveResult.error}` });
+            }
         }
     }
 

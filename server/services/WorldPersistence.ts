@@ -40,6 +40,7 @@ class WorldPersistenceService {
 
     private flushPromise: Promise<void> | null = null;
     private isResetting: Map<string, boolean> = new Map(); // Per-world reset tracking
+    private hasWarnedDisabled = false; // Track whether we've warned about disabled persistence
 
     /**
      * Save a block change to Firebase RTDB
@@ -339,6 +340,81 @@ class WorldPersistenceService {
             console.error(`[WorldPersistence] Failed to get signs for world ${targetId}:`, error);
         }
         return result;
+    }
+
+    /**
+     * Flush all pending writes immediately.
+     * Cancels any pending timer, waits for any in-flight flush, then flushes remaining queues.
+     * Call this during graceful shutdown to prevent data loss.
+     */
+    async flush(): Promise<void> {
+        // Cancel any pending timer
+        if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = null;
+        }
+
+        // Wait for any in-flight flush to complete
+        if (this.flushPromise) {
+            await this.flushPromise;
+        }
+
+        // Flush any remaining queued writes
+        const totalPending = this.writeQueue.length + this.entityWriteQueue.length + this.signWriteQueue.length;
+        if (totalPending > 0) {
+            console.log(`[WorldPersistence] Flushing ${totalPending} pending writes (blocks: ${this.writeQueue.length}, entities: ${this.entityWriteQueue.length}, signs: ${this.signWriteQueue.length})`);
+            await this.flushWrites();
+            console.log('[WorldPersistence] Flush complete');
+        }
+    }
+
+    /**
+     * Check Firebase RTDB connectivity with a lightweight read.
+     * @returns Object with connected status and optional error message
+     */
+    async checkHealth(): Promise<{ connected: boolean; error?: string }> {
+        if (!realtimeDb) {
+            return { connected: false, error: 'Realtime Database not configured' };
+        }
+
+        try {
+            // Lightweight read to test connectivity — read the worlds root (just checks access)
+            await realtimeDb.ref('worlds').limitToFirst(1).get();
+            return { connected: true };
+        } catch (error: any) {
+            return { connected: false, error: error.message || 'Unknown error' };
+        }
+    }
+
+    /**
+     * Get pending write counts for monitoring/health checks.
+     */
+    getQueueStatus(): { blocks: number; entities: number; signs: number; total: number; isFlushing: boolean } {
+        const blocks = this.writeQueue.length;
+        const entities = this.entityWriteQueue.length;
+        const signs = this.signWriteQueue.length;
+        return {
+            blocks,
+            entities,
+            signs,
+            total: blocks + entities + signs,
+            isFlushing: this.flushPromise !== null
+        };
+    }
+
+    /**
+     * Log a warning once if persistence is disabled (RTDB not configured).
+     * Useful for callers that want to know if persistence silently failed.
+     */
+    warnIfDisabled(): boolean {
+        if (!realtimeDb) {
+            if (!this.hasWarnedDisabled) {
+                console.warn('[WorldPersistence] ⚠️  Firebase Realtime Database is not configured — world changes will NOT be persisted');
+                this.hasWarnedDisabled = true;
+            }
+            return true; // is disabled
+        }
+        return false; // is enabled
     }
 
     /**

@@ -20,8 +20,7 @@ export class InputManager {
             'KeyQ': 'DROP',
             'KeyF': 'INTERACT', // Kept for Interact
             'KeyC': 'CAMERA',
-            'AltLeft': 'VOICE',
-            'AltRight': 'VOICE',
+            'KeyV': 'VOICE',
         };
         this.lastSpaceTime = 0; // For double-jump detection
         this.isLocked = false;
@@ -124,10 +123,12 @@ export class InputManager {
             const aiChatInput = document.getElementById('chat-input');
             const merlinInput = document.getElementById('merlin-custom-input');
             const merlinFollowupInput = document.getElementById('task-followup-input');
+            const villagerChatInput = document.getElementById('villager-chat-input');
             if ((commInput && document.activeElement === commInput) ||
                 (aiChatInput && document.activeElement === aiChatInput) ||
                 (merlinInput && document.activeElement === merlinInput) ||
-                (merlinFollowupInput && document.activeElement === merlinFollowupInput)) return;
+                (merlinFollowupInput && document.activeElement === merlinFollowupInput) ||
+                (villagerChatInput && document.activeElement === villagerChatInput)) return;
 
             // Tab toggles chat open/closed
             if (e.code === 'Tab') {
@@ -315,6 +316,13 @@ export class InputManager {
                     }
 
                     // For all other items (including flying_broom), fall through to secondary action
+                }
+            }
+
+            // G for Treasure Hunt - blocked when panels open
+            if (e.code === 'KeyG' && !isPanelOpen && !this.game.agent.isChatOpen) {
+                if (this.game.treasureHuntManager) {
+                    this.game.treasureHuntManager.toggle();
                 }
             }
 

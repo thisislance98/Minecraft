@@ -338,9 +338,58 @@ export async function loadAllCreatures(): Promise<void> {
 
         // Note: World-specific creatures are loaded on-demand when players join a world
         // This avoids loading all creatures from all worlds at startup
-
     } catch (e) {
-        console.error('[DynamicCreatureService] Failed to load creatures:', e);
+        console.error('[DynamicCreatureService] Failed to load global creatures:', e);
+    }
+}
+
+/**
+ * Create or update a dynamic creature
+ */
+export async function createCreature(definition: CreatureDefinition): Promise<{ success: boolean; error?: string }> {
+    if (!db) return { success: false, error: 'No database connection' };
+
+    try {
+        const { name, worldId } = definition;
+
+        // Validate code first
+        const validation = validateCreatureCode(name, definition.code);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+
+        const data = {
+            ...definition,
+            createdAt: Date.now()
+        };
+
+        if (worldId && worldId !== 'global') {
+            await db.collection('worlds').doc(worldId).collection('creatures').doc(name).set(data);
+            creatureCache.set(getCacheKey(worldId, name), data);
+        } else {
+            await db.collection('dynamic_creatures').doc(name).set(data);
+            creatureCache.set(getCacheKey('global', name), data);
+        }
+
+        // Notify clients
+        if (io) {
+            // Determine room to broadcast to
+            // Global creatures go to everyone (or specific room if implemented)
+            // For now, let's just emit to everyone for global, or specific world room for world-scoped
+            // The client registry listens for 'creature_definition'
+            io.emit('creature_definition', {
+                name,
+                code: definition.code,
+                description: definition.description,
+                worldId
+            });
+        }
+
+        console.log(`[DynamicCreatureService] Created creature: ${name} (${worldId || 'global'})`);
+        return { success: true };
+    } catch (e: any) {
+        console.error(`[DynamicCreatureService] Failed to create creature ${definition.name}:`, e);
+        return { success: false, error: e.message };
     }
 }
 
@@ -388,4 +437,120 @@ export async function sendCreaturesToSocket(socket: any, worldId?: string): Prom
         })));
         console.log(`[DynamicCreatureService] Sent ${creatures.length} creature definitions to client (world: ${worldId || 'global'})`);
     }
+}
+
+/**
+ * Update an existing creature definition
+ * @param name The creature name to update
+ * @param updates Partial updates to apply
+ * @param worldId Optional world ID
+ */
+export async function updateCreature(
+    name: string,
+    updates: Partial<CreatureDefinition>,
+    worldId?: string
+): Promise<{ success: boolean; error?: string }> {
+    const effectiveWorldId = worldId || 'global';
+    const cacheKey = getCacheKey(effectiveWorldId, name);
+
+    // Check if exists
+    const existing = creatureCache.get(cacheKey);
+    if (!existing) {
+        return { success: false, error: `Creature '${name}' not found in world '${effectiveWorldId}'` };
+    }
+
+    // If code is being updated, validate it
+    if (updates.code) {
+        const validation = validateCreatureCode(name, updates.code);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+    }
+
+    try {
+        // Merge updates
+        const updatedCreature: CreatureDefinition = {
+            ...existing,
+            ...updates,
+            name, // Don't allow name change
+            worldId: effectiveWorldId
+        };
+
+        // Save to Firebase
+        if (db) {
+            if (effectiveWorldId === 'global') {
+                await db.collection('dynamic_creatures').doc(name).update({
+                    code: updatedCreature.code,
+                    description: updatedCreature.description
+                });
+            } else {
+                await db.collection('worlds').doc(effectiveWorldId)
+                    .collection('creatures').doc(name).update({
+                        code: updatedCreature.code,
+                        description: updatedCreature.description
+                    });
+            }
+        }
+
+        // Update cache
+        creatureCache.set(cacheKey, updatedCreature);
+
+        // Broadcast update to clients (they will replace the existing definition)
+        broadcastCreatureDefinition(updatedCreature, effectiveWorldId);
+
+        console.log(`[DynamicCreatureService] Updated creature: ${name} (world: ${effectiveWorldId})`);
+        return { success: true };
+    } catch (e: any) {
+        console.error('[DynamicCreatureService] Failed to update creature:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+/**
+ * Archive all creatures from dynamic_creatures to dynamic_creatures_archive
+ * Moves documents from the active collection to the archive collection,
+ * then deletes them from the active collection.
+ * @returns Summary of archived creatures
+ */
+export async function archiveAllCreatures(): Promise<{ archived: number; errors: string[] }> {
+    if (!db) {
+        return { archived: 0, errors: ['No database connection'] };
+    }
+
+    const errors: string[] = [];
+    let archived = 0;
+
+    try {
+        // Archive global creatures
+        const globalSnapshot = await db.collection('dynamic_creatures').get();
+        console.log(`[DynamicCreatureService] Archiving ${globalSnapshot.size} global creatures...`);
+
+        for (const doc of globalSnapshot.docs) {
+            try {
+                const data = doc.data();
+                // Copy to archive collection
+                await db.collection('dynamic_creatures_archive').doc(doc.id).set({
+                    ...data,
+                    archivedAt: Date.now()
+                });
+                // Delete from active collection
+                await db.collection('dynamic_creatures').doc(doc.id).delete();
+                archived++;
+                console.log(`[DynamicCreatureService] Archived: ${doc.id}`);
+            } catch (e: any) {
+                errors.push(`Failed to archive ${doc.id}: ${e.message}`);
+                console.error(`[DynamicCreatureService] Failed to archive ${doc.id}:`, e);
+            }
+        }
+
+        // Clear in-memory cache
+        creatureCache.clear();
+
+        console.log(`[DynamicCreatureService] Archive complete: ${archived} creatures archived, ${errors.length} errors`);
+    } catch (e: any) {
+        errors.push(`Archive failed: ${e.message}`);
+        console.error('[DynamicCreatureService] Archive failed:', e);
+    }
+
+    return { archived, errors };
 }

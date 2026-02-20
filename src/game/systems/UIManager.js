@@ -20,6 +20,7 @@ import { SpellUIManager } from './ui/SpellUIManager.js';
 import { MinigameUIManager } from './ui/MinigameUIManager.js';
 import { SignEditorManager } from './ui/SignEditorManager.js';
 import { SpaceshipUIManager } from './ui/SpaceshipUIManager.js';
+import { TreasureHuntUIManager } from '../ui/TreasureHuntUI.js';
 
 /**
  * UIManager centralizes all HUD/UI updates.
@@ -58,6 +59,7 @@ export class UIManager {
         this.minigameUIManager = new MinigameUIManager(game, this);
         this.signEditorManager = new SignEditorManager(game, this);
         this.spaceshipUIManager = new SpaceshipUIManager(game, this);
+        this.treasureHuntUIManager = new TreasureHuntUIManager(game, this);
 
         // Cache DOM elements (legacy - some still needed for direct access)
         this.fpsElement = document.getElementById('fps');
@@ -81,6 +83,11 @@ export class UIManager {
         // Wire up TaskManager to MerlinPanel
         if (window.merlinClient && window.merlinClient.taskManager) {
             this.merlinPanel.setTaskManager(window.merlinClient.taskManager);
+        }
+
+        // Wire up FewShotClient to MerlinPanel for model selection
+        if (window.fewShotClient) {
+            this.merlinPanel.setFewShotClient(window.fewShotClient);
         }
 
         // Feedback button
@@ -186,6 +193,70 @@ export class UIManager {
         if (window.spawnUI && window.spawnUI !== exclude) window.spawnUI.closePanel();
     }
 
+    /**
+     * Close all open panels/modals except the one specified.
+     * Ensures only one panel is open at a time.
+     * @param {string} exclude - Name of the panel to keep open (e.g., 'merlin', 'debug', 'inventory', 'spawn', 'settings', 'help')
+     */
+    closeAllPanels(exclude = null) {
+        // Merlin panel
+        if (exclude !== 'merlin' && this.merlinPanel && this.merlinPanel.isVisible) {
+            this.merlinPanel.hide();
+        }
+
+        // Debug panel
+        if (exclude !== 'debug' && this.debugPanel && this.debugPanel.isVisible) {
+            this.debugPanel.toggle();
+        }
+
+        // Inventory
+        if (exclude !== 'inventory' && this.game && this.game.gameState && this.game.gameState.flags.inventoryOpen) {
+            this.game.toggleInventory();
+        }
+
+        // Spawn UI
+        if (exclude !== 'spawn' && window.spawnUI && window.spawnUI.isOpen) {
+            window.spawnUI.closePanel();
+        }
+
+        // Settings modal
+        if (exclude !== 'settings') {
+            const settingsModal = document.getElementById('settings-modal');
+            if (settingsModal && !settingsModal.classList.contains('hidden')) {
+                settingsModal.classList.add('hidden');
+            }
+        }
+
+        // Help modal
+        if (exclude !== 'help') {
+            const helpModal = document.getElementById('help-modal');
+            if (helpModal && !helpModal.classList.contains('hidden')) {
+                helpModal.classList.add('hidden');
+            }
+        }
+
+        // Community UI
+        if (exclude !== 'community' && this.communityUI && this.communityUI.isOpen) {
+            this.communityUI.toggle();
+        }
+
+        // World Settings UI
+        if (exclude !== 'worldSettings' && window.worldSettingsUI && window.worldSettingsUI.isVisible) {
+            window.worldSettingsUI.hide();
+        }
+
+        // Feedback UI
+        if (exclude !== 'feedback' && window.feedbackUI && window.feedbackUI.isOpen) {
+            window.feedbackUI.close();
+        }
+
+        // Treasure Hunt modals
+        if (exclude !== 'treasureHunt' && this.treasureHuntUIManager) {
+            this.treasureHuntUIManager.hideDifficultyModal();
+            this.treasureHuntUIManager.hideCompletionScreen();
+        }
+    }
+
     showXboxUI() {
         if (this.minigameManager) {
             this.minigameManager.showXboxUI();
@@ -270,6 +341,12 @@ export class UIManager {
     createSignInputUI() { /* handled in signEditorManager.initialize() */ }
     showSignInput(callback, initialText) { this.signEditorManager.showSignInput(callback, initialText); }
     toggleSignInput(show) { this.signEditorManager.toggleSignInput(show); }
+
+    // Treasure Hunt UI Manager delegations
+    showTreasureHuntUI(visible) { this.treasureHuntUIManager.showHUD(visible); }
+    updateTreasureHuntUI(data) { this.treasureHuntUIManager.updateHUD(data); }
+    showTreasureHuntDifficultySelect(cb) { this.treasureHuntUIManager.showDifficultySelect(cb); }
+    showTreasureHuntComplete(time, diff, scores) { this.treasureHuntUIManager.showCompletionScreen(time, diff, scores); }
 
     // Spaceship UI Manager delegations
     showSpaceShipControls(visible) { this.spaceshipUIManager.showSpaceShipControls(visible); }
@@ -392,6 +469,7 @@ export class UIManager {
         this.minigameUIManager.cleanup();
         this.signEditorManager.cleanup();
         this.spaceshipUIManager.cleanup();
+        if (this.treasureHuntUIManager) this.treasureHuntUIManager.cleanup();
 
         // Cleanup direct elements
         if (this.feedbackBtn) this.feedbackBtn.remove();

@@ -5,11 +5,9 @@
 import express from 'express';
 import { ragLookup, classifyTask, summarizeRAGResult } from '../services/RAGTemplateService';
 import { getAllKnowledge, deleteAllKnowledge } from '../services/KnowledgeService';
-import { getItem, getAllItems } from '../services/DynamicItemService';
+import { getItem, getAllItems, saveItem } from '../services/DynamicItemService';
 import { FewShotAI, availableModels } from '../ai/few_shot_system';
-import { findBestCreatureExamples } from '../ai/examples/creatures';
-import { findBestItemExamples } from '../ai/examples/items';
-import { findBestStructureExamples } from '../ai/examples/structures';
+import { unifiedExampleIndex } from '../ai/examples/UnifiedExampleIndex';
 // Genesis system is on separate branch
 // import { generateScript } from '../services/GenesisService';
 
@@ -226,7 +224,7 @@ aiRoutes.get('/fewshot/models', (req, res) => {
  * POST /api/ai/fewshot/examples
  * Body: { prompt: string, category?: 'creature' | 'item' | 'structure' }
  */
-aiRoutes.post('/fewshot/examples', (req, res) => {
+aiRoutes.post('/fewshot/examples', async (req, res) => {
     try {
         const { prompt, category } = req.body;
 
@@ -251,17 +249,10 @@ aiRoutes.post('/fewshot/examples', (req, res) => {
             }
         }
 
-        switch (usedCategory) {
-            case 'creature':
-                examples = findBestCreatureExamples(prompt, 3);
-                break;
-            case 'item':
-                examples = findBestItemExamples(prompt, 3);
-                break;
-            case 'structure':
-                examples = findBestStructureExamples(prompt, 3);
-                break;
-        }
+        examples = await unifiedExampleIndex.search(prompt, {
+            category: usedCategory as 'creature' | 'item' | 'structure',
+            topK: 3
+        });
 
         res.json({
             success: true,
@@ -323,6 +314,25 @@ aiRoutes.post('/fewshot/test', async (req, res) => {
         });
     } catch (error: any) {
         console.error('[AI Routes] FewShot test error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * Save a custom item directly
+ * POST /api/ai/items/save
+ * Body: { name: string, code: string, icon: string, description?: string, worldId?: string }
+ */
+aiRoutes.post('/items/save', async (req, res) => {
+    try {
+        const { name, code, icon, description, worldId } = req.body;
+        if (!name || !code || !icon) {
+            return res.status(400).json({ error: 'Missing required fields: name, code, icon' });
+        }
+        const result = await saveItem({ name, code, icon, description }, worldId || 'global');
+        res.json(result);
+    } catch (error: any) {
+        console.error('[AI Routes] Save item error:', error);
         res.status(500).json({ error: error.message });
     }
 });

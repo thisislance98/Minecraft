@@ -234,7 +234,9 @@ export class DialogueManager {
         this.villagerChatBox.style.display = 'block';
 
         // Unlock pointer for typing
-        if (this.game.controls) {
+        if (this.game.inputManager) {
+            this.game.inputManager.unlock();
+        } else if (this.game.controls) {
             this.game.controls.unlock();
         }
 

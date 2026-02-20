@@ -1,4 +1,4 @@
-import { Villager } from '../game/entities/animals/Villager.js';
+import { Villager } from '../game/entities/animals-archive/Villager.js';
 // StaticLampost import removed
 import { Blocks } from '../game/core/Blocks.js';
 import { SeededRandom } from '../utils/SeededRandom.js';
@@ -986,6 +986,68 @@ export class StructureGenerator {
                 farmStructGen.game.scene.add(v.mesh);
             }
         }, 600);
+
+        // Generate a farm plot adjacent to the farmhouse
+        this.generateFarmPlot(x + w + 2, y, z - 2);
+    }
+
+    /**
+     * Farm Plot - Fenced crop field with farmland, water channels, and crops
+     * Placed adjacent to farmhouses
+     */
+    generateFarmPlot(x, y, z) {
+        const plotW = 9; // Width of the farm plot
+        const plotD = 7; // Depth of the farm plot
+
+        // Crop types to alternate in rows
+        const cropTypes = [Blocks.WHEAT, Blocks.CARROTS, Blocks.WHEAT, Blocks.CARROTS, Blocks.WHEAT];
+
+        // Ground / farmland base
+        for (let dx = 0; dx < plotW; dx++) {
+            for (let dz = 0; dz < plotD; dz++) {
+                // Water channel in the middle (dz === 3)
+                if (dz === 3) {
+                    this.game.setBlock(x + dx, y - 1, z + dz, Blocks.WATER, true, true);
+                } else {
+                    this.game.setBlock(x + dx, y - 1, z + dz, Blocks.FARMLAND, true, true);
+                }
+            }
+        }
+
+        // Plant crops on farmland rows (skip fence borders and water channel)
+        for (let dx = 1; dx < plotW - 1; dx++) {
+            let cropRow = 0;
+            for (let dz = 0; dz < plotD; dz++) {
+                if (dz === 3) continue; // Skip water channel
+                const cropType = cropTypes[cropRow % cropTypes.length];
+                this.game.setBlock(x + dx, y, z + dz, cropType, true, true);
+                cropRow++;
+            }
+        }
+
+        // Fence border around the plot
+        for (let dx = -1; dx <= plotW; dx++) {
+            this.game.setBlock(x + dx, y, z - 1, Blocks.FENCE, true, true);
+            this.game.setBlock(x + dx, y, z + plotD, Blocks.FENCE, true, true);
+        }
+        for (let dz = 0; dz < plotD; dz++) {
+            this.game.setBlock(x - 1, y, z + dz, Blocks.FENCE, true, true);
+            this.game.setBlock(x + plotW, y, z + dz, Blocks.FENCE, true, true);
+        }
+
+        // Gate opening in the fence (facing farmhouse)
+        this.game.setBlock(x - 1, y, z + 2, Blocks.AIR, true, true);
+        this.game.setBlock(x - 1, y, z + 4, Blocks.AIR, true, true);
+
+        // Hay bales at corners
+        this.game.setBlock(x, y, z - 1, Blocks.HAY_BALE, true, true);
+        this.game.setBlock(x + plotW - 1, y, z - 1, Blocks.HAY_BALE, true, true);
+        this.game.setBlock(x, y, z + plotD, Blocks.HAY_BALE, true, true);
+        this.game.setBlock(x + plotW - 1, y, z + plotD, Blocks.HAY_BALE, true, true);
+
+        // Pumpkins at two ends of the plot for variety
+        this.game.setBlock(x + 1, y, z + plotD, Blocks.PUMPKIN, true, true);
+        this.game.setBlock(x + plotW - 2, y, z + plotD, Blocks.PUMPKIN, true, true);
     }
 
     /**
@@ -1384,6 +1446,124 @@ export class StructureGenerator {
         // Bed
         this.game.setBlock(cx + 4, roomY + 1, cz, Blocks.BED, true, true);
 
+    }
+
+    /**
+     * Generate a volcano - a large cone-shaped mountain with a lava-filled crater
+     * @param {number} cx - Center X position
+     * @param {number} baseY - Ground level Y at center
+     * @param {number} cz - Center Z position
+     */
+    generateVolcano(cx, baseY, cz) {
+        console.log(`[StructureGenerator] Generating Volcano at ${cx}, ${baseY}, ${cz}`);
+
+        const rng = this.getPositionRng(cx, cz, 777);
+
+        // Volcano dimensions (vary slightly per volcano)
+        const baseRadius = 18 + Math.floor(rng.next() * 6);  // 18-23 blocks wide
+        const volcanoHeight = 28 + Math.floor(rng.next() * 8); // 28-35 blocks tall
+        const craterRadius = 4 + Math.floor(rng.next() * 3);   // 4-6 blocks crater opening
+        const craterDepth = 6 + Math.floor(rng.next() * 4);    // 6-9 blocks deep crater
+
+        // Build the cone from bottom to top
+        for (let y = 0; y <= volcanoHeight; y++) {
+            const progress = y / volcanoHeight; // 0 at base, 1 at peak
+            // Radius shrinks as we go up (cone shape)
+            const layerRadius = Math.floor(baseRadius * (1 - progress * 0.85));
+
+            for (let x = -layerRadius; x <= layerRadius; x++) {
+                for (let z = -layerRadius; z <= layerRadius; z++) {
+                    const dist = Math.sqrt(x * x + z * z);
+
+                    // Add noise-based surface variation for natural look
+                    const noiseHash = this.hashPosition(cx + x, cz + z, 550 + y);
+                    const noiseFactor = ((noiseHash % 1000) / 1000 - 0.5) * 2.5;
+                    const effectiveRadius = layerRadius + noiseFactor;
+
+                    if (dist > effectiveRadius) continue;
+
+                    // Check if we're in the crater zone (top portion, inside crater radius)
+                    const isCraterZone = y > volcanoHeight - craterDepth && dist < craterRadius;
+
+                    if (isCraterZone) {
+                        // Crater interior - fill with lava at the bottom
+                        if (y <= volcanoHeight - craterDepth + 2) {
+                            this.game.setBlock(cx + x, baseY + y, cz + z, Blocks.FIRE, true, true);
+                        }
+                        // Otherwise leave as air (hollow crater)
+                        continue;
+                    }
+
+                    // Determine block type based on depth and height
+                    const isShell = dist >= effectiveRadius - 2; // Outer 2 blocks
+                    const wy = baseY + y;
+
+                    let blockType;
+
+                    if (y >= volcanoHeight - 3) {
+                        // Crater rim - obsidian
+                        blockType = Blocks.OBSIDIAN;
+                    } else if (y >= volcanoHeight - craterDepth && dist < craterRadius + 2) {
+                        // Inner crater walls - ember blocks (glowing)
+                        blockType = Blocks.EMBER_BLOCK;
+                    } else if (progress > 0.7) {
+                        // Upper slopes - magma stone
+                        blockType = Blocks.MAGMA_STONE;
+                    } else if (progress > 0.4) {
+                        // Mid slopes - cobblestone mixed with magma
+                        const mixHash = this.hashPosition(cx + x, cz + z, 600 + y);
+                        blockType = (mixHash % 3 === 0) ? Blocks.MAGMA_STONE : Blocks.COBBLESTONE;
+                    } else {
+                        // Lower slopes - stone and cobblestone
+                        const mixHash = this.hashPosition(cx + x, cz + z, 650 + y);
+                        blockType = (mixHash % 4 === 0) ? Blocks.COBBLESTONE : Blocks.STONE;
+                    }
+
+                    this.game.setBlock(cx + x, wy, cz + z, blockType, true, true);
+                }
+            }
+        }
+
+        // Add lava flows down the sides (2-4 streams)
+        const numFlows = 2 + Math.floor(rng.next() * 3);
+        for (let f = 0; f < numFlows; f++) {
+            const flowAngle = rng.next() * Math.PI * 2;
+            const flowStartY = volcanoHeight - craterDepth + 1;
+            const flowLength = 10 + Math.floor(rng.next() * 12);
+
+            let fx = cx + Math.round(Math.cos(flowAngle) * (craterRadius + 1));
+            let fz = cz + Math.round(Math.sin(flowAngle) * (craterRadius + 1));
+            let fy = baseY + flowStartY;
+
+            for (let step = 0; step < flowLength; step++) {
+                // Place lava (fire) block
+                this.game.setBlock(fx, fy, fz, Blocks.FIRE, true, true);
+                // Also place ember blocks beside the flow for glow effect
+                this.game.setBlock(fx + 1, fy, fz, Blocks.EMBER_BLOCK, true, true);
+                this.game.setBlock(fx - 1, fy, fz, Blocks.EMBER_BLOCK, true, true);
+
+                // Flow outward and downward
+                fx += Math.round(Math.cos(flowAngle) * 1.2);
+                fz += Math.round(Math.sin(flowAngle) * 1.2);
+                // Descend 1 block every 1-2 steps
+                if (step % 2 === 0 || rng.next() > 0.5) {
+                    fy--;
+                }
+
+                // Stop if we reach ground level
+                if (fy <= baseY) break;
+            }
+        }
+
+        // Add glowstone "vents" around the crater rim for dramatic lighting
+        for (let i = 0; i < 6; i++) {
+            const ventAngle = (i / 6) * Math.PI * 2;
+            const ventX = cx + Math.round(Math.cos(ventAngle) * (craterRadius + 1));
+            const ventZ = cz + Math.round(Math.sin(ventAngle) * (craterRadius + 1));
+            this.game.setBlock(ventX, baseY + volcanoHeight - 1, ventZ, Blocks.GLOWSTONE, true, true);
+        }
+
+        console.log(`[StructureGenerator] Volcano complete: base=${baseRadius}, height=${volcanoHeight}, crater=${craterRadius}`);
     }
 
     /**

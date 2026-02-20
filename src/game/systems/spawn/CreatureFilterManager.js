@@ -5,34 +5,11 @@
  */
 
 // Mapping from creature display names to ambient manager property names
-const AMBIENT_MANAGER_MAP = {
-    'Bird': 'birdManager',
-    'Birds': 'birdManager',
-    'BirdManager': 'birdManager',
-    'Butterfly': 'butterflyManager',
-    'Butterflies': 'butterflyManager',
-    'ButterflyManager': 'butterflyManager',
-    'Pixie': 'pixieManager',
-    'Pixies': 'pixieManager',
-    'PixieManager': 'pixieManager',
-    'Fairy': 'pixieManager',
-    'Fairies': 'pixieManager',
-    'Bat': 'batManager',
-    'Bats': 'batManager',
-    'BatManager': 'batManager',
-    'Mosquito': 'mosquitoManager',
-    'Mosquitoes': 'mosquitoManager',
-    'MosquitoManager': 'mosquitoManager'
-};
+// NOTE: All ambient creatures archived. Re-add mappings as creatures are recreated.
+const AMBIENT_MANAGER_MAP = {};
 
 // Default counts for respawning ambient managers
-const AMBIENT_MANAGER_COUNTS = {
-    'birdManager': 5,
-    'butterflyManager': 10,
-    'pixieManager': 5,
-    'batManager': 8,
-    'mosquitoManager': 5
-};
+const AMBIENT_MANAGER_COUNTS = {};
 
 export class CreatureFilterManager {
     constructor(game, entityRegistry) {
@@ -216,61 +193,8 @@ export class CreatureFilterManager {
      * @param {string} managerName - The manager property name
      */
     respawnAmbientManager(managerName) {
-        const entityManager = this.game.entityManager;
-        if (!entityManager) return;
-
-        const count = AMBIENT_MANAGER_COUNTS[managerName] || 5;
-        console.log(`[CreatureFilterManager] Respawning ${managerName} with count ${count}`);
-
-        // Import the manager class dynamically based on name
-        try {
-            switch (managerName) {
-                case 'birdManager':
-                    import('../../entities/animals/Birds.js').then(module => {
-                        if (entityManager[managerName]) {
-                            entityManager[managerName].clear?.();
-                        }
-                        entityManager[managerName] = new module.BirdManager(this.game, count);
-                    });
-                    break;
-                case 'butterflyManager':
-                    import('../../entities/animals/Butterflies.js').then(module => {
-                        if (entityManager[managerName]) {
-                            entityManager[managerName].clear?.();
-                        }
-                        entityManager[managerName] = new module.ButterflyManager(this.game, count);
-                    });
-                    break;
-                case 'pixieManager':
-                    import('../../entities/animals/Pixies.js').then(module => {
-                        if (entityManager[managerName]) {
-                            entityManager[managerName].clear?.();
-                        }
-                        entityManager[managerName] = new module.PixieManager(this.game, count);
-                    });
-                    break;
-                case 'batManager':
-                    import('../../entities/animals/Bats.js').then(module => {
-                        if (entityManager[managerName]) {
-                            entityManager[managerName].clear?.();
-                        }
-                        entityManager[managerName] = new module.BatManager(this.game, count);
-                    });
-                    break;
-                case 'mosquitoManager':
-                    import('../../entities/animals/Mosquitoes.js').then(module => {
-                        if (entityManager[managerName]) {
-                            entityManager[managerName].clear?.();
-                        }
-                        entityManager[managerName] = new module.MosquitoManager(this.game, count);
-                    });
-                    break;
-                default:
-                    console.warn(`[CreatureFilterManager] Unknown manager: ${managerName}`);
-            }
-        } catch (e) {
-            console.error(`[CreatureFilterManager] Failed to respawn ${managerName}:`, e);
-        }
+        // All ambient creature managers archived — nothing to respawn
+        console.warn(`[CreatureFilterManager] Cannot respawn ${managerName}: creature archived`);
     }
 
     /**

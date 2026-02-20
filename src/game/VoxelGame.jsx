@@ -34,7 +34,6 @@ import { AssetManager } from './core/AssetManager.js';
 import { Environment } from './systems/Environment.js';
 
 import { WeatherSystem } from './systems/WeatherSystem.js';
-import { Dragon } from './entities/animals/Dragon.js';
 
 import { WorldParticleSystem } from './systems/WorldParticleSystem.js';
 import { SoundManager } from './systems/SoundManager.js';
@@ -48,9 +47,9 @@ import { WaterSystem } from './systems/WaterSystem.js';
 import { StoreUI } from './ui/StoreUI.js';
 import { SocketManager } from './systems/SocketManager.js';
 import { AnimalClasses } from './AnimalRegistry.js';
-import { Merlin } from './entities/animals/Merlin.js';
+import { Merlin } from './entities/animals-archive/Merlin.js';
 import { Xbox } from './entities/furniture/Xbox.js';
-import { Starfighter } from './entities/animals/Starfighter.js';
+import { Starfighter } from './entities/animals-archive/Starfighter.js';
 import { setItemManager } from './DynamicItemRegistry.js';
 
 import { SurvivalGameManager } from './systems/SurvivalGameManager.js';
@@ -62,6 +61,7 @@ import { DestinationManager } from './systems/DestinationManager.js';
 import { SpaceShipManager } from './systems/SpaceShipManager.js';
 import { SpaceStationManager } from './systems/SpaceStationManager.js';
 import { QuestSystem } from './systems/QuestSystem.js';
+import { TreasureHuntManager } from './systems/TreasureHuntManager.js';
 
 // Visual Improvements: Post-Processing
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -268,6 +268,7 @@ export class VoxelGame {
         this.AnimalClasses = AnimalClasses;
         this.parkourManager = new ParkourManager(this);
         this.questSystem = new QuestSystem(this);
+        this.treasureHuntManager = new TreasureHuntManager(this);
         this.updateTimeStop = (dt) => {
             if (this.gameState?.timers?.timeStop > 0) {
                 this.gameState.timers.timeStop -= dt;
@@ -384,10 +385,9 @@ export class VoxelGame {
         }
         this.updateBlockCount();
 
-        // Animals and Dragon spawning is deferred until initial world chunks are generated
+        // Animals spawning is deferred until initial world chunks are generated
         // (handled in processChunkQueue via _initialSpawnDone flag)
         this._initialSpawnDone = false;
-        this.dragon = null;
         this.merlin = null; // Merlin wizard companion
 
         // Projectiles
@@ -493,6 +493,12 @@ export class VoxelGame {
     toggleDebugPanel() {
         if (this.gameState.flags.inventoryOpen || (this.agent && this.agent.isChatOpen)) return;
 
+        // If about to open, close all other panels first
+        const willOpen = !(this.uiManager.debugPanel && this.uiManager.debugPanel.isVisible);
+        if (willOpen && this.uiManager && typeof this.uiManager.closeAllPanels === 'function') {
+            this.uiManager.closeAllPanels('debug');
+        }
+
         const isOpen = this.uiManager.toggleDebugPanel();
         if (isOpen) {
             this.inputManager.unlock();
@@ -555,12 +561,6 @@ export class VoxelGame {
             if (animal.group) {
                 animal.group.visible = visible;
             }
-        }
-
-        // Handle special entities not in animals array
-        // Dragon is stored separately
-        if (this.dragon && this.dragon.mesh) {
-            this.dragon.mesh.visible = this.creaturesVisible;
         }
 
         // BirdManager and MosquitoManager are in entityManager
@@ -871,15 +871,7 @@ export class VoxelGame {
         this.spawnManager.spawnAnimalsInArea(centerCX, centerCZ, 6);
     }
 
-    spawnDragon() {
-        const x = this.player.position.x + (Math.random() - 0.5) * 40;
-        const z = this.player.position.z + (Math.random() - 0.5) * 40;
-        const y = this.player.position.y + 35; // High in the sky
 
-        const seed = Math.random() * 0xFFFFFF; // Or derive from worldSeed
-        this.dragon = new Dragon(this, x, y, z, seed);
-        this.scene.add(this.dragon.mesh);
-    }
 
     /**
      * Spawn the Merlin wizard companion near the player
@@ -979,6 +971,10 @@ export class VoxelGame {
 
         this.gameState.flags.inventoryOpen = !this.gameState.flags.inventoryOpen;
         if (this.gameState.flags.inventoryOpen) {
+            // Close all other panels first (only one panel open at a time)
+            if (this.uiManager && typeof this.uiManager.closeAllPanels === 'function') {
+                this.uiManager.closeAllPanels('inventory');
+            }
             this.inventory.openInventory();
         } else {
             this.inventory.closeInventory();
@@ -2036,7 +2032,7 @@ export class VoxelGame {
                     this.spawnManager.spawnKangaroosNearPlayer();
                     this.spawnManager.spawnPugasusNearPlayer();
                     this.spawnManager.spawnSnowmenNearPlayer();
-                    this.spawnDragon();
+
                     // this.spawnMerlin(); // Disabled - wizard no longer spawns near player
                     this.spawnPlayerShip();
                 }
@@ -2493,6 +2489,17 @@ export class VoxelGame {
             // this.profiler.start('Physics');
             this.physicsManager.update();
             // this.profiler.end('Physics');
+
+            // Update held item (for items like Fishing Pole that need per-frame updates)
+            if (this.itemManager && this.inventoryManager) {
+                const selectedSlot = this.inventoryManager.getSelectedItem();
+                if (selectedSlot && selectedSlot.item) {
+                    const heldItem = this.itemManager.getItem(selectedSlot.item);
+                    if (heldItem && heldItem.onHeldUpdate) {
+                        heldItem.onHeldUpdate(this, this.player, deltaTime);
+                    }
+                }
+            }
         }
 
 
@@ -2646,6 +2653,7 @@ export class VoxelGame {
         if (this.survivalGameManager) this.survivalGameManager.update(deltaTime);
         if (this.parkourManager) this.parkourManager.update(deltaTime);
         if (this.escapeRoomManager) this.escapeRoomManager.update(deltaTime);
+        if (this.treasureHuntManager) this.treasureHuntManager.update(deltaTime);
 
         // Update orbiting spaceship
         if (this.spaceShipManager) this.spaceShipManager.update(deltaTime);
@@ -2658,17 +2666,6 @@ export class VoxelGame {
             // Check if player moved to a different planet and spawn creatures there
             if (this.spawnManager) {
                 this.spawnManager.checkWorldChange();
-            }
-        }
-
-        // Update Dragon
-        if (this.dragon) {
-            // Special handling for Dragon as it's single instance, not in list usually?
-            // Wait, this.dragon is just a property.
-            if (!this.safelyUpdateEntity(this.dragon, deltaTime)) {
-                console.warn('[Guard] Dragon crashed/lagged and was removed.');
-                this.scene.remove(this.dragon.mesh);
-                this.dragon = null;
             }
         }
 
@@ -2864,17 +2861,11 @@ export class VoxelGame {
         }
         this.animals = [];
 
-        if (this.dragon) {
-            if (this.dragon.dispose) this.dragon.dispose();
-            if (this.dragon.mesh) this.scene.remove(this.dragon.mesh);
-            this.dragon = null;
-        }
-
         if (this.entityManager) {
             this.entityManager.clearAll();
         }
 
-        console.log('Killed all animals, dragon, and ambient entities.');
+        console.log('Killed all animals and ambient entities.');
     }
 
     cleanupEntities() {

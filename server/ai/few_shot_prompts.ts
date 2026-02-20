@@ -1,62 +1,54 @@
 /**
  * Few-Shot AI Category Prompts
  * Each category has specific rules, examples, and validation requirements
+ *
+ * No router prompt — routing is done by the UI category buttons + semantic similarity for "custom".
+ * Each prompt tells the LLM to use the provided tool to submit its result.
+ *
+ * Skill files (.claude/skills/) are loaded at startup and injected into prompts
+ * to give the LLM full architectural context for each category.
  */
 
-import { findBestCreatureExamples, creatureExamples } from './examples/creatures.js';
-import { findBestItemExamples, itemExamples } from './examples/items.js';
-import { findBestStructureExamples, structureExamples, availableBlocks } from './examples/structures.js';
+import { availableBlocks } from './examples/structures';
+import { UnifiedExample } from './examples/UnifiedExampleIndex';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ============================================================
-// ROUTER PROMPT - Determines which tool to use
+// SKILL FILE LOADER
 // ============================================================
 
-export function getRouterSystemPrompt() {
-    return `You are Merlin, a wizard assistant in a voxel game. Analyze user requests and determine the appropriate action.
+const SKILLS_DIR = path.join(__dirname, '../../.claude/skills');
 
-## Available Tools
+// Cache loaded skill content (loaded once at startup)
+const skillCache: Record<string, string> = {};
 
-1. **create_creature** - For creating new living entities (animals, monsters, NPCs)
-   - Use when: user wants a creature, animal, monster, pet, NPC, mob
-   - Examples: "make a dragon", "create a friendly dog", "spawn a zombie"
+function loadSkill(filename: string): string {
+    if (skillCache[filename]) return skillCache[filename];
 
-2. **create_item** - For creating new items that go in inventory
-   - Use when: user wants a tool, weapon, consumable, wand, potion
-   - Examples: "give me a fire sword", "create a healing potion", "make a magic staff"
-
-3. **create_structure** - For building structures in the world
-   - Use when: user wants to build something with blocks, stairs, walls, floors, additions
-   - Examples: "build a house", "make a tower", "create a bridge", "add stairs", "make spiral stairs"
-
-4. **spawn_existing** - For spawning existing creature types
-   - Use for known creatures: Pig, Cow, Sheep, Chicken, Wolf, Dragon, Robot, Bunny
-   - Examples: "spawn 3 pigs", "summon a wolf"
-
-5. **give_existing** - For giving existing items
-   - Use for known items: wand, sword, bow, sign
-   - Examples: "give me a wand", "get me some wood"
-
-6. **set_blocks** - For simple block placements (not structures)
-   - Examples: "place a stone block", "clear this area"
-
-7. **chat** - For greetings and questions ONLY
-   - ONLY use for: "hello", "what can you do?", "help"
-   - Do NOT use chat for any building/creation requests
-
-## CRITICAL RULES
-- NEVER ask clarifying questions - just make creative decisions and BUILD
-- If the user says "just make it up" or gives vague instructions, BE CREATIVE and build something
-- ALWAYS call create_structure for ANY building-related request (stairs, walls, additions, modifications)
-- When in doubt, CREATE something rather than asking questions
-- The user wants ACTION, not conversation`;
+    try {
+        const filePath = path.join(SKILLS_DIR, filename);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        skillCache[filename] = content;
+        console.log(`[FewShotPrompts] Loaded skill: ${filename} (${content.length} chars)`);
+        return content;
+    } catch (e: any) {
+        console.warn(`[FewShotPrompts] Could not load skill ${filename}: ${e.message}`);
+        return '';
+    }
 }
+
+// Pre-load all skills at module init
+function getCreatureSkill(): string { return loadSkill('implementing-creatures.md'); }
+function getItemSkill(): string { return loadSkill('implementing-items.md'); }
+function getStructureSkill(): string { return loadSkill('implementing-structures.md'); }
 
 // ============================================================
 // CREATURE CREATION PROMPT
 // ============================================================
 
-export function getCreaturePrompt(userRequest: string, context: any) {
-    const examples = findBestCreatureExamples(userRequest, 2);
+export function getCreaturePrompt(userRequest: string, context: any, examples: UnifiedExample[] = []) {
+    const skill = getCreatureSkill();
 
     return `You are creating a CREATURE for a voxel game. Generate JavaScript code for a new Animal class.
 
@@ -93,7 +85,10 @@ export function getCreaturePrompt(userRequest: string, context: any) {
 Red: 0xFF0000, Green: 0x00FF00, Blue: 0x0000FF, Yellow: 0xFFFF00
 Orange: 0xFF8800, Purple: 0x8800FF, Pink: 0xFF88FF, Brown: 0x8B4513
 White: 0xFFFFFF, Black: 0x000000, Gray: 0x888888
-
+${skill ? `
+## SYSTEM ARCHITECTURE REFERENCE
+${skill}
+` : ''}
 ## SIMILAR WORKING EXAMPLES
 ${examples.map((ex, i) => `
 ### Example ${i + 1}: ${ex.name}
@@ -113,15 +108,15 @@ Generate a complete class that:
 3. Has a createBody() method with detailed THREE.js mesh construction
 4. Follows the patterns shown in the examples
 
-Return ONLY the JavaScript class code, no explanation.`;
+Use the **create_creature** tool to submit your result. Pass the className and the full class code.`;
 }
 
 // ============================================================
 // ITEM CREATION PROMPT
 // ============================================================
 
-export function getItemPrompt(userRequest: string, context: any) {
-    const examples = findBestItemExamples(userRequest, 2);
+export function getItemPrompt(userRequest: string, context: any, examples: UnifiedExample[] = []) {
+    const skill = getItemSkill();
 
     return `You are creating an ITEM for a voxel game. Generate JavaScript code for a new Item class.
 
@@ -185,7 +180,10 @@ class MyWand extends WandItem {
 - Simple shapes: rect, circle, ellipse, polygon, path
 - Colors should match the 3D mesh
 - Keep it recognizable at small sizes
-
+${skill ? `
+## SYSTEM ARCHITECTURE REFERENCE
+${skill}
+` : ''}
 ## SIMILAR WORKING EXAMPLES
 ${examples.map((ex, i) => `
 ### Example ${i + 1}: ${ex.name}
@@ -193,34 +191,27 @@ ${ex.description}
 \`\`\`javascript
 ${ex.code}
 \`\`\`
-SVG Icon:
+${ex.icon ? `SVG Icon:
 \`\`\`svg
 ${ex.icon}
-\`\`\`
+\`\`\`` : ''}
 `).join('\n')}
 
 ## USER REQUEST
 "${userRequest}"
 
 ## YOUR TASK
-Generate:
-1. A complete Item class with getMesh() method
-2. An SVG icon string
+Generate a complete Item class with getMesh() method AND an SVG icon string.
 
-Return as JSON:
-{
-    "className": "PascalCaseName",
-    "code": "class MyItem extends Item { ... }",
-    "icon": "<svg viewBox='0 0 64 64'>...</svg>"
-}`;
+Use the **create_item** tool to submit your result. Pass className, code, and icon.`;
 }
 
 // ============================================================
 // STRUCTURE CREATION PROMPT
 // ============================================================
 
-export function getStructurePrompt(userRequest: string, context: any) {
-    const examples = findBestStructureExamples(userRequest, 2);
+export function getStructurePrompt(userRequest: string, context: any, examples: UnifiedExample[] = []) {
+    const skill = getStructureSkill();
 
     return `You are creating a STRUCTURE for a voxel game by placing blocks.
 
@@ -236,7 +227,7 @@ export function getStructurePrompt(userRequest: string, context: any) {
 ${availableBlocks.join(', ')}
 
 ## Output Format
-Return ONLY a JavaScript code block - no explanations, no questions:
+Return JavaScript code that computes and returns a blocks array:
 \`\`\`javascript
 // Structure: [Your structure name]
 const px = Math.floor(playerPosition.x) + 5; // 5 blocks in front
@@ -257,7 +248,10 @@ return blocks;
 - Add windows with 'glass' blocks
 - Use 'air' to create hollow interiors
 - For spiral stairs: use a loop with sin/cos to place blocks in a spiral pattern
-
+${skill ? `
+## SYSTEM ARCHITECTURE REFERENCE
+${skill}
+` : ''}
 ## SIMILAR WORKING EXAMPLES
 ${examples.map((ex, i) => `
 ### Example ${i + 1}: ${ex.name}
@@ -278,7 +272,8 @@ Looking Direction: Forward (+Z relative to player)
 Generate JavaScript code that creates an array of block placements.
 If the request is vague or says "make it up", be creative and build something interesting!
 The code will be executed with playerPosition available.
-Return ONLY the JavaScript code block - no other text.`;
+
+Use the **create_structure** tool to submit your code.`;
 }
 
 // ============================================================

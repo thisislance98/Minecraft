@@ -72,10 +72,11 @@ export class TaskManager {
     /**
      * Create a new task and add to queue
      * @param {string} prompt - The task description/prompt
-     * @param {string} category - Task category (item, creature, fix, build, custom)
+     * @param {string} category - Task category (item, creature, fix, build, custom, edit)
+     * @param {object} editContext - Optional edit context when editing existing items/creatures
      * @returns {object} The created task
      */
-    createTask(prompt, category = 'custom') {
+    createTask(prompt, category = 'custom', editContext = null) {
         const taskId = this.generateTaskId();
         const task = {
             id: taskId,
@@ -86,13 +87,15 @@ export class TaskManager {
             startedAt: null,
             completedAt: null,
             response: '',
-            error: null
+            error: null,
+            editContext: editContext // Store edit context for editing existing items/creatures
         };
 
         this.tasks.set(taskId, task);
         this.taskQueue.push(taskId);
 
-        console.log(`[TaskManager] Created task ${taskId}: ${prompt.substring(0, 50)}...`);
+        const editInfo = editContext ? ` (editing ${editContext.type}: ${editContext.name})` : '';
+        console.log(`[TaskManager] Created task ${taskId}: ${prompt.substring(0, 50)}...${editInfo}`);
         this.notifyListeners('task_created', task);
 
         // Try to start next task if none running
@@ -149,22 +152,26 @@ export class TaskManager {
         const clientName = client === this.fewShotClient ? 'FewShotClient' : 'MerlinClient';
 
         // Send to the active client with taskId included
+        const message = {
+            type: 'input',
+            text: task.prompt,
+            taskId: taskId,
+            category: task.category,
+            context: this.getTaskContext()
+        };
+
+        // Include edit context if editing an existing item/creature
+        if (task.editContext) {
+            message.editContext = task.editContext;
+            console.log(`[TaskManager] Including edit context for ${task.editContext.type}: ${task.editContext.name}`);
+        }
+
         if (client && client.ws && client.ws.readyState === WebSocket.OPEN) {
             console.log(`[TaskManager] Sending task to ${clientName}`);
-            client.send({
-                type: 'input',
-                text: task.prompt,
-                taskId: taskId,
-                context: this.getTaskContext()
-            });
+            client.send(message);
         } else if (client && client.aiProvider === 'claude') {
             // Claude Code mode - handle locally
-            client.send({
-                type: 'input',
-                text: task.prompt,
-                taskId: taskId,
-                context: this.getTaskContext()
-            });
+            client.send(message);
         } else {
             console.error(`[TaskManager] ${clientName} not connected`);
             this.failTask(taskId, 'AI not connected');

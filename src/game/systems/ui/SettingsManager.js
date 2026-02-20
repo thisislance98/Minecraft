@@ -503,6 +503,12 @@ export class SettingsManager {
 
     openSettings() {
         if (!this.settingsModal) return;
+
+        // Close all other panels first (only one panel open at a time)
+        if (this.uiManager && typeof this.uiManager.closeAllPanels === 'function') {
+            this.uiManager.closeAllPanels('settings');
+        }
+
         this.settingsModal.classList.remove('hidden');
 
         // Sync toggle states with current settings

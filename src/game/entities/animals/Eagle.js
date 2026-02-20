@@ -74,6 +74,8 @@ export class Eagle extends Animal {
     updateAI(dt) {
         // Basic flying AI: roam within a radius
         if (this.flying) {
+            this.stateTimer -= dt;
+
             if (this.stateTimer <= 0) {
                 this.stateTimer = this.rng.next() * 5 + 5; // New target every 5-10 seconds
                 this.targetAltitude = 10 + (this.rng.next() - 0.5) * 10; // Random altitude
@@ -87,14 +89,21 @@ export class Eagle extends Animal {
             const dz = this.targetZ - this.position.z;
             const dy = this.targetAltitude - this.position.y;
 
-            this.moveDirection.set(dx, dy, dz).normalize();
-            this.position.add(this.moveDirection.multiplyScalar(this.flySpeed * dt));
+            const dir = new THREE.Vector3(dx, dy, dz);
+            const len = dir.length();
+            if (len > 0.1) {
+                dir.divideScalar(len); // safe normalize
+                this.position.addScaledVector(dir, this.flySpeed * dt);
+                this.rotation = Math.atan2(dir.x, dir.z);
+            }
         }
     }
 
     updatePhysics(dt) {
         if (this.flying) {
-            this.updateAI(dt);
+            // Override: skip gravity/ground collision, just sync mesh
+            this.mesh.position.copy(this.position);
+            this.mesh.rotation.y = this.rotation;
         } else {
             super.updatePhysics(dt);
         }

@@ -86,14 +86,22 @@ async function runTest() {
         }
         console.log('[Test] ✓ Panel structure verified\n');
 
-        // Step 3: Click a category
+        // Step 3: Click a category (use evaluate to click directly in browser)
         console.log('[Test] Step 3: Clicking "Creature" category...');
-        await page.click('.merlin-category-btn[data-category="creature"]');
-        await sleep(500);
+        await page.evaluate(() => {
+            const btn = document.querySelector('.merlin-category-btn[data-category="creature"]');
+            if (btn) {
+                btn.click();
+                console.log('[Test] Clicked creature button via evaluate');
+            }
+        });
+        await sleep(1000);
 
         const categorySelected = await page.evaluate(() => {
             const btn = document.querySelector('.merlin-category-btn[data-category="creature"]');
-            return btn && btn.classList.contains('selected');
+            const isSelected = btn && btn.classList.contains('selected');
+            console.log('[Test] Category selected state:', isSelected, 'Classes:', btn?.className);
+            return isSelected;
         });
 
         if (!categorySelected) {

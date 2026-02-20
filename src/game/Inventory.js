@@ -545,6 +545,17 @@ export class Inventory {
                         <rect x="28" y="20" width="8" height="40" rx="2" fill="#5C4113" stroke="#3e2b1e" stroke-width="2"/>
                         <circle cx="32" cy="16" r="10" fill="#FF00FF" filter="url(#glow-wand)"/>
                         <circle cx="32" cy="16" r="6" fill="#FFFFFF" opacity="0.5"/>
+                    </svg>`,
+            fishing_pole: `<svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                        <line x1="30" y1="58" x2="34" y2="8" stroke="#6D4C41" stroke-width="4" stroke-linecap="round"/>
+                        <line x1="34" y1="8" x2="50" y2="20" stroke="#CCCCCC" stroke-width="1.5" stroke-dasharray="3,2"/>
+                        <circle cx="50" cy="22" r="4" fill="#FF0000"/>
+                        <circle cx="50" cy="22" r="4" fill="#FFFFFF" clip-path="inset(50% 0 0 0)"/>
+                        <ellipse cx="36" cy="42" rx="6" ry="4" fill="#9E9E9E" opacity="0.8"/>
+                        <circle cx="42" cy="42" r="2" fill="#424242"/>
+                        <circle cx="34" cy="8" r="2" fill="#8D6E63"/>
+                        <circle cx="34" cy="18" r="1.5" fill="#BDBDBD" opacity="0.6"/>
+                        <circle cx="33" cy="28" r="1.5" fill="#BDBDBD" opacity="0.6"/>
                     </svg>`
         };
         return svgs[item] || `<svg viewBox="0 0 64 64" width="100%" height="100%"><rect x="4" y="4" width="56" height="56" rx="8" fill="#7B5B3C" stroke="#3e2b1e" stroke-width="2"/><rect x="16" y="16" width="32" height="32" rx="4" fill="#A0A0A0" stroke="white" stroke-width="2" opacity="0.5"/></svg>`;

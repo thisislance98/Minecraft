@@ -1,16 +1,20 @@
 /**
  * Few-Shot AI System
  * Main handler for the few-shot example-based AI approach
+ *
+ * Routing is handled by the UI category buttons.
+ * For "custom" category, semantic similarity against all example pools picks the best category.
+ * Each handler uses tool calling for structured output with fallback text extraction.
  */
 
 import {
-    getRouterSystemPrompt,
     getCreaturePrompt,
     getItemPrompt,
     getStructurePrompt,
     getChatPrompt
-} from './few_shot_prompts.js';
-import { getFewShotTools, knownCreatures, knownItems } from './few_shot_tools.js';
+} from './few_shot_prompts';
+import { getCreatureTools, getItemTools, getStructureTools } from './few_shot_tools';
+import { unifiedExampleIndex, UnifiedExample } from './examples/UnifiedExampleIndex';
 
 // OpenRouter API configuration
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -46,12 +50,27 @@ interface FewShotConfig {
     siteName?: string;
 }
 
+interface ConversationMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    createdItem?: string;
+}
+
+interface LastCreatedItem {
+    type: 'creature' | 'item' | 'structure';
+    name: string;
+    code?: string;
+}
+
 interface FewShotContext {
     playerPosition?: { x: number; y: number; z: number };
-    targetPosition?: { x: number; y: number; z: number };  // Where to place structures (at ground level)
-    playerDirection?: { x: number; z: number };  // Player's facing direction (XZ plane)
+    targetPosition?: { x: number; y: number; z: number };
+    playerDirection?: { x: number; z: number };
     worldName?: string;
     userId?: string;
+    conversationHistory?: ConversationMessage[];
+    lastCreatedItem?: LastCreatedItem | null;
+    editContext?: any;
 }
 
 interface FewShotResult {
@@ -62,11 +81,21 @@ interface FewShotResult {
     code?: string;
     icon?: string;
     error?: string;
+    usage?: TokenUsage;
+}
+
+export interface TokenUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
 }
 
 export class FewShotAI {
     private config: FewShotConfig;
     private model: string;
+
+    // Track accumulated token usage across multiple API calls
+    private accumulatedUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     constructor(config: FewShotConfig) {
         this.config = config;
@@ -78,212 +107,289 @@ export class FewShotAI {
         console.log(`[FewShotAI] Model set to: ${modelId}`);
     }
 
+    getModel(): string {
+        return this.model;
+    }
+
+    resetUsage(): void {
+        this.accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    }
+
+    getAccumulatedUsage(): TokenUsage {
+        return { ...this.accumulatedUsage };
+    }
+
+    // ============================================================
+    // CATEGORY RESOLUTION
+    // ============================================================
+
     /**
-     * Main entry point - process a user request
+     * Resolve the final category.
+     * - creature / item / build / fix → pass through directly
+     * - custom → use unified example index semantic similarity to pick the best category
+     * - chat detection for greetings / help
      */
-    async processRequest(userMessage: string, context: FewShotContext): Promise<FewShotResult> {
-        console.log(`[FewShotAI] Processing: "${userMessage}" with model ${this.model}`);
+    async resolveCategory(category: string, text: string): Promise<string> {
+        // Direct categories from the UI pass through
+        if (category === 'creature' || category === 'item' || category === 'build' || category === 'fix') {
+            return category;
+        }
+
+        // For "custom" (or missing category), use semantic similarity
+        console.log(`[FewShotAI] Resolving custom category via unified index for: "${text}"`);
+
+        // Quick chat detection for very short greetings/help
+        const lower = text.toLowerCase().trim();
+        const chatPatterns = /^(hi|hello|hey|help|what can you do|how does this work|thanks|thank you)\b/;
+        if (chatPatterns.test(lower)) {
+            console.log(`[FewShotAI] Resolved to: chat (greeting/help pattern)`);
+            return 'chat';
+        }
 
         try {
-            // Step 1: Route the request to determine which tool to use
-            const routeResult = await this.routeRequest(userMessage, context);
+            const resolved = await unifiedExampleIndex.resolveCategory(text);
 
-            if (!routeResult.tool) {
-                return {
-                    success: false,
-                    type: 'error',
-                    error: 'Could not determine how to handle this request'
-                };
+            // Map unified category names to the handler names
+            if (resolved === 'structure') {
+                console.log(`[FewShotAI] Resolved to: build (via unified index)`);
+                return 'build';
+            }
+            console.log(`[FewShotAI] Resolved to: ${resolved} (via unified index)`);
+            return resolved;
+
+        } catch (err: any) {
+            console.error(`[FewShotAI] Semantic resolution failed, defaulting to creature:`, err.message);
+            return 'creature';
+        }
+    }
+
+    // ============================================================
+    // MAIN ENTRY POINT
+    // ============================================================
+
+    /**
+     * Main entry point — process a user request.
+     * Category comes from the UI; for "custom" it is resolved via semantic similarity.
+     */
+    async processRequest(userMessage: string, context: FewShotContext, category: string = 'custom'): Promise<FewShotResult> {
+        console.log(`[FewShotAI] Processing: "${userMessage}" | category=${category} | model=${this.model}`);
+
+        this.resetUsage();
+
+        try {
+            // Resolve category (pass-through for explicit, semantic for custom)
+            const resolved = await this.resolveCategory(category, userMessage);
+            console.log(`[FewShotAI] Resolved category: ${resolved}`);
+
+            // Map handler category to unified index category for example search
+            const exampleCategory = resolved === 'build' ? 'structure' : resolved as 'creature' | 'item' | 'structure';
+
+            // Fetch relevant examples from unified index (skip for chat)
+            let examples: UnifiedExample[] = [];
+            if (resolved !== 'chat') {
+                examples = await unifiedExampleIndex.search(userMessage, {
+                    category: exampleCategory,
+                    topK: 3,
+                    maxTotalChars: 15000
+                });
             }
 
-            console.log(`[FewShotAI] Routed to tool: ${routeResult.tool}`);
+            let result: FewShotResult;
 
-            // Step 2: Execute the appropriate handler
-            switch (routeResult.tool) {
-                case 'create_creature':
-                    return await this.handleCreateCreature(routeResult.args?.description || userMessage, context);
-
-                case 'create_item':
-                    return await this.handleCreateItem(routeResult.args?.description || userMessage, context);
-
-                case 'create_structure':
-                    return await this.handleCreateStructure(routeResult.args?.description || userMessage, context);
-
-                case 'spawn_existing':
-                    return this.handleSpawnExisting(routeResult.args?.creature, routeResult.args?.count || 1);
-
-                case 'give_existing':
-                    return this.handleGiveExisting(routeResult.args?.item, routeResult.args?.count || 1);
-
-                case 'set_blocks':
-                    return { success: true, type: 'blocks', data: routeResult.args?.blocks || [] };
-
+            switch (resolved) {
+                case 'creature':
+                    result = await this.handleCreateCreature(userMessage, context, examples);
+                    break;
+                case 'item':
+                    result = await this.handleCreateItem(userMessage, context, examples);
+                    break;
+                case 'build':
+                    result = await this.handleCreateStructure(userMessage, context, examples);
+                    break;
                 case 'chat':
-                    return { success: true, type: 'chat', message: routeResult.args?.response || 'Hello!' };
-
+                    result = await this.handleChat(userMessage, context);
+                    break;
                 default:
-                    return { success: false, type: 'error', error: `Unknown tool: ${routeResult.tool}` };
+                    // "fix" and any other unknown → treat as creature for now
+                    result = await this.handleCreateCreature(userMessage, context, examples);
+                    break;
             }
+
+            // Attach accumulated token usage to the result
+            result.usage = this.getAccumulatedUsage();
+            return result;
+
         } catch (error: any) {
             console.error('[FewShotAI] Error:', error);
             return {
                 success: false,
                 type: 'error',
-                error: error.message || 'An error occurred'
+                error: error.message || 'An error occurred',
+                usage: this.getAccumulatedUsage()
             };
         }
     }
 
-    /**
-     * Route the request to determine which tool to use
-     */
-    private async routeRequest(userMessage: string, context: FewShotContext): Promise<{ tool: string | null; args?: any }> {
-        const response = await this.callOpenRouter(
-            getRouterSystemPrompt(),
-            userMessage,
-            getFewShotTools()
-        );
+    // ============================================================
+    // HANDLERS (one LLM call each, with tool-calling extraction)
+    // ============================================================
 
-        if (response.tool_calls && response.tool_calls.length > 0) {
-            const toolCall = response.tool_calls[0];
-            try {
-                console.log('[FewShotAI] Raw tool arguments:', toolCall.function.arguments);
-                return {
-                    tool: toolCall.function.name,
-                    args: JSON.parse(toolCall.function.arguments || '{}')
-                };
-            } catch (parseError) {
-                console.error('[FewShotAI] Failed to parse tool arguments:', toolCall.function.arguments);
-                console.error('[FewShotAI] Parse error:', parseError.message);
-                // Return empty args to continue execution
-                return {
-                    tool: toolCall.function.name,
-                    args: {}
-                };
+    /**
+     * Handle creature creation — uses create_creature tool for structured output
+     */
+    private async handleCreateCreature(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
+        // If we have a last created creature, include its code as reference for modifications
+        let modifiedDescription = description;
+        if (context.lastCreatedItem?.type === 'creature' && context.lastCreatedItem.code) {
+            const modificationKeywords = ['smaller', 'bigger', 'larger', 'fix', 'change', 'modify', 'update', 'wrong', 'backward', 'weird', 'different', 'more', 'less'];
+            const isModification = modificationKeywords.some(kw => description.toLowerCase().includes(kw));
+
+            if (isModification) {
+                modifiedDescription = `Modify the existing ${context.lastCreatedItem.name} creature. The user wants: ${description}\n\nHere is the original code to modify:\n\`\`\`javascript\n${context.lastCreatedItem.code}\n\`\`\`\n\nCreate a new version that addresses the feedback while keeping the same class name (${context.lastCreatedItem.name}).`;
+                console.log('[FewShotAI] Detected modification request for:', context.lastCreatedItem.name);
             }
         }
 
-        // If no tool was called, treat as chat
-        return { tool: 'chat', args: { response: response.content || "I'm not sure how to help with that." } };
-    }
+        const prompt = getCreaturePrompt(modifiedDescription, context, examples);
 
-    /**
-     * Handle creature creation
-     */
-    private async handleCreateCreature(description: string, context: FewShotContext): Promise<FewShotResult> {
-        const prompt = getCreaturePrompt(description, context);
+        const response = await this.callOpenRouter(prompt, modifiedDescription, getCreatureTools(), context.conversationHistory);
 
-        const response = await this.callOpenRouter(prompt, description, null);
-        console.log('[FewShotAI] Raw creature response:', response.content?.substring(0, 500));
-        console.log('[FewShotAI] Response has content?', !!response.content, 'Length:', response.content?.length);
-        console.log('[FewShotAI] Response keys:', Object.keys(response));
-        const code = this.extractCode(response.content);
+        // Try tool-call extraction first
+        const toolResult = this.extractToolCallArgs(response, 'create_creature');
+        let code: string | null = null;
+        let className: string | null = null;
+
+        if (toolResult) {
+            code = toolResult.code || null;
+            className = toolResult.className || null;
+            console.log(`[FewShotAI] Creature extracted via tool call: ${className}`);
+        }
+
+        // Fallback: extract from text content
+        if (!code) {
+            console.log('[FewShotAI] Falling back to text extraction for creature');
+            code = this.extractCode(response.content);
+        }
 
         if (!code) {
-            console.error('[FewShotAI] Failed to extract code. Response object:', JSON.stringify(response).substring(0, 1000));
+            console.error('[FewShotAI] Failed to extract creature code from response');
             return { success: false, type: 'error', error: 'Failed to generate creature code' };
+        }
+
+        if (!className) {
+            className = this.extractClassName(code);
         }
 
         // Validate the code
         const validation = this.validateCreatureCode(code);
         if (!validation.valid) {
             console.log('[FewShotAI] Creature validation failed:', validation.errors);
-            // Try to fix common issues
             const fixedCode = this.attemptCodeFix(code, validation.errors, 'creature');
             if (fixedCode) {
                 const revalidation = this.validateCreatureCode(fixedCode);
                 if (revalidation.valid) {
-                    return {
-                        success: true,
-                        type: 'creature',
-                        code: fixedCode,
-                        data: { className: this.extractClassName(fixedCode) }
-                    };
+                    return { success: true, type: 'creature', code: fixedCode, data: { className: this.extractClassName(fixedCode) } };
                 }
             }
             return { success: false, type: 'error', error: `Invalid creature code: ${validation.errors.join(', ')}` };
         }
 
-        return {
-            success: true,
-            type: 'creature',
-            code: code,
-            data: { className: this.extractClassName(code) }
-        };
+        return { success: true, type: 'creature', code, data: { className } };
     }
 
     /**
-     * Handle item creation
+     * Handle item creation — uses create_item tool for structured output
      */
-    private async handleCreateItem(description: string, context: FewShotContext): Promise<FewShotResult> {
-        const prompt = getItemPrompt(description, context);
+    private async handleCreateItem(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
+        const prompt = getItemPrompt(description, context, examples);
 
-        const response = await this.callOpenRouter(prompt, description, null);
+        const response = await this.callOpenRouter(prompt, description, getItemTools(), context.conversationHistory);
 
-        // Try to parse as JSON first
-        let result: { className?: string; code?: string; icon?: string } = {};
+        // Try tool-call extraction first
+        const toolResult = this.extractToolCallArgs(response, 'create_item');
+        let code: string | null = null;
+        let icon: string | null = null;
+        let className: string | null = null;
 
-        try {
-            // Look for JSON in the response
-            const jsonMatch = response.content.match(/\{[\s\S]*"className"[\s\S]*"code"[\s\S]*"icon"[\s\S]*\}/);
-            if (jsonMatch) {
-                result = JSON.parse(jsonMatch[0]);
+        if (toolResult) {
+            code = toolResult.code || null;
+            icon = toolResult.icon || null;
+            className = toolResult.className || null;
+            console.log(`[FewShotAI] Item extracted via tool call: ${className}`);
+        }
+
+        // Fallback: extract from text content
+        if (!code && response.content) {
+            console.log('[FewShotAI] Falling back to text extraction for item');
+            // Try JSON parse first (old format)
+            try {
+                const jsonMatch = response.content.match(/\{[\s\S]*"className"[\s\S]*"code"[\s\S]*"icon"[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    code = parsed.code || null;
+                    icon = parsed.icon || null;
+                    className = parsed.className || null;
+                }
+            } catch (e) {
+                // ignore
             }
-        } catch (e) {
-            // Fall back to extracting code and icon separately
-            result.code = this.extractCode(response.content);
-            result.icon = this.extractSvg(response.content);
+            if (!code) code = this.extractCode(response.content);
+            if (!icon) icon = this.extractSvg(response.content);
         }
 
-        if (!result.code) {
-            result.code = this.extractCode(response.content);
-        }
-        if (!result.icon) {
-            result.icon = this.extractSvg(response.content);
-        }
-
-        if (!result.code) {
+        if (!code) {
             return { success: false, type: 'error', error: 'Failed to generate item code' };
         }
 
+        if (!className) {
+            className = this.extractClassName(code);
+        }
+
         // Validate the code
-        const validation = this.validateItemCode(result.code);
+        const validation = this.validateItemCode(code);
         if (!validation.valid) {
             console.log('[FewShotAI] Item validation failed:', validation.errors);
-            const fixedCode = this.attemptCodeFix(result.code, validation.errors, 'item');
+            const fixedCode = this.attemptCodeFix(code, validation.errors, 'item');
             if (fixedCode) {
                 const revalidation = this.validateItemCode(fixedCode);
                 if (revalidation.valid) {
-                    result.code = fixedCode;
+                    code = fixedCode;
                 }
             }
-            if (!this.validateItemCode(result.code).valid) {
+            if (!this.validateItemCode(code).valid) {
                 return { success: false, type: 'error', error: `Invalid item code: ${validation.errors.join(', ')}` };
             }
         }
 
-        // Ensure we have an icon
-        if (!result.icon) {
-            result.icon = this.generateDefaultIcon();
+        if (!icon) {
+            icon = this.generateDefaultIcon();
         }
 
-        return {
-            success: true,
-            type: 'item',
-            code: result.code,
-            icon: result.icon,
-            data: { className: result.className || this.extractClassName(result.code) }
-        };
+        return { success: true, type: 'item', code, icon, data: { className } };
     }
 
     /**
-     * Handle structure creation
+     * Handle structure creation — uses create_structure tool for structured output
      */
-    private async handleCreateStructure(description: string, context: FewShotContext): Promise<FewShotResult> {
-        const prompt = getStructurePrompt(description, context);
+    private async handleCreateStructure(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
+        const prompt = getStructurePrompt(description, context, examples);
 
-        const response = await this.callOpenRouter(prompt, description, null);
-        const code = this.extractCode(response.content);
+        const response = await this.callOpenRouter(prompt, description, getStructureTools(), context.conversationHistory);
+
+        // Try tool-call extraction first
+        const toolResult = this.extractToolCallArgs(response, 'create_structure');
+        let code: string | null = null;
+
+        if (toolResult) {
+            code = toolResult.code || null;
+            console.log(`[FewShotAI] Structure code extracted via tool call`);
+        }
+
+        // Fallback: extract from text content
+        if (!code) {
+            console.log('[FewShotAI] Falling back to text extraction for structure');
+            code = this.extractCode(response.content);
+        }
 
         if (!code) {
             return { success: false, type: 'error', error: 'Failed to generate structure code' };
@@ -292,60 +398,76 @@ export class FewShotAI {
         // Execute the structure code to get blocks
         try {
             const blocks = this.executeStructureCode(code, context);
-            return {
-                success: true,
-                type: 'structure',
-                data: { blocks },
-                code: code
-            };
+            return { success: true, type: 'structure', data: { blocks }, code };
         } catch (e: any) {
             return { success: false, type: 'error', error: `Structure code error: ${e.message}` };
         }
     }
 
     /**
-     * Handle spawning existing creatures
+     * Handle chat / greeting — no LLM call needed for simple cases
      */
-    private handleSpawnExisting(creature: string, count: number): FewShotResult {
-        // Normalize creature name
-        const normalized = this.normalizeCreatureName(creature);
+    private async handleChat(userMessage: string, context: FewShotContext): Promise<FewShotResult> {
+        const prompt = getChatPrompt(context);
 
-        if (!normalized) {
-            return {
-                success: false,
-                type: 'error',
-                error: `Unknown creature: ${creature}. Known creatures: ${knownCreatures.slice(0, 10).join(', ')}...`
-            };
-        }
+        const response = await this.callOpenRouter(prompt, userMessage, null, context.conversationHistory);
 
-        return {
-            success: true,
-            type: 'spawn',
-            data: { creature: normalized, count: Math.min(count, 10) }
-        };
+        return { success: true, type: 'chat', message: response.content || 'Hello! I\'m Merlin. Ask me to create creatures, items, or build structures!' };
     }
+
+    // ============================================================
+    // TOOL CALL EXTRACTION
+    // ============================================================
 
     /**
-     * Handle giving existing items
+     * Extract arguments from a tool call response.
+     * Returns parsed args object or null if no tool call found.
      */
-    private handleGiveExisting(item: string, count: number): FewShotResult {
-        const normalized = item.toLowerCase().replace(/\s+/g, '_');
+    private extractToolCallArgs(response: any, expectedTool: string): any | null {
+        if (!response.tool_calls || response.tool_calls.length === 0) {
+            return null;
+        }
 
-        return {
-            success: true,
-            type: 'give',
-            data: { item: normalized, count: Math.min(count, 64) }
-        };
+        const toolCall = response.tool_calls[0];
+        if (toolCall.function.name !== expectedTool) {
+            console.warn(`[FewShotAI] Expected tool ${expectedTool} but got ${toolCall.function.name}`);
+            // Still try to use the args
+        }
+
+        try {
+            const args = JSON.parse(toolCall.function.arguments || '{}');
+            console.log(`[FewShotAI] Tool call ${toolCall.function.name} parsed successfully`);
+            return args;
+        } catch (parseError: any) {
+            console.error('[FewShotAI] Failed to parse tool arguments:', parseError.message);
+            return null;
+        }
     }
+
+    // ============================================================
+    // OPENROUTER API
+    // ============================================================
 
     /**
      * Call OpenRouter API
      */
-    private async callOpenRouter(systemPrompt: string, userMessage: string, tools: any[] | null): Promise<any> {
-        const messages = [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
+    private async callOpenRouter(systemPrompt: string, userMessage: string, tools: any[] | null, conversationHistory?: ConversationMessage[]): Promise<any> {
+        const messages: any[] = [
+            { role: 'system', content: systemPrompt }
         ];
+
+        // Add conversation history if provided
+        if (conversationHistory && conversationHistory.length > 0) {
+            for (const msg of conversationHistory) {
+                messages.push({
+                    role: msg.role,
+                    content: msg.content
+                });
+            }
+        }
+
+        // Add current user message
+        messages.push({ role: 'user', content: userMessage });
 
         const body: any = {
             model: this.model,
@@ -379,7 +501,15 @@ export class FewShotAI {
         console.log('[FewShotAI] API Response data keys:', Object.keys(data));
         console.log('[FewShotAI] API Response choices:', data.choices?.length);
         console.log('[FewShotAI] API Response message keys:', Object.keys(data.choices?.[0]?.message || {}));
-        console.log('[FewShotAI] API Response content length:', data.choices?.[0]?.message?.content?.length);
+
+        // Accumulate token usage from this API call
+        if (data.usage) {
+            this.accumulatedUsage.promptTokens += data.usage.prompt_tokens || 0;
+            this.accumulatedUsage.completionTokens += data.usage.completion_tokens || 0;
+            this.accumulatedUsage.totalTokens += data.usage.total_tokens || 0;
+            console.log(`[FewShotAI] Token usage: ${data.usage.prompt_tokens} in / ${data.usage.completion_tokens} out (total accumulated: ${this.accumulatedUsage.totalTokens})`);
+        }
+
         return data.choices[0].message;
     }
 
@@ -442,7 +572,6 @@ export class FewShotAI {
         // Add missing getMesh for items
         if (type === 'item' && errors.includes('Must have getMesh() method')) {
             if (!fixed.includes('getMesh')) {
-                // Insert before the closing brace of the class
                 const lastBrace = fixed.lastIndexOf('}');
                 if (lastBrace > 0) {
                     const getMeshMethod = `
@@ -467,6 +596,8 @@ export class FewShotAI {
     // ============================================================
 
     private extractCode(content: string): string | null {
+        if (!content) return null;
+
         // Try to extract from code blocks
         const codeBlockMatch = content.match(/```(?:javascript|js)?\s*([\s\S]*?)```/);
         if (codeBlockMatch) {
@@ -483,6 +614,7 @@ export class FewShotAI {
     }
 
     private extractSvg(content: string): string | null {
+        if (!content) return null;
         const svgMatch = content.match(/<svg[\s\S]*?<\/svg>/i);
         return svgMatch ? svgMatch[0] : null;
     }
@@ -490,16 +622,6 @@ export class FewShotAI {
     private extractClassName(code: string): string {
         const match = code.match(/class\s+(\w+)/);
         return match ? match[1] : 'Unknown';
-    }
-
-    private normalizeCreatureName(name: string): string | null {
-        const lower = name.toLowerCase();
-        for (const known of knownCreatures) {
-            if (known.toLowerCase() === lower || known.toLowerCase().includes(lower)) {
-                return known;
-            }
-        }
-        return null;
     }
 
     private executeStructureCode(code: string, context: FewShotContext): any[] {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FallingTree } from '../entities/animals/FallingTree.js';
+import { FallingTree } from '../entities/animals-archive/FallingTree.js';
 
 import { Blocks } from '../core/Blocks.js';
 import { Config } from '../core/Config.js';
@@ -394,37 +394,43 @@ export class PhysicsManager {
     }
 
     checkAndFellTree(x, y, z, logType) {
-        // 1. Verify base: Block below should NOT be a log (it should be dirt/grass/etc)
-        const below = this.game.getBlockWorld(x, y - 1, z);
         const logTypes = [
             Blocks.LOG, Blocks.PINE_WOOD, Blocks.BIRCH_WOOD,
             Blocks.DARK_OAK_WOOD, Blocks.WILLOW_WOOD, Blocks.ACACIA_WOOD
         ];
-        if (below && logTypes.includes(below)) {
-            // Not the base, just break normal block
-            this.game.setBlock(x, y, z, null);
-            this.game.updateBlockCount();
-            return;
-        }
-
-        // 2. Perform BFS to find connected logs/leaves
-        const treeBlocks = [];
-        const queue = [{ x, y, z, type: logType }];
-        const visited = new Set();
-        const key = (nx, ny, nz) => `${nx},${ny},${nz}`;
-
-        visited.add(key(x, y, z));
-
-        // Limits to prevent freezing on massive accidental structures
-        const MAX_BLOCKS = 200;
-
-        // Leaf types to include if connected
-        // Leaf types to include if connected
         const leafTypes = [
             Blocks.LEAVES, Blocks.PINE_LEAVES, Blocks.BIRCH_LEAVES,
             Blocks.DARK_OAK_LEAVES, Blocks.WILLOW_LEAVES, Blocks.ACACIA_LEAVES
         ];
 
+        // 1. Remove the chopped block first — this creates the visible cut point
+        this.game.spawnDrop(x, y, z, logType);
+        if (this.game.worldParticleSystem) {
+            this.game.worldParticleSystem.spawnBlockParticles({ x, y, z }, logType);
+        }
+        this.game.setBlock(x, y, z, null);
+        this.game.updateBlockCount();
+        this.game.soundManager.playSound('block_break', new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
+
+        // 2. Check if there's a log directly above that's now unsupported
+        const aboveType = this.game.getBlockWorld(x, y + 1, z);
+        if (!aboveType || !logTypes.includes(aboveType)) {
+            return; // No log above the cut, nothing to fell
+        }
+
+        // Check if the log above still has a path to the ground through other logs
+        if (this.isLogSupported(x, y + 1, z, logTypes)) {
+            return; // Still connected to ground (e.g. 2x2 tree with other trunk blocks intact)
+        }
+
+        // 3. Log above is unsupported — BFS to collect the disconnected tree portion
+        const treeBlocks = [];
+        const queue = [{ x, y: y + 1, z, type: aboveType }];
+        const visited = new Set();
+        const key = (nx, ny, nz) => `${nx},${ny},${nz}`;
+        visited.add(key(x, y + 1, z));
+
+        const MAX_BLOCKS = 200;
         let foundLeaves = false;
 
         while (queue.length > 0 && treeBlocks.length < MAX_BLOCKS) {
@@ -435,9 +441,9 @@ export class PhysicsManager {
                 foundLeaves = true;
             }
 
-            // Search neighbors
+            // Search 26-connected neighbors
             for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) { // Check up/down/diagonal
+                for (let dy = -1; dy <= 1; dy++) {
                     for (let dz = -1; dz <= 1; dz++) {
                         if (dx === 0 && dy === 0 && dz === 0) continue;
 
@@ -445,8 +451,8 @@ export class PhysicsManager {
                         const ny = current.y + dy;
                         const nz = current.z + dz;
 
-                        // Only go UP or LEVEL, never go below original cut
-                        if (ny < y) continue;
+                        // Don't go below the cut — stump blocks stay
+                        if (ny <= y) continue;
 
                         const nKey = key(nx, ny, nz);
                         if (visited.has(nKey)) continue;
@@ -454,21 +460,9 @@ export class PhysicsManager {
                         const nType = this.game.getBlockWorld(nx, ny, nz);
                         if (!nType) continue;
 
-                        // Logic:
-                        // Logs connect to Logs
-                        // Logs connect to Leaves
-                        // Leaves connect to Leaves (strict radius? or just loose flood fill?)
-                        // To avoid grabbing the whole forest, we should be careful.
-                        // Standard: Logs connect to any log. Logs connect to leaves. Leaves connect to leaves.
-
                         let isValid = false;
-                        if (logTypes.includes(nType)) {
-                            // Only follow matching log type? Or any log? 
-                            // Usually trees don't mix logs.
-                            if (nType === logType) isValid = true;
-                        } else if (leafTypes.includes(nType)) {
-                            isValid = true;
-                        }
+                        if (logTypes.includes(nType) && nType === logType) isValid = true;
+                        else if (leafTypes.includes(nType)) isValid = true;
 
                         if (isValid) {
                             visited.add(nKey);
@@ -479,42 +473,74 @@ export class PhysicsManager {
             }
         }
 
-        // 3. Fall Logic
-        // Determine fall direction (Player forward vector)
-        if (treeBlocks.length > 3 && foundLeaves) { // Minimum size to count as tree
-            // Remove blocks from world
+        // 4. Fell the disconnected portion if it's a real tree
+        if (treeBlocks.length >= 3 && foundLeaves) {
+            // Remove tree blocks from world
             for (const b of treeBlocks) {
-                this.game.setBlock(b.x, b.y, b.z, null, true, true); // skipBroadcast - tree felling is local physics
-                // Note: setBlock updates mesh immediately unless optimized.
-                // We should probably optimize this batch update later, but for now simple loop is fine.
+                this.game.setBlock(b.x, b.y, b.z, null, true, true);
             }
             this.game.updateChunks();
 
-            // Calculate fall info
+            // Fall direction based on player's look direction
             const playerDir = new THREE.Vector3();
             this.game.camera.getWorldDirection(playerDir);
-            playerDir.y = 0; // Horizontal fall
+            playerDir.y = 0;
 
-            // Create falling entity
-            const fallingTree = new FallingTree(this.game, x, y, z, treeBlocks, playerDir);
-
-            // Register for updates? It needs to be in a list that gets updated.
-            // game.animals? Or special projectiles list?
-            // FallingTree is not an Animal subclass.
-            // Let's add it to game.projectiles or create game.effects
-            // Or just hook into animate loop via a manager.
-            // For now, let's force push it into 'projectiles' since they have update() called.
+            // Pivot point is at the cut — one block above where we chopped
+            const fallingTree = new FallingTree(this.game, x, y + 1, z, treeBlocks, playerDir);
             this.game.projectiles.push(fallingTree);
 
-            // Play tree falling sound
-            this.game.soundManager.playSound('block_break', new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), 1.5);
-
-        } else {
-            // Not a valid tree (just a stump or pile), just break the single block
-            this.game.spawnDrop(x, y, z, logType);
-            this.game.setBlock(x, y, z, null);
-            this.game.updateBlockCount();
+            // Play tree creak/fall sound
+            this.game.soundManager.playSound('block_break', new THREE.Vector3(x + 0.5, y + 1.5, z + 0.5), 1.5);
         }
+    }
+
+    /**
+     * Check if a log block is still supported (connected to ground through other logs).
+     * Uses BFS downward/level through connected logs to find any log resting on solid ground.
+     */
+    isLogSupported(startX, startY, startZ, logTypes) {
+        const visited = new Set();
+        const key = (x, y, z) => `${x},${y},${z}`;
+        const queue = [{ x: startX, y: startY, z: startZ }];
+        visited.add(key(startX, startY, startZ));
+        const MAX_CHECK = 50;
+        let checked = 0;
+
+        while (queue.length > 0 && checked < MAX_CHECK) {
+            const { x, y, z } = queue.shift();
+            checked++;
+
+            // If at bedrock level, it's supported
+            if (y <= 0) return true;
+
+            // Check what's directly below this log
+            const below = this.game.getBlockWorld(x, y - 1, z);
+            if (below && !logTypes.includes(below)) {
+                // Solid non-log block below (dirt, stone, grass, etc.) = supported
+                return true;
+            }
+
+            // Expand to adjacent logs at same level or below to find alternate support paths
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 0; dy++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        if (dx === 0 && dy === 0 && dz === 0) continue;
+                        const nx = x + dx, ny = y + dy, nz = z + dz;
+                        const nKey = key(nx, ny, nz);
+                        if (visited.has(nKey)) continue;
+
+                        const nType = this.game.getBlockWorld(nx, ny, nz);
+                        if (nType && logTypes.includes(nType)) {
+                            visited.add(nKey);
+                            queue.push({ x: nx, y: ny, z: nz });
+                        }
+                    }
+                }
+            }
+        }
+
+        return false; // No support found
     }
 
     /**

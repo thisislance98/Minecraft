@@ -19,14 +19,29 @@ export class MerlinPanelUI {
         this.selectedTaskId = null; // Currently viewing task
         this.isDetailView = false;
 
+        // Model selection
+        this.availableModels = [];
+        this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-haiku-4.5';
+
         // Categories definition
         this.categories = [
             { id: 'item', label: 'Item', icon: '⚔️', description: 'Create magical items and weapons' },
             { id: 'creature', label: 'Creature', icon: '🦁', description: 'Spawn new creatures and companions' },
             { id: 'fix', label: 'Fix', icon: '🔧', description: 'Fix bugs and issues' },
             { id: 'build', label: 'Build', icon: '🏗️', description: 'Build structures and buildings' },
+            { id: 'edit', label: 'Edit', icon: '✏️', description: 'Edit existing items or creatures' },
             { id: 'custom', label: 'Custom', icon: '✨', description: 'Any custom request' }
         ];
+
+        // Edit mode state
+        this.editMode = {
+            active: false,
+            type: null, // 'creature' or 'item'
+            selectedName: null,
+            selectedData: null,
+            creatures: [],
+            items: []
+        };
 
         this.createPanel();
         this.setupEventListeners();
@@ -50,6 +65,107 @@ export class MerlinPanelUI {
     }
 
     /**
+     * Set the FewShotClient reference for model selection
+     */
+    setFewShotClient(fewShotClient) {
+        this.fewShotClient = fewShotClient;
+
+        // Listen for model events
+        if (this.fewShotClient) {
+            this.fewShotClient.addListener((msg) => {
+                if (msg.type === 'models_list') {
+                    this.updateModelList(msg.models, msg.current);
+                } else if (msg.type === 'model_changed') {
+                    this.updateSelectedModel(msg.model);
+                }
+            });
+
+            // If already connected and has models, populate immediately
+            if (this.fewShotClient.availableModels.length > 0) {
+                this.updateModelList(this.fewShotClient.availableModels, this.fewShotClient.currentModel);
+            }
+        }
+    }
+
+    /**
+     * Update the model dropdown with available models
+     */
+    updateModelList(models, currentModel) {
+        this.availableModels = models;
+        if (currentModel) {
+            this.currentModel = currentModel;
+        }
+
+        const select = document.getElementById('merlin-model-select');
+        if (!select) return;
+
+        // Group models by provider
+        const modelsByProvider = {};
+        for (const model of models) {
+            const [provider] = model.id.split('/');
+            if (!modelsByProvider[provider]) {
+                modelsByProvider[provider] = [];
+            }
+            modelsByProvider[provider].push(model);
+        }
+
+        // Build options HTML with optgroups
+        let html = '';
+        for (const [provider, providerModels] of Object.entries(modelsByProvider)) {
+            const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+            html += `<optgroup label="${this.escapeHtml(providerName)}">`;
+            for (const model of providerModels) {
+                const selected = model.id === this.currentModel ? 'selected' : '';
+                const costBadge = this.getCostBadge(model.cost);
+                html += `<option value="${this.escapeHtml(model.id)}" ${selected}>${this.escapeHtml(model.name)} ${costBadge}</option>`;
+            }
+            html += '</optgroup>';
+        }
+
+        select.innerHTML = html;
+        console.log(`[MerlinPanelUI] Model list updated: ${models.length} models, current: ${this.currentModel}`);
+    }
+
+    /**
+     * Get cost badge for model dropdown
+     */
+    getCostBadge(cost) {
+        const badges = {
+            'very-low': '💚',
+            'low': '💛',
+            'medium': '🧡',
+            'high': '❤️'
+        };
+        return badges[cost] || '';
+    }
+
+    /**
+     * Update the selected model in the dropdown
+     */
+    updateSelectedModel(modelId) {
+        this.currentModel = modelId;
+        const select = document.getElementById('merlin-model-select');
+        if (select) {
+            select.value = modelId;
+        }
+        console.log(`[MerlinPanelUI] Model changed to: ${modelId}`);
+    }
+
+    /**
+     * Select a new model
+     */
+    selectModel(modelId) {
+        if (!this.fewShotClient) {
+            console.warn('[MerlinPanelUI] No FewShotClient available');
+            return;
+        }
+
+        console.log(`[MerlinPanelUI] Selecting model: ${modelId}`);
+        this.fewShotClient.setModel(modelId);
+        this.currentModel = modelId;
+    }
+
+    /**
      * Create the panel DOM structure
      */
     createPanel() {
@@ -60,6 +176,12 @@ export class MerlinPanelUI {
             <div class="merlin-panel-content">
                 <div class="merlin-panel-header">
                     <h2>🧙 Merlin's Workshop</h2>
+                    <div class="merlin-model-selector">
+                        <label for="merlin-model-select">🤖</label>
+                        <select id="merlin-model-select" title="Select AI Model">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="merlin-panel-body">
@@ -85,6 +207,27 @@ export class MerlinPanelUI {
                         </h3>
                         <div class="merlin-suggestions" id="merlin-suggestions">
                             <p class="suggestions-placeholder">Select a category to see suggestions</p>
+                        </div>
+                    </div>
+
+                    <!-- Edit Mode Selector (hidden by default) -->
+                    <div class="merlin-section hidden" id="merlin-edit-section">
+                        <h3 class="merlin-section-title">
+                            <span>✏️ Edit Existing</span>
+                        </h3>
+                        <div class="edit-type-selector">
+                            <button class="edit-type-btn" data-type="creature">🦁 Creatures</button>
+                            <button class="edit-type-btn" data-type="item">⚔️ Items</button>
+                        </div>
+                        <div class="edit-selector-container" id="edit-selector-container">
+                            <p class="edit-placeholder">Select creature or item type above</p>
+                        </div>
+                        <div class="edit-preview hidden" id="edit-preview">
+                            <div class="edit-preview-header">
+                                <span class="edit-preview-name" id="edit-preview-name"></span>
+                                <button class="edit-preview-load-btn" id="edit-load-btn">Load for Editing</button>
+                            </div>
+                            <div class="edit-preview-description" id="edit-preview-description"></div>
                         </div>
                     </div>
 
@@ -251,6 +394,29 @@ export class MerlinPanelUI {
             }
         });
 
+        // Edit mode type selector
+        const editSection = document.getElementById('merlin-edit-section');
+        if (editSection) {
+            editSection.addEventListener('click', (e) => {
+                const typeBtn = e.target.closest('.edit-type-btn');
+                if (typeBtn) {
+                    const type = typeBtn.dataset.type;
+                    this.selectEditType(type);
+                }
+
+                const selectItem = e.target.closest('.edit-select-item');
+                if (selectItem) {
+                    const name = selectItem.dataset.name;
+                    this.selectEditItem(name);
+                }
+            });
+        }
+
+        // Edit load button
+        addListener('edit-load-btn', 'click', () => {
+            this.loadSelectedForEditing();
+        });
+
         // Close on escape (only if not typing in an input)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.isVisible) {
@@ -262,6 +428,14 @@ export class MerlinPanelUI {
                 } else {
                     this.hide();
                 }
+            }
+        });
+
+        // Model selector change
+        addListener('merlin-model-select', 'change', (e) => {
+            const modelId = e.target.value;
+            if (modelId) {
+                this.selectModel(modelId);
             }
         });
     }
@@ -303,8 +477,30 @@ export class MerlinPanelUI {
 
         this.selectedCategory = categoryId;
 
-        // Show refresh button
+        // Handle edit mode specially
+        const editSection = document.getElementById('merlin-edit-section');
+        const suggestionsSection = document.getElementById('merlin-suggestions-section');
         const refreshBtn = document.getElementById('refresh-suggestions-btn');
+
+        if (categoryId === 'edit') {
+            // Show edit section, hide suggestions
+            editSection.classList.remove('hidden');
+            suggestionsSection.classList.add('hidden');
+            this.editMode.active = true;
+            // Reset edit mode state
+            this.editMode.type = null;
+            this.editMode.selectedName = null;
+            this.editMode.selectedData = null;
+            this.renderEditSelector();
+            return;
+        } else {
+            // Hide edit section, show suggestions
+            editSection.classList.add('hidden');
+            suggestionsSection.classList.remove('hidden');
+            this.editMode.active = false;
+        }
+
+        // Show refresh button
         refreshBtn.classList.remove('hidden');
 
         // Load suggestions from predefined pool
@@ -316,6 +512,205 @@ export class MerlinPanelUI {
         }
 
         this.renderSuggestions();
+    }
+
+    /**
+     * Select edit type (creature or item)
+     */
+    selectEditType(type) {
+        this.editMode.type = type;
+        this.editMode.selectedName = null;
+        this.editMode.selectedData = null;
+
+        // Update type button UI
+        const typeButtons = document.querySelectorAll('.edit-type-btn');
+        typeButtons.forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.type === type);
+        });
+
+        // Hide preview
+        document.getElementById('edit-preview').classList.add('hidden');
+
+        // Load list from server
+        this.loadEditList(type);
+    }
+
+    /**
+     * Load list of creatures or items from server
+     */
+    async loadEditList(type) {
+        const container = document.getElementById('edit-selector-container');
+        container.innerHTML = '<p class="edit-loading">Loading...</p>';
+
+        try {
+            // Get socket from game
+            const socket = this.game.socketManager?.socket;
+            if (!socket) {
+                container.innerHTML = '<p class="edit-error">Not connected to server</p>';
+                return;
+            }
+
+            // Get auth token
+            const token = localStorage.getItem('admin_token') || 'asdf123';
+            const worldId = this.game.currentWorldId;
+
+            // Request list from server
+            const eventName = type === 'creature' ? 'admin:list_creatures' : 'admin:list_items';
+            const resultEvent = type === 'creature' ? 'admin:list_creatures:result' : 'admin:list_items:result';
+
+            socket.emit(eventName, { worldId, token });
+
+            // Wait for response
+            const result = await new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    resolve({ success: false, error: 'Timeout' });
+                }, 5000);
+
+                socket.once(resultEvent, (data) => {
+                    clearTimeout(timeout);
+                    resolve(data);
+                });
+            });
+
+            if (!result.success) {
+                container.innerHTML = `<p class="edit-error">Error: ${result.error || 'Unknown error'}</p>`;
+                return;
+            }
+
+            const items = type === 'creature' ? result.creatures : result.items;
+            if (type === 'creature') {
+                this.editMode.creatures = items;
+            } else {
+                this.editMode.items = items;
+            }
+
+            this.renderEditSelector();
+
+        } catch (error) {
+            console.error('[MerlinPanelUI] Failed to load edit list:', error);
+            container.innerHTML = `<p class="edit-error">Error: ${error.message}</p>`;
+        }
+    }
+
+    /**
+     * Render the edit selector list
+     */
+    renderEditSelector() {
+        const container = document.getElementById('edit-selector-container');
+
+        if (!this.editMode.type) {
+            container.innerHTML = '<p class="edit-placeholder">Select creature or item type above</p>';
+            return;
+        }
+
+        const items = this.editMode.type === 'creature' ? this.editMode.creatures : this.editMode.items;
+
+        if (!items || items.length === 0) {
+            container.innerHTML = `<p class="edit-placeholder">No ${this.editMode.type}s found</p>`;
+            return;
+        }
+
+        const icon = this.editMode.type === 'creature' ? '🦁' : '⚔️';
+        container.innerHTML = `
+            <div class="edit-select-list">
+                ${items.map(item => `
+                    <div class="edit-select-item ${this.editMode.selectedName === item.name ? 'selected' : ''}"
+                         data-name="${this.escapeHtml(item.name)}">
+                        <span class="edit-item-icon">${icon}</span>
+                        <span class="edit-item-name">${this.escapeHtml(item.name)}</span>
+                        <span class="edit-item-world">${item.worldId === 'global' ? '🌍' : '📍'}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    /**
+     * Select an item for editing
+     */
+    selectEditItem(name) {
+        this.editMode.selectedName = name;
+
+        // Update UI selection
+        document.querySelectorAll('.edit-select-item').forEach(el => {
+            el.classList.toggle('selected', el.dataset.name === name);
+        });
+
+        // Find item data
+        const items = this.editMode.type === 'creature' ? this.editMode.creatures : this.editMode.items;
+        const itemData = items.find(i => i.name === name);
+
+        if (itemData) {
+            // Show preview
+            const preview = document.getElementById('edit-preview');
+            preview.classList.remove('hidden');
+            document.getElementById('edit-preview-name').textContent = itemData.name;
+            document.getElementById('edit-preview-description').textContent = itemData.description || 'No description';
+        }
+    }
+
+    /**
+     * Load selected item for editing - fetches full code and puts in input
+     */
+    async loadSelectedForEditing() {
+        if (!this.editMode.selectedName || !this.editMode.type) return;
+
+        const socket = this.game.socketManager?.socket;
+        if (!socket) {
+            console.error('[MerlinPanelUI] Not connected to server');
+            return;
+        }
+
+        const token = localStorage.getItem('admin_token') || 'asdf123';
+        const worldId = this.game.currentWorldId;
+        const name = this.editMode.selectedName;
+        const type = this.editMode.type;
+
+        try {
+            // Request full data from server
+            const eventName = type === 'creature' ? 'admin:get_creature' : 'admin:get_item';
+            const resultEvent = type === 'creature' ? 'admin:get_creature:result' : 'admin:get_item:result';
+
+            socket.emit(eventName, { name, worldId, token });
+
+            const result = await new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    resolve({ success: false, error: 'Timeout' });
+                }, 5000);
+
+                socket.once(resultEvent, (data) => {
+                    clearTimeout(timeout);
+                    resolve(data);
+                });
+            });
+
+            if (!result.success) {
+                console.error('[MerlinPanelUI] Failed to load item:', result.error);
+                return;
+            }
+
+            const data = type === 'creature' ? result.creature : result.item;
+            this.editMode.selectedData = data;
+
+            // Populate the input with an edit prompt
+            const input = document.getElementById('merlin-custom-input');
+            input.value = `Edit the ${type} "${name}": `;
+            input.focus();
+
+            // Store the editing context for the task manager
+            this.editMode.editing = {
+                name,
+                type,
+                code: data.code,
+                description: data.description,
+                icon: data.icon // for items
+            };
+
+            console.log(`[MerlinPanelUI] Loaded ${type} "${name}" for editing`);
+
+        } catch (error) {
+            console.error('[MerlinPanelUI] Failed to load for editing:', error);
+        }
     }
 
     /**
@@ -402,11 +797,31 @@ export class MerlinPanelUI {
             return;
         }
 
-        console.log(`[MerlinPanelUI] Starting custom task: ${text}`);
-        this.taskManager.createTask(text, this.selectedCategory || 'custom');
+        // Check if we're in edit mode with an item loaded
+        let category = this.selectedCategory || 'custom';
+        let editContext = null;
 
-        // Clear input
+        if (this.editMode.editing) {
+            // Pass edit context to the task
+            editContext = {
+                isEdit: true,
+                name: this.editMode.editing.name,
+                type: this.editMode.editing.type,
+                existingCode: this.editMode.editing.code,
+                existingDescription: this.editMode.editing.description,
+                existingIcon: this.editMode.editing.icon
+            };
+            category = this.editMode.editing.type; // 'creature' or 'item'
+            console.log(`[MerlinPanelUI] Starting edit task for ${editContext.type}: ${editContext.name}`);
+        } else {
+            console.log(`[MerlinPanelUI] Starting custom task: ${text}`);
+        }
+
+        this.taskManager.createTask(text, category, editContext);
+
+        // Clear input and reset edit mode
         input.value = '';
+        this.editMode.editing = null;
 
         // Update task list
         this.updateTaskList();
@@ -1098,6 +1513,11 @@ export class MerlinPanelUI {
      * Show the panel
      */
     show() {
+        // Close all other panels first (only one panel open at a time)
+        if (this.game.uiManager) {
+            this.game.uiManager.closeAllPanels('merlin');
+        }
+
         const panel = document.getElementById('merlin-panel');
         panel.classList.remove('hidden');
         this.isVisible = true;
@@ -1209,6 +1629,56 @@ export class MerlinPanelUI {
                 text-shadow: 0 0 10px rgba(200, 180, 255, 0.5);
             }
 
+            /* Model Selector */
+            .merlin-model-selector {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-left: auto;
+            }
+
+            .merlin-model-selector label {
+                font-size: 16px;
+                cursor: pointer;
+            }
+
+            #merlin-model-select {
+                background: rgba(40, 40, 80, 0.9);
+                border: 1px solid #5a5a9a;
+                border-radius: 6px;
+                color: #ccc;
+                font-family: inherit;
+                font-size: 13px;
+                padding: 6px 10px;
+                cursor: pointer;
+                max-width: 180px;
+                transition: all 0.2s;
+            }
+
+            #merlin-model-select:hover {
+                border-color: #7a7aca;
+                background: rgba(60, 60, 100, 0.9);
+            }
+
+            #merlin-model-select:focus {
+                outline: none;
+                border-color: #8a8ada;
+                box-shadow: 0 0 8px rgba(130, 130, 200, 0.4);
+            }
+
+            #merlin-model-select option {
+                background: #1a1a2e;
+                color: #ccc;
+                padding: 8px;
+            }
+
+            #merlin-model-select optgroup {
+                background: #252540;
+                color: #a0a0d0;
+                font-weight: bold;
+                font-style: normal;
+            }
+
             .merlin-close-btn {
                 position: absolute;
                 bottom: 15px;
@@ -1254,11 +1724,18 @@ export class MerlinPanelUI {
                 gap: 8px;
             }
 
-            /* Category Grid - 3 columns for side panel */
+            /* Category Grid - 3 columns on 2 rows for side panel */
             .merlin-category-grid {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 8px;
+            }
+
+            /* Adjust for 6 categories */
+            @media (min-width: 400px) {
+                .merlin-category-grid {
+                    grid-template-columns: repeat(3, 1fr);
+                }
             }
 
             .merlin-category-btn {
@@ -2309,6 +2786,156 @@ export class MerlinPanelUI {
             @keyframes spin {
                 from { transform: rotate(0deg); }
                 to { transform: rotate(360deg); }
+            }
+
+            /* ========== Edit Mode Styles ========== */
+            #merlin-edit-section.hidden {
+                display: none;
+            }
+
+            .edit-type-selector {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            .edit-type-btn {
+                flex: 1;
+                padding: 10px 15px;
+                background: rgba(40, 40, 80, 0.8);
+                border: 2px solid #3a3a6a;
+                border-radius: 8px;
+                color: #a0a0d0;
+                font-family: inherit;
+                font-size: 15px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .edit-type-btn:hover {
+                background: rgba(60, 60, 100, 0.9);
+                border-color: #5a5a9a;
+                color: #fff;
+            }
+
+            .edit-type-btn.selected {
+                background: rgba(80, 80, 140, 0.9);
+                border-color: #7a7aca;
+                color: #fff;
+                box-shadow: 0 0 10px rgba(130, 130, 200, 0.3);
+            }
+
+            .edit-selector-container {
+                background: rgba(30, 30, 60, 0.6);
+                border: 1px solid #3a3a6a;
+                border-radius: 8px;
+                padding: 10px;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+
+            .edit-placeholder,
+            .edit-loading,
+            .edit-error {
+                color: #666;
+                font-style: italic;
+                text-align: center;
+                padding: 15px;
+            }
+
+            .edit-error {
+                color: #f44336;
+            }
+
+            .edit-select-list {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .edit-select-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 12px;
+                background: rgba(40, 40, 70, 0.5);
+                border: 1px solid transparent;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .edit-select-item:hover {
+                background: rgba(60, 60, 100, 0.6);
+                border-color: #5a5a9a;
+            }
+
+            .edit-select-item.selected {
+                background: rgba(80, 80, 140, 0.7);
+                border-color: #7a7aca;
+            }
+
+            .edit-item-icon {
+                font-size: 18px;
+            }
+
+            .edit-item-name {
+                flex: 1;
+                color: #ccc;
+                font-size: 15px;
+            }
+
+            .edit-item-world {
+                font-size: 14px;
+                opacity: 0.7;
+            }
+
+            .edit-preview {
+                margin-top: 12px;
+                background: rgba(40, 40, 80, 0.6);
+                border: 1px solid #5a5a9a;
+                border-radius: 8px;
+                padding: 12px;
+            }
+
+            .edit-preview.hidden {
+                display: none;
+            }
+
+            .edit-preview-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+
+            .edit-preview-name {
+                font-size: 16px;
+                color: #fff;
+                font-weight: bold;
+            }
+
+            .edit-preview-load-btn {
+                padding: 6px 12px;
+                background: linear-gradient(180deg, #4a7c4a, #3a6a3a);
+                border: 1px solid #5a9a5a;
+                border-radius: 6px;
+                color: #fff;
+                font-family: inherit;
+                font-size: 13px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .edit-preview-load-btn:hover {
+                background: linear-gradient(180deg, #5a8c5a, #4a7a4a);
+                transform: translateY(-1px);
+            }
+
+            .edit-preview-description {
+                color: #aaa;
+                font-size: 14px;
+                line-height: 1.4;
             }
 
             /* Responsive - full width on small screens */

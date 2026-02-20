@@ -91,6 +91,11 @@ export class InventoryManager {
         this.addItemToSlot(39, 'sword', 1, 'tool');  // Sword moved to inventory
         this.addItemToSlot(39, 'mob_waves_block', 10, 'block');
         this.addItemToSlot(41, 'slime', 64, 'block');
+
+        // ===== TOOLS =====
+        this.addItemToSlot(42, 'grappling_hook', 1, 'tool');
+        this.addItemToSlot(43, 'fishing_pole', 1, 'item');
+        this.addItemToSlot(44, 'paint_brush', 1, 'tool');
     }
 
     // --- Slot Accessors for Crafting ---

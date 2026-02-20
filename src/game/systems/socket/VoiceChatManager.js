@@ -68,7 +68,17 @@ export class VoiceChatManager {
                 const peerId = this.socketIdToPeerId(socketId);
                 console.log(`[VoiceChatManager] Creating PeerJS with ID: ${peerId}`);
 
-                this.peerJs = new Peer(peerId);
+                // Connect to our self-hosted PeerJS signaling server
+                // instead of the unreliable free PeerJS cloud (0.peerjs.com)
+                const peerHost = window.location.hostname;
+                const peerPort = window.location.port ? Number(window.location.port) : (window.location.protocol === 'https:' ? 443 : 80);
+                // In dev, Vite proxies /peerjs to the backend server (port 2567)
+                this.peerJs = new Peer(peerId, {
+                    host: peerHost,
+                    port: peerPort,
+                    path: '/peerjs',
+                    secure: window.location.protocol === 'https:'
+                });
 
                 this.peerJs.on('open', (id) => {
                     console.log('[VoiceChatManager] PeerJS connected with ID:', id);

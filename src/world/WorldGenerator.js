@@ -103,6 +103,7 @@ export class WorldGenerator {
                 // 2D Terrain Height (Cached in TerrainGenerator)
                 const groundHeight = this.getTerrainHeight(wx, wz);
                 const biome = this.getBiomeWithHeight(wx, wz, groundHeight);
+                const riverWaterLevel = this.terrainGenerator.getRiverWaterLevel(wx, wz);
 
                 // OPTIMIZATION: Check if this column is entirely above groundwork once
                 const columnIsUnderground = startY <= groundHeight;
@@ -138,7 +139,8 @@ export class WorldGenerator {
 
                         // Surface/Sub-surface layers
                         if (wy === groundHeight) {
-                            if (biome === 'DESERT') type = Blocks.SAND;
+                            if (riverWaterLevel > 0) type = Blocks.SAND; // River bed
+                            else if (biome === 'DESERT') type = Blocks.SAND;
                             else if (biome === 'SNOW') type = Blocks.SNOW;
                             else if (groundHeight < this.seaLevel + 2 && biome !== 'MOUNTAIN') type = Blocks.SAND; // Beach
                             else type = Blocks.GRASS;
@@ -149,7 +151,10 @@ export class WorldGenerator {
 
                         this.game.setBlock(wx, wy, wz, type, true, true);
                     } else if (wy <= this.seaLevel && this.oceansEnabled) {
-                        // Water (only if oceans are enabled)
+                        // Ocean water at/below sea level
+                        this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
+                    } else if (wy <= riverWaterLevel) {
+                        // River water above sea level
                         this.game.setBlock(wx, wy, wz, Blocks.WATER, true, true);
                     }
                 }
@@ -158,6 +163,9 @@ export class WorldGenerator {
 
         // Structure Generation (Trees, etc.)
         this.generateFeatures(cx, cy, cz);
+
+        // Volcano Generation - check if this chunk should trigger a volcano
+        this.checkVolcanoGeneration(cx, cy, cz);
 
         // Generate village near spawn (spawn is at 32, 80, 32 = chunk 2, 5, 2)
         // Trigger when we generate a nearby chunk
@@ -550,6 +558,76 @@ export class WorldGenerator {
     generateFeatures(cx, cy, cz) {
         this.structureGenerator.generateFeatures(cx, cy, cz);
     }
+
+    /**
+     * Check if a volcano should be generated near this chunk.
+     * Uses a grid-based approach: every volcanoGridSize blocks, check if a volcano
+     * should exist based on deterministic hashing and biome checks.
+     * Only triggers once per grid cell, when the matching chunk is generated.
+     */
+    checkVolcanoGeneration(cx, cy, cz) {
+        // Volcanoes are placed on a grid of ~160 blocks (10 chunks)
+        const volcanoGridChunks = 10;
+
+        // Only check at surface-level chunks (where terrain is)
+        const startY = cy * this.game.chunkSize;
+        if (startY > 60 || startY < 16) return; // Only trigger near ground level
+
+        // Snap to grid cell
+        const gridX = Math.floor(cx / volcanoGridChunks);
+        const gridZ = Math.floor(cz / volcanoGridChunks);
+
+        // Only trigger on the first chunk of each grid cell (deterministic)
+        const triggerCx = gridX * volcanoGridChunks;
+        const triggerCz = gridZ * volcanoGridChunks;
+        if (cx !== triggerCx || cz !== triggerCz) return;
+
+        // Deterministic hash to decide if this grid cell has a volcano
+        const seed = this.seed || 0;
+        let hash = seed;
+        hash = ((hash << 5) + hash) ^ (gridX * 73856093);
+        hash = ((hash << 5) + hash) ^ (gridZ * 83492791);
+        hash = ((hash << 5) + hash) ^ (12345678); // volcano salt
+        hash = Math.abs(hash) >>> 0;
+
+        // ~25% chance per grid cell to have a volcano
+        const volcanoChance = (hash % 10000) / 10000;
+        if (volcanoChance > 0.25) return;
+
+        // Calculate world position for the volcano center
+        const volcanoX = triggerCx * this.game.chunkSize + Math.floor(this.game.chunkSize / 2);
+        const volcanoZ = triggerCz * this.game.chunkSize + Math.floor(this.game.chunkSize / 2);
+
+        // Check distance from spawn - must be at least 200 blocks away
+        const spawnX = Config.PLAYER.SPAWN_POINT.x;
+        const spawnZ = Config.PLAYER.SPAWN_POINT.z;
+        const distFromSpawn = Math.sqrt((volcanoX - spawnX) ** 2 + (volcanoZ - spawnZ) ** 2);
+        if (distFromSpawn < 200) return;
+
+        // Check biome - prefer mountain biomes (also allow plains for variety)
+        const volcanoY = this.getTerrainHeight(volcanoX, volcanoZ);
+        const biome = this.getBiomeWithHeight(volcanoX, volcanoZ, volcanoY);
+        if (biome !== 'MOUNTAIN' && biome !== 'PLAINS') return;
+
+        // Additional filter: mountains always get volcanos, plains only 30% of the time
+        if (biome === 'PLAINS') {
+            const plainsHash = ((hash >> 8) % 10000) / 10000;
+            if (plainsHash > 0.3) return;
+        }
+
+        // Prevent duplicate generation with a tracker set
+        if (!this._generatedVolcanoes) this._generatedVolcanoes = new Set();
+        const volcanoKey = `${gridX},${gridZ}`;
+        if (this._generatedVolcanoes.has(volcanoKey)) return;
+        this._generatedVolcanoes.add(volcanoKey);
+
+        // Generate the volcano! (defer slightly so surrounding terrain is ready)
+        const structGen = this.structureGenerator;
+        setTimeout(() => {
+            structGen.generateVolcano(volcanoX, volcanoY, volcanoZ);
+        }, 50);
+    }
+
 
     setSeed(seed) {
         console.log('WorldGenerator: Setting seed to', seed);

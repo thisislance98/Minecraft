@@ -383,6 +383,84 @@ export async function loadWorldItems(worldId: string): Promise<void> {
 }
 
 /**
+ * Update an existing item definition
+ * @param name The item name to update
+ * @param updates Partial updates to apply
+ * @param worldId Optional world ID
+ */
+export async function updateItem(
+    name: string,
+    updates: Partial<ItemDefinition>,
+    worldId?: string
+): Promise<{ success: boolean; error?: string }> {
+    const effectiveWorldId = worldId || 'global';
+    const cacheKey = getCacheKey(effectiveWorldId, name);
+
+    // Check if exists
+    const existing = itemCache.get(cacheKey);
+    if (!existing) {
+        return { success: false, error: `Item '${name}' not found in world '${effectiveWorldId}'` };
+    }
+
+    // If code is being updated, validate it
+    if (updates.code) {
+        const validation = validateItemCode(name, updates.code);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+    }
+
+    // If icon is being updated, validate it
+    if (updates.icon) {
+        const validation = validateIcon(updates.icon);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+    }
+
+    try {
+        const now = Date.now();
+        // Merge updates
+        const updatedItem: ItemDefinition = {
+            ...existing,
+            ...updates,
+            name, // Don't allow name change
+            worldId: effectiveWorldId,
+            updatedAt: now
+        };
+
+        // Save to Firebase
+        if (db) {
+            const updateData = {
+                code: updatedItem.code,
+                icon: updatedItem.icon,
+                description: updatedItem.description,
+                updatedAt: now
+            };
+
+            if (effectiveWorldId === 'global') {
+                await db.collection('dynamic_items').doc(name).update(updateData);
+            } else {
+                await db.collection('worlds').doc(effectiveWorldId)
+                    .collection('items').doc(name).update(updateData);
+            }
+        }
+
+        // Update cache
+        itemCache.set(cacheKey, updatedItem);
+
+        // Broadcast update to clients
+        broadcastItemDefinition(updatedItem, effectiveWorldId);
+
+        console.log(`[DynamicItemService] Updated item: ${name} (world: ${effectiveWorldId})`);
+        return { success: true };
+    } catch (e: any) {
+        console.error('[DynamicItemService] Failed to update item:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+/**
  * Send all cached items to a newly connected client
  * @param socket The socket to send to
  * @param worldId The world the player is joining

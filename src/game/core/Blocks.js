@@ -62,6 +62,12 @@ export const Blocks = {
     GRAVEL: 'gravel',
     PUMPKIN: 'pumpkin',
     MELON: 'melon',
+
+    // Farming Blocks
+    FARMLAND: 'farmland',
+    WHEAT: 'wheat',
+    CARROTS: 'carrots',
+    HAY_BALE: 'hay_bale',
     MYCELIUM: 'mycelium',
     IRON_BARS: 'iron_bars',
     WINDOW_FRAME: 'window_frame',

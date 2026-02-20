@@ -9,8 +9,6 @@
 // eager: true ensures they are available immediately
 const modules = import.meta.glob([
     './entities/animals/*.js',
-    './entities/monsters/*.js',
-    './entities/furniture/*.js',
     './entities/plants/*.js'
 ], { eager: true });
 
@@ -26,41 +24,9 @@ for (const path in modules) {
     }
 }
 
-// Manual additions if any (for debugging or special cases)
-import { Slime } from './entities/monsters/Slime.js';
-import { Firefly } from './entities/animals/Firefly.js';
-import { Bee } from './entities/animals/Bee.js'; // Verification entity
-import { Starfish } from './entities/animals/Starfish.js';
-import { Car } from './entities/animals/Car.js';
-import { Hedgehog } from './entities/animals/Hedgehog.js';
-import { Merlin } from './entities/animals/Merlin.js';
-import { Rhinoceros } from './entities/animals/Rhinoceros.js';
-import { Hippopotamus } from './entities/animals/Hippopotamus.js';
-import { Crocodile } from './entities/animals/Crocodile.js';
-import { Ostrich } from './entities/animals/Ostrich.js';
-import { Wolf } from './entities/animals/Wolf.js';
-import { Pig } from './entities/animals/Pig.js';
-import { Cow } from './entities/animals/Cow.js';
-import { Sheep } from './entities/animals/Sheep.js';
-import { Chicken } from './entities/animals/Chicken.js';
-AnimalClasses['Slime'] = Slime;
-AnimalClasses['Firefly'] = Firefly;
-AnimalClasses['Bee'] = Bee;
-AnimalClasses['Starfish'] = Starfish;
-AnimalClasses['Car'] = Car;
-AnimalClasses['Hedgehog'] = Hedgehog;
-AnimalClasses['Merlin'] = Merlin;
-AnimalClasses['Rhinoceros'] = Rhinoceros;
-AnimalClasses['Hippopotamus'] = Hippopotamus;
-AnimalClasses['Crocodile'] = Crocodile;
-AnimalClasses['Ostrich'] = Ostrich;
-AnimalClasses['Wolf'] = Wolf;
-AnimalClasses['Pig'] = Pig;
-AnimalClasses['Cow'] = Cow;
-AnimalClasses['Sheep'] = Sheep;
-AnimalClasses['Chicken'] = Chicken;
-console.log('[AnimalRegistry] Manually registered common animals: Wolf, Pig, Cow, Sheep, Chicken.');
-console.log('[AnimalRegistry] Final AnimalClasses keys:', Object.keys(AnimalClasses));
+// No manual creature registrations — all creatures have been archived.
+// The glob pattern above will auto-discover any new creatures added to ./entities/animals/
+console.log('[AnimalRegistry] AnimalClasses keys:', Object.keys(AnimalClasses));
 
 // Expose Animal base class to window for dynamic creature creation
 import { Animal } from './entities/Animal.js';

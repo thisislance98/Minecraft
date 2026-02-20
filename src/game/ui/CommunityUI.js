@@ -716,6 +716,10 @@ export class CommunityUI {
         this.container.style.display = this.isOpen ? 'flex' : 'none';
 
         if (this.isOpen) {
+            // Close all other panels first (only one panel open at a time)
+            if (this.game.uiManager && typeof this.game.uiManager.closeAllPanels === 'function') {
+                this.game.uiManager.closeAllPanels('community');
+            }
             // Prompt for username on first use
             if (!this.username) {
                 await this.promptForUsername();

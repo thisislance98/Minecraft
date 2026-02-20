@@ -159,6 +159,13 @@ const palettes = {
     mob_waves_block: { base: ['#0f0f0f', '#1a1a1a'], wave: '#ff0000', accent: '#800000' },
     cactus: ['#2E8B57', '#006400', '#556B2F'], // SeaGreen, DarkGreen, DarkOliveGreen
 
+    // Farming Blocks
+    farmland: ['#3a2010', '#4a2a15', '#35190d', '#2e1508'], // Dark tilled soil
+    wheat: ['#DAA520', '#D4A017', '#C5961C', '#FFD700', '#E8C71A'], // Golden wheat stalks
+    carrots: ['#228B22', '#2E8B57', '#3CB371', '#FF8C00', '#FF6600'], // Green tops + orange roots
+    hay_bale: ['#D4A017', '#C5961C', '#E8C71A', '#B8860B', '#8B7355'], // Yellow-golden with brown bands
+    pumpkin: ['#E8751A', '#D4681A', '#FF8C00', '#CC5500', '#6B8E23'], // Orange body with green stem
+
     // Enterprise Palettes
     enterprise_hull: ['#E3E3E3', '#D0D0D0', '#C0C0C0', '#F0F0F0'], // Smooth pearl white/grey
     enterprise_floor: ['#A0A0A0', '#909090', '#B0B0B0'], // Darker grey floor
@@ -1879,6 +1886,124 @@ export function generateTexture(type, size = 16) {
             for (let i = 0; i < size; i += 2) {
                 for (let j = 0; j < size; j += 2) {
                     if ((i + j) % 4 === 0) ctx.fillRect(i, j, 1, 1);
+                }
+            }
+            break;
+        }
+
+        // ===== FARMING BLOCKS =====
+
+        case 'farmland': {
+            const colors = palettes.farmland;
+            // Dark tilled soil base
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = colors[Math.floor(seededRandom(seed++) * colors.length)];
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Furrow lines (horizontal rows)
+            for (let y = 2; y < size; y += 4) {
+                ctx.fillStyle = '#2a1508';
+                ctx.fillRect(0, y, size, 1);
+                ctx.fillStyle = '#1e0f05';
+                ctx.fillRect(0, y + 1, size, 1);
+            }
+            // Soil moisture specks
+            for (let i = 0; i < 10; i++) {
+                const rx = Math.floor(seededRandom(seed++) * size);
+                const ry = Math.floor(seededRandom(seed++) * size);
+                ctx.fillStyle = '#1a0a02';
+                ctx.fillRect(rx, ry, 1, 1);
+            }
+            break;
+        }
+
+        case 'wheat': {
+            // Transparent background (plant block)
+            ctx.clearRect(0, 0, size, size);
+            const wColors = palettes.wheat;
+            // Draw wheat stalks
+            for (let stalk = 1; stalk < size - 1; stalk += 2) {
+                // Stalk stem (thin green-brown line)
+                ctx.fillStyle = '#6B8E23'; // Olive green stem
+                ctx.fillRect(stalk, 4, 1, size - 4);
+                // Wheat head (golden top)
+                const headColor = wColors[Math.floor(seededRandom(seed++) * 3)];
+                ctx.fillStyle = headColor;
+                ctx.fillRect(stalk - 1, 1, 3, 4);
+                ctx.fillRect(stalk, 0, 1, 2);
+                // Grain details
+                ctx.fillStyle = wColors[3];
+                ctx.fillRect(stalk, 2, 1, 1);
+            }
+            break;
+        }
+
+        case 'carrots': {
+            // Transparent background (plant block)
+            ctx.clearRect(0, 0, size, size);
+            const cColors = palettes.carrots;
+            // Draw carrot plants
+            for (let plant = 2; plant < size - 1; plant += 3) {
+                // Green leafy top
+                ctx.fillStyle = cColors[Math.floor(seededRandom(seed++) * 3)];
+                ctx.fillRect(plant - 1, 0, 3, 5);
+                ctx.fillRect(plant, 0, 1, 7);
+                // Carrot root showing at bottom
+                ctx.fillStyle = cColors[3 + Math.floor(seededRandom(seed++) * 2)];
+                ctx.fillRect(plant, size - 5, 1, 4);
+                ctx.fillRect(plant, size - 3, 2, 2);
+            }
+            break;
+        }
+
+        case 'pumpkin': {
+            const pColors = palettes.pumpkin;
+            // Orange pumpkin body
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = pColors[Math.floor(seededRandom(seed++) * 4)]; // First 4 orange colors
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Vertical ribs (pumpkin segments)
+            ctx.fillStyle = pColors[3]; // Darker orange
+            for (let ribX = 3; ribX < size; ribX += 4) {
+                ctx.fillRect(ribX, 0, 1, size);
+            }
+            // Green stem on top section
+            ctx.fillStyle = pColors[4]; // Green
+            ctx.fillRect(6, 0, 3, 3);
+            ctx.fillStyle = '#4a6e1a';
+            ctx.fillRect(7, 0, 1, 4);
+            break;
+        }
+
+        case 'hay_bale': {
+            const hColors = palettes.hay_bale;
+            // Base straw texture
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    ctx.fillStyle = hColors[Math.floor(seededRandom(seed++) * 3)]; // First 3 are golden straw
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+            // Horizontal band straps (dark brown)
+            ctx.fillStyle = hColors[4]; // Brown band
+            ctx.fillRect(0, 3, size, 2);
+            ctx.fillRect(0, size - 5, size, 2);
+            // Band buckle detail
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(6, 3, 4, 2);
+            ctx.fillRect(6, size - 5, 4, 2);
+            // Straw texture lines
+            ctx.fillStyle = hColors[3];
+            for (let y = 0; y < size; y += 3) {
+                for (let x = 0; x < size; x++) {
+                    if (seededRandom(seed++) > 0.6) {
+                        ctx.fillRect(x, y, 1, 1);
+                    }
                 }
             }
             break;

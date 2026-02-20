@@ -58,7 +58,7 @@ export class PuppyWandItem extends Item {
 
     spawnPuppyProjectile(game, position, velocity) {
         // Import Puppy class dynamically to avoid circular dependencies
-        import('../entities/animals/Puppy.js').then(({ Puppy }) => {
+        import('../entities/animals-archive/Puppy.js').then(({ Puppy }) => {
             // Create a puppy projectile that flies through the air
             const projectile = new PuppyProjectile(game, position, velocity, Puppy);
 

@@ -59,6 +59,12 @@ window.addEventListener('load', () => {
 
             console.log('[Main] FewShotClient wired to TaskManager');
         }
+
+        // Wire up FewShotClient to MerlinPanel for model selection
+        if (game.uiManager?.merlinPanel) {
+            game.uiManager.merlinPanel.setFewShotClient(window.fewShotClient);
+            console.log('[Main] FewShotClient wired to MerlinPanel');
+        }
     }
 
     // Check for new version badge

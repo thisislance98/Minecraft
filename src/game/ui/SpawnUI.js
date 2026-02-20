@@ -160,13 +160,13 @@ export class SpawnUI {
     }
 
     openPanel() {
+        // Close all other panels first (only one panel open at a time)
+        if (this.game.uiManager && typeof this.game.uiManager.closeAllPanels === 'function') {
+            this.game.uiManager.closeAllPanels('spawn');
+        }
+
         this.isOpen = true;
         this.panel.classList.remove('hidden');
-
-        // Close other menus if manager supports it
-        if (this.game.uiManager && typeof this.game.uiManager.closeAllMenus === 'function') {
-            this.game.uiManager.closeAllMenus(this);
-        }
 
         // Unlock mouse so user can click
         if (document.pointerLockElement) {

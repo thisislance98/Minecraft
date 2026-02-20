@@ -115,6 +115,12 @@ export class AssetManager {
             'wool_gray': { hardness: 0.8 },
             'wool_brown': { hardness: 0.8 },
             'wool_cyan': { hardness: 0.8 },
+            // Farming blocks
+            'pumpkin': { hardness: 0.5 },
+            'farmland': { hardness: 0.5 },
+            'wheat': { hardness: 0.1 },
+            'carrots': { hardness: 0.1 },
+            'hay_bale': { hardness: 0.5 },
             // Concrete blocks (harder than wool)
             'concrete_white': { hardness: 1.8 },
             'concrete_red': { hardness: 1.8 },
@@ -287,6 +293,23 @@ export class AssetManager {
         const cactusTop = this.getOrCreateMat('cactus_top');
         // Side, Side, Top, Bottom, Side, Side
         this.registerBlockMaterials('cactus', [cactusSide, cactusSide, cactusTop, cactusTop, cactusSide, cactusSide]);
+
+        // Pumpkin
+        const pumpkin = this.getOrCreateMat('pumpkin');
+        this.registerBlockMaterials('pumpkin', pumpkin);
+
+        // Farming Blocks
+        const farmland = this.getOrCreateMat('farmland');
+        this.registerBlockMaterials('farmland', farmland);
+
+        const wheat = this.getOrCreateMat('wheat', true); // Transparent plant block
+        this.registerBlockMaterials('wheat', wheat);
+
+        const carrots = this.getOrCreateMat('carrots', true); // Transparent plant block
+        this.registerBlockMaterials('carrots', carrots);
+
+        const hayBale = this.getOrCreateMat('hay_bale');
+        this.registerBlockMaterials('hay_bale', hayBale);
 
         // Castle Blocks
         const stoneBrick = this.getOrCreateMat('stone_brick', false);

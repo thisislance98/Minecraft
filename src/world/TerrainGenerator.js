@@ -9,6 +9,7 @@ export class TerrainGenerator {
 
         // OPTIMIZATION: Cache terrain heights to avoid redundant noise calculations
         // Adjacent chunks share column edges, so caching prevents recalculation
+        // Each entry stores [groundHeight, riverWaterLevel] to avoid double computation
         this.heightCache = new Map();
         this.maxCacheSize = 50000; // ~50k columns = ~13 chunks radius worth
     }
@@ -26,25 +27,33 @@ export class TerrainGenerator {
         this.riversEnabled = enabled;
     }
 
+    _getCacheKey(x, z) {
+        return ((x & 0xFFFF) << 16) | (z & 0xFFFF);
+    }
+
+    _ensureCached(x, z) {
+        const cacheKey = this._getCacheKey(x, z);
+        if (!this.heightCache.has(cacheKey)) {
+            const result = this._calculateTerrainHeight(x, z);
+            if (this.heightCache.size >= this.maxCacheSize) {
+                const firstKey = this.heightCache.keys().next().value;
+                this.heightCache.delete(firstKey);
+            }
+            this.heightCache.set(cacheKey, result);
+        }
+        return this.heightCache.get(cacheKey);
+    }
+
     getTerrainHeight(x, z) {
-        // OPTIMIZATION: Check cache first with numeric key
-        const cacheKey = ((x & 0xFFFF) << 16) | (z & 0xFFFF);
-        if (this.heightCache.has(cacheKey)) {
-            return this.heightCache.get(cacheKey);
-        }
+        return this._ensureCached(x, z)[0];
+    }
 
-        // Calculate height (expensive - multiple noise calls)
-        const height = this._calculateTerrainHeight(x, z);
-
-        // Cache result with LRU eviction
-        if (this.heightCache.size >= this.maxCacheSize) {
-            // Remove oldest entry (first key in Map iteration order)
-            const firstKey = this.heightCache.keys().next().value;
-            this.heightCache.delete(firstKey);
-        }
-        this.heightCache.set(cacheKey, height);
-
-        return height;
+    /**
+     * Returns the river water surface level at (x, z), or -1 if not in a river.
+     * Computed alongside terrain height in a single pass - this is just a cache lookup.
+     */
+    getRiverWaterLevel(x, z) {
+        return this._ensureCached(x, z)[1];
     }
 
     _calculateTerrainHeight(x, z) {
@@ -80,6 +89,9 @@ export class TerrainGenerator {
         }
 
         // -- Rivers --
+        // Track water level: -1 means not in a river
+        let riverWaterLevel = -1;
+
         if (this.riversEnabled) {
             const warpX = this.noise.get2D(x, z, 0.005, 1) * 40;
             const warpZ = this.noise.get2D(z + 500, x + 500, 0.005, 1) * 40;
@@ -88,13 +100,17 @@ export class TerrainGenerator {
             const riverWidth = 0.15;
 
             if (riverNoise < riverWidth) {
+                // Water surface is 3 blocks below the bank for visible riverbanks
+                riverWaterLevel = Math.floor(height) - 3;
+
                 let riverFactor = Math.pow((riverWidth - riverNoise) / riverWidth, 2);
                 const riverBedHeight = Math.max(this.seaLevel - 12, height - 5);
                 height = height * (1 - riverFactor) + riverBedHeight * riverFactor;
             }
         }
 
-        return Math.floor(height);
+        // Return both values: [groundHeight, riverWaterLevel]
+        return [Math.floor(height), riverWaterLevel];
     } // end _calculateTerrainHeight
 
     isCave(x, y, z) {

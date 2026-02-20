@@ -173,6 +173,22 @@ export class SocketManager {
             this.game.uiManager?.showNotification(`Failed to join world: ${error.message}`, 'error');
         });
 
+        // Handle persistence status — warn player if world changes won't be saved
+        this.socket.on('persistence:status', (data) => {
+            if (!data.operational) {
+                console.warn('[SocketManager] World persistence is NOT operational — changes will not be saved');
+                this.game.uiManager?.showNotification('⚠️ World persistence is offline — your changes will not be saved', 'warning');
+            } else {
+                console.log('[SocketManager] World persistence: operational');
+            }
+        });
+
+        // Handle persistence warning — block/sign loading failed
+        this.socket.on('persistence:warning', (data) => {
+            console.warn('[SocketManager] Persistence warning:', data.message);
+            this.game.uiManager?.showNotification(`⚠️ ${data.message}`, 'warning');
+        });
+
         // Handle world settings changed by owner
         this.socket.on('world:settings_changed', (data) => {
             console.log('[SocketManager] World settings changed:', data);
@@ -292,6 +308,16 @@ export class SocketManager {
             console.log(`[SocketManager] Received PeerJS ID from ${data.socketId}: ${data.peerId}`);
             // Delegate to VoiceChatManager
             this.voiceChatManager.handlePeerJoin(data.socketId, data.peerId);
+        });
+
+        // Handle remote player voice activity indicators
+        this.socket.on('player:voice', (data) => {
+            // data: { id, active }
+            console.log(`[SocketManager] Player ${data.id} voice: ${data.active ? 'ON' : 'OFF'}`);
+            const meshInfo = this.playerMeshes.get(data.id);
+            if (meshInfo) {
+                this.showRemoteVoiceIndicator(data.id, meshInfo, data.active);
+            }
         });
 
         this.socket.on('player:move', (data) => {
@@ -760,6 +786,38 @@ export class SocketManager {
         }
     }
 
+    /**
+     * Show/hide a voice indicator sprite above a remote player's head
+     */
+    showRemoteVoiceIndicator(id, meshInfo, active) {
+        if (active) {
+            // Create a small speaker icon sprite above the player's head
+            if (!meshInfo.voiceSprite) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.font = '48px serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🔊', 32, 32);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                const sprite = new THREE.Sprite(material);
+                sprite.scale.set(0.5, 0.5, 0.5);
+                sprite.position.set(0, 2.5, 0); // Above head
+                meshInfo.group.add(sprite);
+                meshInfo.voiceSprite = sprite;
+            }
+            meshInfo.voiceSprite.visible = true;
+        } else {
+            if (meshInfo.voiceSprite) {
+                meshInfo.voiceSprite.visible = false;
+            }
+        }
+    }
+
     handleRemoteAction(id, action) {
         const meshInfo = this.playerMeshes.get(id);
         if (!meshInfo) return;
@@ -794,6 +852,11 @@ export class SocketManager {
                 console.log(`[SocketManager] Voice ${voiceActive ? 'ON' : 'OFF'}`);
                 localStream.getAudioTracks().forEach(t => t.enabled = voiceActive);
                 this.game.uiManager?.toggleVoiceTransmitIndicator(voiceActive);
+
+                // Broadcast voice activity to other players
+                if (this.socket) {
+                    this.socket.emit('player:voice', voiceActive);
+                }
             }
         }
 

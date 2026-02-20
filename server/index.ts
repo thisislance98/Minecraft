@@ -21,11 +21,13 @@ import { testRoutes, initTestRoutes } from './routes/test';
 import { auth } from './config'; // Initialize config
 import { worldManagementService } from './services/WorldManagementService';
 import { worldPersistence } from './services/WorldPersistence';
-import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature } from './services/DynamicCreatureService';
+import { loadAllCreatures, sendCreaturesToSocket, deleteCreature, getAllCreatures, getCreature, createCreature } from './services/DynamicCreatureService';
 import { loadAllItems, sendItemsToSocket, deleteItem } from './services/DynamicItemService';
 import { initKnowledgeService } from './services/KnowledgeService';
+import { unifiedExampleIndex } from './ai/examples/UnifiedExampleIndex';
 // Genesis system is on separate branch
 // import { initGenesisService } from './services/GenesisService';
+import { ExpressPeerServer } from 'peer';
 import { WebSocketServer } from 'ws';
 import { FewShotSession } from './services/FewShotSession';
 import { logError } from './utils/logger';
@@ -46,8 +48,8 @@ import * as path from 'path';
 
 // ============ Server Setup ============
 
-// Use MINECRAFT_PORT to avoid conflicts with other projects using PORT
-const port = Number(process.env.MINECRAFT_PORT || 2567);
+// Use PORT for Cloud Run, MINECRAFT_PORT for local development
+const port = Number(process.env.PORT || process.env.MINECRAFT_PORT || 2567);
 const app = express();
 
 // Enable CORS
@@ -90,9 +92,79 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Create HTTP server
 const httpServer = createServer(app);
 
+// ============ WebSocket Routing Setup ============
+// Set up upgrade interception BEFORE any WebSocket servers are created
+// This ensures we can route upgrade requests to the correct handler
+
+const wssAI = new WebSocketServer({ noServer: true });
+let socketIOUpgradeHandler: Function | null = null;
+let peerUpgradeHandler: Function | null = null;
+
+// Wrap the httpServer's on method to capture upgrade handlers from PeerJS and Socket.IO
+const originalOn = httpServer.on.bind(httpServer);
+(httpServer as any).on = function(event: string, listener: Function) {
+    if (event === 'upgrade') {
+        // Capture handlers but don't register them - we route manually
+        if (!peerUpgradeHandler) {
+            peerUpgradeHandler = listener;
+            console.log('[WebSocket] Captured PeerJS upgrade handler');
+        } else if (!socketIOUpgradeHandler) {
+            socketIOUpgradeHandler = listener;
+            console.log('[WebSocket] Captured Socket.IO upgrade handler');
+        }
+        return this;
+    }
+    return originalOn(event, listener);
+};
+
+// Register our central upgrade router
+originalOn('upgrade', (request: any, socket: any, head: any) => {
+    const pathname = request.url || '';
+
+    if (pathname.startsWith('/api/fewshot') || pathname.startsWith('/api/antigravity')) {
+        // AI WebSocket - our custom handler
+        wssAI.handleUpgrade(request, socket, head, (ws: any) => {
+            wssAI.emit('connection', ws, request);
+        });
+    } else if (pathname.startsWith('/socket.io')) {
+        // Socket.IO
+        if (socketIOUpgradeHandler) {
+            socketIOUpgradeHandler(request, socket, head);
+        } else {
+            console.error('[WebSocket] No Socket.IO handler registered!');
+            socket.destroy();
+        }
+    } else if (pathname.startsWith('/peerjs')) {
+        // PeerJS
+        if (peerUpgradeHandler) {
+            peerUpgradeHandler(request, socket, head);
+        } else {
+            console.error('[WebSocket] No PeerJS handler registered!');
+            socket.destroy();
+        }
+    } else {
+        // Unknown path
+        socket.destroy();
+    }
+});
+
+wssAI.on('connection', (ws, req) => {
+    console.log('[AI] Client connected. Initializing FewShotSession...');
+    new FewShotSession(ws, req);
+});
+
+// ============ PeerJS Signaling Server ============
+const peerServer = ExpressPeerServer(httpServer, {
+    path: '/',           // Relative to the mount path
+    allow_discovery: false
+});
+app.use('/peerjs', peerServer);
+console.log('[Server] PeerJS signaling server mounted at /peerjs');
+
 // ============ Socket.IO Setup ============
 import { Server } from 'socket.io';
 
+// Create Socket.IO attached to httpServer (standard approach)
 export const io = new Server(httpServer, {
     cors: {
         origin: "*", // Allow all origins for simplicity
@@ -103,28 +175,10 @@ export const io = new Server(httpServer, {
 // Initialize test routes with Socket.IO
 initTestRoutes(io);
 
-// ============ Few-Shot AI Setup ============
-const wssAI = new WebSocketServer({ noServer: true });
-
-httpServer.on('upgrade', (request, socket, head) => {
-    const pathname = request.url || '';
-    // Support both /api/fewshot and legacy /api/antigravity endpoints
-    if (pathname.startsWith('/api/fewshot') || pathname.startsWith('/api/antigravity')) {
-        wssAI.handleUpgrade(request, socket, head, (ws) => {
-            wssAI.emit('connection', ws, request);
-        });
-    }
-});
-
-wssAI.on('connection', (ws, req) => {
-    console.log('[AI] Client connected. Initializing FewShotSession...');
-    new FewShotSession(ws, req);
-});
-
 // Simple in-memory room storage
 const MAX_PLAYERS_PER_ROOM = 4;
 const DAY_DURATION_SECONDS = 1800; // 30 minutes per day
-const TIME_INCREMENT_PER_SEC = 0; // Frozen at 0 to keep the game bright per user request
+const TIME_INCREMENT_PER_SEC = 1 / DAY_DURATION_SECONDS; // Time advances by 1/1800 per second (30 min day cycle)
 
 // Admin configuration
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
@@ -134,17 +188,28 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const CLI_SECRET = process.env.CLI_SECRET || 'asdf123';
 
 // Global Game Loop (Low frequency for sync)
-// We tick time for all rooms here
-setInterval(() => {
-    rooms.forEach((room, roomId) => {
-        // Increment time
-        room.time += TIME_INCREMENT_PER_SEC;
-        if (room.time > 1.0) room.time -= 1.0;
+// We tick time for all rooms here - respects world's timeFrozen setting
+setInterval(async () => {
+    for (const [roomId, room] of rooms) {
+        // Check if time is frozen for this world
+        try {
+            const world = await worldManagementService.getWorld(room.worldId);
+            const timeFrozen = world?.settings?.timeFrozen ?? false;
 
-        // Broadcast time every 2 seconds roughly (or every tick? 1 sec is fine)
-        // To save bandwidth, we could only sync occasionally, but 1Hz is low overhead.
+            if (!timeFrozen) {
+                // Increment time only if not frozen
+                room.time += TIME_INCREMENT_PER_SEC;
+                if (room.time > 1.0) room.time -= 1.0;
+            }
+        } catch (e) {
+            // If we can't get the world, still advance time (default behavior)
+            room.time += TIME_INCREMENT_PER_SEC;
+            if (room.time > 1.0) room.time -= 1.0;
+        }
+
+        // Broadcast time every second (regardless of frozen state - clients need to know current time)
         io.to(roomId).emit('world:time', room.time);
-    });
+    }
 }, 1000);
 
 interface PlayerState {
@@ -537,14 +602,15 @@ async function sendWorldDataToSocket(socket: any, worldId: string, roomId: strin
     // Send dynamic item definitions (world-scoped + global)
     await sendItemsToSocket(socket, worldId);
 
-    // Send persisted block changes
+    // Send persisted block changes (15s timeout — don't lose data on slow Firebase)
+    let blocksLoaded = false;
     try {
         const blockChanges = await Promise.race([
             worldPersistence.getBlockChanges(worldId),
-            new Promise<Map<string, string | null>>(resolve => setTimeout(() => resolve(new Map()), 1000))
-        ]) || new Map();
+            new Promise<Map<string, string | null>>((_, reject) => setTimeout(() => reject(new Error('Block loading timed out after 15s')), 15000))
+        ]);
 
-        if (blockChanges.size > 0) {
+        if (blockChanges && blockChanges.size > 0) {
             const blocksArray: { x: number; y: number; z: number; type: string | null }[] = [];
             for (const [key, type] of blockChanges) {
                 const [x, y, z] = key.split('_').map(Number);
@@ -552,19 +618,22 @@ async function sendWorldDataToSocket(socket: any, worldId: string, roomId: strin
             }
             socket.emit('blocks:initial', blocksArray);
             console.log(`[Socket] Sent ${blocksArray.length} persisted blocks to ${socket.id} for world ${worldId}`);
+            blocksLoaded = true;
         }
     } catch (e) {
-        console.error('Failed to load/send persisted blocks', e);
+        console.error(`[Socket] Failed to load persisted blocks for world ${worldId}:`, e);
+        socket.emit('persistence:warning', { type: 'blocks', message: 'Failed to load persisted blocks — some world changes may be missing' });
     }
 
-    // Send persisted signs
+    // Send persisted signs (15s timeout)
+    let signsLoaded = false;
     try {
         const signsMap = await Promise.race([
             worldPersistence.getSignTexts(worldId),
-            new Promise<Map<string, string>>(resolve => setTimeout(() => resolve(new Map()), 1000))
-        ]) || new Map();
+            new Promise<Map<string, string>>((_, reject) => setTimeout(() => reject(new Error('Sign loading timed out after 15s')), 15000))
+        ]);
 
-        if (signsMap.size > 0) {
+        if (signsMap && signsMap.size > 0) {
             const signsArray: { x: number; y: number; z: number; text: string }[] = [];
             for (const [key, text] of signsMap) {
                 const [x, y, z] = key.split('_').map(Number);
@@ -572,10 +641,20 @@ async function sendWorldDataToSocket(socket: any, worldId: string, roomId: strin
             }
             socket.emit('signs:initial', signsArray);
             console.log(`[Socket] Sent ${signsArray.length} persisted signs to ${socket.id} for world ${worldId}`);
+            signsLoaded = true;
         }
     } catch (e) {
-        console.error('Failed to load/send persisted signs', e);
+        console.error(`[Socket] Failed to load persisted signs for world ${worldId}:`, e);
+        socket.emit('persistence:warning', { type: 'signs', message: 'Failed to load persisted signs — some signs may be missing' });
     }
+
+    // Emit persistence status so client knows if persistence is operational
+    const isDisabled = worldPersistence.warnIfDisabled();
+    socket.emit('persistence:status', {
+        operational: !isDisabled,
+        blocksLoaded,
+        signsLoaded
+    });
 }
 
 io.on('connection', (socket) => {
@@ -601,6 +680,145 @@ io.on('connection', (socket) => {
         socketToUser.delete(socket.id);
     });
 
+    // ============ Villager Chat (registered immediately on connection) ============
+
+    socket.on('villager:chat', async (data: any) => {
+        const { villagerId, profession, professionName, name, job, backstory, playerMessage, isGreeting, quest } = data;
+        console.log(`[VillagerChat] ${name} the ${professionName} - ${isGreeting ? 'greeting' : `player says: "${playerMessage}"`}`);
+
+        const historyKey = `${socket.id}:${villagerId}`;
+
+        // Build conversation history
+        if (!conversationHistory.has(historyKey)) {
+            conversationHistory.set(historyKey, []);
+        }
+        const history = conversationHistory.get(historyKey)!;
+
+        // Add player message to history (if not a greeting)
+        if (playerMessage) {
+            history.push({ role: 'user', parts: [{ text: playerMessage }] });
+        }
+
+        // Try AI-generated response via OpenRouter
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (apiKey) {
+            try {
+                const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+                const villagerModel = process.env.VILLAGER_CHAT_MODEL || 'anthropic/claude-haiku-4.5';
+
+                const systemPrompt = `You are ${name}, a ${professionName} (specialty: ${job}) in a voxel world village.
+Your backstory: ${backstory}
+
+Personality guidelines:
+- Stay in character as a ${professionName} villager
+- Keep responses SHORT (1-3 sentences max)
+- Be friendly but have personality quirks based on your profession and backstory
+- Use simple, medieval/fantasy-style language
+- You can reference your job, the village, other villagers, monsters, weather, etc.
+- If the player asks something you wouldn't know, make up a fun in-character answer
+${quest ? `\nYou have a quest to offer: "${quest.title}" - ${quest.description}. ${quest.dialogueIntro}
+${quest.isAccepted ? 'The player already accepted this quest.' : 'Offer this quest naturally in conversation.'}
+${quest.canComplete ? 'The player has completed the quest requirements! Congratulate them.' : ''}` : ''}
+
+IMPORTANT: Respond ONLY with your dialogue line. No quotation marks, no stage directions, no narration.`;
+
+                // Build messages array from history
+                const messages: any[] = [
+                    { role: 'system', content: systemPrompt }
+                ];
+
+                // Add conversation history (last 10 exchanges)
+                const recentHistory = history.slice(-10);
+                for (const msg of recentHistory) {
+                    messages.push({
+                        role: msg.role === 'user' ? 'user' : 'assistant',
+                        content: msg.parts[0]?.text || ''
+                    });
+                }
+
+                // If greeting, add a user message to prompt the greeting
+                if (isGreeting) {
+                    messages.push({ role: 'user', content: '(A player has approached you. Greet them in character.)' });
+                }
+
+                const response = await fetch(OPENROUTER_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': process.env.OPENROUTER_REFERER || 'http://localhost:2567',
+                        'X-Title': 'VoxelWorld'
+                    },
+                    body: JSON.stringify({
+                        model: villagerModel,
+                        messages,
+                        temperature: 0.8,
+                        max_tokens: 200
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const aiMessage = result.choices?.[0]?.message?.content?.trim();
+
+                    if (aiMessage) {
+                        // Store assistant response in history
+                        history.push({ role: 'assistant', parts: [{ text: aiMessage }] });
+
+                        // Trim history to last 20 messages
+                        if (history.length > 20) {
+                            history.splice(0, history.length - 20);
+                        }
+
+                        // Check for quest-related keywords
+                        let questAccepted = false;
+                        let questCompleted = false;
+                        if (quest && !quest.isAccepted && aiMessage.toLowerCase().includes('quest')) {
+                            questAccepted = true;
+                        }
+                        if (quest && quest.canComplete) {
+                            questCompleted = true;
+                        }
+
+                        socket.emit('villager:chat:response', {
+                            villagerId,
+                            message: aiMessage,
+                            questAccepted,
+                            questCompleted,
+                            endConversation: false
+                        });
+                        console.log(`[VillagerChat] AI response for ${name}: "${aiMessage.substring(0, 80)}..."`);
+                        return;
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error(`[VillagerChat] OpenRouter error: ${response.status} - ${errorText}`);
+                }
+            } catch (error: any) {
+                console.error(`[VillagerChat] AI error:`, error.message);
+            }
+        }
+
+        // Fallback: Use a scripted response if AI is unavailable
+        const fallbackPhrases: Record<string, string[]> = {
+            FARMER: ["The crops come in nicely.", "Need some wheat?", "Rain would be nice."],
+            BLACKSMITH: ["Iron is strong.", "Need a sword repaired?", "Hot stuff coming through!"],
+            GUARD: ["Keep moving.", "Safe travels.", "No trouble on my watch."],
+            LIBRARIAN: ["Read any good books lately?", "Knowledge is power.", "I am studying ancient texts."]
+        };
+        const phrases = fallbackPhrases[profession] || ["Hello there!", "Nice weather today.", "Good to see you!"];
+        const fallbackMessage = phrases[Math.floor(Math.random() * phrases.length)];
+
+        socket.emit('villager:chat:response', {
+            villagerId,
+            message: fallbackMessage,
+            questAccepted: false,
+            questCompleted: false,
+            endConversation: false
+        });
+        console.log(`[VillagerChat] Fallback response for ${name}: "${fallbackMessage}"`);
+    });
+
     // ============ Admin Events (registered immediately on connection) ============
 
     socket.on('admin:delete_creature', async (data: { name: string, token: string }) => {
@@ -624,6 +842,43 @@ io.on('connection', (socket) => {
             }
         } catch (error: any) {
             console.error('[Admin] Delete creature failed:', error);
+            socket.emit('admin:error', { message: error.message });
+        }
+    });
+
+    socket.on('admin:create_creature', async (data: { definition: any, token: string }) => {
+        console.log(`[Admin] Received admin:create_creature event from ${socket.id}`);
+        try {
+            // Allow CLI mode with secret
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            let userEmail = 'cli@local';
+
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                console.log('[Admin] Verifying token...');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                console.log('[Admin] Token verified for:', decodedToken.email);
+
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+                userEmail = decodedToken.email!;
+            } else {
+                console.log('[Admin] CLI mode access granted');
+            }
+
+            console.log(`[Admin] User ${userEmail} creating creature: ${data.definition.name}`);
+            const result = await createCreature(data.definition);
+            console.log('[Admin] Create creature result:', result);
+
+            socket.emit('admin:create_creature:result', result);
+
+            if (!result.success) {
+                socket.emit('admin:error', { message: result.error });
+            }
+        } catch (error: any) {
+            console.error('[Admin] Create creature failed:', error);
+            socket.emit('admin:create_creature:result', { success: false, error: error.message });
             socket.emit('admin:error', { message: error.message });
         }
     });
@@ -697,6 +952,108 @@ io.on('connection', (socket) => {
         } catch (error: any) {
             console.error('[Admin] Announcement failed:', error);
             socket.emit('admin:error', { message: error.message });
+        }
+    });
+
+    // List all creatures (for editing)
+    socket.on('admin:list_creatures', async (data: { worldId?: string; token: string }) => {
+        console.log(`[Admin] Received admin:list_creatures event from ${socket.id}`);
+        try {
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+            }
+            const creatures = getAllCreatures(data.worldId);
+            const list = creatures.map(c => ({
+                name: c.name,
+                description: c.description,
+                worldId: c.worldId,
+                createdAt: c.createdAt
+            }));
+            socket.emit('admin:list_creatures:result', { success: true, creatures: list });
+        } catch (error: any) {
+            console.error('[Admin] List creatures failed:', error);
+            socket.emit('admin:list_creatures:result', { success: false, error: error.message });
+        }
+    });
+
+    // Get single creature with full code (for editing)
+    socket.on('admin:get_creature', async (data: { name: string; worldId?: string; token: string }) => {
+        console.log(`[Admin] Received admin:get_creature event from ${socket.id}:`, { name: data.name });
+        try {
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+            }
+            const creature = getCreature(data.name, data.worldId);
+            if (creature) {
+                socket.emit('admin:get_creature:result', { success: true, creature });
+            } else {
+                socket.emit('admin:get_creature:result', { success: false, error: 'Creature not found' });
+            }
+        } catch (error: any) {
+            console.error('[Admin] Get creature failed:', error);
+            socket.emit('admin:get_creature:result', { success: false, error: error.message });
+        }
+    });
+
+    // List all items (for editing)
+    socket.on('admin:list_items', async (data: { worldId?: string; token: string }) => {
+        console.log(`[Admin] Received admin:list_items event from ${socket.id}`);
+        try {
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+            }
+            const { getAllItems } = await import('./services/DynamicItemService');
+            const items = getAllItems(data.worldId);
+            const list = items.map(i => ({
+                name: i.name,
+                description: i.description,
+                worldId: i.worldId,
+                createdAt: i.createdAt
+            }));
+            socket.emit('admin:list_items:result', { success: true, items: list });
+        } catch (error: any) {
+            console.error('[Admin] List items failed:', error);
+            socket.emit('admin:list_items:result', { success: false, error: error.message });
+        }
+    });
+
+    // Get single item with full code (for editing)
+    socket.on('admin:get_item', async (data: { name: string; worldId?: string; token: string }) => {
+        console.log(`[Admin] Received admin:get_item event from ${socket.id}:`, { name: data.name });
+        try {
+            const cliSecret = process.env.CLI_SECRET || 'asdf123';
+            if (data.token !== cliSecret) {
+                if (!auth) throw new Error('Auth service unavailable');
+                const decodedToken = await auth.verifyIdToken(data.token);
+                if (decodedToken.email !== ADMIN_EMAIL) {
+                    throw new Error('Unauthorized: Admin access required');
+                }
+            }
+            const { getItem } = await import('./services/DynamicItemService');
+            const item = getItem(data.name, data.worldId);
+            if (item) {
+                socket.emit('admin:get_item:result', { success: true, item });
+            } else {
+                socket.emit('admin:get_item:result', { success: false, error: 'Item not found' });
+            }
+        } catch (error: any) {
+            console.error('[Admin] Get item failed:', error);
+            socket.emit('admin:get_item:result', { success: false, error: error.message });
         }
     });
 
@@ -1370,13 +1727,21 @@ app.delete('/api/creatures/:name', async (req, res) => {
     }
 });
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check — includes persistence status and pending write counts
+app.get('/health', async (req, res) => {
+    const persistenceHealth = await worldPersistence.checkHealth();
+    const queueStatus = worldPersistence.getQueueStatus();
+
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
         activeRooms: rooms.size,
-        connectedClients: io.engine.clientsCount
+        connectedClients: io.engine.clientsCount,
+        persistence: {
+            operational: persistenceHealth.connected,
+            error: persistenceHealth.error || null,
+            pendingWrites: queueStatus
+        }
     });
 });
 
@@ -1390,7 +1755,31 @@ Promise.all([
     loadAllItems(),
     initKnowledgeService()
     // Genesis on separate branch: initGenesisService()
-]).then(() => {
+]).then(async () => {
+    // Initialize unified example index AFTER Firebase data is loaded into memory
+    try {
+        await unifiedExampleIndex.initialize();
+    } catch (e) {
+        console.error('[Server] Failed to initialize unified example index:', e);
+    }
+
+    // Initialize default world (ensures 'global' world exists for first-time users)
+    try {
+        await worldManagementService.getOrCreateDefaultWorld();
+        console.log('[Server] Default world initialized');
+    } catch (e) {
+        console.error('[Server] Failed to initialize default world:', e);
+    }
+
+    // Check world persistence health
+    const persistenceHealth = await worldPersistence.checkHealth();
+    if (persistenceHealth.connected) {
+        console.log('[Server] World persistence: Connected');
+    } else {
+        console.warn(`[Server] World persistence: NOT connected — ${persistenceHealth.error}`);
+        worldPersistence.warnIfDisabled();
+    }
+
     httpServer.listen(port, '0.0.0.0', () => {
         console.log(`[Server] Listening on http://0.0.0.0:${port}`);
         console.log('[Server] Startup: complete');
@@ -1406,7 +1795,7 @@ Promise.all([
 
 // Graceful shutdown
 let isShuttingDown = false;
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
     if (isShuttingDown) {
         console.log(`\n[Server] Force exiting...`);
         process.exit(1);
@@ -1414,11 +1803,23 @@ function shutdown(signal: string) {
     isShuttingDown = true;
     console.log(`\n[Server] Received ${signal}, shutting down gracefully...`);
 
-    // Force exit after 3 seconds if graceful shutdown hangs
+    // Force exit after 5 seconds if graceful shutdown hangs
     const forceExitTimeout = setTimeout(() => {
         console.log('[Server] Graceful shutdown timed out, forcing exit...');
         process.exit(1);
-    }, 3000);
+    }, 5000);
+
+    // Flush pending world persistence writes before closing
+    try {
+        const queueStatus = worldPersistence.getQueueStatus();
+        if (queueStatus.total > 0) {
+            console.log(`[Server] Flushing ${queueStatus.total} pending persistence writes...`);
+        }
+        await worldPersistence.flush();
+        console.log('[Server] World persistence flushed');
+    } catch (e) {
+        console.error('[Server] Failed to flush world persistence:', e);
+    }
 
     httpServer.close(() => {
         clearTimeout(forceExitTimeout);

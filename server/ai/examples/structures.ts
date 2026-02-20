@@ -1,7 +1,10 @@
 /**
  * Structure Examples for Few-Shot AI
  * Structures use set_blocks or fill_blocks to place blocks in the world
+ * Uses semantic search to find the most relevant examples for each request
  */
+
+import { semanticSearchExamples } from '../../services/SemanticSearch';
 
 export const structureExamples = [
     {
@@ -252,6 +255,163 @@ for (let y = -1; y >= -5; y--) {
 return blocks;`
     },
     {
+        name: "TargetRange",
+        description: "An archery or shooting target range with bullseye targets, lanes, and a covered shooting area",
+        keywords: ["target", "range", "archery", "shooting", "bullseye", "practice", "bow", "arrow", "aim", "sport"],
+        code: `// Target Range generation
+const px = Math.floor(playerPosition.x) + 3;
+const py = Math.floor(playerPosition.y);
+const pz = Math.floor(playerPosition.z) - 6;
+
+const blocks = [];
+const length = 20; // Range length (depth)
+const width = 13;  // Range width (3 lanes)
+const laneWidth = 3;
+const wallHeight = 4;
+
+// Floor
+for (let x = 0; x < length; x++) {
+    for (let z = 0; z < width; z++) {
+        // Lane divider lines in different color
+        const isLaneLine = (z === laneWidth || z === laneWidth * 2 + 1 || z === width - 1 || z === 0);
+        blocks.push({ x: px + x, y: py, z: pz + z, id: isLaneLine ? 'concrete_yellow' : 'stone_brick' });
+    }
+}
+
+// Side walls
+for (let y = 1; y <= wallHeight; y++) {
+    for (let x = 0; x < length; x++) {
+        blocks.push({ x: px + x, y: py + y, z: pz, id: 'stone_brick' });
+        blocks.push({ x: px + x, y: py + y, z: pz + width - 1, id: 'stone_brick' });
+    }
+}
+
+// Back wall behind targets
+for (let y = 1; y <= wallHeight + 1; y++) {
+    for (let z = 0; z < width; z++) {
+        blocks.push({ x: px + length - 1, y: py + y, z: pz + z, id: 'stone_brick' });
+    }
+}
+
+// Bullseye targets on the back wall (one per lane)
+const targetCenters = [
+    { z: pz + Math.floor(laneWidth / 2) + 1 },
+    { z: pz + laneWidth + 1 + Math.floor(laneWidth / 2) },
+    { z: pz + (laneWidth + 1) * 2 + Math.floor(laneWidth / 2) - 1 }
+];
+const targetX = px + length - 2;
+const targetCenterY = py + 3;
+
+for (const tc of targetCenters) {
+    for (let dy = -2; dy <= 2; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+            const dist = Math.sqrt(dy * dy + dz * dz);
+            let color;
+            if (dist <= 0.5) {
+                color = 'concrete_yellow';  // Bullseye center
+            } else if (dist <= 1.2) {
+                color = 'concrete_red';     // Inner ring
+            } else if (dist <= 2.0) {
+                color = 'wool_white';       // Middle ring
+            } else if (dist <= 2.5) {
+                color = 'concrete_blue';    // Outer ring
+            } else {
+                continue;
+            }
+            blocks.push({ x: targetX, y: targetCenterY + dy, z: tc.z + dz, id: color });
+        }
+    }
+}
+
+// Covered shooting platform (roof over the near end)
+for (let z = 1; z < width - 1; z++) {
+    for (let x = 0; x < 4; x++) {
+        blocks.push({ x: px + x, y: py + wallHeight + 1, z: pz + z, id: 'dark_oak_wood' });
+    }
+}
+
+// Support posts for the roof
+for (let y = 1; y <= wallHeight; y++) {
+    blocks.push({ x: px, y: py + y, z: pz + 1, id: 'fence' });
+    blocks.push({ x: px, y: py + y, z: pz + width - 2, id: 'fence' });
+    blocks.push({ x: px + 3, y: py + y, z: pz + 1, id: 'fence' });
+    blocks.push({ x: px + 3, y: py + y, z: pz + width - 2, id: 'fence' });
+}
+
+// Shooting line marker on the ground
+for (let z = 1; z < width - 1; z++) {
+    blocks.push({ x: px + 3, y: py, z: pz + z, id: 'concrete_red' });
+}
+
+// Glowstone lights on ceiling of covered area
+blocks.push({ x: px + 1, y: py + wallHeight + 1, z: pz + 3, id: 'glowstone' });
+blocks.push({ x: px + 1, y: py + wallHeight + 1, z: pz + width - 4, id: 'glowstone' });
+
+return blocks;`
+    },
+    {
+        name: "FarmPlot",
+        description: "A fenced farm plot with farmland rows, water irrigation channel, wheat and carrot crops, and hay bale decorations",
+        keywords: ["farm", "garden", "crop", "wheat", "field", "agriculture", "harvest", "plant", "farming", "crops", "carrot", "hay"],
+        code: `// Farm Plot generation - fenced crop field with irrigation
+const px = Math.floor(playerPosition.x) + 5;
+const py = Math.floor(playerPosition.y);
+const pz = Math.floor(playerPosition.z) - 4;
+
+const blocks = [];
+const plotW = 11;
+const plotD = 9;
+
+// Farmland base with water channel in the middle
+for (let x = 0; x < plotW; x++) {
+    for (let z = 0; z < plotD; z++) {
+        if (z === 4) {
+            // Water irrigation channel
+            blocks.push({ x: px + x, y: py - 1, z: pz + z, id: 'water' });
+        } else {
+            blocks.push({ x: px + x, y: py - 1, z: pz + z, id: 'farmland' });
+        }
+    }
+}
+
+// Plant crops in alternating rows
+const cropTypes = ['wheat', 'carrots'];
+for (let x = 1; x < plotW - 1; x++) {
+    let rowIdx = 0;
+    for (let z = 0; z < plotD; z++) {
+        if (z === 4) continue; // Skip water channel
+        const crop = cropTypes[rowIdx % 2];
+        blocks.push({ x: px + x, y: py, z: pz + z, id: crop });
+        rowIdx++;
+    }
+}
+
+// Fence border
+for (let x = -1; x <= plotW; x++) {
+    blocks.push({ x: px + x, y: py, z: pz - 1, id: 'fence' });
+    blocks.push({ x: px + x, y: py, z: pz + plotD, id: 'fence' });
+}
+for (let z = 0; z < plotD; z++) {
+    blocks.push({ x: px - 1, y: py, z: pz + z, id: 'fence' });
+    blocks.push({ x: px + plotW, y: py, z: pz + z, id: 'fence' });
+}
+
+// Gate openings
+blocks.push({ x: px + Math.floor(plotW / 2), y: py, z: pz - 1, id: 'air' });
+
+// Hay bales at corners
+blocks.push({ x: px, y: py, z: pz - 1, id: 'hay_bale' });
+blocks.push({ x: px + plotW - 1, y: py, z: pz - 1, id: 'hay_bale' });
+blocks.push({ x: px, y: py, z: pz + plotD, id: 'hay_bale' });
+blocks.push({ x: px + plotW - 1, y: py, z: pz + plotD, id: 'hay_bale' });
+
+// Pumpkins at ends for decoration
+blocks.push({ x: px + 2, y: py, z: pz + plotD, id: 'pumpkin' });
+blocks.push({ x: px + plotW - 3, y: py, z: pz + plotD, id: 'pumpkin' });
+
+return blocks;`
+    },
+    {
         name: "Pyramid",
         description: "A stepped pyramid structure",
         keywords: ["pyramid", "temple", "ancient", "steps", "monument"],
@@ -285,32 +445,31 @@ return blocks;`
     }
 ];
 
-export function findBestStructureExamples(userRequest: string, count: number = 2): typeof structureExamples {
-    const request = userRequest.toLowerCase();
-
-    const scored = structureExamples.map(example => {
-        let score = 0;
-        for (const keyword of example.keywords) {
-            if (request.includes(keyword)) {
-                score += 10;
-            }
-        }
-        const descWords = example.description.toLowerCase().split(/\s+/);
-        for (const word of descWords) {
-            if (request.includes(word) && word.length > 3) {
-                score += 2;
-            }
-        }
-        return { example, score };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-
-    if (scored[0].score === 0) {
-        return [structureExamples[0], structureExamples[2]]; // House and Sphere as defaults
+/**
+ * Find the best matching structure examples using semantic search
+ * @param userRequest - The user's structure creation request
+ * @param count - Number of examples to return (default 2)
+ * @returns Promise resolving to array of best matching examples
+ */
+export async function findBestStructureExamples(userRequest: string, count: number = 2): Promise<typeof structureExamples> {
+    if (structureExamples.length === 0) {
+        return [];
     }
 
-    return scored.slice(0, count).map(s => s.example);
+    try {
+        const results = await semanticSearchExamples(userRequest, structureExamples, count);
+
+        // If no good semantic matches, return defaults
+        if (results.length === 0) {
+            console.log(`[StructureExamples] No semantic matches, returning defaults`);
+            return [structureExamples[0], structureExamples[2]]; // House and Sphere as defaults
+        }
+
+        return results.map(r => r.example);
+    } catch (error) {
+        console.error('[StructureExamples] Semantic search failed, returning defaults:', error);
+        return [structureExamples[0], structureExamples[2]];
+    }
 }
 
 // Block types available in the game (must match src/game/core/Blocks.js)
@@ -332,6 +491,8 @@ export const availableBlocks = [
     'concrete_white', 'concrete_red', 'concrete_orange', 'concrete_yellow',
     'concrete_green', 'concrete_blue', 'concrete_purple', 'concrete_pink',
     'concrete_black', 'concrete_gray', 'concrete_brown', 'concrete_cyan',
+    // Farming
+    'farmland', 'wheat', 'carrots', 'hay_bale', 'pumpkin',
     // Special
     'gold_block', 'diamond_block',
     'obsidian', 'glowstone',

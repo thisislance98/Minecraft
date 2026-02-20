@@ -223,5 +223,81 @@ export function formatTemplatesForInjection(results: SemanticSearchResult[]): st
     return formatted;
 }
 
+// ============================================================
+// GENERIC EXAMPLE SEARCH
+// ============================================================
+
+export interface ExampleSearchResult<T> {
+    example: T;
+    similarity: number;
+}
+
+/**
+ * Semantic search through any array of examples
+ * Each example should have searchable text (name, description, keywords)
+ *
+ * @param query - The user's search query
+ * @param examples - Array of examples to search through
+ * @param topK - Number of results to return
+ * @param minSimilarity - Minimum similarity threshold (0-1)
+ * @returns Array of examples sorted by similarity
+ */
+export async function semanticSearchExamples<T extends { name: string; description: string; keywords?: string[] }>(
+    query: string,
+    examples: T[],
+    topK: number = 2,
+    minSimilarity: number = 0.3
+): Promise<ExampleSearchResult<T>[]> {
+    if (examples.length === 0) {
+        return [];
+    }
+
+    console.log(`[SemanticSearch] Searching ${examples.length} examples for: "${query}"`);
+
+    try {
+        // Get query embedding
+        const queryEmbedding = await getEmbedding(query);
+
+        // Score each example
+        const scored: ExampleSearchResult<T>[] = [];
+
+        for (const example of examples) {
+            // Create searchable text from example
+            const keywordsText = example.keywords?.join(' ') || '';
+            const searchText = `${example.name} ${example.description} ${keywordsText}`;
+
+            try {
+                const exampleEmbedding = await getEmbedding(searchText);
+                const similarity = cosineSimilarity(queryEmbedding, exampleEmbedding);
+
+                if (similarity >= minSimilarity) {
+                    scored.push({ example, similarity });
+                }
+            } catch (e) {
+                console.warn(`[SemanticSearch] Failed to embed example: ${example.name}`);
+            }
+        }
+
+        // Sort by similarity descending
+        scored.sort((a, b) => b.similarity - a.similarity);
+
+        // Return top K
+        const results = scored.slice(0, topK);
+
+        console.log(`[SemanticSearch] Found ${results.length} example matches:`);
+        results.forEach((r, i) => {
+            console.log(`  [${i + 1}] ${r.example.name} (${(r.similarity * 100).toFixed(1)}%)`);
+        });
+
+        return results;
+
+    } catch (error: any) {
+        console.error('[SemanticSearch] Example search error:', error.message);
+        // Fall back to returning first N examples if semantic search fails
+        console.log(`[SemanticSearch] Falling back to first ${topK} examples`);
+        return examples.slice(0, topK).map(example => ({ example, similarity: 0 }));
+    }
+}
+
 // Initialize cache on module load
 loadCache();

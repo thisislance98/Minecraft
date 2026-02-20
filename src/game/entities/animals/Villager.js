@@ -430,9 +430,21 @@ export class Villager extends Animal {
             const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
             if (distToPlayer < 10 && !this.conversationCooldown) {
-                // 1. Check if close enough to START conversation FIRST
-                if (distToPlayer <= 2.5) {
-                    this.startConversation();
+                // 1. If close enough, stop and face the player (show greeting if first time)
+                if (distToPlayer <= 3.0) {
+                    // Face the player
+                    this.rotation = Math.atan2(dx, dz);
+                    this.isMoving = false;
+                    this.state = 'idle';
+
+                    // Show a greeting bubble once (player must right-click/F to start chat)
+                    if (!this.hasGreeted) {
+                        this.hasGreeted = true;
+                        const greeting = this.getRandomPhrase();
+                        if (this.game?.uiManager?.dialogueManager) {
+                            this.game.uiManager.dialogueManager.addSpeechBubble(this, greeting, 4000);
+                        }
+                    }
                     return;
                 }
 
@@ -440,9 +452,6 @@ export class Villager extends Animal {
                 // Check if player is already busy with another villager
                 if (this.game?.uiManager?.activeVillagerConversation) {
                     // Start wandering instead of waiting awkwardly
-                    // Fallthrough to normal roaming behavior below logic...
-                    // We need to NOT return here if we want to wander, but we effectively want to stop "Approaching"
-                    // So we just don't enter the approach block.
                 } else {
                     // Approach player
                     this.state = 'approaching';
@@ -534,6 +543,11 @@ export class Villager extends Animal {
                 this.isMoving = false;
             }
 
+            // Reset greeting flag when player moves away
+            if (distToPlayer >= 10 && this.hasGreeted) {
+                this.hasGreeted = false;
+            }
+
             // Conversation timeout handling
             if (this.conversationCooldown > 0) {
                 this.conversationCooldown -= dt;
@@ -542,6 +556,25 @@ export class Villager extends Animal {
                 }
             }
         }
+    }
+
+    /**
+     * Called when player right-clicks or presses F on this villager
+     */
+    interact(player) {
+        if (this.isDead || this.isDying) return;
+
+        // If already talking, ignore
+        if (this.isConversing) return;
+
+        // If hostile, don't talk
+        if (this.isHostile) {
+            this.showSpeechBubble("I have nothing to say to you!");
+            return;
+        }
+
+        console.log(`[Villager] Player interacted with ${this.name} the ${this.profession.name}`);
+        this.startConversation();
     }
 
     /**

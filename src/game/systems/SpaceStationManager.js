@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Blocks } from '../core/Blocks.js';
 import { Chair } from '../entities/furniture/Chair.js';
-import { CrewMember } from '../entities/animals/CrewMember.js';
+import { CrewMember } from '../entities/animals-archive/CrewMember.js';
 
 /**
  * SpaceStationManager - Generates a rotating Ring Space Station

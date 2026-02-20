@@ -28,6 +28,11 @@ export default defineConfig({
         target: 'http://localhost:2567',
         changeOrigin: true,
         ws: true
+      },
+      '/peerjs': {
+        target: 'http://localhost:2567',
+        changeOrigin: true,
+        ws: true
       }
     },
     watch: {

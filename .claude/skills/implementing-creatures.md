@@ -87,6 +87,10 @@ createBody() {
 ### Optional Overrides
 - `update(dt)` - Custom per-frame behavior (call `super.update(dt)` first)
 - `updateAI(dt)` - Custom AI behavior (call `super.updateAI(dt)` for defaults)
+- `updatePhysics(dt)` - Override for flying creatures (skip gravity/ground collision)
+
+### Flying Creatures
+For any creature that flies (dragons, birds, bats, etc.), you **MUST read** `.claude/skills/implementing-flying-creatures.md`. Setting `this.gravity = 0` alone is NOT enough — flying creatures need custom flight movement code in `update()` and a `updatePhysics()` override. Without this, the creature will just sit on the ground.
 
 ### Helper Method Pattern (from VoxelDragon example)
 ```javascript
@@ -140,6 +144,29 @@ The `keywords` and `description` fields are used by `SemanticSearch` to find the
 
 - **Global creatures** (`worldId = 'global'`) - Available in all worlds, stored in `dynamic_creatures` Firebase collection
 - **World-scoped creatures** (`worldId = specific`) - Only in that world, stored in `worlds/{worldId}/creatures`
+
+## Multiplayer Sync
+
+### What IS Automatically Broadcast to All Players
+
+| Event | Mechanism | Persisted? |
+|-------|-----------|-----------|
+| **Creature definition** (class code) | Socket.IO `creature_definition` to all clients | Yes (Firebase) |
+| **Creature spawn** (entity instance) | `SpawnManager.createAnimal()` → Socket.IO `entity:spawn` | Yes (Firebase) |
+| **Creature position/state updates** | `Animal.checkSync()` → Socket.IO `entity:update` (periodic) | Yes |
+| **Creature despawn** (edit/replace) | `FewShotClient.handleDespawnCreatures()` → Socket.IO `entity:remove` | Yes (removed from Firebase) |
+
+### Late-Joining Players
+
+When a new player joins a world, they automatically receive:
+1. **Creature definitions** via `creatures_initial` event (from `DynamicCreatureService.sendCreaturesToSocket()`)
+2. **Persisted entity instances** via `entities:initial` event (from `worldPersistence.getEntities()`)
+
+This means late-joining players CAN see previously created creatures — both the class definition and any spawned instances.
+
+### No Action Needed for Creatures
+
+Creature creation is **fully multiplayer-compatible** out of the box. The `SpawnManager.createAnimal()` method automatically broadcasts the spawn via Socket.IO, and `Animal.checkSync()` handles ongoing position sync.
 
 ## Testing
 

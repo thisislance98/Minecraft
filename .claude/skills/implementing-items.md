@@ -95,31 +95,58 @@ The item ID (first arg to `super()`) should be snake_case: `'fire_sword'`, `'hea
 
 ## Available Game APIs for Items
 
+### Multiplayer-Safe APIs (visible to ALL players)
+
 ```javascript
-// Player/Camera
-game.camera.position              // THREE.Vector3 - camera position
-game.camera.getWorldDirection(v)  // Get look direction into vector v
+// Projectiles — ALWAYS use these for ranged attacks
+// These automatically broadcast via Socket.IO to all players
+game.spawnMagicProjectile(pos, velocity)      // Generic magic projectile
+game.spawnArrow(pos, velocity)                // Arrow projectile
+game.spawnShrinkProjectile(pos, velocity)     // Shrink effect
+game.spawnLevitationProjectile(pos, velocity) // Levitation effect
+game.spawnSpinProjectile(pos, velocity)       // Spin effect
+game.spawnGiantProjectile(pos, velocity)      // Giant effect
+game.spawnGrowthProjectile(pos, velocity)     // Growth effect
+game.spawnFireworkProjectile(pos, velocity)   // Firework effect
+
+// Block changes — visible to all, persisted in Firebase
+game.setBlock(x, y, z, blockType)  // Place/remove blocks (auto-broadcasts)
+
+// Creatures — damage/knockback syncs via Animal.checkSync()
+game.animals                       // Array of all creatures in world
+```
+
+### Local-Only APIs (visible ONLY to the using player)
+
+```javascript
+// Scene additions — NOT broadcast to other players
+game.scene.add(object)            // Lights, particles, custom 3D objects
+game.scene.remove(object)         // Only the local player sees these
+
+// Player state
 player.position                   // Player position
 player.health / player.maxHealth  // Player health
-player.swingArm()                 // Play arm swing animation
+player.swingArm()                 // Arm animation (local only)
 
-// Creatures
-game.animals                      // Array of all creatures in world
-
-// Projectiles
-game.spawnMagicProjectile(pos, velocity)  // Spawn a projectile
+// Camera
+game.camera.position              // THREE.Vector3 - camera position
+game.camera.getWorldDirection(v)  // Get look direction
 
 // Inventory
 game.inventoryManager.findItem(id)        // Find item slot by id
 game.inventoryManager.removeItem(slot, n) // Remove n items from slot
 
-// Scene
-game.scene.add(object)            // Add object to scene (lights, etc.)
-game.scene.remove(object)         // Remove from scene
-
-// Sound
+// Sound — local only
 game.soundManager?.playSound('drink')  // Play sound effect
 ```
+
+### Best Practices for Multiplayer Visibility
+
+1. **For ranged weapons**: Always extend `WandItem` or use `game.spawnMagicProjectile()` — these auto-broadcast
+2. **For melee weapons**: Creature damage via `game.animals` syncs through `Animal.checkSync()`, so melee is fine
+3. **For building items**: Use `game.setBlock()` — it auto-broadcasts and persists
+4. **For visual effects** (lights, particles): These are local-only. This is acceptable for player-attached effects (flashlight, aura) since the item is personal. But don't rely on `game.scene.add()` for world-changing effects all players should see
+5. **For consumables**: Inventory changes are local by design (each player has their own inventory)
 
 ## SVG Icon Requirements
 
@@ -203,6 +230,41 @@ export const itemExamples = [
 
 - **Global items** (`worldId = 'global'`) - Available in all worlds, stored in `dynamic_items` collection
 - **World-scoped items** (`worldId = specific`) - Only in that world, stored in `worlds/{worldId}/items`
+
+## Multiplayer Sync
+
+### What IS Automatically Broadcast to All Players
+
+| Event | Mechanism | Persisted? |
+|-------|-----------|-----------|
+| **Item definition** (class code + icon) | Socket.IO `item_definition` to all clients | Yes (Firebase) |
+| **Projectile spawns** (from wands/bows) | Socket.IO `projectile:spawn` | No (transient visual) |
+| **Block changes** (from building items) | Socket.IO `block:change` per block | Yes (Firebase) |
+| **Creature damage/knockback** (melee) | `Animal.checkSync()` → `entity:update` | Yes |
+
+### What is NOT Broadcast (Local Only)
+
+| Effect | Why | Impact |
+|--------|-----|--------|
+| **Item given to inventory** | By design — only requester gets the item | Expected |
+| **Scene additions** (`game.scene.add()`) | No broadcast mechanism for arbitrary THREE.js objects | Lights, particles, custom 3D effects only visible to user |
+| **Sound effects** | Local audio playback | Expected |
+| **Arm swing animation** | Cosmetic, local | Low impact |
+
+### Late-Joining Players
+
+When a new player joins, they receive:
+1. **Item definitions** via `items_initial` event (from `DynamicItemService.sendItemsToSocket()`)
+2. All previously created dynamic items are available for them to use if given
+
+### Multiplayer Guidelines for AI-Generated Items
+
+When generating item code, ensure world-affecting actions use broadcast-compatible APIs:
+
+- **Ranged attacks** → `game.spawnMagicProjectile()` (broadcasts automatically)
+- **Block placement** → `game.setBlock()` (broadcasts + persists automatically)
+- **Creature effects** → Direct manipulation of `game.animals` (syncs via `checkSync()`)
+- **Visual-only effects** → `game.scene.add()` is OK for personal effects (flashlight, aura) but NOT for effects all players must see
 
 ## Testing
 

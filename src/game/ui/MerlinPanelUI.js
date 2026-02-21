@@ -29,6 +29,10 @@ export class MerlinPanelUI {
         this.pendingTokens = '';
         this.rafId = null;
 
+        // Voice input state
+        this.isRecording = false;
+        this.recognition = null;
+
         // Model selection
         this.availableModels = [];
         this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-haiku-4.5';
@@ -81,6 +85,9 @@ export class MerlinPanelUI {
                 break;
             case 'chat_token':
                 this.appendToAIMessage(msg.messageId, msg.text);
+                break;
+            case 'chat_code_token':
+                this.appendCodeToken(msg.messageId, msg.code);
                 break;
             case 'chat_code':
                 this.attachCodeBlock(msg.messageId, msg.code, msg.language, msg.description);
@@ -149,11 +156,131 @@ export class MerlinPanelUI {
     }
 
     // ============================================================
+    // VOICE INPUT
+    // ============================================================
+
+    toggleVoiceInput() {
+        if (this.isRecording) {
+            this.stopVoiceInput();
+        } else {
+            this.startVoiceInput();
+        }
+    }
+
+    startVoiceInput() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.warn('[MerlinPanelUI] Speech recognition not supported in this browser');
+            this.addSystemMessage('Voice input is not supported in this browser. Try Chrome or Edge.');
+            return;
+        }
+
+        this.recognition = new SpeechRecognition();
+        this.recognition.continuous = true;
+        this.recognition.interimResults = true;
+        this.recognition.lang = 'en-US';
+
+        const input = document.getElementById('merlin-chat-input');
+        const voiceBtn = document.getElementById('merlin-voice-btn');
+        // Save any existing text so we can append to it
+        const existingText = input ? input.value : '';
+
+        this.recognition.onstart = () => {
+            this.isRecording = true;
+            if (voiceBtn) voiceBtn.classList.add('recording');
+            if (input) input.placeholder = 'Listening...';
+            console.log('[MerlinPanelUI] Voice recording started');
+        };
+
+        this.recognition.onresult = (event) => {
+            let finalTranscript = '';
+            let interimTranscript = '';
+
+            // Loop through ALL results (from 0) to rebuild full transcript
+            for (let i = 0; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript;
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            if (input) {
+                // Combine existing text + all finalized phrases + current interim
+                const base = existingText ? existingText + ' ' : '';
+                const spaceBeforeInterim = (finalTranscript && interimTranscript) ? ' ' : '';
+                input.value = (base + finalTranscript + spaceBeforeInterim + interimTranscript).trimEnd();
+                // Auto-resize
+                input.style.height = 'auto';
+                input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+            }
+        };
+
+        this.recognition.onerror = (event) => {
+            console.warn('[MerlinPanelUI] Voice recognition error:', event.error);
+            if (event.error === 'not-allowed') {
+                this.addSystemMessage('Microphone access denied. Please allow microphone permissions.');
+            }
+            this.stopVoiceInput();
+        };
+
+        this.recognition.onend = () => {
+            // Recognition can end on its own (e.g. silence timeout)
+            if (this.isRecording) {
+                this.stopVoiceInput();
+            }
+        };
+
+        try {
+            this.recognition.start();
+        } catch (e) {
+            console.error('[MerlinPanelUI] Failed to start voice recognition:', e);
+            this.stopVoiceInput();
+        }
+    }
+
+    stopVoiceInput() {
+        this.isRecording = false;
+        const voiceBtn = document.getElementById('merlin-voice-btn');
+        const input = document.getElementById('merlin-chat-input');
+
+        if (voiceBtn) voiceBtn.classList.remove('recording');
+        if (input) input.placeholder = 'Ask Merlin...';
+
+        if (this.recognition) {
+            try {
+                this.recognition.stop();
+            } catch (e) {
+                // Already stopped
+            }
+            this.recognition = null;
+        }
+
+        // Focus the input so user can edit or send
+        if (input) input.focus();
+        console.log('[MerlinPanelUI] Voice recording stopped');
+    }
+
+    addSystemMessage(text) {
+        const container = document.getElementById('merlin-chat-messages');
+        if (!container) return;
+        const div = document.createElement('div');
+        div.className = 'merlin-message merlin-system-message';
+        div.textContent = text;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // ============================================================
     // MESSAGE SENDING
     // ============================================================
 
     sendMessage(text) {
         if (!text.trim() || this.isWaitingForResponse) return;
+
+        // Stop voice recording if active
+        if (this.isRecording) this.stopVoiceInput();
 
         // Add user message to UI
         this.addUserMessage(text.trim());
@@ -285,38 +412,117 @@ export class MerlinPanelUI {
         const attachments = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-attachments`);
         if (!attachments) return;
 
+        // Check if a streaming code block already exists for this message
+        const streamingId = `streaming-code_${messageId}`;
+        const existingStreaming = document.getElementById(streamingId);
+
         const codeId = `code_${messageId}`;
-        const codeBlock = document.createElement('div');
-        codeBlock.className = 'merlin-code-block';
-        codeBlock.innerHTML = `
-            <div class="merlin-code-header" data-code-id="${codeId}">
-                <span class="code-toggle-icon">&#x25B8;</span>
-                <span class="code-label">${this.escapeHtml(description || `${language} code`)}</span>
-                <button class="code-copy-btn" title="Copy code">&#x1F4CB;</button>
-            </div>
-            <pre class="merlin-code-content hidden" id="${codeId}"><code>${this.escapeHtml(code)}</code></pre>
-        `;
 
-        // Toggle expand/collapse
-        const header = codeBlock.querySelector('.merlin-code-header');
-        header.addEventListener('click', (e) => {
-            if (e.target.closest('.code-copy-btn')) return;
-            const content = document.getElementById(codeId);
-            const icon = header.querySelector('.code-toggle-icon');
-            content.classList.toggle('hidden');
-            icon.textContent = content.classList.contains('hidden') ? '\u25B8' : '\u25BE';
-        });
+        if (existingStreaming) {
+            // Replace streaming block with final code block (collapsed)
+            existingStreaming.className = 'merlin-code-block';
+            existingStreaming.id = '';
+            existingStreaming.innerHTML = `
+                <div class="merlin-code-header" data-code-id="${codeId}">
+                    <span class="code-toggle-icon">&#x25B8;</span>
+                    <span class="code-label">${this.escapeHtml(description || `${language} code`)}</span>
+                    <button class="code-copy-btn" title="Copy code">&#x1F4CB;</button>
+                </div>
+                <pre class="merlin-code-content hidden" id="${codeId}"><code>${this.escapeHtml(code)}</code></pre>
+            `;
 
-        // Copy button
-        const copyBtn = codeBlock.querySelector('.code-copy-btn');
-        copyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(code).then(() => {
-                copyBtn.textContent = '\u2705';
-                setTimeout(() => { copyBtn.textContent = '\u{1F4CB}'; }, 1500);
+            // Re-attach event listeners
+            const header = existingStreaming.querySelector('.merlin-code-header');
+            header.addEventListener('click', (e) => {
+                if (e.target.closest('.code-copy-btn')) return;
+                const content = document.getElementById(codeId);
+                const icon = header.querySelector('.code-toggle-icon');
+                content.classList.toggle('hidden');
+                icon.textContent = content.classList.contains('hidden') ? '\u25B8' : '\u25BE';
             });
-        });
 
-        attachments.appendChild(codeBlock);
+            const copyBtn = existingStreaming.querySelector('.code-copy-btn');
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(code).then(() => {
+                    copyBtn.textContent = '\u2705';
+                    setTimeout(() => { copyBtn.textContent = '\u{1F4CB}'; }, 1500);
+                });
+            });
+        } else {
+            // No streaming block — create fresh (original behavior)
+            const codeBlock = document.createElement('div');
+            codeBlock.className = 'merlin-code-block';
+            codeBlock.innerHTML = `
+                <div class="merlin-code-header" data-code-id="${codeId}">
+                    <span class="code-toggle-icon">&#x25B8;</span>
+                    <span class="code-label">${this.escapeHtml(description || `${language} code`)}</span>
+                    <button class="code-copy-btn" title="Copy code">&#x1F4CB;</button>
+                </div>
+                <pre class="merlin-code-content hidden" id="${codeId}"><code>${this.escapeHtml(code)}</code></pre>
+            `;
+
+            const header = codeBlock.querySelector('.merlin-code-header');
+            header.addEventListener('click', (e) => {
+                if (e.target.closest('.code-copy-btn')) return;
+                const content = document.getElementById(codeId);
+                const icon = header.querySelector('.code-toggle-icon');
+                content.classList.toggle('hidden');
+                icon.textContent = content.classList.contains('hidden') ? '\u25B8' : '\u25BE';
+            });
+
+            const copyBtn = codeBlock.querySelector('.code-copy-btn');
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(code).then(() => {
+                    copyBtn.textContent = '\u2705';
+                    setTimeout(() => { copyBtn.textContent = '\u{1F4CB}'; }, 1500);
+                });
+            });
+
+            attachments.appendChild(codeBlock);
+        }
+
+        this.scrollToBottom();
+    }
+
+    /**
+     * Append streaming code tokens to a live code block.
+     * On first call for a messageId, creates the streaming code block (expanded).
+     * On subsequent calls, appends text to the <code> element.
+     */
+    appendCodeToken(messageId, code) {
+        const attachments = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-attachments`);
+        if (!attachments) return;
+
+        const streamingId = `streaming-code_${messageId}`;
+        let codeBlock = document.getElementById(streamingId);
+
+        if (!codeBlock) {
+            // First token — create the streaming code block (expanded by default)
+            codeBlock = document.createElement('div');
+            codeBlock.id = streamingId;
+            codeBlock.className = 'merlin-code-block merlin-code-streaming';
+            codeBlock.innerHTML = `
+                <div class="merlin-code-header streaming-code-header">
+                    <span class="streaming-code-indicator"></span>
+                    <span class="code-label">Generating code...</span>
+                </div>
+                <pre class="merlin-code-content" id="${streamingId}-pre"><code></code></pre>
+            `;
+            attachments.appendChild(codeBlock);
+        }
+
+        // Append text to the <code> element
+        const codeEl = codeBlock.querySelector('code');
+        if (codeEl) {
+            codeEl.textContent += code;
+        }
+
+        // Auto-scroll the code container
+        const pre = document.getElementById(`${streamingId}-pre`);
+        if (pre) {
+            pre.scrollTop = pre.scrollHeight;
+        }
+
         this.scrollToBottom();
     }
 
@@ -377,7 +583,48 @@ export class MerlinPanelUI {
                 const costEl = document.createElement('div');
                 costEl.className = 'merlin-cost-badge';
                 const cost = msg.costInfo.totalCostUSD;
-                costEl.textContent = `$${cost < 0.001 ? '<0.001' : cost.toFixed(3)} \u00B7 ${msg.costInfo.model?.split('/').pop() || ''}`;
+                const modelName = msg.costInfo.model?.split('/').pop() || '';
+                costEl.textContent = `$${cost < 0.001 ? '<0.001' : cost.toFixed(3)} · ${modelName}`;
+                costEl.title = 'Click for cost breakdown';
+
+                // Build breakdown popup
+                const popup = document.createElement('div');
+                popup.className = 'merlin-cost-popup';
+                const ci = msg.costInfo;
+                const fmtTokens = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+                const fmtUSD = (n) => n === undefined || n === null ? '—' : n < 0.001 ? '<$0.001' : `$${n.toFixed(4)}`;
+
+                let rows = `
+                    <div class="merlin-cost-popup-title">Cost Breakdown</div>
+                    <div class="merlin-cost-popup-row"><span>Model</span><span>${this.escapeHtml(modelName)}</span></div>
+                    <div class="merlin-cost-popup-divider"></div>
+                    <div class="merlin-cost-popup-row"><span>Input tokens</span><span>${fmtTokens(ci.inputTokens || 0)}</span></div>
+                    <div class="merlin-cost-popup-row"><span>Output tokens</span><span>${fmtTokens(ci.outputTokens || 0)}</span></div>`;
+                if (ci.cachedTokens > 0) {
+                    rows += `<div class="merlin-cost-popup-row"><span>Cache read</span><span>${fmtTokens(ci.cachedTokens)}</span></div>`;
+                }
+                if (ci.cacheCreationTokens > 0) {
+                    rows += `<div class="merlin-cost-popup-row"><span>Cache create</span><span>${fmtTokens(ci.cacheCreationTokens)}</span></div>`;
+                }
+                rows += `
+                    <div class="merlin-cost-popup-divider"></div>
+                    <div class="merlin-cost-popup-row"><span>Input cost</span><span>${fmtUSD(ci.inputCostUSD)}</span></div>
+                    <div class="merlin-cost-popup-row"><span>Output cost</span><span>${fmtUSD(ci.outputCostUSD)}</span></div>
+                    <div class="merlin-cost-popup-divider"></div>
+                    <div class="merlin-cost-popup-row merlin-cost-popup-total"><span>Total</span><span>${fmtUSD(ci.totalCostUSD)}</span></div>`;
+                popup.innerHTML = rows;
+
+                costEl.appendChild(popup);
+
+                // Toggle popup on click
+                costEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = popup.classList.contains('open');
+                    // Close any other open popups
+                    document.querySelectorAll('.merlin-cost-popup.open').forEach(p => p.classList.remove('open'));
+                    if (!isOpen) popup.classList.add('open');
+                });
+
                 attachments.appendChild(costEl);
             }
         }
@@ -521,6 +768,9 @@ export class MerlinPanelUI {
                 <!-- Input area -->
                 <div class="merlin-input-area">
                     <textarea id="merlin-chat-input" placeholder="Ask Merlin..." rows="1"></textarea>
+                    <button id="merlin-voice-btn" class="merlin-voice-btn" title="Voice input">
+                        <span class="voice-icon">&#x1F3A4;</span>
+                    </button>
                     <button id="merlin-send-btn" class="merlin-send-btn" title="Send (Enter)">
                         <span class="send-icon">&#x27A4;</span>
                     </button>
@@ -540,11 +790,18 @@ export class MerlinPanelUI {
         // Close button
         addListener('merlin-panel-close', 'click', () => this.hide());
 
-        // Send button
+        // Send / Stop button
         addListener('merlin-send-btn', 'click', () => {
-            const input = document.getElementById('merlin-chat-input');
-            if (input) this.sendMessage(input.value);
+            if (this.isWaitingForResponse) {
+                this.stopGeneration();
+            } else {
+                const input = document.getElementById('merlin-chat-input');
+                if (input) this.sendMessage(input.value);
+            }
         });
+
+        // Voice input button
+        addListener('merlin-voice-btn', 'click', () => this.toggleVoiceInput());
 
         // Input: Enter to send, Shift+Enter for newline
         addListener('merlin-chat-input', 'keydown', (e) => {
@@ -598,6 +855,13 @@ export class MerlinPanelUI {
                 } else {
                     this.hide();
                 }
+            }
+        });
+
+        // Close cost popups when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.merlin-cost-badge')) {
+                document.querySelectorAll('.merlin-cost-popup.open').forEach(p => p.classList.remove('open'));
             }
         });
     }
@@ -655,6 +919,9 @@ export class MerlinPanelUI {
     }
 
     hide() {
+        // Stop voice recording if active
+        if (this.isRecording) this.stopVoiceInput();
+
         const panel = document.getElementById('merlin-panel');
         if (panel) panel.classList.add('hidden');
         this.isVisible = false;
@@ -674,10 +941,56 @@ export class MerlinPanelUI {
 
     updateSendButton() {
         const btn = document.getElementById('merlin-send-btn');
-        if (btn) {
-            btn.disabled = this.isWaitingForResponse;
-            btn.classList.toggle('disabled', this.isWaitingForResponse);
+        if (!btn) return;
+
+        const icon = btn.querySelector('.send-icon');
+        if (this.isWaitingForResponse) {
+            btn.disabled = false;
+            btn.classList.remove('disabled');
+            btn.classList.add('stop-mode');
+            btn.title = 'Stop generating';
+            if (icon) icon.innerHTML = '&#x25A0;'; // filled square
+        } else {
+            btn.disabled = false;
+            btn.classList.remove('stop-mode');
+            btn.title = 'Send (Enter)';
+            if (icon) icon.innerHTML = '&#x27A4;'; // arrow
         }
+    }
+
+    stopGeneration() {
+        if (!this.isWaitingForResponse) return;
+
+        // Send interrupt to server
+        if (this.fewShotClient) {
+            this.fewShotClient.interrupt();
+        }
+
+        // Append stopped indicator to current message
+        if (this.currentStreamingId) {
+            const msgEl = document.querySelector(`.merlin-msg[data-message-id="${this.currentStreamingId}"] .merlin-msg-text`);
+            if (msgEl) {
+                msgEl.innerHTML += '<span class="merlin-stopped-text"> (stopped)</span>';
+            }
+
+            // Remove streaming indicator
+            const indicator = document.querySelector(`.merlin-msg[data-message-id="${this.currentStreamingId}"] .merlin-msg-streaming-indicator`);
+            if (indicator) indicator.remove();
+
+            const msg = this.messages.find(m => m.id === this.currentStreamingId);
+            if (msg) msg.isStreaming = false;
+        }
+
+        // Reset state
+        this.isWaitingForResponse = false;
+        this.currentStreamingId = null;
+        this.pendingTokens = '';
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
+        this.updateSendButton();
+        this.scrollToBottom();
     }
 
     // ============================================================
@@ -976,6 +1289,39 @@ export class MerlinPanelUI {
             .merlin-code-content.hidden { display: none; }
             .merlin-code-content code { white-space: pre-wrap; }
 
+            /* Streaming code block */
+            .merlin-code-streaming {
+                border-color: rgba(138, 43, 226, 0.5);
+            }
+            .merlin-code-streaming .merlin-code-content {
+                max-height: 200px;
+            }
+            .merlin-code-streaming .merlin-code-content code::after {
+                content: '\u2588';
+                animation: codeCursorBlink 0.8s step-end infinite;
+                color: #8a2be2;
+            }
+            @keyframes codeCursorBlink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0; }
+            }
+            .streaming-code-header {
+                background: rgba(138, 43, 226, 0.15);
+                cursor: default;
+            }
+            .streaming-code-header .code-label {
+                color: #c0a0ee;
+            }
+            .streaming-code-indicator {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                background: #8a2be2;
+                border-radius: 50%;
+                animation: orbPulse 1s ease-in-out infinite;
+                flex-shrink: 0;
+            }
+
             /* Action badges */
             .merlin-action-badge {
                 display: inline-flex;
@@ -991,9 +1337,62 @@ export class MerlinPanelUI {
 
             /* Cost badge */
             .merlin-cost-badge {
-                font-size: 11px;
-                color: #666;
-                padding: 2px 0;
+                font-size: 13px;
+                color: #999;
+                padding: 4px 0;
+                cursor: pointer;
+                position: relative;
+                display: inline-block;
+                user-select: none;
+            }
+            .merlin-cost-badge:hover {
+                color: #ccc;
+            }
+
+            /* Cost breakdown popup */
+            .merlin-cost-popup {
+                display: none;
+                position: absolute;
+                bottom: calc(100% + 6px);
+                left: 0;
+                background: #1e1e2e;
+                border: 1px solid #444;
+                border-radius: 8px;
+                padding: 10px 14px;
+                min-width: 220px;
+                z-index: 100;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+                font-size: 12px;
+                color: #ccc;
+            }
+            .merlin-cost-popup.open {
+                display: block;
+            }
+            .merlin-cost-popup-title {
+                font-weight: 600;
+                font-size: 13px;
+                color: #fff;
+                margin-bottom: 8px;
+            }
+            .merlin-cost-popup-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 3px 0;
+            }
+            .merlin-cost-popup-row span:first-child {
+                color: #888;
+            }
+            .merlin-cost-popup-row span:last-child {
+                color: #ddd;
+                font-family: monospace;
+            }
+            .merlin-cost-popup-total span {
+                font-weight: 600;
+                color: #fff !important;
+            }
+            .merlin-cost-popup-divider {
+                border-top: 1px solid #333;
+                margin: 5px 0;
             }
 
             /* ======== FOLLOW-UP CHIPS ======== */
@@ -1074,9 +1473,70 @@ export class MerlinPanelUI {
                 opacity: 0.4;
                 cursor: not-allowed;
             }
+            .merlin-send-btn.stop-mode {
+                background: rgba(220, 60, 60, 0.5);
+                border-color: rgba(220, 60, 60, 0.7);
+            }
+            .merlin-send-btn.stop-mode:hover {
+                background: rgba(220, 60, 60, 0.75);
+                transform: scale(1.05);
+            }
+            .merlin-send-btn.stop-mode .send-icon {
+                color: #ffcccc;
+                font-size: 14px;
+            }
             .send-icon {
                 color: #e0d0ff;
                 font-size: 18px;
+            }
+
+            /* Voice button */
+            .merlin-voice-btn {
+                background: rgba(60, 60, 80, 0.5);
+                border: 1px solid rgba(138, 43, 226, 0.3);
+                border-radius: 50%;
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                flex-shrink: 0;
+                transition: all 0.2s;
+            }
+            .merlin-voice-btn:hover {
+                background: rgba(138, 43, 226, 0.4);
+                transform: scale(1.05);
+            }
+            .merlin-voice-btn.recording {
+                background: rgba(220, 50, 50, 0.6);
+                border-color: rgba(255, 80, 80, 0.8);
+                animation: merlin-pulse-recording 1s ease-in-out infinite;
+            }
+            .merlin-voice-btn.recording:hover {
+                background: rgba(220, 50, 50, 0.8);
+            }
+            .voice-icon {
+                font-size: 16px;
+                line-height: 1;
+            }
+            @keyframes merlin-pulse-recording {
+                0%, 100% { box-shadow: 0 0 4px rgba(255, 60, 60, 0.4); }
+                50% { box-shadow: 0 0 12px rgba(255, 60, 60, 0.8); }
+            }
+
+            /* System messages */
+            .merlin-system-message {
+                color: #999;
+                font-style: italic;
+                font-size: 13px;
+                padding: 4px 12px;
+                text-align: center;
+            }
+
+            .merlin-stopped-text {
+                color: #888;
+                font-style: italic;
             }
 
             /* ======== RESPONSIVE ======== */

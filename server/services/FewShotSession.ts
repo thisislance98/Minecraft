@@ -10,7 +10,7 @@ import { IncomingMessage } from 'http';
 import { BaseAISession } from './BaseAISession';
 import { saveCreature, updateCreature } from './DynamicCreatureService';
 import { saveItem, updateItem } from './DynamicItemService';
-import { FewShotAI, availableModels, OnTokenCallback } from '../ai/few_shot_system';
+import { FewShotAI, availableModels, OnTokenCallback, OnCodeTokenCallback } from '../ai/few_shot_system';
 
 const FEWSHOT_COST_TOKENS = 2; // Minimal charge for few-shot approach
 
@@ -267,6 +267,13 @@ export class FewShotSession extends BaseAISession {
                 }
             };
 
+            // Create onCodeToken callback that emits chat_code_token events
+            const onCodeToken: OnCodeTokenCallback = (code: string) => {
+                if (!this.isInterrupted) {
+                    this.send('chat_code_token', { messageId, code });
+                }
+            };
+
             const result = await this.ai.processRequest(enhancedText, {
                 playerPosition,
                 targetPosition,
@@ -276,7 +283,7 @@ export class FewShotSession extends BaseAISession {
                 conversationHistory: this.conversationHistory.slice(-this.MAX_HISTORY_LENGTH),
                 lastCreatedItem: this.lastCreatedItem,
                 editContext: editContext
-            }, category || 'custom', onToken);
+            }, category || 'custom', onToken, onCodeToken);
 
             console.log(`[FewShot] Result:`, { type: result.type, success: result.success });
 
@@ -328,7 +335,8 @@ export class FewShotSession extends BaseAISession {
             if (result.usage) {
                 const costInfo = this.calculateCost(
                     result.usage.promptTokens,
-                    result.usage.completionTokens
+                    result.usage.completionTokens,
+                    result.usage.cachedTokens || 0
                 );
                 this.send('chat_cost', {
                     messageId,
@@ -340,7 +348,8 @@ export class FewShotSession extends BaseAISession {
                     totalCostUSD: costInfo.totalCostUSD,
                     model: this.model
                 });
-                console.log(`[FewShot] Cost: $${costInfo.totalCostUSD.toFixed(6)} (${costInfo.inputTokens} in / ${costInfo.outputTokens} out)`);
+                const cacheInfo = costInfo.cachedTokens > 0 ? ` [${costInfo.cachedTokens} cached]` : '';
+                console.log(`[FewShot] Cost: $${costInfo.totalCostUSD.toFixed(6)} (${costInfo.inputTokens} in / ${costInfo.outputTokens} out${cacheInfo})`);
             }
 
             // Emit chat_end

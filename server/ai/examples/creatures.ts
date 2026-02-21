@@ -9,11 +9,15 @@ import { semanticSearchExamples } from '../../services/SemanticSearch';
 export const creatureExamples = [
     {
         name: "VoxelDragon",
-        description: "A majestic flying dragon with animated wings, fire breathing, articulated neck and tail segments",
+        description: "A majestic flying dragon with animated wings, fire breathing, articulated neck and tail segments. Flies through the air with circling, swooping, and direction-change behaviors.",
         keywords: ["dragon", "fly", "flying", "fire", "wings", "mythical", "creature", "monster", "beast", "large", "scary", "breathe"],
         code: `class VoxelDragon extends Animal {
     constructor(game, x, y, z, seed) {
         super(game, x, y, z, seed);
+
+        // CRITICAL: Disable gravity for flight
+        this.gravity = 0;
+        this.flying = true;
 
         // Flight & Animation State
         this.time = 0;
@@ -21,12 +25,23 @@ export const creatureExamples = [
         this.breathing = false;
         this.fireTimer = 0;
         this.flightSpeed = 12.0;
-        this.flightVelocity = new THREE.Vector3();
+        this.flightVelocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 12,
+            0,
+            (Math.random() - 0.5) * 12
+        );
         this.targetDirection = new THREE.Vector3(1,0,0);
         this.homePosition = new THREE.Vector3(x, y, z);
         this.maxRoamDistance = 100;
         this.flyingHeight = 20;
         this.turnSpeed = 1.0;
+        this.directionChangeTimer = 0;
+        this.directionChangeInterval = 3 + Math.random() * 4;
+        this.swoopTimer = Math.random() * Math.PI * 2;
+        this.isCircling = false;
+        this.circleCenter = null;
+        this.circleRadius = 20;
+        this.circleAngle = Math.random() * Math.PI * 2;
 
         // Colors
         this.C = {
@@ -226,9 +241,80 @@ export const creatureExamples = [
 
     update(dt) {
         if (!this.mesh) return;
-        super.update(dt);
 
         this.time += dt * this.speedMul;
+
+        // === FLIGHT MOVEMENT (CRITICAL for flying creatures) ===
+
+        // Direction changes every 3-7 seconds
+        this.directionChangeTimer += dt;
+        if (this.directionChangeTimer >= this.directionChangeInterval) {
+            this.directionChangeTimer = 0;
+            this.directionChangeInterval = 3 + Math.random() * 5;
+            const behavior = Math.random();
+            if (behavior < 0.3) {
+                this.isCircling = true;
+                this.circleCenter = this.position.clone();
+                this.circleRadius = 15 + Math.random() * 20;
+            } else {
+                this.isCircling = false;
+                const angle = Math.random() * Math.PI * 2;
+                this.targetDirection.set(Math.cos(angle), 0, Math.sin(angle)).normalize();
+            }
+        }
+
+        // Update flight velocity
+        if (this.isCircling && this.circleCenter) {
+            this.circleAngle += dt * 0.5;
+            const tx = this.circleCenter.x + Math.cos(this.circleAngle) * this.circleRadius;
+            const tz = this.circleCenter.z + Math.sin(this.circleAngle) * this.circleRadius;
+            const toTarget = new THREE.Vector3(tx - this.position.x, 0, tz - this.position.z);
+            toTarget.normalize().multiplyScalar(this.flightSpeed);
+            this.flightVelocity.lerp(toTarget, dt * 2);
+        } else {
+            const tv = this.targetDirection.clone().multiplyScalar(this.flightSpeed);
+            this.flightVelocity.lerp(tv, dt * this.turnSpeed);
+        }
+
+        // Bounds checking - stay near home
+        const dx = this.position.x - this.homePosition.x;
+        const dz = this.position.z - this.homePosition.z;
+        if (Math.sqrt(dx*dx + dz*dz) > this.maxRoamDistance) {
+            const toHome = new THREE.Vector3(this.homePosition.x - this.position.x, 0, this.homePosition.z - this.position.z).normalize();
+            this.targetDirection.copy(toHome);
+            this.isCircling = false;
+        }
+
+        // Height control with swooping
+        this.swoopTimer += dt * 0.8;
+        const swoopOffset = Math.sin(this.swoopTimer) * 5;
+        const groundY = this.game.worldGen ? this.game.worldGen.getTerrainHeight(this.position.x, this.position.z) : 0;
+        const targetY = groundY + this.flyingHeight + swoopOffset;
+        this.flightVelocity.y = Math.max(-5, Math.min(5, (targetY - this.position.y) * 1.5));
+
+        // Apply velocity to position
+        this.position.x += this.flightVelocity.x * dt;
+        this.position.y += this.flightVelocity.y * dt;
+        this.position.z += this.flightVelocity.z * dt;
+
+        // Minimum height safety
+        if (this.position.y < groundY + 3) {
+            this.position.y = groundY + 3;
+            this.flightVelocity.y = Math.abs(this.flightVelocity.y);
+        }
+
+        // Orient to face flight direction
+        if (this.flightVelocity.lengthSq() > 0.1) {
+            const heading = Math.atan2(this.flightVelocity.x, this.flightVelocity.z);
+            const hSpd = Math.sqrt(this.flightVelocity.x*this.flightVelocity.x + this.flightVelocity.z*this.flightVelocity.z);
+            this.mesh.rotation.y = heading;
+            this.mesh.rotation.x = Math.atan2(-this.flightVelocity.y, hSpd) * 0.3;
+        }
+
+        // Sync mesh position
+        this.mesh.position.copy(this.position);
+
+        // === ANIMATIONS ===
 
         // Wing flapping animation
         const fs = 2.8 * this.speedMul;
@@ -258,11 +344,11 @@ export const creatureExamples = [
             });
         }
 
-        // Leg walking animation
+        // Leg tucking animation (tucked up during flight)
         if (this.legs) {
             this.legs.forEach((l,i)=>{
                 const o=i*Math.PI*.5;
-                l.group.rotation.x=Math.sin(this.time*1.4+o)*.22;
+                l.group.rotation.x=Math.sin(this.time*1.4+o)*.12 + 0.3;
             });
         }
 
@@ -280,6 +366,99 @@ export const creatureExamples = [
         if (this.fireLight) {
             this.fireLight.intensity = this.fireTimer * 10 + Math.random() * 5;
         }
+    }
+
+    updatePhysics(dt) {
+        // Override: flying creatures skip gravity and ground collision
+        // Position is already updated in update()
+    }
+}`
+    },
+    {
+        name: "FlyingEagle",
+        description: "A simple flying eagle that soars through the air with flapping wings. Demonstrates the minimal flying creature pattern with waypoint-based 3D flight.",
+        keywords: ["eagle", "bird", "fly", "flying", "soar", "wings", "hawk", "falcon", "owl", "parrot", "airborne", "sky", "simple", "small"],
+        code: `class FlyingEagle extends Animal {
+    constructor(game, x, y, z, seed) {
+        super(game, x, y, z, seed);
+        this.width = 0.5;
+        this.height = 0.4;
+        this.depth = 0.8;
+        this.gravity = 0;
+        this.flying = true;
+        this.flySpeed = 5;
+        this.flyingHeight = 15;
+        this.roamRadius = 25;
+        this.targetX = x;
+        this.targetZ = z;
+        this.targetAltitude = 15;
+        this.wingTimer = 0;
+        this.createBody();
+    }
+
+    createBody() {
+        const brown = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const white = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const yellow = new THREE.MeshLambertMaterial({ color: 0xFFFF00 });
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.8), brown);
+        body.position.set(0, 0.2, 0);
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), white);
+        head.position.set(0, 0.4, 0.4);
+        this.mesh.add(head);
+
+        const beak = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), yellow);
+        beak.position.set(0, 0.35, 0.55);
+        this.mesh.add(beak);
+
+        this.leftWing = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.5), brown);
+        this.leftWing.position.set(-0.5, 0.25, 0);
+        this.leftWing.castShadow = true;
+        this.mesh.add(this.leftWing);
+
+        this.rightWing = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.5), brown);
+        this.rightWing.position.set(0.5, 0.25, 0);
+        this.rightWing.castShadow = true;
+        this.mesh.add(this.rightWing);
+    }
+
+    updateAI(dt) {
+        // Pick new 3D waypoint every 5-10 seconds
+        this.stateTimer -= dt;
+        if (this.stateTimer <= 0) {
+            this.stateTimer = 5 + Math.random() * 5;
+            this.targetAltitude = 10 + Math.random() * 10;
+            const angle = Math.random() * Math.PI * 2;
+            this.targetX = this.position.x + Math.cos(angle) * this.roamRadius;
+            this.targetZ = this.position.z + Math.sin(angle) * this.roamRadius;
+        }
+
+        // Move toward 3D target
+        const dx = this.targetX - this.position.x;
+        const dz = this.targetZ - this.position.z;
+        const dy = this.targetAltitude - this.position.y;
+        const dir = new THREE.Vector3(dx, dy, dz);
+        const len = dir.length();
+        if (len > 0.1) {
+            dir.divideScalar(len);
+            this.position.addScaledVector(dir, this.flySpeed * dt);
+            this.rotation = Math.atan2(dir.x, dir.z);
+        }
+
+        // Wing flap animation
+        this.wingTimer += dt * 6;
+        const flap = Math.sin(this.wingTimer) * 0.4;
+        this.leftWing.rotation.z = flap;
+        this.rightWing.rotation.z = -flap;
+    }
+
+    updatePhysics(dt) {
+        // Override: skip gravity and ground collision for flight
+        this.mesh.position.copy(this.position);
+        this.mesh.rotation.y = this.rotation;
     }
 }`
     }

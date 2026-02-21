@@ -218,6 +218,25 @@ Territories can define bounded areas with custom rules, but this is still experi
 - **AI Structures** (this system): Generated on-demand via Merlin panel, run on server, blocks sent to client
 - **Static StructureGenerator** (`src/world/StructureGenerator.js`): Generates structures during world creation (trees, terrain features). Not used for AI-generated content.
 
+## Multiplayer Sync
+
+### Structures Are Fully Multiplayer-Compatible
+
+Structures are the most multiplayer-friendly category — every block placed is automatically broadcast and persisted:
+
+| Event | Mechanism | Persisted? |
+|-------|-----------|-----------|
+| **Each block placed** | `game.setBlock()` → Socket.IO `block:change` | Yes (Firebase) |
+| **Each block cleared** | `game.setBlock(x,y,z, null)` → Socket.IO `block:change` | Yes (Firebase) |
+
+### Late-Joining Players
+
+When a new player joins, they receive ALL persisted block changes via `blocks:initial` event. This means structures built by Merlin are **permanently visible** to everyone, including players who join later.
+
+### No Action Needed for Structures
+
+The `FewShotClient.handleSetBlocks()` method calls `game.setBlock()` which automatically broadcasts each block change via Socket.IO and persists it in Firebase. No extra multiplayer code is needed.
+
 ## Testing
 
 Test via the Merlin panel in-game by selecting the "Build" category:

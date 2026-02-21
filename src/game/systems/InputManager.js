@@ -122,11 +122,13 @@ export class InputManager {
             const commInput = document.getElementById('comm-input');
             const aiChatInput = document.getElementById('chat-input');
             const merlinInput = document.getElementById('merlin-custom-input');
+            const merlinChatInput = document.getElementById('merlin-chat-input');
             const merlinFollowupInput = document.getElementById('task-followup-input');
             const villagerChatInput = document.getElementById('villager-chat-input');
             if ((commInput && document.activeElement === commInput) ||
                 (aiChatInput && document.activeElement === aiChatInput) ||
                 (merlinInput && document.activeElement === merlinInput) ||
+                (merlinChatInput && document.activeElement === merlinChatInput) ||
                 (merlinFollowupInput && document.activeElement === merlinFollowupInput) ||
                 (villagerChatInput && document.activeElement === villagerChatInput)) return;
 

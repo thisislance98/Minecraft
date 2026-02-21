@@ -1506,7 +1506,10 @@ export class SocketManager {
                 this.game.spawnFireworkProjectile(position, velocity, true);
                 break;
             default:
-                console.warn(`[SocketManager] Unknown remote projectile type: ${type}`);
+                // Fallback: spawn as a magic projectile so other players see SOMETHING
+                // This handles AI-generated items that may use custom projectile types
+                console.warn(`[SocketManager] Unknown remote projectile type: ${type}, falling back to magic projectile`);
+                this.game.spawnMagicProjectile(position, velocity, true);
         }
     }
 

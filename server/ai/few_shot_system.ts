@@ -88,20 +88,129 @@ export interface TokenUsage {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedTokens: number;
 }
 
 export type OnTokenCallback = (text: string) => void;
+export type OnCodeTokenCallback = (code: string) => void;
+
+/**
+ * StreamingCodeExtractor — incrementally extracts the "code" field value
+ * from accumulated tool-call argument JSON as it streams in.
+ *
+ * State machine:
+ *  1. Scan accumulated args for the pattern `"code":"` (or `"code" : "`)
+ *  2. Once found, track lastEmitIndex and process new chars:
+ *     - Regular char → emit
+ *     - `\` + next → unescape JSON string encoding (\n, \t, \\, \", etc.)
+ *     - `\` at buffer end → hold back (incomplete escape)
+ *     - Unescaped `"` → code value complete, stop
+ */
+export class StreamingCodeExtractor {
+    private codeStarted = false;
+    private codeComplete = false;
+    private codeFieldIndex = -1; // index of the opening quote of the code value
+    private lastEmitIndex = 0;   // how far we've processed into the code value
+    private pendingBackslash = false;
+
+    /**
+     * Call this each time the accumulated tool args string grows.
+     * Returns newly decoded code characters (empty string if none).
+     */
+    extractNewCode(accumulatedArgs: string): string {
+        if (this.codeComplete) return '';
+
+        // Phase 1: Find the start of the "code" field value
+        if (!this.codeStarted) {
+            // Look for "code" : " pattern (with optional whitespace)
+            const pattern = /"code"\s*:\s*"/;
+            const match = accumulatedArgs.match(pattern);
+            if (!match || match.index === undefined) return '';
+
+            // Mark the index right after the opening quote of the value
+            this.codeFieldIndex = match.index + match[0].length;
+            this.codeStarted = true;
+            this.lastEmitIndex = 0;
+        }
+
+        // Phase 2: Process characters from where we left off
+        const valueStr = accumulatedArgs.slice(this.codeFieldIndex);
+        let result = '';
+        let i = this.lastEmitIndex;
+
+        while (i < valueStr.length) {
+            const ch = valueStr[i];
+
+            if (this.pendingBackslash) {
+                // We had a backslash from the previous call
+                this.pendingBackslash = false;
+                result += this.unescapeChar(ch);
+                i++;
+                continue;
+            }
+
+            if (ch === '\\') {
+                // Check if there's a next character
+                if (i + 1 < valueStr.length) {
+                    const next = valueStr[i + 1];
+                    result += this.unescapeChar(next);
+                    i += 2;
+                } else {
+                    // Backslash at end of buffer — hold back
+                    this.pendingBackslash = true;
+                    i++;
+                    break;
+                }
+                continue;
+            }
+
+            if (ch === '"') {
+                // Unescaped quote → code value is complete
+                this.codeComplete = true;
+                break;
+            }
+
+            result += ch;
+            i++;
+        }
+
+        this.lastEmitIndex = i;
+        return result;
+    }
+
+    private unescapeChar(ch: string): string {
+        switch (ch) {
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case '\\': return '\\';
+            case '"': return '"';
+            case '/': return '/';
+            case 'b': return '\b';
+            case 'f': return '\f';
+            default: return '\\' + ch; // Unknown escape, preserve as-is
+        }
+    }
+
+    isComplete(): boolean {
+        return this.codeComplete;
+    }
+
+    hasStarted(): boolean {
+        return this.codeStarted;
+    }
+}
 
 export class FewShotAI {
     private config: FewShotConfig;
     private model: string;
 
     // Track accumulated token usage across multiple API calls
-    private accumulatedUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    private accumulatedUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 };
 
     constructor(config: FewShotConfig) {
         this.config = config;
-        this.model = config.model || 'anthropic/claude-3-haiku';
+        this.model = config.model || 'anthropic/claude-haiku-4.5';
     }
 
     setModel(modelId: string) {
@@ -114,11 +223,73 @@ export class FewShotAI {
     }
 
     resetUsage(): void {
-        this.accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        this.accumulatedUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, cachedTokens: 0 };
     }
 
     getAccumulatedUsage(): TokenUsage {
         return { ...this.accumulatedUsage };
+    }
+
+    /**
+     * Check if current model is an Anthropic Claude model (supports cache_control)
+     */
+    private isAnthropicModel(): boolean {
+        return this.model.startsWith('anthropic/');
+    }
+
+    /**
+     * Format the system message with cache_control for Anthropic models.
+     * For Anthropic models via OpenRouter, the system prompt is sent as a
+     * content-block array with cache_control on the last block to enable
+     * prompt caching (system prompt + skill files + examples stay warm).
+     * Non-Anthropic models get a plain string (unchanged behavior).
+     */
+    private formatSystemMessage(systemPrompt: string): { role: string; content: string | any[] } {
+        if (this.isAnthropicModel()) {
+            return {
+                role: 'system',
+                content: [
+                    {
+                        type: 'text',
+                        text: systemPrompt,
+                        cache_control: { type: 'ephemeral' }
+                    }
+                ]
+            };
+        }
+        return { role: 'system', content: systemPrompt };
+    }
+
+    /**
+     * Accumulate token usage from an API response, including cache metrics
+     */
+    private accumulateUsage(usage: any, label: string = '') {
+        if (!usage) return;
+
+        // Debug: log raw usage object to see what OpenRouter returns
+        console.log(`[FewShotAI] Raw usage object:`, JSON.stringify(usage));
+
+        this.accumulatedUsage.promptTokens += usage.prompt_tokens || 0;
+        this.accumulatedUsage.completionTokens += usage.completion_tokens || 0;
+        this.accumulatedUsage.totalTokens += usage.total_tokens || 0;
+
+        // Track cache tokens — OpenRouter may use different field names:
+        // Anthropic native: cache_read_input_tokens / cache_creation_input_tokens
+        // OpenAI compat: prompt_tokens_details.cached_tokens
+        const cacheRead = usage.cache_read_input_tokens
+            || usage.prompt_tokens_details?.cached_tokens
+            || usage.native_tokens_prompt_cache_read
+            || 0;
+        const cacheCreation = usage.cache_creation_input_tokens
+            || usage.native_tokens_prompt_cache_write
+            || 0;
+        this.accumulatedUsage.cachedTokens += cacheRead;
+
+        const prefix = label ? `[FewShotAI] ${label}` : '[FewShotAI]';
+        const cacheInfo = cacheRead > 0 || cacheCreation > 0
+            ? ` (cache read: ${cacheRead}, cache write: ${cacheCreation})`
+            : '';
+        console.log(`${prefix} Token usage: ${usage.prompt_tokens} in / ${usage.completion_tokens} out${cacheInfo} (total accumulated: ${this.accumulatedUsage.totalTokens})`);
     }
 
     // ============================================================
@@ -131,7 +302,7 @@ export class FewShotAI {
      * - custom → use unified example index semantic similarity to pick the best category
      * - chat detection for greetings / help
      */
-    async resolveCategory(category: string, text: string): Promise<string> {
+    async resolveCategory(category: string, text: string, lastCreatedItem?: LastCreatedItem | null): Promise<string> {
         // Direct categories from the UI pass through
         if (category === 'creature' || category === 'item' || category === 'build' || category === 'fix') {
             return category;
@@ -146,6 +317,21 @@ export class FewShotAI {
         if (chatPatterns.test(lower)) {
             console.log(`[FewShotAI] Resolved to: chat (greeting/help pattern)`);
             return 'chat';
+        }
+
+        // Edit detection: if there's a lastCreatedItem and the message looks like
+        // a modification request (short, referential), route to the same category
+        if (lastCreatedItem) {
+            const editPatterns = /^(make (it|the|them)|change (it|the|its|their)|add |remove |give (it|the|them)|bigger|smaller|taller|shorter|faster|slower|more |less |different |another color|red|blue|green|yellow|pink|purple|orange|white|black|now make|update|modify|edit|fix|improve|enhance|also )/i;
+            const isReferential = editPatterns.test(lower) ||
+                (lower.length < 60 && !lower.includes('create') && !lower.includes('build') && !lower.includes('spawn') && !lower.includes('craft') &&
+                 (lower.includes('it') || lower.includes('the ') || lower.includes('its ') || lower.includes('more') || lower.includes('less')));
+
+            if (isReferential) {
+                const mappedCategory = lastCreatedItem.type === 'structure' ? 'build' : lastCreatedItem.type;
+                console.log(`[FewShotAI] Edit detected: "${text}" refers to last created ${lastCreatedItem.type} "${lastCreatedItem.name}" → routing to ${mappedCategory}`);
+                return mappedCategory;
+            }
         }
 
         try {
@@ -173,14 +359,15 @@ export class FewShotAI {
      * Main entry point — process a user request.
      * Category comes from the UI; for "custom" it is resolved via semantic similarity.
      */
-    async processRequest(userMessage: string, context: FewShotContext, category: string = 'custom', onToken?: OnTokenCallback): Promise<FewShotResult> {
+    async processRequest(userMessage: string, context: FewShotContext, category: string = 'custom', onToken?: OnTokenCallback, onCodeToken?: OnCodeTokenCallback): Promise<FewShotResult> {
         console.log(`[FewShotAI] Processing: "${userMessage}" | category=${category} | model=${this.model} | streaming=${!!onToken}`);
 
         this.resetUsage();
 
         try {
             // Resolve category (pass-through for explicit, semantic for custom)
-            const resolved = await this.resolveCategory(category, userMessage);
+            // Pass lastCreatedItem so edit-detection can route to the correct handler
+            const resolved = await this.resolveCategory(category, userMessage, context.lastCreatedItem);
             console.log(`[FewShotAI] Resolved category: ${resolved}`);
 
             // Map handler category to unified index category for example search
@@ -200,20 +387,20 @@ export class FewShotAI {
 
             switch (resolved) {
                 case 'creature':
-                    result = await this.handleCreateCreature(userMessage, context, examples, onToken);
+                    result = await this.handleCreateCreature(userMessage, context, examples, onToken, onCodeToken);
                     break;
                 case 'item':
-                    result = await this.handleCreateItem(userMessage, context, examples, onToken);
+                    result = await this.handleCreateItem(userMessage, context, examples, onToken, onCodeToken);
                     break;
                 case 'build':
-                    result = await this.handleCreateStructure(userMessage, context, examples, onToken);
+                    result = await this.handleCreateStructure(userMessage, context, examples, onToken, onCodeToken);
                     break;
                 case 'chat':
                     result = await this.handleChat(userMessage, context, onToken);
                     break;
                 default:
                     // "fix" and any other unknown → treat as creature for now
-                    result = await this.handleCreateCreature(userMessage, context, examples, onToken);
+                    result = await this.handleCreateCreature(userMessage, context, examples, onToken, onCodeToken);
                     break;
             }
 
@@ -239,7 +426,7 @@ export class FewShotAI {
     /**
      * Handle creature creation — uses create_creature tool for structured output
      */
-    private async handleCreateCreature(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
+    private async handleCreateCreature(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback, onCodeToken?: OnCodeTokenCallback): Promise<FewShotResult> {
         // If we have a last created creature, include its code in the description
         // so the AI can decide whether this is an edit (and set isEdit=true in the tool call)
         let modifiedDescription = description;
@@ -250,7 +437,7 @@ export class FewShotAI {
         const prompt = getCreaturePrompt(modifiedDescription, context, examples);
 
         const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
-        const response = await callFn(prompt, modifiedDescription, getCreatureTools(), context.conversationHistory, onToken);
+        const response = await callFn(prompt, modifiedDescription, getCreatureTools(), context.conversationHistory, onToken, onCodeToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_creature');
@@ -301,11 +488,11 @@ export class FewShotAI {
     /**
      * Handle item creation — uses create_item tool for structured output
      */
-    private async handleCreateItem(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
+    private async handleCreateItem(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback, onCodeToken?: OnCodeTokenCallback): Promise<FewShotResult> {
         const prompt = getItemPrompt(description, context, examples);
 
         const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
-        const response = await callFn(prompt, description, getItemTools(), context.conversationHistory, onToken);
+        const response = await callFn(prompt, description, getItemTools(), context.conversationHistory, onToken, onCodeToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_item');
@@ -373,7 +560,7 @@ export class FewShotAI {
     /**
      * Handle structure creation — uses create_structure tool for structured output
      */
-    private async handleCreateStructure(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
+    private async handleCreateStructure(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback, onCodeToken?: OnCodeTokenCallback): Promise<FewShotResult> {
         // If we have a last created structure, include its code so the AI can decide if this is an edit
         let modifiedDescription = description;
         if (context.lastCreatedItem?.type === 'structure' && context.lastCreatedItem.code) {
@@ -383,7 +570,7 @@ export class FewShotAI {
         const prompt = getStructurePrompt(modifiedDescription, context, examples);
 
         const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
-        const response = await callFn(prompt, modifiedDescription, getStructureTools(), context.conversationHistory, onToken);
+        const response = await callFn(prompt, modifiedDescription, getStructureTools(), context.conversationHistory, onToken, onCodeToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_structure');
@@ -465,7 +652,7 @@ export class FewShotAI {
      */
     private async callOpenRouter(systemPrompt: string, userMessage: string, tools: any[] | null, conversationHistory?: ConversationMessage[]): Promise<any> {
         const messages: any[] = [
-            { role: 'system', content: systemPrompt }
+            this.formatSystemMessage(systemPrompt)
         ];
 
         // Add conversation history if provided
@@ -514,13 +701,8 @@ export class FewShotAI {
         console.log('[FewShotAI] API Response choices:', data.choices?.length);
         console.log('[FewShotAI] API Response message keys:', Object.keys(data.choices?.[0]?.message || {}));
 
-        // Accumulate token usage from this API call
-        if (data.usage) {
-            this.accumulatedUsage.promptTokens += data.usage.prompt_tokens || 0;
-            this.accumulatedUsage.completionTokens += data.usage.completion_tokens || 0;
-            this.accumulatedUsage.totalTokens += data.usage.total_tokens || 0;
-            console.log(`[FewShotAI] Token usage: ${data.usage.prompt_tokens} in / ${data.usage.completion_tokens} out (total accumulated: ${this.accumulatedUsage.totalTokens})`);
-        }
+        // Accumulate token usage (including cache metrics for Anthropic models)
+        this.accumulateUsage(data.usage);
 
         return data.choices[0].message;
     }
@@ -535,10 +717,11 @@ export class FewShotAI {
         userMessage: string,
         tools: any[] | null,
         conversationHistory?: ConversationMessage[],
-        onToken?: OnTokenCallback
+        onToken?: OnTokenCallback,
+        onCodeToken?: OnCodeTokenCallback
     ): Promise<any> {
         const messages: any[] = [
-            { role: 'system', content: systemPrompt }
+            this.formatSystemMessage(systemPrompt)
         ];
 
         if (conversationHistory && conversationHistory.length > 0) {
@@ -588,6 +771,9 @@ export class FewShotAI {
         let toolCallAccum: { id?: string; type?: string; function?: { name?: string; arguments?: string } } | null = null;
         let usage: any = null;
 
+        // Code extraction for streaming code tokens
+        const codeExtractor = onCodeToken ? new StreamingCodeExtractor() : null;
+
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -627,7 +813,7 @@ export class FewShotAI {
                         }
                     }
 
-                    // Accumulate tool calls silently (don't stream JSON fragments)
+                    // Accumulate tool calls and stream code tokens
                     if (delta.tool_calls && delta.tool_calls.length > 0) {
                         const tc = delta.tool_calls[0];
                         if (!toolCallAccum) {
@@ -642,6 +828,14 @@ export class FewShotAI {
                         }
                         if (tc.function?.arguments) {
                             toolCallAccum.function!.arguments += tc.function.arguments;
+
+                            // Extract streaming code tokens from the accumulated args
+                            if (codeExtractor && onCodeToken && !codeExtractor.isComplete()) {
+                                const newCode = codeExtractor.extractNewCode(toolCallAccum.function!.arguments!);
+                                if (newCode) {
+                                    onCodeToken(newCode);
+                                }
+                            }
                         }
                     }
                 } catch (parseErr) {
@@ -651,13 +845,8 @@ export class FewShotAI {
             }
         }
 
-        // Accumulate token usage
-        if (usage) {
-            this.accumulatedUsage.promptTokens += usage.prompt_tokens || 0;
-            this.accumulatedUsage.completionTokens += usage.completion_tokens || 0;
-            this.accumulatedUsage.totalTokens += usage.total_tokens || 0;
-            console.log(`[FewShotAI] Streaming token usage: ${usage.prompt_tokens} in / ${usage.completion_tokens} out (total accumulated: ${this.accumulatedUsage.totalTokens})`);
-        }
+        // Accumulate token usage (including cache metrics for Anthropic models)
+        this.accumulateUsage(usage, 'Streaming');
 
         // Build response in same shape as non-streaming
         const result: any = {

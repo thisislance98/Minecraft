@@ -27,7 +27,7 @@ export class FewShotClient {
 
         // Model selection
         this.availableModels = [];
-        this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-opus-4.6';
+        this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-haiku-4.5';
 
         // Settings
         this.bypassTokens = localStorage.getItem('settings_bypass_tokens') !== 'false';
@@ -229,7 +229,7 @@ export class FewShotClient {
 
     handleMessage(msg) {
         // Reduce noise: only log non-token messages
-        if (msg.type !== 'chat_token') {
+        if (msg.type !== 'chat_token' && msg.type !== 'chat_code_token') {
             console.log('[FewShotClient] Message:', msg.type, msg);
         }
 
@@ -318,6 +318,12 @@ export class FewShotClient {
                     break;
                 case 'set_blocks':
                     result = await this.handleSetBlocks(args);
+                    break;
+                case 'despawn_creatures':
+                    result = await this.handleDespawnCreatures(args);
+                    break;
+                case 'clear_blocks':
+                    result = await this.handleClearBlocks(args);
                     break;
                 case 'verify':
                     result = await this.handleVerify(args);
@@ -462,6 +468,111 @@ export class FewShotClient {
             return { success: true, count: blocks.length, position: center };
         } catch (e) {
             console.error('[FewShotClient] Error setting blocks:', e);
+            return { error: e.message };
+        }
+    }
+
+    // ── Despawn & Clear handlers (for edit/replace flows) ──
+
+    async handleDespawnCreatures(args) {
+        const { entityIds } = args;
+        console.log(`[FewShotClient] Despawning ${entityIds?.length || 0} creatures`);
+
+        if (!this.game || !entityIds || entityIds.length === 0) {
+            return { success: false, error: 'No entities to despawn' };
+        }
+
+        let removed = 0;
+        const spawnManager = this.game.spawnManager;
+
+        for (const entityId of entityIds) {
+            try {
+                let foundAndRemoved = false;
+
+                // Try to find and remove by ID from spawnManager
+                if (spawnManager?.entities) {
+                    const entities = spawnManager.entities instanceof Map
+                        ? spawnManager.entities
+                        : null;
+
+                    if (entities && entities.has(entityId)) {
+                        const entity = entities.get(entityId);
+                        if (entity?.mesh) {
+                            this.game.scene.remove(entity.mesh);
+                        }
+                        entities.delete(entityId);
+                        removed++;
+                        foundAndRemoved = true;
+                    }
+
+                    if (!foundAndRemoved) {
+                        // Fallback: search by ID in all entities
+                        const entityIter = entities
+                            ? entities.entries()
+                            : (spawnManager.entities[Symbol.iterator]
+                                ? spawnManager.entities
+                                : []);
+
+                        for (const [key, entity] of entityIter) {
+                            if (entity.id === entityId) {
+                                if (entity.mesh) {
+                                    this.game.scene.remove(entity.mesh);
+                                }
+                                if (entities) entities.delete(key);
+                                removed++;
+                                foundAndRemoved = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Also remove from game.animals if it exists
+                if (this.game.animals) {
+                    const idx = this.game.animals.findIndex(a => a.id === entityId);
+                    if (idx !== -1) {
+                        const animal = this.game.animals[idx];
+                        if (animal.mesh) {
+                            this.game.scene.remove(animal.mesh);
+                        }
+                        this.game.animals.splice(idx, 1);
+                        if (!foundAndRemoved) removed++;
+                        foundAndRemoved = true;
+                    }
+                }
+
+                // Broadcast entity removal to all other players via Socket.IO
+                // This ensures other players also remove the despawned creature
+                if (foundAndRemoved && this.game.socketManager?.isConnected()) {
+                    this.game.socketManager.sendEntityRemove(entityId);
+                    console.log(`[FewShotClient] Broadcast entity:remove for ${entityId}`);
+                }
+            } catch (e) {
+                console.error(`[FewShotClient] Error despawning entity ${entityId}:`, e);
+            }
+        }
+
+        console.log(`[FewShotClient] Despawned ${removed} entities (broadcast to all players)`);
+        return { success: true, removed };
+    }
+
+    async handleClearBlocks(args) {
+        const { blocks } = args;
+        console.log(`[FewShotClient] Clearing ${blocks?.length || 0} blocks`);
+
+        if (!this.game || !blocks || blocks.length === 0) {
+            return { success: false, error: 'No blocks to clear' };
+        }
+
+        let cleared = 0;
+        try {
+            for (const block of blocks) {
+                this.game.setBlock(block.x, block.y, block.z, null);
+                cleared++;
+            }
+            return { success: true, cleared };
+        } catch (e) {
+            console.error('[FewShotClient] Error clearing blocks:', e);
             return { error: e.message };
         }
     }

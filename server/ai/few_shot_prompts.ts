@@ -40,6 +40,7 @@ function loadSkill(filename: string): string {
 
 // Pre-load all skills at module init
 function getCreatureSkill(): string { return loadSkill('implementing-creatures.md'); }
+function getFlyingCreatureSkill(): string { return loadSkill('implementing-flying-creatures.md'); }
 function getItemSkill(): string { return loadSkill('implementing-items.md'); }
 function getStructureSkill(): string { return loadSkill('implementing-structures.md'); }
 
@@ -50,6 +51,11 @@ function getStructureSkill(): string { return loadSkill('implementing-structures
 export function getCreaturePrompt(userRequest: string, context: any, examples: UnifiedExample[] = []) {
     const skill = getCreatureSkill();
 
+    // Detect if the request is for a flying creature
+    const flyingKeywords = ['fly', 'flying', 'dragon', 'bird', 'eagle', 'hawk', 'bat', 'butterfly', 'bee', 'phoenix', 'griffin', 'pegasus', 'fairy', 'pixie', 'owl', 'parrot', 'pterodactyl', 'wyvern', 'wings', 'airborne', 'soar', 'hover'];
+    const isFlying = flyingKeywords.some(k => userRequest.toLowerCase().includes(k));
+    const flyingSkill = isFlying ? getFlyingCreatureSkill() : '';
+
     return `You are creating a CREATURE for a voxel game. Generate JavaScript code for a new Animal class.
 
 ## CRITICAL RULES
@@ -58,6 +64,15 @@ export function getCreaturePrompt(userRequest: string, context: any, examples: U
 3. MUST set dimensions: this.width, this.height, this.depth
 4. Use only THREE.BoxGeometry, CylinderGeometry, SphereGeometry (Minecraft-style blocks)
 5. The creature will be spawned in front of the player automatically
+${isFlying ? `6. **FLYING CREATURE DETECTED** — You MUST include flight movement code. Setting gravity=0 alone is NOT enough!
+   - Set this.gravity = 0 AND this.flying = true in constructor
+   - Initialize flight velocity and waypoint properties
+   - Override updatePhysics(dt) to skip ground collision
+   - Add 3D movement logic in updateAI(dt) or update(dt) that moves the creature through the air
+   - Include height control relative to terrain
+   - Include bounds checking so it doesn't fly infinitely far away
+   - Add wing flap animation if the creature has wings
+   - See the FLYING CREATURE PATTERN section below for the required code` : ''}
 
 ## Available Properties (set in constructor)
 - this.width, this.height, this.depth - Physical size
@@ -76,6 +91,7 @@ export function getCreaturePrompt(userRequest: string, context: any, examples: U
 - createBody() - REQUIRED: Build the 3D mesh using THREE.js
 - update(dt) - For custom behaviors (call super.update(dt) first)
 - updateAI(dt) - For custom AI (call super.updateAI(dt) for default behavior)
+- updatePhysics(dt) - Override for flying creatures to skip gravity/ground collision
 
 ## Materials (colors as hex)
 - new THREE.MeshLambertMaterial({ color: 0xRRGGBB })
@@ -85,6 +101,10 @@ export function getCreaturePrompt(userRequest: string, context: any, examples: U
 Red: 0xFF0000, Green: 0x00FF00, Blue: 0x0000FF, Yellow: 0xFFFF00
 Orange: 0xFF8800, Purple: 0x8800FF, Pink: 0xFF88FF, Brown: 0x8B4513
 White: 0xFFFFFF, Black: 0x000000, Gray: 0x888888
+${isFlying && flyingSkill ? `
+## FLYING CREATURE PATTERN (MUST FOLLOW)
+${flyingSkill}
+` : ''}
 ${skill ? `
 ## SYSTEM ARCHITECTURE REFERENCE
 ${skill}

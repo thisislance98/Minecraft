@@ -38,8 +38,9 @@ export class SoundManager {
             'splash': '/sounds/splash.mp3'
         };
 
-        // Load mute preference - default to unmuted (music on)
-        this.isMuted = localStorage.getItem('isMuted') === 'true';
+        // Load mute preference - default to muted (music off)
+        const savedMute = localStorage.getItem('isMuted');
+        this.isMuted = savedMute === null ? true : savedMute === 'true';
         this.listener.setMasterVolume(this.isMuted ? 0 : 1);
     }
 

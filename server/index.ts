@@ -29,7 +29,7 @@ import { unifiedExampleIndex } from './ai/examples/UnifiedExampleIndex';
 // import { initGenesisService } from './services/GenesisService';
 import { ExpressPeerServer } from 'peer';
 import { WebSocketServer } from 'ws';
-import { FewShotSession } from './services/FewShotSession';
+import { AgentSession } from './services/AgentSession';
 import { logError } from './utils/logger';
 import {
     validateBlockChange,
@@ -149,8 +149,8 @@ originalOn('upgrade', (request: any, socket: any, head: any) => {
 });
 
 wssAI.on('connection', (ws, req) => {
-    console.log('[AI] Client connected. Initializing FewShotSession...');
-    new FewShotSession(ws, req);
+    console.log('[AI] Client connected. Initializing AgentSession...');
+    new AgentSession(ws, req);
 });
 
 // ============ PeerJS Signaling Server ============

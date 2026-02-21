@@ -31,11 +31,17 @@ export interface ModelPricing {
 }
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
-    // Claude models
+    // Claude models (both dot and dash formats for matching flexibility)
+    'opus-4-6': { inputPer1M: 5.00, outputPer1M: 25.00 },
     'opus-4.6': { inputPer1M: 5.00, outputPer1M: 25.00 },
+    'opus-4-5': { inputPer1M: 5.00, outputPer1M: 25.00 },
     'opus-4.5': { inputPer1M: 5.00, outputPer1M: 25.00 },
+    'sonnet-4-6': { inputPer1M: 3.00, outputPer1M: 15.00 },
+    'sonnet-4.6': { inputPer1M: 3.00, outputPer1M: 15.00 },
+    'sonnet-4-5': { inputPer1M: 3.00, outputPer1M: 15.00 },
     'sonnet-4.5': { inputPer1M: 3.00, outputPer1M: 15.00 },
     'sonnet-4': { inputPer1M: 3.00, outputPer1M: 15.00 },
+    'haiku-4-5': { inputPer1M: 0.80, outputPer1M: 4.00 },
     'haiku-4.5': { inputPer1M: 0.80, outputPer1M: 4.00 },
     'haiku': { inputPer1M: 0.80, outputPer1M: 4.00 },
     // GPT models

@@ -8,7 +8,7 @@ import { getAllKnowledge, deleteAllKnowledge } from '../services/KnowledgeServic
 import { getItem, getAllItems, saveItem } from '../services/DynamicItemService';
 import { FewShotAI, availableModels } from '../ai/few_shot_system';
 import { unifiedExampleIndex } from '../ai/examples/UnifiedExampleIndex';
-import { FewShotSession } from '../services/FewShotSession';
+import { AgentSession } from '../services/AgentSession';
 // Genesis system is on separate branch
 // import { generateScript } from '../services/GenesisService';
 
@@ -303,6 +303,7 @@ aiRoutes.post('/fewshot/test', async (req, res) => {
             playerPosition: { x: 0, y: 64, z: 0 }
         });
 
+        const usage = ai.getAccumulatedUsage();
         res.json({
             success: result.success,
             type: result.type,
@@ -311,7 +312,8 @@ aiRoutes.post('/fewshot/test', async (req, res) => {
             hasCode: !!result.code,
             codeLength: result.code?.length,
             hasIcon: !!result.icon,
-            error: result.error
+            error: result.error,
+            usage
         });
     } catch (error: any) {
         console.error('[AI Routes] FewShot test error:', error);
@@ -390,7 +392,7 @@ aiRoutes.post('/chat', async (req, res) => {
         if (!session) {
             const ai = new FewShotAI({
                 apiKey,
-                model: model || process.env.FEWSHOT_MODEL || 'anthropic/claude-opus-4.6',
+                model: model || process.env.FEWSHOT_MODEL || 'anthropic/claude-haiku-4.5',
                 siteUrl: 'http://localhost:5173',
                 siteName: 'VoxelWorld'
             });
@@ -501,8 +503,8 @@ aiRoutes.post('/genesis/generate', async (req, res) => {
 /**
  * Helper: get a connected game client session
  */
-function getGameSession(): FewShotSession | null {
-    const session = FewShotSession.getAnySession();
+function getGameSession(): AgentSession | null {
+    const session = AgentSession.getAnySession();
     if (!session) return null;
     return session;
 }
@@ -512,7 +514,7 @@ function getGameSession(): FewShotSession | null {
  * GET /api/ai/verify/sessions
  */
 aiRoutes.get('/verify/sessions', (req, res) => {
-    const sessions = FewShotSession.getAllSessions();
+    const sessions = AgentSession.getAllSessions();
     res.json({
         count: sessions.length,
         hasConnectedClient: sessions.length > 0

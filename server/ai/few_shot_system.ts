@@ -51,7 +51,7 @@ interface FewShotConfig {
 }
 
 interface ConversationMessage {
-    role: 'user' | 'assistant';
+    role: 'user' | 'assistant' | 'system';
     content: string;
     createdItem?: string;
 }
@@ -89,6 +89,8 @@ export interface TokenUsage {
     completionTokens: number;
     totalTokens: number;
 }
+
+export type OnTokenCallback = (text: string) => void;
 
 export class FewShotAI {
     private config: FewShotConfig;
@@ -171,8 +173,8 @@ export class FewShotAI {
      * Main entry point — process a user request.
      * Category comes from the UI; for "custom" it is resolved via semantic similarity.
      */
-    async processRequest(userMessage: string, context: FewShotContext, category: string = 'custom'): Promise<FewShotResult> {
-        console.log(`[FewShotAI] Processing: "${userMessage}" | category=${category} | model=${this.model}`);
+    async processRequest(userMessage: string, context: FewShotContext, category: string = 'custom', onToken?: OnTokenCallback): Promise<FewShotResult> {
+        console.log(`[FewShotAI] Processing: "${userMessage}" | category=${category} | model=${this.model} | streaming=${!!onToken}`);
 
         this.resetUsage();
 
@@ -198,20 +200,20 @@ export class FewShotAI {
 
             switch (resolved) {
                 case 'creature':
-                    result = await this.handleCreateCreature(userMessage, context, examples);
+                    result = await this.handleCreateCreature(userMessage, context, examples, onToken);
                     break;
                 case 'item':
-                    result = await this.handleCreateItem(userMessage, context, examples);
+                    result = await this.handleCreateItem(userMessage, context, examples, onToken);
                     break;
                 case 'build':
-                    result = await this.handleCreateStructure(userMessage, context, examples);
+                    result = await this.handleCreateStructure(userMessage, context, examples, onToken);
                     break;
                 case 'chat':
-                    result = await this.handleChat(userMessage, context);
+                    result = await this.handleChat(userMessage, context, onToken);
                     break;
                 default:
                     // "fix" and any other unknown → treat as creature for now
-                    result = await this.handleCreateCreature(userMessage, context, examples);
+                    result = await this.handleCreateCreature(userMessage, context, examples, onToken);
                     break;
             }
 
@@ -237,32 +239,31 @@ export class FewShotAI {
     /**
      * Handle creature creation — uses create_creature tool for structured output
      */
-    private async handleCreateCreature(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
-        // If we have a last created creature, include its code as reference for modifications
+    private async handleCreateCreature(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
+        // If we have a last created creature, include its code in the description
+        // so the AI can decide whether this is an edit (and set isEdit=true in the tool call)
         let modifiedDescription = description;
         if (context.lastCreatedItem?.type === 'creature' && context.lastCreatedItem.code) {
-            const modificationKeywords = ['smaller', 'bigger', 'larger', 'fix', 'change', 'modify', 'update', 'wrong', 'backward', 'weird', 'different', 'more', 'less'];
-            const isModification = modificationKeywords.some(kw => description.toLowerCase().includes(kw));
-
-            if (isModification) {
-                modifiedDescription = `Modify the existing ${context.lastCreatedItem.name} creature. The user wants: ${description}\n\nHere is the original code to modify:\n\`\`\`javascript\n${context.lastCreatedItem.code}\n\`\`\`\n\nCreate a new version that addresses the feedback while keeping the same class name (${context.lastCreatedItem.name}).`;
-                console.log('[FewShotAI] Detected modification request for:', context.lastCreatedItem.name);
-            }
+            modifiedDescription = `${description}\n\n[CONTEXT] The player previously created a creature called "${context.lastCreatedItem.name}". Here is its code:\n\`\`\`javascript\n${context.lastCreatedItem.code}\n\`\`\`\nIf the player is asking to modify/change this creature, set isEdit=true in the tool call and keep the same class name "${context.lastCreatedItem.name}". If they want something entirely new, set isEdit=false or omit it.`;
         }
 
         const prompt = getCreaturePrompt(modifiedDescription, context, examples);
 
-        const response = await this.callOpenRouter(prompt, modifiedDescription, getCreatureTools(), context.conversationHistory);
+        const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
+        const response = await callFn(prompt, modifiedDescription, getCreatureTools(), context.conversationHistory, onToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_creature');
         let code: string | null = null;
         let className: string | null = null;
 
+        let isEdit = false;
+
         if (toolResult) {
             code = toolResult.code || null;
             className = toolResult.className || null;
-            console.log(`[FewShotAI] Creature extracted via tool call: ${className}`);
+            isEdit = toolResult.isEdit === true;
+            console.log(`[FewShotAI] Creature extracted via tool call: ${className}, isEdit=${isEdit}`);
         }
 
         // Fallback: extract from text content
@@ -288,22 +289,23 @@ export class FewShotAI {
             if (fixedCode) {
                 const revalidation = this.validateCreatureCode(fixedCode);
                 if (revalidation.valid) {
-                    return { success: true, type: 'creature', code: fixedCode, data: { className: this.extractClassName(fixedCode) } };
+                    return { success: true, type: 'creature', code: fixedCode, data: { className: this.extractClassName(fixedCode), isEdit } };
                 }
             }
             return { success: false, type: 'error', error: `Invalid creature code: ${validation.errors.join(', ')}` };
         }
 
-        return { success: true, type: 'creature', code, data: { className } };
+        return { success: true, type: 'creature', code, data: { className, isEdit } };
     }
 
     /**
      * Handle item creation — uses create_item tool for structured output
      */
-    private async handleCreateItem(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
+    private async handleCreateItem(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
         const prompt = getItemPrompt(description, context, examples);
 
-        const response = await this.callOpenRouter(prompt, description, getItemTools(), context.conversationHistory);
+        const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
+        const response = await callFn(prompt, description, getItemTools(), context.conversationHistory, onToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_item');
@@ -371,18 +373,27 @@ export class FewShotAI {
     /**
      * Handle structure creation — uses create_structure tool for structured output
      */
-    private async handleCreateStructure(description: string, context: FewShotContext, examples: UnifiedExample[] = []): Promise<FewShotResult> {
-        const prompt = getStructurePrompt(description, context, examples);
+    private async handleCreateStructure(description: string, context: FewShotContext, examples: UnifiedExample[] = [], onToken?: OnTokenCallback): Promise<FewShotResult> {
+        // If we have a last created structure, include its code so the AI can decide if this is an edit
+        let modifiedDescription = description;
+        if (context.lastCreatedItem?.type === 'structure' && context.lastCreatedItem.code) {
+            modifiedDescription = `${description}\n\n[CONTEXT] The player previously built a structure. Here is its code:\n\`\`\`javascript\n${context.lastCreatedItem.code}\n\`\`\`\nIf the player is asking to modify/change this structure, set isEdit=true in the tool call. If they want something entirely new, set isEdit=false or omit it.`;
+        }
 
-        const response = await this.callOpenRouter(prompt, description, getStructureTools(), context.conversationHistory);
+        const prompt = getStructurePrompt(modifiedDescription, context, examples);
+
+        const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
+        const response = await callFn(prompt, modifiedDescription, getStructureTools(), context.conversationHistory, onToken);
 
         // Try tool-call extraction first
         const toolResult = this.extractToolCallArgs(response, 'create_structure');
         let code: string | null = null;
+        let isEdit = false;
 
         if (toolResult) {
             code = toolResult.code || null;
-            console.log(`[FewShotAI] Structure code extracted via tool call`);
+            isEdit = toolResult.isEdit === true;
+            console.log(`[FewShotAI] Structure code extracted via tool call, isEdit=${isEdit}`);
         }
 
         // Fallback: extract from text content
@@ -398,7 +409,7 @@ export class FewShotAI {
         // Execute the structure code to get blocks
         try {
             const blocks = this.executeStructureCode(code, context);
-            return { success: true, type: 'structure', data: { blocks }, code };
+            return { success: true, type: 'structure', data: { blocks, isEdit }, code };
         } catch (e: any) {
             return { success: false, type: 'error', error: `Structure code error: ${e.message}` };
         }
@@ -407,10 +418,11 @@ export class FewShotAI {
     /**
      * Handle chat / greeting — no LLM call needed for simple cases
      */
-    private async handleChat(userMessage: string, context: FewShotContext): Promise<FewShotResult> {
+    private async handleChat(userMessage: string, context: FewShotContext, onToken?: OnTokenCallback): Promise<FewShotResult> {
         const prompt = getChatPrompt(context);
 
-        const response = await this.callOpenRouter(prompt, userMessage, null, context.conversationHistory);
+        const callFn = onToken ? this.callOpenRouterStreaming.bind(this) : this.callOpenRouter.bind(this);
+        const response = await callFn(prompt, userMessage, null, context.conversationHistory, onToken);
 
         return { success: true, type: 'chat', message: response.content || 'Hello! I\'m Merlin. Ask me to create creatures, items, or build structures!' };
     }
@@ -497,7 +509,7 @@ export class FewShotAI {
             throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
         }
 
-        const data = await response.json();
+        const data: any = await response.json();
         console.log('[FewShotAI] API Response data keys:', Object.keys(data));
         console.log('[FewShotAI] API Response choices:', data.choices?.length);
         console.log('[FewShotAI] API Response message keys:', Object.keys(data.choices?.[0]?.message || {}));
@@ -511,6 +523,154 @@ export class FewShotAI {
         }
 
         return data.choices[0].message;
+    }
+
+    /**
+     * Call OpenRouter API with streaming enabled
+     * Streams text tokens via onToken callback, accumulates tool call JSON silently
+     * Returns same shape as non-streaming callOpenRouter
+     */
+    private async callOpenRouterStreaming(
+        systemPrompt: string,
+        userMessage: string,
+        tools: any[] | null,
+        conversationHistory?: ConversationMessage[],
+        onToken?: OnTokenCallback
+    ): Promise<any> {
+        const messages: any[] = [
+            { role: 'system', content: systemPrompt }
+        ];
+
+        if (conversationHistory && conversationHistory.length > 0) {
+            for (const msg of conversationHistory) {
+                messages.push({ role: msg.role, content: msg.content });
+            }
+        }
+
+        messages.push({ role: 'user', content: userMessage });
+
+        const body: any = {
+            model: this.model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 20000,
+            stream: true,
+            stream_options: { include_usage: true }
+        };
+
+        if (tools && tools.length > 0) {
+            body.tools = tools;
+            body.tool_choice = 'auto';
+        }
+
+        const response = await fetch(OPENROUTER_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.config.apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': this.config.siteUrl || 'http://localhost:5173',
+                'X-Title': this.config.siteName || 'VoxelWorld'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+        }
+
+        if (!response.body) {
+            throw new Error('No response body for streaming');
+        }
+
+        // Parse SSE stream
+        let contentAccum = '';
+        let toolCallAccum: { id?: string; type?: string; function?: { name?: string; arguments?: string } } | null = null;
+        let usage: any = null;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed === 'data: [DONE]') continue;
+                if (!trimmed.startsWith('data: ')) continue;
+
+                try {
+                    const json = JSON.parse(trimmed.slice(6));
+
+                    // Extract usage from final chunk
+                    if (json.usage) {
+                        usage = json.usage;
+                    }
+
+                    const choice = json.choices?.[0];
+                    if (!choice) continue;
+
+                    const delta = choice.delta;
+                    if (!delta) continue;
+
+                    // Stream text content tokens
+                    if (delta.content) {
+                        contentAccum += delta.content;
+                        if (onToken) {
+                            onToken(delta.content);
+                        }
+                    }
+
+                    // Accumulate tool calls silently (don't stream JSON fragments)
+                    if (delta.tool_calls && delta.tool_calls.length > 0) {
+                        const tc = delta.tool_calls[0];
+                        if (!toolCallAccum) {
+                            toolCallAccum = {
+                                id: tc.id || '',
+                                type: tc.type || 'function',
+                                function: { name: tc.function?.name || '', arguments: '' }
+                            };
+                        }
+                        if (tc.function?.name) {
+                            toolCallAccum.function!.name = tc.function.name;
+                        }
+                        if (tc.function?.arguments) {
+                            toolCallAccum.function!.arguments += tc.function.arguments;
+                        }
+                    }
+                } catch (parseErr) {
+                    // Skip malformed SSE lines
+                    console.warn('[FewShotAI] SSE parse error:', parseErr);
+                }
+            }
+        }
+
+        // Accumulate token usage
+        if (usage) {
+            this.accumulatedUsage.promptTokens += usage.prompt_tokens || 0;
+            this.accumulatedUsage.completionTokens += usage.completion_tokens || 0;
+            this.accumulatedUsage.totalTokens += usage.total_tokens || 0;
+            console.log(`[FewShotAI] Streaming token usage: ${usage.prompt_tokens} in / ${usage.completion_tokens} out (total accumulated: ${this.accumulatedUsage.totalTokens})`);
+        }
+
+        // Build response in same shape as non-streaming
+        const result: any = {
+            content: contentAccum || null,
+            role: 'assistant'
+        };
+
+        if (toolCallAccum) {
+            result.tool_calls = [toolCallAccum];
+        }
+
+        console.log(`[FewShotAI] Streaming complete: ${contentAccum.length} chars content, tool_calls=${!!toolCallAccum}`);
+        return result;
     }
 
     // ============================================================

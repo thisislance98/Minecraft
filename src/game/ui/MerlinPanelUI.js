@@ -1,86 +1,64 @@
 /**
- * MerlinPanelUI - Full-screen modal panel for Merlin's Workshop
+ * MerlinPanelUI - Chat-based Merlin AI panel
  *
+ * Replaces the old task-based UI with a conversational chat interface.
  * Features:
- * - Category selection (Item, Creature, Fix, Build, Custom)
- * - AI-generated suggestions for each category
- * - Real-time task queue display
- * - Custom input for requests
- * - Notification system
+ * - Streaming AI responses (token-by-token)
+ * - Collapsible inline code blocks with copy
+ * - Action badges with coordinates
+ * - Welcome screen with suggestion chips
+ * - Follow-up suggestion chips after each response
+ * - Model selector dropdown
  */
+
+import { getRandomSuggestions } from '../ai/MerlinSuggestions.js';
 
 export class MerlinPanelUI {
     constructor(game) {
         this.game = game;
         this.isVisible = false;
-        this.selectedCategory = null;
-        this.taskManager = null;
-        this.suggestions = [];
-        this.selectedTaskId = null; // Currently viewing task
-        this.isDetailView = false;
+        this.fewShotClient = null;
+
+        // Chat state
+        this.messages = []; // { id, role, content, timestamp, code?, action?, costInfo?, isStreaming }
+        this.messageCounter = 0;
+        this.isWaitingForResponse = false;
+
+        // Streaming state
+        this.currentStreamingId = null;
+        this.pendingTokens = '';
+        this.rafId = null;
 
         // Model selection
         this.availableModels = [];
         this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-haiku-4.5';
 
-        // Categories definition
-        this.categories = [
-            { id: 'item', label: 'Item', icon: '⚔️', description: 'Create magical items and weapons' },
-            { id: 'creature', label: 'Creature', icon: '🦁', description: 'Spawn new creatures and companions' },
-            { id: 'fix', label: 'Fix', icon: '🔧', description: 'Fix bugs and issues' },
-            { id: 'build', label: 'Build', icon: '🏗️', description: 'Build structures and buildings' },
-            { id: 'edit', label: 'Edit', icon: '✏️', description: 'Edit existing items or creatures' },
-            { id: 'custom', label: 'Custom', icon: '✨', description: 'Any custom request' }
-        ];
-
-        // Edit mode state
-        this.editMode = {
-            active: false,
-            type: null, // 'creature' or 'item'
-            selectedName: null,
-            selectedData: null,
-            creatures: [],
-            items: []
-        };
-
         this.createPanel();
         this.setupEventListeners();
         this.setupMerlinButton();
 
-        console.log('[MerlinPanelUI] Initialized');
+        console.log('[MerlinPanelUI] Chat UI initialized');
     }
 
     /**
-     * Set the TaskManager reference
-     */
-    setTaskManager(taskManager) {
-        this.taskManager = taskManager;
-
-        // Listen for task events
-        if (this.taskManager) {
-            this.taskManager.addListener((event, data) => {
-                this.handleTaskEvent(event, data);
-            });
-        }
-    }
-
-    /**
-     * Set the FewShotClient reference for model selection
+     * Set the FewShotClient reference (replaces old setTaskManager)
      */
     setFewShotClient(fewShotClient) {
+        // Guard against duplicate listener registration
+        if (this.fewShotClient === fewShotClient && this._listenerAttached) {
+            console.log('[MerlinPanelUI] FewShotClient already wired, skipping duplicate');
+            return;
+        }
+
         this.fewShotClient = fewShotClient;
 
-        // Listen for model events
         if (this.fewShotClient) {
+            this._listenerAttached = true;
             this.fewShotClient.addListener((msg) => {
-                if (msg.type === 'models_list') {
-                    this.updateModelList(msg.models, msg.current);
-                } else if (msg.type === 'model_changed') {
-                    this.updateSelectedModel(msg.model);
-                }
+                this.handleFewShotMessage(msg);
             });
 
-            // If already connected and has models, populate immediately
+            // Populate models if already available
             if (this.fewShotClient.availableModels.length > 0) {
                 this.updateModelList(this.fewShotClient.availableModels, this.fewShotClient.currentModel);
             }
@@ -88,86 +66,426 @@ export class MerlinPanelUI {
     }
 
     /**
-     * Update the model dropdown with available models
+     * Handle all messages from FewShotClient
      */
+    handleFewShotMessage(msg) {
+        switch (msg.type) {
+            case 'models_list':
+                this.updateModelList(msg.models, msg.current);
+                break;
+            case 'model_changed':
+                this.updateSelectedModel(msg.model);
+                break;
+            case 'chat_start':
+                this.startAIMessage(msg.messageId);
+                break;
+            case 'chat_token':
+                this.appendToAIMessage(msg.messageId, msg.text);
+                break;
+            case 'chat_code':
+                this.attachCodeBlock(msg.messageId, msg.code, msg.language, msg.description);
+                break;
+            case 'chat_action':
+                this.attachActionBadge(msg.messageId, msg);
+                break;
+            case 'chat_cost':
+                this.attachCostBadge(msg.messageId, msg);
+                break;
+            case 'chat_end':
+                this.finalizeAIMessage(msg.messageId);
+                break;
+            case 'chat_error':
+                this.handleAIError(msg.messageId, msg.error);
+                break;
+            case 'error':
+                this.handleConnectionError(msg.message);
+                break;
+        }
+    }
+
+    // ============================================================
+    // MODEL MANAGEMENT
+    // ============================================================
+
     updateModelList(models, currentModel) {
         this.availableModels = models;
-        if (currentModel) {
-            this.currentModel = currentModel;
-        }
+        if (currentModel) this.currentModel = currentModel;
 
         const select = document.getElementById('merlin-model-select');
         if (!select) return;
 
-        // Group models by provider
         const modelsByProvider = {};
         for (const model of models) {
             const [provider] = model.id.split('/');
-            if (!modelsByProvider[provider]) {
-                modelsByProvider[provider] = [];
-            }
+            if (!modelsByProvider[provider]) modelsByProvider[provider] = [];
             modelsByProvider[provider].push(model);
         }
 
-        // Build options HTML with optgroups
         let html = '';
         for (const [provider, providerModels] of Object.entries(modelsByProvider)) {
             const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
             html += `<optgroup label="${this.escapeHtml(providerName)}">`;
             for (const model of providerModels) {
                 const selected = model.id === this.currentModel ? 'selected' : '';
-                const costBadge = this.getCostBadge(model.cost);
+                const costBadge = { 'very-low': '\u{1F49A}', low: '\u{1F49B}', medium: '\u{1F9E1}', high: '\u{2764}\uFE0F' }[model.cost] || '';
                 html += `<option value="${this.escapeHtml(model.id)}" ${selected}>${this.escapeHtml(model.name)} ${costBadge}</option>`;
             }
             html += '</optgroup>';
         }
 
         select.innerHTML = html;
-        console.log(`[MerlinPanelUI] Model list updated: ${models.length} models, current: ${this.currentModel}`);
     }
 
-    /**
-     * Get cost badge for model dropdown
-     */
-    getCostBadge(cost) {
-        const badges = {
-            'very-low': '💚',
-            'low': '💛',
-            'medium': '🧡',
-            'high': '❤️'
-        };
-        return badges[cost] || '';
-    }
-
-    /**
-     * Update the selected model in the dropdown
-     */
     updateSelectedModel(modelId) {
         this.currentModel = modelId;
         const select = document.getElementById('merlin-model-select');
-        if (select) {
-            select.value = modelId;
-        }
-        console.log(`[MerlinPanelUI] Model changed to: ${modelId}`);
+        if (select) select.value = modelId;
     }
 
-    /**
-     * Select a new model
-     */
     selectModel(modelId) {
-        if (!this.fewShotClient) {
-            console.warn('[MerlinPanelUI] No FewShotClient available');
-            return;
-        }
-
-        console.log(`[MerlinPanelUI] Selecting model: ${modelId}`);
+        if (!this.fewShotClient) return;
         this.fewShotClient.setModel(modelId);
         this.currentModel = modelId;
     }
 
-    /**
-     * Create the panel DOM structure
-     */
+    // ============================================================
+    // MESSAGE SENDING
+    // ============================================================
+
+    sendMessage(text) {
+        if (!text.trim() || this.isWaitingForResponse) return;
+
+        // Add user message to UI
+        this.addUserMessage(text.trim());
+
+        // Hide welcome screen
+        this.hideWelcomeScreen();
+
+        // Send to server
+        this.isWaitingForResponse = true;
+        this.updateSendButton();
+
+        if (this.fewShotClient) {
+            this.fewShotClient.send({
+                type: 'input',
+                text: text.trim(),
+                context: this.fewShotClient.getContext(),
+                category: 'custom'
+            });
+        }
+
+        // Clear input
+        const input = document.getElementById('merlin-chat-input');
+        if (input) {
+            input.value = '';
+            input.style.height = 'auto';
+        }
+    }
+
+    // ============================================================
+    // CHAT MESSAGE RENDERING
+    // ============================================================
+
+    addUserMessage(text) {
+        const id = `user_${++this.messageCounter}`;
+        this.messages.push({
+            id,
+            role: 'user',
+            content: text,
+            timestamp: Date.now()
+        });
+
+        const container = document.getElementById('merlin-chat-messages');
+        if (!container) return;
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'merlin-msg merlin-msg-user';
+        msgEl.dataset.messageId = id;
+        msgEl.innerHTML = `<div class="merlin-msg-bubble">${this.escapeHtml(text)}</div>`;
+        container.appendChild(msgEl);
+
+        this.scrollToBottom();
+    }
+
+    startAIMessage(messageId) {
+        this.currentStreamingId = messageId;
+
+        this.messages.push({
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            isStreaming: true
+        });
+
+        const container = document.getElementById('merlin-chat-messages');
+        if (!container) return;
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'merlin-msg merlin-msg-ai';
+        msgEl.dataset.messageId = messageId;
+        msgEl.innerHTML = `
+            <div class="merlin-msg-avatar">&#x1F9D9;</div>
+            <div class="merlin-msg-content">
+                <div class="merlin-msg-text"></div>
+                <div class="merlin-msg-attachments"></div>
+                <div class="merlin-msg-streaming-indicator"><span class="streaming-orb"></span></div>
+            </div>
+        `;
+        container.appendChild(msgEl);
+        this.scrollToBottom();
+    }
+
+    appendToAIMessage(messageId, text) {
+        // Update data model
+        const msg = this.messages.find(m => m.id === messageId);
+        if (msg) msg.content += text;
+
+        // Batch DOM updates via requestAnimationFrame
+        this.pendingTokens += text;
+
+        if (!this.rafId) {
+            this.rafId = requestAnimationFrame(() => {
+                this.flushPendingTokens(messageId);
+                this.rafId = null;
+            });
+        }
+    }
+
+    flushPendingTokens(messageId) {
+        if (!this.pendingTokens) return;
+
+        const msgEl = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-text`);
+        if (msgEl) {
+            // Parse markdown-like bold (**text**) and newlines
+            const currentHtml = msgEl.innerHTML;
+            const msg = this.messages.find(m => m.id === messageId);
+            if (msg) {
+                msgEl.innerHTML = this.formatMessageText(msg.content);
+            }
+        }
+
+        this.pendingTokens = '';
+        this.scrollToBottom();
+    }
+
+    formatMessageText(text) {
+        // Simple markdown: **bold**, \n -> <br>
+        return this.escapeHtml(text)
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+    }
+
+    attachCodeBlock(messageId, code, language, description) {
+        const msg = this.messages.find(m => m.id === messageId);
+        if (msg) {
+            msg.code = { code, language, description };
+        }
+
+        const attachments = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-attachments`);
+        if (!attachments) return;
+
+        const codeId = `code_${messageId}`;
+        const codeBlock = document.createElement('div');
+        codeBlock.className = 'merlin-code-block';
+        codeBlock.innerHTML = `
+            <div class="merlin-code-header" data-code-id="${codeId}">
+                <span class="code-toggle-icon">&#x25B8;</span>
+                <span class="code-label">${this.escapeHtml(description || `${language} code`)}</span>
+                <button class="code-copy-btn" title="Copy code">&#x1F4CB;</button>
+            </div>
+            <pre class="merlin-code-content hidden" id="${codeId}"><code>${this.escapeHtml(code)}</code></pre>
+        `;
+
+        // Toggle expand/collapse
+        const header = codeBlock.querySelector('.merlin-code-header');
+        header.addEventListener('click', (e) => {
+            if (e.target.closest('.code-copy-btn')) return;
+            const content = document.getElementById(codeId);
+            const icon = header.querySelector('.code-toggle-icon');
+            content.classList.toggle('hidden');
+            icon.textContent = content.classList.contains('hidden') ? '\u25B8' : '\u25BE';
+        });
+
+        // Copy button
+        const copyBtn = codeBlock.querySelector('.code-copy-btn');
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(code).then(() => {
+                copyBtn.textContent = '\u2705';
+                setTimeout(() => { copyBtn.textContent = '\u{1F4CB}'; }, 1500);
+            });
+        });
+
+        attachments.appendChild(codeBlock);
+        this.scrollToBottom();
+    }
+
+    attachActionBadge(messageId, actionData) {
+        const msg = this.messages.find(m => m.id === messageId);
+        if (msg) {
+            msg.action = actionData;
+        }
+
+        const attachments = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-attachments`);
+        if (!attachments) return;
+
+        const pos = actionData.position;
+        const posStr = pos ? `(${pos.x}, ${pos.y}, ${pos.z})` : '';
+        const actionLabels = {
+            'spawn_creature': `\u{1F4CD} Spawned ${actionData.name} ${posStr}`,
+            'give_item': `\u{1F392} Added ${actionData.name} to inventory`,
+            'build_structure': `\u{1F3D7}\uFE0F Built structure ${posStr}`,
+            'set_blocks': `\u{1F9F1} Placed blocks ${posStr}`
+        };
+
+        const badge = document.createElement('div');
+        badge.className = 'merlin-action-badge';
+        badge.textContent = actionLabels[actionData.action] || `${actionData.action}: ${actionData.name}`;
+        attachments.appendChild(badge);
+        this.scrollToBottom();
+    }
+
+    attachCostBadge(messageId, costData) {
+        const msg = this.messages.find(m => m.id === messageId);
+        if (msg) msg.costInfo = costData;
+
+        // Cost badge is tiny, shown after message finalizes
+    }
+
+    finalizeAIMessage(messageId) {
+        this.isWaitingForResponse = false;
+        this.currentStreamingId = null;
+        this.updateSendButton();
+
+        // Flush any remaining tokens
+        if (this.pendingTokens) {
+            this.flushPendingTokens(messageId);
+        }
+
+        // Remove streaming indicator
+        const indicator = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-streaming-indicator`);
+        if (indicator) indicator.remove();
+
+        // Add cost badge
+        const msg = this.messages.find(m => m.id === messageId);
+        if (msg) {
+            msg.isStreaming = false;
+        }
+        if (msg?.costInfo) {
+            const attachments = document.querySelector(`.merlin-msg[data-message-id="${messageId}"] .merlin-msg-attachments`);
+            if (attachments) {
+                const costEl = document.createElement('div');
+                costEl.className = 'merlin-cost-badge';
+                const cost = msg.costInfo.totalCostUSD;
+                costEl.textContent = `$${cost < 0.001 ? '<0.001' : cost.toFixed(3)} \u00B7 ${msg.costInfo.model?.split('/').pop() || ''}`;
+                attachments.appendChild(costEl);
+            }
+        }
+
+        // Show follow-up suggestions
+        this.showFollowUpChips(msg);
+        this.scrollToBottom();
+    }
+
+    handleAIError(messageId, error) {
+        this.isWaitingForResponse = false;
+        this.currentStreamingId = null;
+        this.updateSendButton();
+
+        const msgEl = document.querySelector(`.merlin-msg[data-message-id="${messageId}"]`);
+        if (msgEl) {
+            const textEl = msgEl.querySelector('.merlin-msg-text');
+            if (textEl) {
+                textEl.innerHTML += `<span class="merlin-error-text"><br>\u274C Error: ${this.escapeHtml(error)}</span>`;
+            }
+            const indicator = msgEl.querySelector('.merlin-msg-streaming-indicator');
+            if (indicator) indicator.remove();
+        }
+    }
+
+    handleConnectionError(error) {
+        // Show as a system message
+        const container = document.getElementById('merlin-chat-messages');
+        if (!container) return;
+
+        const errEl = document.createElement('div');
+        errEl.className = 'merlin-msg merlin-msg-system';
+        errEl.innerHTML = `<div class="merlin-msg-bubble merlin-msg-error">\u26A0\uFE0F ${this.escapeHtml(error)}</div>`;
+        container.appendChild(errEl);
+        this.scrollToBottom();
+    }
+
+    // ============================================================
+    // FOLLOW-UP & SUGGESTION CHIPS
+    // ============================================================
+
+    showFollowUpChips(msg) {
+        const chipsContainer = document.getElementById('merlin-followup-chips');
+        if (!chipsContainer) return;
+
+        let suggestions = [];
+
+        if (msg?.action) {
+            const action = msg.action.action;
+            if (action === 'spawn_creature') {
+                suggestions = ['Make it bigger', 'Change its color', 'Make it fly', 'Add more details'];
+            } else if (action === 'give_item') {
+                suggestions = ['Make it more powerful', 'Add particle effects', 'Change the design'];
+            } else if (action === 'build_structure') {
+                suggestions = ['Add windows', 'Make it taller', 'Add a roof', 'Change material'];
+            }
+        }
+
+        if (suggestions.length === 0) {
+            suggestions = ['Create a dragon', 'Build a house', 'Make a magic wand'];
+        }
+
+        // Show at most 3
+        suggestions = suggestions.slice(0, 3);
+        chipsContainer.innerHTML = suggestions.map(s =>
+            `<button class="merlin-chip">${this.escapeHtml(s)}</button>`
+        ).join('');
+        chipsContainer.classList.remove('hidden');
+    }
+
+    showWelcomeScreen() {
+        const welcome = document.getElementById('merlin-welcome');
+        if (welcome) welcome.classList.remove('hidden');
+        const followups = document.getElementById('merlin-followup-chips');
+        if (followups) followups.classList.add('hidden');
+
+        // Populate suggestion chips
+        this.populateWelcomeSuggestions();
+    }
+
+    hideWelcomeScreen() {
+        const welcome = document.getElementById('merlin-welcome');
+        if (welcome) welcome.classList.add('hidden');
+    }
+
+    populateWelcomeSuggestions() {
+        const container = document.getElementById('merlin-welcome-suggestions');
+        if (!container) return;
+
+        // Get mixed category suggestions
+        const suggestions = [
+            ...getRandomSuggestions('creature', 2),
+            ...getRandomSuggestions('build', 2),
+            ...getRandomSuggestions('item', 2),
+            'Surprise me with something cool!',
+            'What can you create?'
+        ].sort(() => Math.random() - 0.5).slice(0, 8);
+
+        const icons = ['\u{1F981}', '\u{1F3D7}\uFE0F', '\u2694\uFE0F', '\u2728', '\u{1F409}', '\u{1F3F0}', '\u{1FA84}', '\u{1F31F}'];
+        container.innerHTML = suggestions.map((s, i) =>
+            `<button class="merlin-welcome-chip">${icons[i % icons.length]} ${this.escapeHtml(s)}</button>`
+        ).join('');
+    }
+
+    // ============================================================
+    // PANEL DOM STRUCTURE
+    // ============================================================
+
     createPanel() {
         const panel = document.createElement('div');
         panel.id = 'merlin-panel';
@@ -175,274 +493,115 @@ export class MerlinPanelUI {
         panel.innerHTML = `
             <div class="merlin-panel-content">
                 <div class="merlin-panel-header">
-                    <h2>🧙 Merlin's Workshop</h2>
+                    <span class="merlin-title">&#x1F9D9; Merlin</span>
                     <div class="merlin-model-selector">
-                        <label for="merlin-model-select">🤖</label>
                         <select id="merlin-model-select" title="Select AI Model">
-                            <option value="">Loading models...</option>
+                            <option value="">Loading...</option>
                         </select>
                     </div>
+                    <button id="merlin-panel-close" class="merlin-close-btn">&times;</button>
                 </div>
 
-                <div class="merlin-panel-body">
-                    <!-- Category Grid -->
-                    <div class="merlin-section">
-                        <h3 class="merlin-section-title">Choose a Task Type</h3>
-                        <div class="merlin-category-grid" id="merlin-categories">
-                            ${this.categories.map(cat => `
-                                <button class="merlin-category-btn" data-category="${cat.id}">
-                                    <span class="category-icon">${cat.icon}</span>
-                                    <span class="category-label">${cat.label}</span>
-                                </button>
-                            `).join('')}
-                        </div>
+                <div class="merlin-chat-area" id="merlin-chat-area">
+                    <!-- Welcome screen -->
+                    <div class="merlin-welcome" id="merlin-welcome">
+                        <div class="merlin-welcome-icon">&#x1F9D9;</div>
+                        <h3>Welcome! What would you like to create?</h3>
+                        <p class="merlin-welcome-sub">I can make creatures, items, and structures.</p>
+                        <div class="merlin-welcome-suggestions" id="merlin-welcome-suggestions"></div>
                     </div>
 
-                    <!-- Suggestions Area -->
-                    <div class="merlin-section" id="merlin-suggestions-section">
-                        <h3 class="merlin-section-title">
-                            <span id="suggestions-title">💡 Suggestions</span>
-                            <span id="suggestions-stats" class="suggestions-stats"></span>
-                            <button id="refresh-suggestions-btn" class="refresh-btn hidden" title="Show different suggestions">🔄</button>
-                        </h3>
-                        <div class="merlin-suggestions" id="merlin-suggestions">
-                            <p class="suggestions-placeholder">Select a category to see suggestions</p>
-                        </div>
-                    </div>
-
-                    <!-- Edit Mode Selector (hidden by default) -->
-                    <div class="merlin-section hidden" id="merlin-edit-section">
-                        <h3 class="merlin-section-title">
-                            <span>✏️ Edit Existing</span>
-                        </h3>
-                        <div class="edit-type-selector">
-                            <button class="edit-type-btn" data-type="creature">🦁 Creatures</button>
-                            <button class="edit-type-btn" data-type="item">⚔️ Items</button>
-                        </div>
-                        <div class="edit-selector-container" id="edit-selector-container">
-                            <p class="edit-placeholder">Select creature or item type above</p>
-                        </div>
-                        <div class="edit-preview hidden" id="edit-preview">
-                            <div class="edit-preview-header">
-                                <span class="edit-preview-name" id="edit-preview-name"></span>
-                                <button class="edit-preview-load-btn" id="edit-load-btn">Load for Editing</button>
-                            </div>
-                            <div class="edit-preview-description" id="edit-preview-description"></div>
-                        </div>
-                    </div>
-
-                    <!-- Task List -->
-                    <div class="merlin-section">
-                        <h3 class="merlin-section-title">
-                            <span>📋 Tasks</span>
-                            <span id="task-counts" class="task-counts"></span>
-                        </h3>
-                        <div class="merlin-task-list" id="merlin-task-list">
-                            <p class="task-placeholder">No tasks yet. Start one above!</p>
-                        </div>
-                    </div>
-
-                    <!-- Task Detail View (hidden by default) -->
-                    <div class="merlin-task-detail hidden" id="merlin-task-detail">
-                        <div class="task-detail-header">
-                            <button class="task-detail-back" id="task-detail-back">← Back</button>
-                            <span class="task-detail-title" id="task-detail-title">Task Details</span>
-                            <span class="task-detail-status" id="task-detail-status"></span>
-                        </div>
-                        <div class="task-detail-prompt" id="task-detail-prompt"></div>
-
-                        <!-- Tabs for Response/Code -->
-                        <div class="task-detail-tabs" id="task-detail-tabs">
-                            <button class="task-tab active" data-tab="response">💬 Response</button>
-                            <button class="task-tab" data-tab="code">💻 Code</button>
-                        </div>
-
-                        <!-- Response Tab Content -->
-                        <div class="task-detail-response task-tab-content active" id="task-detail-response" data-tab="response">
-                            <p class="response-placeholder">No response yet...</p>
-                        </div>
-
-                        <!-- Code Tab Content -->
-                        <div class="task-detail-code task-tab-content" id="task-detail-code" data-tab="code">
-                            <p class="code-placeholder">No code executed yet...</p>
-                        </div>
-                        <!-- Follow-up Suggestions -->
-                        <div class="task-followup-suggestions hidden" id="task-followup-suggestions">
-                            <div class="followup-suggestions-header">💡 Quick Feedback</div>
-                            <div class="followup-suggestions-chips" id="followup-chips"></div>
-                        </div>
-
-                        <div class="task-detail-input">
-                            <textarea id="task-followup-input" placeholder="Ask a follow-up question or give more instructions..."></textarea>
-                            <button id="task-followup-send" class="merlin-start-btn">
-                                <span>💬</span> Send
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Custom Input -->
-                    <div class="merlin-section merlin-input-section">
-                        <div class="merlin-input-wrapper">
-                            <textarea id="merlin-custom-input" placeholder="Enter your custom request..."></textarea>
-                            <button id="merlin-start-task" class="merlin-start-btn">
-                                <span>▶️</span> Start Task
-                            </button>
-                        </div>
-                    </div>
+                    <!-- Chat messages -->
+                    <div class="merlin-chat-messages" id="merlin-chat-messages"></div>
                 </div>
 
-                <!-- Close button at bottom right -->
-                <button id="merlin-panel-close" class="merlin-close-btn">×</button>
+                <!-- Follow-up chips -->
+                <div class="merlin-followup-chips hidden" id="merlin-followup-chips"></div>
+
+                <!-- Input area -->
+                <div class="merlin-input-area">
+                    <textarea id="merlin-chat-input" placeholder="Ask Merlin..." rows="1"></textarea>
+                    <button id="merlin-send-btn" class="merlin-send-btn" title="Send (Enter)">
+                        <span class="send-icon">&#x27A4;</span>
+                    </button>
+                </div>
             </div>
         `;
         document.body.appendChild(panel);
-
-        // Inject styles
         this.injectStyles();
     }
 
-    /**
-     * Setup event listeners
-     */
     setupEventListeners() {
-        // Helper to safely add event listeners
         const addListener = (id, event, handler) => {
             const el = document.getElementById(id);
-            if (el) {
-                el.addEventListener(event, handler);
-            } else {
-                console.warn(`[MerlinPanelUI] Element not found: ${id}`);
-            }
+            if (el) el.addEventListener(event, handler);
         };
 
         // Close button
-        addListener('merlin-panel-close', 'click', () => {
-            this.hide();
+        addListener('merlin-panel-close', 'click', () => this.hide());
+
+        // Send button
+        addListener('merlin-send-btn', 'click', () => {
+            const input = document.getElementById('merlin-chat-input');
+            if (input) this.sendMessage(input.value);
         });
 
-        // Category buttons
-        addListener('merlin-categories', 'click', (e) => {
-            const btn = e.target.closest('.merlin-category-btn');
-            if (btn) {
-                const category = btn.dataset.category;
-                this.selectCategory(category);
-            }
-        });
-
-        // Suggestions click
-        addListener('merlin-suggestions', 'click', (e) => {
-            const suggestionEl = e.target.closest('.suggestion-item');
-            if (suggestionEl) {
-                const text = suggestionEl.dataset.text;
-                this.startTaskFromSuggestion(text);
-            }
-        });
-
-        // Refresh suggestions button
-        addListener('refresh-suggestions-btn', 'click', () => {
-            if (this.selectedCategory) {
-                this.cycleSuggestions();
-            }
-        });
-
-        // Task list click - open task detail
-        addListener('merlin-task-list', 'click', (e) => {
-            const taskItem = e.target.closest('.task-item');
-            if (taskItem && !e.target.closest('.task-cancel-btn')) {
-                const taskId = taskItem.dataset.taskId;
-                this.showTaskDetail(taskId);
-            }
-        });
-
-        // Task detail back button
-        addListener('task-detail-back', 'click', () => {
-            this.hideTaskDetail();
-        });
-
-        // Task detail tabs
-        addListener('task-detail-tabs', 'click', (e) => {
-            const tabBtn = e.target.closest('.task-tab');
-            if (tabBtn) {
-                const tabName = tabBtn.dataset.tab;
-                this.switchTaskDetailTab(tabName);
-            }
-        });
-
-        // Task follow-up send button
-        addListener('task-followup-send', 'click', () => {
-            this.sendFollowUp();
-        });
-
-        // Task follow-up enter key
-        addListener('task-followup-input', 'keydown', (e) => {
+        // Input: Enter to send, Shift+Enter for newline
+        addListener('merlin-chat-input', 'keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                this.sendFollowUp();
+                this.sendMessage(e.target.value);
             }
         });
 
-        // Start task button
-        addListener('merlin-start-task', 'click', () => {
-            this.startCustomTask();
+        // Auto-resize textarea
+        addListener('merlin-chat-input', 'input', (e) => {
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
         });
 
-        // Enter key in input
-        addListener('merlin-custom-input', 'keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.startCustomTask();
-            }
+        // Model selector
+        addListener('merlin-model-select', 'change', (e) => {
+            if (e.target.value) this.selectModel(e.target.value);
         });
 
-        // Edit mode type selector
-        const editSection = document.getElementById('merlin-edit-section');
-        if (editSection) {
-            editSection.addEventListener('click', (e) => {
-                const typeBtn = e.target.closest('.edit-type-btn');
-                if (typeBtn) {
-                    const type = typeBtn.dataset.type;
-                    this.selectEditType(type);
-                }
-
-                const selectItem = e.target.closest('.edit-select-item');
-                if (selectItem) {
-                    const name = selectItem.dataset.name;
-                    this.selectEditItem(name);
+        // Welcome suggestion chips (delegated)
+        const welcomeChips = document.getElementById('merlin-welcome-suggestions');
+        if (welcomeChips) {
+            welcomeChips.addEventListener('click', (e) => {
+                const chip = e.target.closest('.merlin-welcome-chip');
+                if (chip) {
+                    // Strip emoji prefix
+                    const text = chip.textContent.trim().replace(/^[^\w]*/, '').trim();
+                    this.sendMessage(text);
                 }
             });
         }
 
-        // Edit load button
-        addListener('edit-load-btn', 'click', () => {
-            this.loadSelectedForEditing();
-        });
+        // Follow-up chips (delegated)
+        const followupChips = document.getElementById('merlin-followup-chips');
+        if (followupChips) {
+            followupChips.addEventListener('click', (e) => {
+                const chip = e.target.closest('.merlin-chip');
+                if (chip) {
+                    this.sendMessage(chip.textContent.trim());
+                }
+            });
+        }
 
-        // Close on escape (only if not typing in an input)
+        // Close on escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.isVisible) {
-                const merlinInput = document.getElementById('merlin-custom-input');
-                const followupInput = document.getElementById('task-followup-input');
-                // If typing in input, just blur it instead of closing panel
-                if (document.activeElement === merlinInput || document.activeElement === followupInput) {
-                    document.activeElement.blur();
+                const input = document.getElementById('merlin-chat-input');
+                if (document.activeElement === input) {
+                    input.blur();
                 } else {
                     this.hide();
                 }
             }
         });
-
-        // Model selector change
-        addListener('merlin-model-select', 'change', (e) => {
-            const modelId = e.target.value;
-            if (modelId) {
-                this.selectModel(modelId);
-            }
-        });
     }
 
-    /**
-     * Setup the Merlin button in top-right controls (next to world button)
-     */
     setupMerlinButton() {
         const topRightControls = document.getElementById('top-right-controls');
         if (topRightControls) {
@@ -450,11 +609,10 @@ export class MerlinPanelUI {
 
             const merlinBtn = document.createElement('button');
             merlinBtn.id = 'merlin-btn';
-            merlinBtn.title = "Merlin's Workshop (M) • Hold M to speak";
-            merlinBtn.textContent = '🧙';
+            merlinBtn.title = "Merlin's Workshop (M)";
+            merlinBtn.textContent = '\u{1F9D9}';
             merlinBtn.addEventListener('click', () => this.toggle());
 
-            // Insert after world button, or at the start if world button doesn't exist
             if (worldBtn && worldBtn.nextSibling) {
                 topRightControls.insertBefore(merlinBtn, worldBtn.nextSibling);
             } else if (worldBtn) {
@@ -465,1143 +623,100 @@ export class MerlinPanelUI {
         }
     }
 
-    /**
-     * Select a category and load suggestions
-     */
-    selectCategory(categoryId) {
-        // Update UI
-        const buttons = document.querySelectorAll('.merlin-category-btn');
-        buttons.forEach(btn => {
-            btn.classList.toggle('selected', btn.dataset.category === categoryId);
-        });
+    // ============================================================
+    // PANEL VISIBILITY
+    // ============================================================
 
-        this.selectedCategory = categoryId;
-
-        // Handle edit mode specially
-        const editSection = document.getElementById('merlin-edit-section');
-        const suggestionsSection = document.getElementById('merlin-suggestions-section');
-        const refreshBtn = document.getElementById('refresh-suggestions-btn');
-
-        if (categoryId === 'edit') {
-            // Show edit section, hide suggestions
-            editSection.classList.remove('hidden');
-            suggestionsSection.classList.add('hidden');
-            this.editMode.active = true;
-            // Reset edit mode state
-            this.editMode.type = null;
-            this.editMode.selectedName = null;
-            this.editMode.selectedData = null;
-            this.renderEditSelector();
-            return;
-        } else {
-            // Hide edit section, show suggestions
-            editSection.classList.add('hidden');
-            suggestionsSection.classList.remove('hidden');
-            this.editMode.active = false;
-        }
-
-        // Show refresh button
-        refreshBtn.classList.remove('hidden');
-
-        // Load suggestions from predefined pool
-        if (this.taskManager) {
-            this.suggestions = this.taskManager.requestSuggestions(categoryId);
-            this.updateSuggestionStats();
-        } else {
-            this.suggestions = this.getDefaultSuggestions(categoryId);
-        }
-
-        this.renderSuggestions();
-    }
-
-    /**
-     * Select edit type (creature or item)
-     */
-    selectEditType(type) {
-        this.editMode.type = type;
-        this.editMode.selectedName = null;
-        this.editMode.selectedData = null;
-
-        // Update type button UI
-        const typeButtons = document.querySelectorAll('.edit-type-btn');
-        typeButtons.forEach(btn => {
-            btn.classList.toggle('selected', btn.dataset.type === type);
-        });
-
-        // Hide preview
-        document.getElementById('edit-preview').classList.add('hidden');
-
-        // Load list from server
-        this.loadEditList(type);
-    }
-
-    /**
-     * Load list of creatures or items from server
-     */
-    async loadEditList(type) {
-        const container = document.getElementById('edit-selector-container');
-        container.innerHTML = '<p class="edit-loading">Loading...</p>';
-
-        try {
-            // Get socket from game
-            const socket = this.game.socketManager?.socket;
-            if (!socket) {
-                container.innerHTML = '<p class="edit-error">Not connected to server</p>';
-                return;
-            }
-
-            // Get auth token
-            const token = localStorage.getItem('admin_token') || 'asdf123';
-            const worldId = this.game.currentWorldId;
-
-            // Request list from server
-            const eventName = type === 'creature' ? 'admin:list_creatures' : 'admin:list_items';
-            const resultEvent = type === 'creature' ? 'admin:list_creatures:result' : 'admin:list_items:result';
-
-            socket.emit(eventName, { worldId, token });
-
-            // Wait for response
-            const result = await new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    resolve({ success: false, error: 'Timeout' });
-                }, 5000);
-
-                socket.once(resultEvent, (data) => {
-                    clearTimeout(timeout);
-                    resolve(data);
-                });
-            });
-
-            if (!result.success) {
-                container.innerHTML = `<p class="edit-error">Error: ${result.error || 'Unknown error'}</p>`;
-                return;
-            }
-
-            const items = type === 'creature' ? result.creatures : result.items;
-            if (type === 'creature') {
-                this.editMode.creatures = items;
-            } else {
-                this.editMode.items = items;
-            }
-
-            this.renderEditSelector();
-
-        } catch (error) {
-            console.error('[MerlinPanelUI] Failed to load edit list:', error);
-            container.innerHTML = `<p class="edit-error">Error: ${error.message}</p>`;
-        }
-    }
-
-    /**
-     * Render the edit selector list
-     */
-    renderEditSelector() {
-        const container = document.getElementById('edit-selector-container');
-
-        if (!this.editMode.type) {
-            container.innerHTML = '<p class="edit-placeholder">Select creature or item type above</p>';
-            return;
-        }
-
-        const items = this.editMode.type === 'creature' ? this.editMode.creatures : this.editMode.items;
-
-        if (!items || items.length === 0) {
-            container.innerHTML = `<p class="edit-placeholder">No ${this.editMode.type}s found</p>`;
-            return;
-        }
-
-        const icon = this.editMode.type === 'creature' ? '🦁' : '⚔️';
-        container.innerHTML = `
-            <div class="edit-select-list">
-                ${items.map(item => `
-                    <div class="edit-select-item ${this.editMode.selectedName === item.name ? 'selected' : ''}"
-                         data-name="${this.escapeHtml(item.name)}">
-                        <span class="edit-item-icon">${icon}</span>
-                        <span class="edit-item-name">${this.escapeHtml(item.name)}</span>
-                        <span class="edit-item-world">${item.worldId === 'global' ? '🌍' : '📍'}</span>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-    }
-
-    /**
-     * Select an item for editing
-     */
-    selectEditItem(name) {
-        this.editMode.selectedName = name;
-
-        // Update UI selection
-        document.querySelectorAll('.edit-select-item').forEach(el => {
-            el.classList.toggle('selected', el.dataset.name === name);
-        });
-
-        // Find item data
-        const items = this.editMode.type === 'creature' ? this.editMode.creatures : this.editMode.items;
-        const itemData = items.find(i => i.name === name);
-
-        if (itemData) {
-            // Show preview
-            const preview = document.getElementById('edit-preview');
-            preview.classList.remove('hidden');
-            document.getElementById('edit-preview-name').textContent = itemData.name;
-            document.getElementById('edit-preview-description').textContent = itemData.description || 'No description';
-        }
-    }
-
-    /**
-     * Load selected item for editing - fetches full code and puts in input
-     */
-    async loadSelectedForEditing() {
-        if (!this.editMode.selectedName || !this.editMode.type) return;
-
-        const socket = this.game.socketManager?.socket;
-        if (!socket) {
-            console.error('[MerlinPanelUI] Not connected to server');
-            return;
-        }
-
-        const token = localStorage.getItem('admin_token') || 'asdf123';
-        const worldId = this.game.currentWorldId;
-        const name = this.editMode.selectedName;
-        const type = this.editMode.type;
-
-        try {
-            // Request full data from server
-            const eventName = type === 'creature' ? 'admin:get_creature' : 'admin:get_item';
-            const resultEvent = type === 'creature' ? 'admin:get_creature:result' : 'admin:get_item:result';
-
-            socket.emit(eventName, { name, worldId, token });
-
-            const result = await new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    resolve({ success: false, error: 'Timeout' });
-                }, 5000);
-
-                socket.once(resultEvent, (data) => {
-                    clearTimeout(timeout);
-                    resolve(data);
-                });
-            });
-
-            if (!result.success) {
-                console.error('[MerlinPanelUI] Failed to load item:', result.error);
-                return;
-            }
-
-            const data = type === 'creature' ? result.creature : result.item;
-            this.editMode.selectedData = data;
-
-            // Populate the input with an edit prompt
-            const input = document.getElementById('merlin-custom-input');
-            input.value = `Edit the ${type} "${name}": `;
-            input.focus();
-
-            // Store the editing context for the task manager
-            this.editMode.editing = {
-                name,
-                type,
-                code: data.code,
-                description: data.description,
-                icon: data.icon // for items
-            };
-
-            console.log(`[MerlinPanelUI] Loaded ${type} "${name}" for editing`);
-
-        } catch (error) {
-            console.error('[MerlinPanelUI] Failed to load for editing:', error);
-        }
-    }
-
-    /**
-     * Cycle to new suggestions
-     */
-    cycleSuggestions() {
-        if (!this.selectedCategory || !this.taskManager) return;
-
-        // Add spin animation to refresh button
-        const refreshBtn = document.getElementById('refresh-suggestions-btn');
-        refreshBtn.classList.add('spinning');
-
-        // Get new suggestions
-        this.suggestions = this.taskManager.cycleSuggestions(this.selectedCategory);
-        this.updateSuggestionStats();
-        this.renderSuggestions();
-
-        // Remove spin animation
-        setTimeout(() => {
-            refreshBtn.classList.remove('spinning');
-        }, 300);
-    }
-
-    /**
-     * Update the suggestion stats display
-     */
-    updateSuggestionStats() {
-        const statsEl = document.getElementById('suggestions-stats');
-        if (!this.taskManager || !this.selectedCategory) {
-            statsEl.textContent = '';
-            return;
-        }
-
-        const stats = this.taskManager.getSuggestionStats(this.selectedCategory);
-        statsEl.textContent = `(${stats.remaining} more available)`;
-    }
-
-    /**
-     * Render suggestions in the UI
-     */
-    renderSuggestions() {
-        const container = document.getElementById('merlin-suggestions');
-
-        if (!this.suggestions || this.suggestions.length === 0) {
-            container.innerHTML = '<p class="suggestions-placeholder">No suggestions available</p>';
-            return;
-        }
-
-        container.innerHTML = this.suggestions.map(suggestion => `
-            <div class="suggestion-item" data-text="${this.escapeHtml(suggestion)}">
-                <span class="suggestion-bullet">•</span>
-                <span class="suggestion-text">${this.escapeHtml(suggestion)}</span>
-            </div>
-        `).join('');
-    }
-
-    /**
-     * Start a task from a suggestion
-     */
-    startTaskFromSuggestion(text) {
-        if (!this.taskManager) {
-            console.error('[MerlinPanelUI] TaskManager not available');
-            return;
-        }
-
-        console.log(`[MerlinPanelUI] Starting task from suggestion: ${text}`);
-        this.taskManager.createTask(text, this.selectedCategory || 'custom');
-
-        // Update task list
-        this.updateTaskList();
-    }
-
-    /**
-     * Start a custom task from the input
-     */
-    startCustomTask() {
-        const input = document.getElementById('merlin-custom-input');
-        const text = input.value.trim();
-
-        if (!text) return;
-
-        if (!this.taskManager) {
-            console.error('[MerlinPanelUI] TaskManager not available');
-            return;
-        }
-
-        // Check if we're in edit mode with an item loaded
-        let category = this.selectedCategory || 'custom';
-        let editContext = null;
-
-        if (this.editMode.editing) {
-            // Pass edit context to the task
-            editContext = {
-                isEdit: true,
-                name: this.editMode.editing.name,
-                type: this.editMode.editing.type,
-                existingCode: this.editMode.editing.code,
-                existingDescription: this.editMode.editing.description,
-                existingIcon: this.editMode.editing.icon
-            };
-            category = this.editMode.editing.type; // 'creature' or 'item'
-            console.log(`[MerlinPanelUI] Starting edit task for ${editContext.type}: ${editContext.name}`);
-        } else {
-            console.log(`[MerlinPanelUI] Starting custom task: ${text}`);
-        }
-
-        this.taskManager.createTask(text, category, editContext);
-
-        // Clear input and reset edit mode
-        input.value = '';
-        this.editMode.editing = null;
-
-        // Update task list
-        this.updateTaskList();
-    }
-
-    /**
-     * Update the task list display
-     */
-    updateTaskList() {
-        const container = document.getElementById('merlin-task-list');
-        const countsEl = document.getElementById('task-counts');
-
-        if (!this.taskManager) {
-            container.innerHTML = '<p class="task-placeholder">No tasks yet. Start one above!</p>';
-            countsEl.textContent = '';
-            return;
-        }
-
-        const tasks = this.taskManager.getAllTasks();
-        const counts = this.taskManager.getTaskCounts();
-
-        // Update counts
-        const parts = [];
-        if (counts.running > 0) parts.push(`${counts.running} running`);
-        if (counts.pending > 0) parts.push(`${counts.pending} pending`);
-        countsEl.textContent = parts.length > 0 ? `(${parts.join(', ')})` : '';
-
-        if (tasks.length === 0) {
-            container.innerHTML = '<p class="task-placeholder">No tasks yet. Start one above!</p>';
-            return;
-        }
-
-        // Render tasks (newest first, limit to 10)
-        const recentTasks = tasks.slice(-10).reverse();
-        container.innerHTML = recentTasks.map(task => this.renderTask(task)).join('');
-    }
-
-    /**
-     * Render a single task item
-     */
-    renderTask(task) {
-        const statusIcons = {
-            pending: '⏳',
-            running: '🔄',
-            completed: '✅',
-            error: '❌'
-        };
-
-        const statusClasses = {
-            pending: 'task-pending',
-            running: 'task-running',
-            completed: 'task-completed',
-            error: 'task-error'
-        };
-
-        const icon = statusIcons[task.status] || '❓';
-        const statusClass = statusClasses[task.status] || '';
-        const shortPrompt = task.prompt.length > 40 ? task.prompt.substring(0, 40) + '...' : task.prompt;
-
-        let statusText = '';
-        if (task.status === 'running' && task.response) {
-            const shortResponse = task.response.length > 30 ? '...' + task.response.slice(-30) : task.response;
-            statusText = `<span class="task-response">${this.escapeHtml(shortResponse)}</span>`;
-        } else if (task.status === 'error' && task.error) {
-            statusText = `<span class="task-error-msg">${this.escapeHtml(task.error)}</span>`;
-        }
-
-        // Use magical orb for running tasks instead of emoji
-        const iconHtml = task.status === 'running'
-            ? `<div class="merlin-orb">
-                <div class="orb-core"></div>
-                <div class="orb-ring"></div>
-                <div class="orb-particle p1"></div>
-                <div class="orb-particle p2"></div>
-                <div class="orb-particle p3"></div>
-                <div class="orb-particle p4"></div>
-               </div>`
-            : `<span class="task-icon">${icon}</span>`;
-
-        // Show token count badge by default (always visible for completed tasks)
-        const tokenBadge = (task.costInfo && task.status === 'completed')
-            ? `<span class="task-token-badge" title="Click for details">
-                   ${this.formatTokenCount(task.costInfo.inputTokens || 0)} / ${this.formatTokenCount(task.costInfo.outputTokens || 0)}
-               </span>`
-            : '';
-
-        // Action buttons for completed tasks
-        let actionButtons = '';
-        if (task.status === 'pending' || task.status === 'running') {
-            actionButtons = `<button class="task-cancel-btn" onclick="event.stopPropagation(); window.merlinPanelUI.cancelTask('${task.id}')" title="Cancel">✕</button>`;
-        } else if (task.status === 'completed' || task.status === 'error') {
-            const undoBtn = task.canUndo && !task.undone
-                ? `<button class="task-undo-btn" onclick="event.stopPropagation(); window.merlinPanelUI.undoTask('${task.id}')" title="Undo changes">↩</button>`
-                : '';
-            const closeBtn = `<button class="task-close-btn" onclick="event.stopPropagation(); window.merlinPanelUI.closeTask('${task.id}')" title="Remove">✕</button>`;
-            actionButtons = `<div class="task-actions">${undoBtn}${closeBtn}</div>`;
-        }
-
-        // Show "undone" indicator
-        const undoneIndicator = task.undone ? '<span class="task-undone-badge">undone</span>' : '';
-
-        return `
-            <div class="task-item ${statusClass} ${task.undone ? 'task-undone' : ''}" data-task-id="${task.id}">
-                ${iconHtml}
-                <div class="task-content">
-                    <span class="task-prompt">${this.escapeHtml(shortPrompt)}</span>
-                    ${statusText}
-                    ${undoneIndicator}
-                </div>
-                ${tokenBadge}
-                ${actionButtons}
-            </div>
-        `;
-    }
-
-    /**
-     * Cancel a task
-     */
-    cancelTask(taskId) {
-        if (this.taskManager) {
-            this.taskManager.cancelTask(taskId);
-            this.updateTaskList();
-        }
-    }
-
-    /**
-     * Undo a task's changes
-     */
-    undoTask(taskId) {
-        if (this.taskManager) {
-            const result = this.taskManager.undoTask(taskId);
-            if (!result.success) {
-                console.warn('[MerlinPanelUI] Undo failed:', result.error);
-            }
-            this.updateTaskList();
-            // Also update detail view if showing this task
-            if (this.selectedTaskId === taskId) {
-                this.updateTaskDetailView();
-            }
-        }
-    }
-
-    /**
-     * Close/remove a task from the list
-     */
-    closeTask(taskId) {
-        if (this.taskManager) {
-            this.taskManager.closeTask(taskId);
-            this.updateTaskList();
-            // Hide detail view if showing this task
-            if (this.selectedTaskId === taskId) {
-                this.hideTaskDetail();
-            }
-        }
-    }
-
-    /**
-     * Handle task events from TaskManager
-     */
-    handleTaskEvent(event, data) {
-        switch (event) {
-            case 'task_created':
-            case 'task_started':
-            case 'task_completed':
-            case 'task_failed':
-            case 'task_cancelled':
-            case 'task_progress':
-            case 'task_followup':
-            case 'tasks_cleared':
-            case 'task_followups_received':
-            case 'task_cost_received':
-            case 'task_undone':
-            case 'task_closed':
-            case 'task_code':
-                this.updateTaskList();
-                // Also update detail view if viewing this task
-                if (this.isDetailView && this.selectedTaskId) {
-                    const taskId = data?.id || data?.task?.id;
-                    if (taskId === this.selectedTaskId) {
-                        this.updateTaskDetailView();
-                    }
-                }
-                break;
-        }
-    }
-
-    /**
-     * Show task detail view
-     */
-    showTaskDetail(taskId) {
-        if (!this.taskManager) return;
-
-        const task = this.taskManager.tasks.get(taskId);
-        if (!task) return;
-
-        this.selectedTaskId = taskId;
-        this.isDetailView = true;
-
-        // Hide main sections, show detail view
-        document.querySelectorAll('.merlin-section').forEach(el => el.classList.add('hidden'));
-        document.getElementById('merlin-task-detail').classList.remove('hidden');
-
-        this.updateTaskDetailView();
-        console.log(`[MerlinPanelUI] Showing task detail: ${taskId}`);
-    }
-
-    /**
-     * Update the task detail view content
-     */
-    updateTaskDetailView() {
-        if (!this.selectedTaskId || !this.taskManager) return;
-
-        const task = this.taskManager.tasks.get(this.selectedTaskId);
-        if (!task) return;
-
-        const statusIcons = {
-            pending: '⏳ Pending',
-            running: '✨ Casting',
-            completed: '✅ Completed',
-            error: '❌ Error'
-        };
-
-        // Update title and status
-        document.getElementById('task-detail-title').textContent = task.category ?
-            `${this.getCategoryIcon(task.category)} ${task.category.charAt(0).toUpperCase() + task.category.slice(1)} Task` :
-            'Task Details';
-
-        // Use magical orb HTML for running status
-        const statusEl = document.getElementById('task-detail-status');
-        if (task.status === 'running') {
-            statusEl.innerHTML = `<div class="merlin-orb merlin-orb-inline">
-                <div class="orb-core"></div>
-                <div class="orb-ring"></div>
-                <div class="orb-particle p1"></div>
-                <div class="orb-particle p2"></div>
-                <div class="orb-particle p3"></div>
-                <div class="orb-particle p4"></div>
-            </div> <span>Casting...</span>`;
-        } else {
-            statusEl.textContent = statusIcons[task.status] || task.status;
-        }
-        statusEl.className = `task-detail-status status-${task.status}`;
-
-        // Update prompt
-        document.getElementById('task-detail-prompt').innerHTML = `
-            <strong>Request:</strong> ${this.escapeHtml(task.prompt)}
-        `;
-
-        // Update response
-        const responseEl = document.getElementById('task-detail-response');
-        if (task.response) {
-            // Format the response with basic markdown-like formatting
-            const formattedResponse = this.formatResponse(task.response);
-            responseEl.innerHTML = formattedResponse;
-        } else if (task.status === 'pending') {
-            responseEl.innerHTML = '<p class="response-placeholder">Waiting to start...</p>';
-        } else if (task.status === 'running') {
-            responseEl.innerHTML = '<p class="response-placeholder">Working on it...</p>';
-        } else if (task.error) {
-            responseEl.innerHTML = `<p class="response-error">Error: ${this.escapeHtml(task.error)}</p>`;
-        } else {
-            responseEl.innerHTML = '<p class="response-placeholder">No response yet...</p>';
-        }
-
-        // Auto-scroll response to bottom
-        responseEl.scrollTop = responseEl.scrollHeight;
-
-        // Update code tab content
-        this.updateCodeTabContent(task);
-
-        // Update tab visibility based on whether code exists
-        this.updateCodeTabVisibility(task);
-
-        // Render cost info if available and setting is enabled
-        this.renderCostInfo(task);
-
-        // Render follow-up suggestions if available
-        this.renderFollowUpSuggestions(task);
-    }
-
-    /**
-     * Update the code tab content
-     */
-    updateCodeTabContent(task) {
-        const codeEl = document.getElementById('task-detail-code');
-        if (!codeEl) return;
-
-        let hasContent = false;
-        let codeHtml = '<div class="executed-code-list">';
-
-        // Check for FewShot generated code (task.code from structure generation)
-        if (task.code) {
-            hasContent = true;
-            const description = task.codeDescription || 'Generated Code';
-            codeHtml += `
-                <div class="executed-code-block code-status-success">
-                    <div class="code-block-header">
-                        <span class="code-block-label">📝 ${this.escapeHtml(description)}</span>
-                        <button class="code-copy-btn code-copy-generated" title="Copy code">📋</button>
-                    </div>
-                    <pre class="code-display"><code>${this.escapeHtml(task.code)}</code></pre>
-                </div>
-            `;
-        }
-
-        // Check for executedCode (from SDK/Merlin system)
-        if (task.executedCode && task.executedCode.length > 0) {
-            hasContent = true;
-            task.executedCode.forEach((exec, index) => {
-                const statusIcon = exec.status === 'success' ? '✅' :
-                    exec.status === 'error' ? '❌' :
-                    exec.status === 'running' ? '⏳' : '❓';
-
-                const statusClass = `code-status-${exec.status}`;
-
-                codeHtml += `
-                    <div class="executed-code-block ${statusClass}">
-                        <div class="code-block-header">
-                            <span class="code-block-label">${statusIcon} Code Execution ${index + 1}</span>
-                            <button class="code-copy-btn" data-code-index="${index}" title="Copy code">📋</button>
-                        </div>
-                        <pre class="code-display"><code>${this.escapeHtml(exec.code)}</code></pre>
-                        ${exec.result ? `<div class="code-result ${exec.result.error ? 'code-result-error' : 'code-result-success'}">
-                            <strong>Result:</strong> ${this.escapeHtml(exec.result.error || exec.result.message || JSON.stringify(exec.result))}
-                        </div>` : ''}
-                    </div>
-                `;
-            });
-        }
-
-        codeHtml += '</div>';
-
-        if (hasContent) {
-            codeEl.innerHTML = codeHtml;
-
-            // Add copy button handler for generated code
-            const generatedCopyBtn = codeEl.querySelector('.code-copy-generated');
-            if (generatedCopyBtn && task.code) {
-                generatedCopyBtn.onclick = () => {
-                    navigator.clipboard.writeText(task.code).then(() => {
-                        generatedCopyBtn.textContent = '✓';
-                        setTimeout(() => generatedCopyBtn.textContent = '📋', 1500);
-                    });
-                };
-            }
-
-            // Add copy button handlers for executed code
-            codeEl.querySelectorAll('.code-copy-btn:not(.code-copy-generated)').forEach(btn => {
-                btn.onclick = () => {
-                    const index = parseInt(btn.dataset.codeIndex);
-                    const code = task.executedCode[index]?.code;
-                    if (code) {
-                        navigator.clipboard.writeText(code).then(() => {
-                            btn.textContent = '✓';
-                            setTimeout(() => btn.textContent = '📋', 1500);
-                        });
-                    }
-                };
-            });
-        } else {
-            codeEl.innerHTML = '<p class="code-placeholder">No code executed yet...</p>';
-        }
-    }
-
-    /**
-     * Update code tab visibility based on whether code exists
-     */
-    updateCodeTabVisibility(task) {
-        const tabsEl = document.getElementById('task-detail-tabs');
-        const codeTab = tabsEl?.querySelector('.task-tab[data-tab="code"]');
-        if (!codeTab) return;
-
-        const hasExecutedCode = task.executedCode && task.executedCode.length > 0;
-        const hasGeneratedCode = !!task.code;
-        const hasCode = hasExecutedCode || hasGeneratedCode;
-
-        // Show/hide code tab and add indicator
-        if (hasCode) {
-            codeTab.classList.remove('hidden');
-
-            // Calculate count for badge
-            let count = 0;
-            if (hasGeneratedCode) count += 1;
-            if (hasExecutedCode) count += task.executedCode.length;
-
-            if (!codeTab.querySelector('.code-count-badge')) {
-                const badge = document.createElement('span');
-                badge.className = 'code-count-badge';
-                badge.textContent = count;
-                codeTab.appendChild(badge);
-            } else {
-                codeTab.querySelector('.code-count-badge').textContent = count;
-            }
-
-            // Auto-switch to code tab when code is first available
-            if (hasGeneratedCode || (hasExecutedCode && task.executedCode.some(e => e.status === 'running'))) {
-                this.switchTaskDetailTab('code');
-            }
-        }
-    }
-
-    /**
-     * Switch between Response and Code tabs in task detail
-     */
-    switchTaskDetailTab(tabName) {
-        const tabsEl = document.getElementById('task-detail-tabs');
-        const detailEl = document.getElementById('merlin-task-detail');
-        if (!tabsEl || !detailEl) return;
-
-        // Update tab buttons
-        tabsEl.querySelectorAll('.task-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.tab === tabName);
-        });
-
-        // Update tab content
-        detailEl.querySelectorAll('.task-tab-content').forEach(content => {
-            content.classList.toggle('active', content.dataset.tab === tabName);
-        });
-    }
-
-    /**
-     * Render token usage information for a task (always visible)
-     * Cost details are shown when showCost setting is enabled
-     */
-    renderCostInfo(task) {
-        // Get or create token info container
-        let tokenContainer = document.getElementById('task-token-info');
-        if (!tokenContainer) {
-            // Create it after the response element
-            const responseEl = document.getElementById('task-detail-response');
-            tokenContainer = document.createElement('div');
-            tokenContainer.id = 'task-token-info';
-            tokenContainer.className = 'task-token-info';
-            responseEl.parentNode.insertBefore(tokenContainer, responseEl.nextSibling);
-        }
-
-        // Hide if no cost info available
-        if (!task.costInfo) {
-            tokenContainer.classList.add('hidden');
-            return;
-        }
-
-        const cost = task.costInfo;
-        const showCost = window.merlinClient?.showCost || localStorage.getItem('settings_show_cost') === 'true';
-
-        tokenContainer.classList.remove('hidden');
-
-        // Build the token usage display
-        let html = `
-            <div class="token-summary" id="token-summary">
-                <span class="token-icon">🔢</span>
-                <span class="token-counts">
-                    <span class="token-in">${cost.inputTokens?.toLocaleString() || 0} in</span>
-                    <span class="token-separator">/</span>
-                    <span class="token-out">${cost.outputTokens?.toLocaleString() || 0} out</span>
-                </span>
-                <span class="token-expand-hint">ⓘ</span>
-            </div>
-            <div class="token-details hidden" id="token-details">
-                <div class="token-detail-row">
-                    <span class="token-label">Model:</span>
-                    <span class="token-value">${this.escapeHtml(cost.model || 'Unknown')}</span>
-                </div>
-                <div class="token-detail-row">
-                    <span class="token-label">Input tokens:</span>
-                    <span class="token-value">${cost.inputTokens?.toLocaleString() || 0}</span>
-                </div>
-                <div class="token-detail-row">
-                    <span class="token-label">Output tokens:</span>
-                    <span class="token-value">${cost.outputTokens?.toLocaleString() || 0}</span>
-                </div>
-                ${cost.cachedTokens > 0 ? `
-                <div class="token-detail-row token-cached">
-                    <span class="token-label">Cached (90% off):</span>
-                    <span class="token-value">${cost.cachedTokens?.toLocaleString() || 0}</span>
-                </div>
-                ` : ''}
-                ${showCost ? `
-                <div class="token-detail-divider"></div>
-                <div class="token-detail-row">
-                    <span class="token-label">Input cost:</span>
-                    <span class="token-value token-cost">$${cost.inputCostUSD?.toFixed(6) || '0.000000'}</span>
-                </div>
-                <div class="token-detail-row">
-                    <span class="token-label">Output cost:</span>
-                    <span class="token-value token-cost">$${cost.outputCostUSD?.toFixed(6) || '0.000000'}</span>
-                </div>
-                <div class="token-detail-row token-total">
-                    <span class="token-label">Total cost:</span>
-                    <span class="token-value token-cost">$${cost.totalCostUSD?.toFixed(6) || '0.000000'}</span>
-                </div>
-                ` : ''}
-            </div>
-        `;
-
-        tokenContainer.innerHTML = html;
-
-        // Add click handler to toggle details
-        const summary = tokenContainer.querySelector('#token-summary');
-        const details = tokenContainer.querySelector('#token-details');
-        if (summary && details) {
-            summary.addEventListener('click', () => {
-                details.classList.toggle('hidden');
-                summary.classList.toggle('expanded');
-            });
-        }
-    }
-
-    /**
-     * Render follow-up suggestion chips
-     */
-    renderFollowUpSuggestions(task) {
-        const container = document.getElementById('task-followup-suggestions');
-        const chipsContainer = document.getElementById('followup-chips');
-
-        if (!task.followUpSuggestions || task.followUpSuggestions.length === 0) {
-            container.classList.add('hidden');
-            return;
-        }
-
-        // Only show for completed tasks
-        if (task.status !== 'completed') {
-            container.classList.add('hidden');
-            return;
-        }
-
-        container.classList.remove('hidden');
-
-        // Render chips
-        chipsContainer.innerHTML = task.followUpSuggestions.map((suggestion, idx) => {
-            const typeClass = `followup-chip-${suggestion.type || 'default'}`;
-            return `
-                <button class="followup-chip ${typeClass}" data-followup-idx="${idx}" data-followup-text="${this.escapeHtml(suggestion.text)}">
-                    ${this.escapeHtml(suggestion.text)}
-                </button>
-            `;
-        }).join('');
-
-        // Add click handlers
-        chipsContainer.querySelectorAll('.followup-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                const text = e.target.dataset.followupText;
-                this.sendFollowUpFromChip(text);
-            });
-        });
-    }
-
-    /**
-     * Send a follow-up from clicking a suggestion chip
-     */
-    sendFollowUpFromChip(text) {
-        if (!this.selectedTaskId || !this.taskManager) return;
-
-        const task = this.taskManager.tasks.get(this.selectedTaskId);
-        if (!task) return;
-
-        console.log(`[MerlinPanelUI] Sending follow-up from chip: ${text}`);
-
-        // Append the follow-up to the task's response as a marker
-        task.response += `\n\n---\n**You:** ${text}\n\n`;
-
-        // Clear follow-up suggestions after clicking one
-        task.followUpSuggestions = [];
-
-        this.updateTaskDetailView();
-
-        // Send follow-up through TaskManager
-        this.taskManager.sendFollowUp(this.selectedTaskId, text);
-    }
-
-    /**
-     * Format response text with basic styling
-     */
-    formatResponse(text) {
-        let html = this.escapeHtml(text);
-
-        // Convert code blocks
-        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>');
-
-        // Convert inline code
-        html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-
-        // Convert bold
-        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        // Convert newlines to breaks
-        html = html.replace(/\n/g, '<br>');
-
-        return `<div class="response-content">${html}</div>`;
-    }
-
-    /**
-     * Get category icon
-     */
-    getCategoryIcon(category) {
-        const icons = { item: '⚔️', creature: '🦁', fix: '🔧', build: '🏗️', custom: '✨' };
-        return icons[category] || '✨';
-    }
-
-    /**
-     * Hide task detail view
-     */
-    hideTaskDetail() {
-        this.selectedTaskId = null;
-        this.isDetailView = false;
-
-        // Show main sections, hide detail view
-        document.querySelectorAll('.merlin-section').forEach(el => el.classList.remove('hidden'));
-        document.getElementById('merlin-task-detail').classList.add('hidden');
-
-        // Clear follow-up input
-        document.getElementById('task-followup-input').value = '';
-
-        console.log('[MerlinPanelUI] Hiding task detail');
-    }
-
-    /**
-     * Send a follow-up message for the current task
-     */
-    sendFollowUp() {
-        if (!this.selectedTaskId || !this.taskManager) return;
-
-        const input = document.getElementById('task-followup-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        const task = this.taskManager.tasks.get(this.selectedTaskId);
-        if (!task) return;
-
-        console.log(`[MerlinPanelUI] Sending follow-up for task ${this.selectedTaskId}: ${text}`);
-
-        // Append the follow-up to the task's response as a marker
-        task.response += `\n\n---\n**You:** ${text}\n\n`;
-        this.updateTaskDetailView();
-
-        // Send follow-up through TaskManager
-        this.taskManager.sendFollowUp(this.selectedTaskId, text);
-
-        // Clear input
-        input.value = '';
-    }
-
-    /**
-     * Get default suggestions for a category
-     */
-    getDefaultSuggestions(category) {
-        const defaults = {
-            item: [
-                'Create a fire sword that ignites enemies on hit',
-                'Make a magic wand that shoots lightning',
-                'Craft a shield that reflects projectiles'
-            ],
-            creature: [
-                'Create a friendly dragon that follows me',
-                'Spawn a bouncing slime creature',
-                'Make a glowing fairy companion'
-            ],
-            fix: [
-                'Fix any errors in the console',
-                'Optimize creature movement performance',
-                'Debug the latest creation'
-            ],
-            build: [
-                'Build a medieval castle',
-                'Create a modern house with a pool',
-                'Construct a pyramid'
-            ],
-            custom: [
-                'Surprise me with something cool!',
-                'What can you create?',
-                'Show me something magical'
-            ]
-        };
-        return defaults[category] || defaults.custom;
-    }
-
-    /**
-     * Toggle panel visibility
-     */
     toggle() {
-        if (this.isVisible) {
-            this.hide();
-        } else {
-            this.show();
-        }
+        if (this.isVisible) this.hide();
+        else this.show();
     }
 
-    /**
-     * Show the panel
-     */
     show() {
-        // Close all other panels first (only one panel open at a time)
-        if (this.game.uiManager) {
-            this.game.uiManager.closeAllPanels('merlin');
-        }
-
         const panel = document.getElementById('merlin-panel');
+        if (!panel) return;
+
+        // Close other panels
+        document.querySelectorAll('.game-panel').forEach(p => p.classList.add('hidden'));
+
         panel.classList.remove('hidden');
         this.isVisible = true;
 
-        // Don't release pointer lock - player can keep playing with side panel open
-
-        // Update task list
-        this.updateTaskList();
-
-        // Focus the custom input textbox so user can start typing immediately
-        const input = document.getElementById('merlin-custom-input');
-        if (input) {
-            // Use setTimeout to ensure the panel is visible before focusing
-            setTimeout(() => input.focus(), 50);
+        // Show welcome screen if no messages
+        if (this.messages.length === 0) {
+            this.showWelcomeScreen();
         }
 
-        console.log('[MerlinPanelUI] Panel shown');
+        // Focus input
+        setTimeout(() => {
+            const input = document.getElementById('merlin-chat-input');
+            if (input) input.focus();
+        }, 100);
     }
 
-    /**
-     * Hide the panel
-     */
     hide() {
         const panel = document.getElementById('merlin-panel');
-        panel.classList.add('hidden');
+        if (panel) panel.classList.add('hidden');
         this.isVisible = false;
 
-        // Return focus to game container so hotkeys work
-        if (this.game.container) {
-            this.game.container.focus();
+        const gameContainer = document.getElementById('game-container');
+        if (gameContainer) gameContainer.focus();
+    }
+
+    scrollToBottom() {
+        const chatArea = document.getElementById('merlin-chat-area');
+        if (chatArea) {
+            requestAnimationFrame(() => {
+                chatArea.scrollTop = chatArea.scrollHeight;
+            });
         }
-
-        console.log('[MerlinPanelUI] Panel hidden');
     }
 
-    /**
-     * Format token count (e.g., 1234 -> "1.2k")
-     */
-    formatTokenCount(count) {
-        if (!count) return '0';
-        if (count < 1000) return count.toString();
-        if (count < 10000) return (count / 1000).toFixed(1) + 'k';
-        return Math.round(count / 1000) + 'k';
+    updateSendButton() {
+        const btn = document.getElementById('merlin-send-btn');
+        if (btn) {
+            btn.disabled = this.isWaitingForResponse;
+            btn.classList.toggle('disabled', this.isWaitingForResponse);
+        }
     }
 
-    /**
-     * Escape HTML characters
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    /**
-     * Inject CSS styles
-     */
+    // ============================================================
+    // CSS STYLES
+    // ============================================================
+
     injectStyles() {
-        if (document.getElementById('merlin-panel-styles')) return;
+        if (document.getElementById('merlin-chat-styles')) return;
 
         const style = document.createElement('style');
-        style.id = 'merlin-panel-styles';
+        style.id = 'merlin-chat-styles';
         style.textContent = `
-            /* Side panel on the right - allows playing while open */
+            /* ======== PANEL CONTAINER ======== */
             #merlin-panel {
                 position: fixed;
                 top: 0;
                 right: 0;
-                width: 380px;
-                height: 100%;
-                background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-                border-left: 3px solid #4a4a8a;
-                z-index: 1000;
+                width: 400px;
+                height: 100vh;
+                z-index: 10000;
+                font-family: 'VT323', monospace;
                 display: flex;
                 flex-direction: column;
-                font-family: 'VT323', monospace;
-                box-shadow: -5px 0 30px rgba(0, 0, 0, 0.5);
-                transform: translateX(0);
+                background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                border-left: 2px solid rgba(138, 43, 226, 0.4);
+                box-shadow: -5px 0 30px rgba(0, 0, 0, 0.6);
                 transition: transform 0.3s ease;
             }
-
             #merlin-panel.hidden {
-                transform: translateX(100%);
-                pointer-events: none;
+                display: none;
             }
 
             .merlin-panel-content {
@@ -1611,1366 +726,392 @@ export class MerlinPanelUI {
                 overflow: hidden;
             }
 
+            /* ======== HEADER ======== */
             .merlin-panel-header {
                 display: flex;
-                justify-content: space-between;
                 align-items: center;
-                padding: 15px 20px;
-                padding-top: 50px; /* Extra padding to avoid top-right-controls overlay */
-                background: linear-gradient(90deg, #2d2d5a, #1a1a3a);
-                border-bottom: 2px solid #4a4a8a;
+                gap: 10px;
+                padding: 10px 14px;
+                background: rgba(0, 0, 0, 0.3);
+                border-bottom: 1px solid rgba(138, 43, 226, 0.3);
                 flex-shrink: 0;
             }
-
-            .merlin-panel-header h2 {
-                margin: 0;
+            .merlin-title {
                 font-size: 22px;
-                color: #fff;
-                text-shadow: 0 0 10px rgba(200, 180, 255, 0.5);
+                color: #e0d0ff;
+                font-weight: bold;
+                flex-shrink: 0;
             }
-
-            /* Model Selector */
             .merlin-model-selector {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                margin-left: auto;
+                flex: 1;
+                min-width: 0;
             }
-
-            .merlin-model-selector label {
-                font-size: 16px;
-                cursor: pointer;
-            }
-
-            #merlin-model-select {
-                background: rgba(40, 40, 80, 0.9);
-                border: 1px solid #5a5a9a;
+            .merlin-model-selector select {
+                width: 100%;
+                background: rgba(30, 30, 50, 0.8);
+                border: 1px solid rgba(138, 43, 226, 0.3);
                 border-radius: 6px;
                 color: #ccc;
-                font-family: inherit;
-                font-size: 13px;
-                padding: 6px 10px;
+                font-family: 'VT323', monospace;
+                font-size: 14px;
+                padding: 4px 8px;
                 cursor: pointer;
-                max-width: 180px;
-                transition: all 0.2s;
             }
-
-            #merlin-model-select:hover {
-                border-color: #7a7aca;
-                background: rgba(60, 60, 100, 0.9);
-            }
-
-            #merlin-model-select:focus {
-                outline: none;
-                border-color: #8a8ada;
-                box-shadow: 0 0 8px rgba(130, 130, 200, 0.4);
-            }
-
-            #merlin-model-select option {
-                background: #1a1a2e;
-                color: #ccc;
-                padding: 8px;
-            }
-
-            #merlin-model-select optgroup {
-                background: #252540;
-                color: #a0a0d0;
-                font-weight: bold;
-                font-style: normal;
-            }
-
             .merlin-close-btn {
-                position: absolute;
-                bottom: 15px;
-                right: 15px;
-                background: rgba(60, 60, 100, 0.8);
-                border: 2px solid #5a5a9a;
-                border-radius: 8px;
-                color: #fff;
-                font-size: 24px;
-                width: 40px;
-                height: 40px;
+                background: none;
+                border: none;
+                color: #999;
+                font-size: 26px;
                 cursor: pointer;
-                opacity: 0.8;
-                transition: all 0.2s;
+                padding: 0 4px;
+                line-height: 1;
+                flex-shrink: 0;
+            }
+            .merlin-close-btn:hover { color: #fff; }
+
+            /* ======== CHAT AREA ======== */
+            .merlin-chat-area {
+                flex: 1;
+                overflow-y: auto;
+                padding: 12px;
                 display: flex;
+                flex-direction: column;
+            }
+            .merlin-chat-area::-webkit-scrollbar { width: 6px; }
+            .merlin-chat-area::-webkit-scrollbar-track { background: transparent; }
+            .merlin-chat-area::-webkit-scrollbar-thumb { background: rgba(138, 43, 226, 0.3); border-radius: 3px; }
+
+            /* ======== WELCOME SCREEN ======== */
+            .merlin-welcome {
+                display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                z-index: 10;
-            }
-
-            .merlin-close-btn:hover {
-                opacity: 1;
-                background: rgba(80, 80, 120, 0.9);
-                transform: scale(1.05);
-            }
-
-            .merlin-panel-body {
-                flex: 1;
-                overflow-y: auto;
-                padding: 15px;
-            }
-
-            .merlin-section {
-                margin-bottom: 15px;
-            }
-
-            .merlin-section-title {
-                font-size: 16px;
-                color: #a0a0d0;
-                margin: 0 0 10px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-
-            /* Category Grid - 3 columns on 2 rows for side panel */
-            .merlin-category-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 8px;
-            }
-
-            /* Adjust for 6 categories */
-            @media (min-width: 400px) {
-                .merlin-category-grid {
-                    grid-template-columns: repeat(3, 1fr);
-                }
-            }
-
-            .merlin-category-btn {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 10px 8px;
-                background: rgba(40, 40, 80, 0.8);
-                border: 2px solid #3a3a6a;
-                border-radius: 8px;
-                cursor: pointer;
-                transition: all 0.2s;
-                color: #fff;
-            }
-
-            .merlin-category-btn:hover {
-                background: rgba(60, 60, 100, 0.9);
-                border-color: #5a5a9a;
-                transform: translateY(-2px);
-            }
-
-            .merlin-category-btn.selected {
-                background: rgba(80, 80, 140, 0.9);
-                border-color: #7a7aca;
-                box-shadow: 0 0 15px rgba(130, 130, 200, 0.4);
-            }
-
-            .category-icon {
-                font-size: 28px;
-                margin-bottom: 5px;
-            }
-
-            .category-label {
-                font-size: 14px;
-            }
-
-            /* Suggestions */
-            .merlin-suggestions {
-                background: rgba(30, 30, 60, 0.6);
-                border: 1px solid #3a3a6a;
-                border-radius: 8px;
-                padding: 10px;
-                min-height: 80px;
-            }
-
-            .suggestions-placeholder,
-            .suggestions-loading {
-                color: #666;
-                font-style: italic;
+                padding: 30px 20px;
                 text-align: center;
-                padding: 15px;
+                flex: 1;
             }
-
-            .suggestion-item {
-                display: flex;
-                align-items: flex-start;
-                gap: 10px;
-                padding: 10px 15px;
-                cursor: pointer;
-                border-radius: 6px;
-                transition: background 0.2s;
+            .merlin-welcome.hidden { display: none; }
+            .merlin-welcome-icon {
+                font-size: 60px;
+                margin-bottom: 12px;
+                animation: welcomeFloat 3s ease-in-out infinite;
             }
-
-            .suggestion-item:hover {
-                background: rgba(80, 80, 140, 0.3);
+            @keyframes welcomeFloat {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
             }
-
-            .suggestion-bullet {
-                color: #7a7aca;
-                font-size: 18px;
-            }
-
-            .suggestion-text {
-                color: #ccc;
+            .merlin-welcome h3 {
+                color: #e0d0ff;
                 font-size: 22px;
+                margin: 0 0 8px;
+                font-family: 'VT323', monospace;
             }
-
-            .loading-spinner {
-                display: inline-block;
-                width: 16px;
-                height: 16px;
-                border: 2px solid #4a4a8a;
-                border-top-color: #a0a0d0;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-            }
-
-            .loading-spinner.hidden {
-                display: none;
-            }
-
-            /* Refresh button */
-            .refresh-btn {
-                background: rgba(60, 60, 100, 0.8);
-                border: 1px solid #5a5a9a;
-                border-radius: 4px;
-                color: #a0a0d0;
-                cursor: pointer;
+            .merlin-welcome-sub {
+                color: #8888aa;
                 font-size: 16px;
-                padding: 4px 8px;
-                margin-left: auto;
-                transition: all 0.2s;
+                margin: 0 0 20px;
             }
-
-            .refresh-btn:hover {
-                background: rgba(80, 80, 120, 0.9);
-                color: #fff;
-            }
-
-            .refresh-btn.hidden {
-                display: none;
-            }
-
-            .refresh-btn.spinning {
-                animation: spin 0.3s linear;
-            }
-
-            /* Suggestions stats */
-            .suggestions-stats {
-                font-size: 12px;
-                color: #666;
-                font-weight: normal;
-                margin-left: 10px;
-            }
-
-            /* Task Detail View */
-            .merlin-task-detail {
-                display: flex;
-                flex-direction: column;
-                height: 100%;
-                gap: 15px;
-            }
-
-            .merlin-task-detail.hidden {
-                display: none;
-            }
-
-            .task-detail-header {
-                display: flex;
-                align-items: center;
-                gap: 15px;
-                padding-bottom: 10px;
-                border-bottom: 1px solid #3a3a6a;
-            }
-
-            .task-detail-back {
-                background: rgba(60, 60, 100, 0.8);
-                border: 1px solid #5a5a9a;
-                border-radius: 6px;
-                color: #a0a0d0;
-                cursor: pointer;
-                padding: 8px 12px;
-                font-family: inherit;
-                font-size: 14px;
-                transition: all 0.2s;
-            }
-
-            .task-detail-back:hover {
-                background: rgba(80, 80, 120, 0.9);
-                color: #fff;
-            }
-
-            .task-detail-title {
-                flex: 1;
-                font-size: 18px;
-                color: #fff;
-            }
-
-            .task-detail-status {
-                font-size: 14px;
-                padding: 4px 10px;
-                border-radius: 12px;
-                background: rgba(60, 60, 100, 0.6);
-            }
-
-            .task-detail-status.status-running {
-                background: rgba(76, 175, 80, 0.3);
-                color: #4CAF50;
-            }
-
-            .task-detail-status.status-completed {
-                background: rgba(76, 175, 80, 0.2);
-                color: #81c784;
-            }
-
-            .task-detail-status.status-error {
-                background: rgba(244, 67, 54, 0.2);
-                color: #ef5350;
-            }
-
-            .task-detail-status.status-pending {
-                background: rgba(255, 152, 0, 0.2);
-                color: #ffb74d;
-            }
-
-            .task-detail-prompt {
-                background: rgba(40, 40, 80, 0.6);
-                border-radius: 8px;
-                padding: 12px 15px;
-                font-size: 16px;
-                color: #ccc;
-            }
-
-            /* Task Detail Tabs */
-            .task-detail-tabs {
-                display: flex;
-                gap: 0;
-                margin-bottom: 0;
-            }
-
-            .task-tab {
-                background: rgba(40, 40, 80, 0.5);
-                border: 1px solid #3a3a6a;
-                border-bottom: none;
-                border-radius: 8px 8px 0 0;
-                color: #a0a0d0;
-                cursor: pointer;
-                padding: 10px 18px;
-                font-family: inherit;
-                font-size: 14px;
-                transition: all 0.2s;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-
-            .task-tab:hover {
-                background: rgba(60, 60, 100, 0.7);
-                color: #fff;
-            }
-
-            .task-tab.active {
-                background: rgba(30, 30, 60, 0.6);
-                color: #fff;
-                border-color: #5a5a9a;
-            }
-
-            .task-tab.hidden {
-                display: none;
-            }
-
-            .code-count-badge {
-                background: #4a7c59;
-                color: #fff;
-                padding: 2px 8px;
-                border-radius: 10px;
-                font-size: 11px;
-                min-width: 18px;
-                text-align: center;
-            }
-
-            /* Tab Content */
-            .task-tab-content {
-                display: none;
-                flex: 1;
-                background: rgba(30, 30, 60, 0.6);
-                border: 1px solid #3a3a6a;
-                border-radius: 0 8px 8px 8px;
-                padding: 15px;
-                overflow-y: auto;
-                min-height: 150px;
-                max-height: 300px;
-            }
-
-            .task-tab-content.active {
-                display: block;
-            }
-
-            .task-detail-response {
-                border-radius: 0 8px 8px 8px;
-            }
-
-            .task-detail-code {
-                border-radius: 0 8px 8px 8px;
-            }
-
-            /* Code Tab Styles */
-            .code-placeholder {
-                color: #666;
-                font-style: italic;
-                text-align: center;
-                padding: 20px;
-            }
-
-            .executed-code-list {
-                display: flex;
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .executed-code-block {
-                background: rgba(20, 25, 35, 0.8);
-                border: 1px solid #3a3a6a;
-                border-radius: 8px;
-                overflow: hidden;
-            }
-
-            .executed-code-block.code-status-success {
-                border-color: rgba(76, 175, 80, 0.5);
-            }
-
-            .executed-code-block.code-status-error {
-                border-color: rgba(244, 67, 54, 0.5);
-            }
-
-            .executed-code-block.code-status-running {
-                border-color: rgba(255, 193, 7, 0.5);
-                animation: pulse-border 1.5s ease-in-out infinite;
-            }
-
-            @keyframes pulse-border {
-                0%, 100% { border-color: rgba(255, 193, 7, 0.3); }
-                50% { border-color: rgba(255, 193, 7, 0.8); }
-            }
-
-            .code-block-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 8px 12px;
-                background: rgba(50, 55, 70, 0.6);
-                border-bottom: 1px solid #3a3a6a;
-            }
-
-            .code-block-label {
-                font-size: 13px;
-                color: #a0a0d0;
-                font-weight: 500;
-            }
-
-            .code-copy-btn {
-                background: transparent;
-                border: 1px solid #3a3a6a;
-                border-radius: 4px;
-                color: #a0a0d0;
-                cursor: pointer;
-                padding: 4px 8px;
-                font-size: 12px;
-                transition: all 0.2s;
-            }
-
-            .code-copy-btn:hover {
-                background: rgba(60, 60, 100, 0.7);
-                color: #fff;
-            }
-
-            .code-display {
-                margin: 0;
-                padding: 12px;
-                background: rgba(10, 12, 18, 0.8);
-                font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
-                font-size: 13px;
-                line-height: 1.5;
-                color: #e0e0e0;
-                overflow-x: auto;
-                white-space: pre-wrap;
-                word-break: break-word;
-            }
-
-            .code-display code {
-                color: #b8d4e8;
-            }
-
-            .code-result {
-                padding: 10px 12px;
-                font-size: 13px;
-                border-top: 1px solid #3a3a6a;
-            }
-
-            .code-result-success {
-                color: #81c784;
-                background: rgba(76, 175, 80, 0.1);
-            }
-
-            .code-result-error {
-                color: #ef5350;
-                background: rgba(244, 67, 54, 0.1);
-            }
-
-            /* Legacy - keeping for compatibility */
-            .task-detail-response.legacy {
-                flex: 1;
-                background: rgba(30, 30, 60, 0.6);
-                border: 1px solid #3a3a6a;
-                border-radius: 8px;
-                padding: 15px;
-                overflow-y: auto;
-                min-height: 150px;
-                max-height: 300px;
-            }
-
-            .response-placeholder {
-                color: #666;
-                font-style: italic;
-                text-align: center;
-                padding: 20px;
-            }
-
-            .response-error {
-                color: #ef5350;
-                padding: 10px;
-            }
-
-            .response-content {
-                color: #ddd;
-                font-size: 16px;
-                line-height: 1.5;
-            }
-
-            .response-content .code-block {
-                background: rgba(0, 0, 0, 0.4);
-                border-radius: 6px;
-                padding: 12px;
-                margin: 10px 0;
-                overflow-x: auto;
-                font-family: 'Courier New', monospace;
-                font-size: 13px;
-            }
-
-            .response-content .inline-code {
-                background: rgba(0, 0, 0, 0.3);
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-family: 'Courier New', monospace;
-                font-size: 14px;
-            }
-
-            .task-detail-input {
-                display: flex;
-                gap: 10px;
-                padding-top: 10px;
-                border-top: 1px solid #3a3a6a;
-            }
-
-            #task-followup-input {
-                flex: 1;
-                padding: 12px 15px;
-                background: rgba(30, 30, 60, 0.8);
-                border: 2px solid #3a3a6a;
-                border-radius: 8px;
-                color: #fff;
-                font-family: inherit;
-                font-size: 16px;
-                resize: none;
-                min-height: 50px;
-                max-height: 80px;
-            }
-
-            #task-followup-input:focus {
-                outline: none;
-                border-color: #5a5a9a;
-            }
-
-            #task-followup-input::placeholder {
-                color: #666;
-            }
-
-            /* Legacy Cost Info - kept for backwards compatibility */
-            .task-cost-info.hidden {
-                display: none;
-            }
-
-            /* Follow-up Suggestions */
-            .task-followup-suggestions {
-                margin-bottom: 10px;
-                padding: 12px;
-                background: rgba(40, 60, 80, 0.4);
-                border: 1px solid rgba(100, 150, 200, 0.3);
-                border-radius: 8px;
-            }
-
-            .task-followup-suggestions.hidden {
-                display: none;
-            }
-
-            .followup-suggestions-header {
-                font-size: 14px;
-                color: #a0c0e0;
-                margin-bottom: 10px;
-                font-weight: bold;
-            }
-
-            .followup-suggestions-chips {
+            .merlin-welcome-suggestions {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 8px;
+                justify-content: center;
+                max-width: 350px;
             }
-
-            .followup-chip {
-                background: rgba(60, 80, 120, 0.6);
-                border: 1px solid rgba(100, 140, 200, 0.4);
+            .merlin-welcome-chip {
+                background: rgba(138, 43, 226, 0.15);
+                border: 1px solid rgba(138, 43, 226, 0.3);
                 border-radius: 16px;
-                padding: 8px 14px;
-                font-family: inherit;
+                padding: 6px 14px;
+                color: #d0c0ee;
+                font-family: 'VT323', monospace;
                 font-size: 14px;
-                color: #ddd;
                 cursor: pointer;
                 transition: all 0.2s;
-                max-width: 100%;
-                text-align: left;
-                white-space: normal;
-                word-break: break-word;
-            }
-
-            .followup-chip:hover {
-                background: rgba(80, 100, 150, 0.8);
-                border-color: rgba(120, 160, 220, 0.6);
-                transform: translateY(-1px);
-                box-shadow: 0 2px 8px rgba(100, 150, 200, 0.3);
-            }
-
-            .followup-chip:active {
-                transform: translateY(0);
-            }
-
-            /* Chip type colors - issues are warm colors, confirmation is green */
-            .followup-chip-visibility_issue {
-                border-left: 3px solid #f44336;
-            }
-
-            .followup-chip-visual_issue {
-                border-left: 3px solid #FF9800;
-            }
-
-            .followup-chip-functionality_issue {
-                border-left: 3px solid #9C27B0;
-            }
-
-            .followup-chip-confirmed_working {
-                border-left: 3px solid #4CAF50;
-                background: rgba(76, 175, 80, 0.2);
-            }
-
-            .followup-chip-confirmed_working:hover {
-                background: rgba(76, 175, 80, 0.4);
-            }
-
-            /* Task List */
-            .merlin-task-list {
-                background: rgba(30, 30, 60, 0.6);
-                border: 1px solid #3a3a6a;
-                border-radius: 8px;
-                padding: 10px;
-                max-height: 200px;
-                overflow-y: auto;
-            }
-
-            .task-placeholder {
-                color: #666;
-                font-style: italic;
-                text-align: center;
-                padding: 15px;
-            }
-
-            .task-counts {
-                font-size: 14px;
-                color: #888;
-                font-weight: normal;
-            }
-
-            .task-item {
-                display: flex;
-                align-items: flex-start;
-                gap: 10px;
-                padding: 10px;
-                border-radius: 6px;
-                margin-bottom: 8px;
-                background: rgba(40, 40, 70, 0.5);
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .task-item:hover {
-                background: rgba(60, 60, 90, 0.6);
-                transform: translateX(3px);
-            }
-
-            .task-item:last-child {
-                margin-bottom: 0;
-            }
-
-            .task-pending {
-                opacity: 0.7;
-            }
-
-            .task-completed {
-                background: rgba(40, 70, 40, 0.4);
-            }
-
-            .task-error {
-                background: rgba(70, 40, 40, 0.4);
-            }
-
-            .task-undone {
-                opacity: 0.6;
-                background: rgba(50, 50, 60, 0.4);
-            }
-
-            .task-undone .task-prompt {
-                text-decoration: line-through;
-            }
-
-            .task-undone-badge {
-                font-size: 10px;
-                color: #999;
-                background: rgba(60, 60, 70, 0.6);
-                border-radius: 8px;
-                padding: 2px 6px;
-                margin-left: 6px;
-            }
-
-            .task-actions {
-                display: flex;
-                gap: 4px;
-                flex-shrink: 0;
-            }
-
-            .task-undo-btn, .task-close-btn {
-                background: rgba(60, 60, 100, 0.6);
-                border: 1px solid #4a4a7a;
-                border-radius: 4px;
-                color: #a0a0d0;
-                cursor: pointer;
-                padding: 4px 8px;
-                font-size: 12px;
-                transition: all 0.2s;
-            }
-
-            .task-undo-btn:hover {
-                background: rgba(70, 100, 70, 0.7);
-                border-color: #5a8a5a;
-                color: #90d090;
-            }
-
-            .task-close-btn:hover {
-                background: rgba(100, 60, 60, 0.7);
-                border-color: #8a5a5a;
-                color: #d09090;
-            }
-
-            /* Token count badge on task list items */
-            .task-token-badge {
-                font-size: 11px;
-                color: #a0c0e0;
-                background: rgba(40, 60, 80, 0.6);
-                border: 1px solid rgba(100, 150, 200, 0.3);
-                border-radius: 10px;
-                padding: 2px 8px;
                 white-space: nowrap;
-                flex-shrink: 0;
-                cursor: pointer;
-                transition: all 0.2s;
+            }
+            .merlin-welcome-chip:hover {
+                background: rgba(138, 43, 226, 0.35);
+                border-color: rgba(138, 43, 226, 0.6);
+                color: #fff;
+                transform: translateY(-1px);
             }
 
-            .task-token-badge:hover {
-                background: rgba(60, 80, 100, 0.8);
-                color: #c0e0ff;
-            }
-
-            /* Token usage display in task detail view */
-            .task-token-info {
-                margin: 10px 0;
-            }
-
-            .task-token-info.hidden {
-                display: none;
-            }
-
-            .token-summary {
+            /* ======== CHAT MESSAGES ======== */
+            .merlin-chat-messages {
                 display: flex;
-                align-items: center;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .merlin-msg {
+                display: flex;
+                animation: msgFadeIn 0.2s ease;
+            }
+            @keyframes msgFadeIn {
+                from { opacity: 0; transform: translateY(6px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            /* User messages - right aligned */
+            .merlin-msg-user {
+                justify-content: flex-end;
+            }
+            .merlin-msg-user .merlin-msg-bubble {
+                background: rgba(59, 130, 246, 0.3);
+                border: 1px solid rgba(59, 130, 246, 0.4);
+                border-radius: 14px 14px 4px 14px;
+                padding: 8px 14px;
+                color: #d0e0ff;
+                font-size: 16px;
+                max-width: 85%;
+                word-wrap: break-word;
+            }
+
+            /* AI messages - left aligned */
+            .merlin-msg-ai {
+                justify-content: flex-start;
                 gap: 8px;
-                padding: 8px 12px;
-                background: rgba(40, 60, 80, 0.4);
-                border: 1px solid rgba(100, 150, 200, 0.3);
-                border-radius: 8px;
-                cursor: pointer;
-                transition: all 0.2s;
             }
-
-            .token-summary:hover {
-                background: rgba(50, 70, 90, 0.5);
-                border-color: rgba(120, 170, 220, 0.4);
+            .merlin-msg-avatar {
+                font-size: 24px;
+                flex-shrink: 0;
+                margin-top: 2px;
             }
-
-            .token-summary.expanded {
-                border-radius: 8px 8px 0 0;
-                border-bottom-color: transparent;
+            .merlin-msg-content {
+                flex: 1;
+                min-width: 0;
             }
+            .merlin-msg-text {
+                background: rgba(30, 30, 50, 0.6);
+                border: 1px solid rgba(80, 80, 120, 0.3);
+                border-radius: 4px 14px 14px 14px;
+                padding: 10px 14px;
+                color: #ccc;
+                font-size: 16px;
+                word-wrap: break-word;
+                line-height: 1.4;
+            }
+            .merlin-msg-text:empty { display: none; }
+            .merlin-msg-text strong { color: #e0d0ff; }
 
-            .token-icon {
+            /* System messages */
+            .merlin-msg-system {
+                justify-content: center;
+            }
+            .merlin-msg-error {
+                background: rgba(244, 67, 54, 0.2) !important;
+                border-color: rgba(244, 67, 54, 0.4) !important;
+                color: #ffaaaa !important;
                 font-size: 14px;
             }
+            .merlin-error-text { color: #ff8888; }
 
-            .token-counts {
+            /* Streaming indicator */
+            .merlin-msg-streaming-indicator {
+                padding: 6px 0;
+            }
+            .streaming-orb {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                background: #8a2be2;
+                border-radius: 50%;
+                animation: orbPulse 1s ease-in-out infinite;
+                box-shadow: 0 0 8px rgba(138, 43, 226, 0.6);
+            }
+            @keyframes orbPulse {
+                0%, 100% { opacity: 0.4; transform: scale(0.8); }
+                50% { opacity: 1; transform: scale(1.2); }
+            }
+
+            /* ======== ATTACHMENTS ======== */
+            .merlin-msg-attachments {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                margin-top: 6px;
+            }
+
+            /* Code blocks */
+            .merlin-code-block {
+                border: 1px solid rgba(138, 43, 226, 0.3);
+                border-radius: 8px;
+                overflow: hidden;
+                background: rgba(20, 20, 40, 0.5);
+            }
+            .merlin-code-header {
                 display: flex;
                 align-items: center;
                 gap: 6px;
-                font-size: 13px;
-                font-family: 'Courier New', monospace;
+                padding: 6px 10px;
+                background: rgba(138, 43, 226, 0.1);
+                cursor: pointer;
+                user-select: none;
             }
-
-            .token-in {
-                color: #80c0ff;
-            }
-
-            .token-separator {
-                color: #666;
-            }
-
-            .token-out {
-                color: #a0e0a0;
-            }
-
-            .token-expand-hint {
-                margin-left: auto;
-                font-size: 12px;
-                color: #666;
-                transition: transform 0.2s;
-            }
-
-            .token-summary.expanded .token-expand-hint {
-                transform: rotate(180deg);
-            }
-
-            .token-details {
-                padding: 10px 12px;
-                background: rgba(30, 50, 70, 0.4);
-                border: 1px solid rgba(100, 150, 200, 0.3);
-                border-top: none;
-                border-radius: 0 0 8px 8px;
-            }
-
-            .token-details.hidden {
-                display: none;
-            }
-
-            .token-detail-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 3px 0;
-                font-size: 12px;
-            }
-
-            .token-label {
-                color: #888;
-            }
-
-            .token-value {
-                color: #ccc;
-                font-family: 'Courier New', monospace;
-            }
-
-            .token-value.token-cost {
-                color: #e0c080;
-            }
-
-            .token-detail-row.token-cached .token-value {
-                color: #80e080;
-            }
-
-            .token-detail-row.token-total {
-                padding-top: 6px;
-                margin-top: 4px;
-                border-top: 1px solid rgba(100, 150, 200, 0.2);
-            }
-
-            .token-detail-row.token-total .token-label,
-            .token-detail-row.token-total .token-value {
-                font-weight: bold;
-                color: #e0c080;
-            }
-
-            .token-detail-divider {
-                height: 1px;
-                background: rgba(100, 150, 200, 0.2);
-                margin: 8px 0;
-            }
-
-            .task-icon {
-                font-size: 18px;
-                background: transparent;
-                border: none;
-                line-height: 1;
-                display: inline-block;
-                font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-            }
-
-            .task-icon.spinning {
-                animation: spin 1s linear infinite;
-                display: inline-block;
-            }
-
-            .task-content {
-                flex: 1;
-                overflow: hidden;
-            }
-
-            .task-prompt {
-                color: #ccc;
-                font-size: 18px;
-                display: block;
-            }
-
-            .task-response {
-                color: #888;
-                font-size: 16px;
-                display: block;
-                margin-top: 4px;
-            }
-
-            .task-error-msg {
-                color: #f44336;
-                font-size: 16px;
-                display: block;
-                margin-top: 4px;
-            }
-
-            .task-cancel-btn {
+            .merlin-code-header:hover { background: rgba(138, 43, 226, 0.2); }
+            .code-toggle-icon { color: #8a2be2; font-size: 14px; }
+            .code-label { color: #aaa; font-size: 14px; flex: 1; }
+            .code-copy-btn {
                 background: none;
                 border: none;
                 color: #888;
                 cursor: pointer;
-                font-size: 16px;
-                padding: 0 5px;
+                font-size: 14px;
+                padding: 0 4px;
             }
-
-            .task-cancel-btn:hover {
-                color: #f44336;
+            .code-copy-btn:hover { color: #fff; }
+            .merlin-code-content {
+                max-height: 300px;
+                overflow-y: auto;
+                padding: 10px;
+                margin: 0;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                color: #b0e0b0;
+                line-height: 1.4;
+                background: rgba(10, 10, 20, 0.6);
             }
+            .merlin-code-content.hidden { display: none; }
+            .merlin-code-content code { white-space: pre-wrap; }
 
-            /* Custom Input */
-            .merlin-input-section {
-                margin-top: auto;
-                padding-top: 15px;
-                border-top: 1px solid #3a3a6a;
-            }
-
-            .merlin-input-wrapper {
-                display: flex;
-                gap: 10px;
-            }
-
-            #merlin-custom-input {
-                flex: 1;
-                padding: 12px 15px;
-                background: rgba(30, 30, 60, 0.8);
-                border: 2px solid #3a3a6a;
-                border-radius: 8px;
-                color: #fff;
-                font-family: inherit;
-                font-size: 16px;
-                resize: none;
-                min-height: 50px;
-                max-height: 100px;
-            }
-
-            #merlin-custom-input:focus {
-                outline: none;
-                border-color: #5a5a9a;
-            }
-
-            #merlin-custom-input::placeholder {
-                color: #666;
-            }
-
-            .merlin-start-btn {
-                display: flex;
+            /* Action badges */
+            .merlin-action-badge {
+                display: inline-flex;
                 align-items: center;
-                gap: 8px;
-                padding: 12px 20px;
-                background: linear-gradient(180deg, #4a4a8a, #3a3a7a);
-                border: 2px solid #5a5a9a;
-                border-radius: 8px;
-                color: #fff;
-                font-family: inherit;
-                font-size: 16px;
-                cursor: pointer;
-                transition: all 0.2s;
-                white-space: nowrap;
+                gap: 4px;
+                padding: 4px 10px;
+                background: rgba(76, 175, 80, 0.15);
+                border: 1px solid rgba(76, 175, 80, 0.3);
+                border-radius: 12px;
+                color: #a0d0a0;
+                font-size: 14px;
             }
 
-            .merlin-start-btn:hover {
-                background: linear-gradient(180deg, #5a5a9a, #4a4a8a);
-                transform: translateY(-1px);
+            /* Cost badge */
+            .merlin-cost-badge {
+                font-size: 11px;
+                color: #666;
+                padding: 2px 0;
             }
 
-            .merlin-start-btn:active {
-                transform: translateY(0);
-            }
-
-            /* ========== Magical Orb Loading Animation ========== */
-            .merlin-orb {
-                position: relative;
-                width: 28px;
-                height: 28px;
+            /* ======== FOLLOW-UP CHIPS ======== */
+            .merlin-followup-chips {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 6px 12px;
                 flex-shrink: 0;
             }
-
-            .orb-core {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                width: 14px;
-                height: 14px;
-                transform: translate(-50%, -50%);
-                background: radial-gradient(circle at 30% 30%,
-                    #fff 0%,
-                    #c8a0ff 20%,
-                    #9060ff 50%,
-                    #6030c0 100%);
-                border-radius: 50%;
-                box-shadow:
-                    0 0 8px 2px rgba(150, 100, 255, 0.8),
-                    0 0 16px 4px rgba(120, 80, 220, 0.6),
-                    0 0 24px 6px rgba(100, 60, 200, 0.4),
-                    inset 0 0 6px rgba(255, 255, 255, 0.5);
-                animation: orb-pulse 1.5s ease-in-out infinite;
+            .merlin-followup-chips.hidden { display: none; }
+            .merlin-chip {
+                background: rgba(138, 43, 226, 0.12);
+                border: 1px solid rgba(138, 43, 226, 0.25);
+                border-radius: 14px;
+                padding: 4px 12px;
+                color: #c0b0dd;
+                font-family: 'VT323', monospace;
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .merlin-chip:hover {
+                background: rgba(138, 43, 226, 0.3);
+                color: #fff;
             }
 
-            .orb-ring {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                width: 22px;
-                height: 22px;
-                transform: translate(-50%, -50%);
-                border: 2px solid transparent;
-                border-top-color: rgba(200, 160, 255, 0.9);
-                border-right-color: rgba(150, 100, 255, 0.6);
-                border-radius: 50%;
-                animation: orb-spin 1s linear infinite;
-            }
-
-            .orb-particle {
-                position: absolute;
-                width: 4px;
-                height: 4px;
-                background: radial-gradient(circle, #fff 0%, #c8a0ff 50%, transparent 100%);
-                border-radius: 50%;
-                box-shadow: 0 0 4px 1px rgba(200, 160, 255, 0.8);
-            }
-
-            .orb-particle.p1 {
-                animation: particle-orbit 2s linear infinite;
-            }
-            .orb-particle.p2 {
-                animation: particle-orbit 2s linear infinite 0.5s;
-            }
-            .orb-particle.p3 {
-                animation: particle-orbit 2s linear infinite 1s;
-            }
-            .orb-particle.p4 {
-                animation: particle-orbit 2s linear infinite 1.5s;
-            }
-
-            @keyframes orb-pulse {
-                0%, 100% {
-                    transform: translate(-50%, -50%) scale(1);
-                    box-shadow:
-                        0 0 8px 2px rgba(150, 100, 255, 0.8),
-                        0 0 16px 4px rgba(120, 80, 220, 0.6),
-                        0 0 24px 6px rgba(100, 60, 200, 0.4),
-                        inset 0 0 6px rgba(255, 255, 255, 0.5);
-                }
-                50% {
-                    transform: translate(-50%, -50%) scale(1.15);
-                    box-shadow:
-                        0 0 12px 4px rgba(180, 130, 255, 0.9),
-                        0 0 24px 8px rgba(150, 100, 255, 0.7),
-                        0 0 36px 12px rgba(120, 80, 220, 0.5),
-                        inset 0 0 8px rgba(255, 255, 255, 0.7);
-                }
-            }
-
-            @keyframes orb-spin {
-                0% { transform: translate(-50%, -50%) rotate(0deg); }
-                100% { transform: translate(-50%, -50%) rotate(360deg); }
-            }
-
-            @keyframes particle-orbit {
-                0% {
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%) rotate(0deg) translateX(14px) scale(1);
-                    opacity: 1;
-                }
-                25% {
-                    transform: translate(-50%, -50%) rotate(90deg) translateX(14px) scale(0.8);
-                    opacity: 0.8;
-                }
-                50% {
-                    transform: translate(-50%, -50%) rotate(180deg) translateX(14px) scale(0.6);
-                    opacity: 0.6;
-                }
-                75% {
-                    transform: translate(-50%, -50%) rotate(270deg) translateX(14px) scale(0.4);
-                    opacity: 0.4;
-                }
-                100% {
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%) rotate(360deg) translateX(14px) scale(1);
-                    opacity: 1;
-                }
-            }
-
-            /* Make running tasks have magical glow border */
-            .task-running {
-                background: rgba(50, 50, 100, 0.6);
-                border-left: 3px solid #9060ff;
-                box-shadow: inset 0 0 20px rgba(150, 100, 255, 0.1);
-            }
-
-            /* Inline orb for status badge */
-            .merlin-orb-inline {
-                display: inline-block;
-                width: 20px;
-                height: 20px;
-                vertical-align: middle;
-                margin-right: 4px;
-            }
-
-            .merlin-orb-inline .orb-core {
-                width: 10px;
-                height: 10px;
-            }
-
-            .merlin-orb-inline .orb-ring {
-                width: 16px;
-                height: 16px;
-            }
-
-            .merlin-orb-inline .orb-particle {
-                width: 3px;
-                height: 3px;
-            }
-
-            /* Update status running styling */
-            .task-detail-status.status-running {
+            /* ======== INPUT AREA ======== */
+            .merlin-input-area {
                 display: flex;
-                align-items: center;
-                gap: 4px;
-                background: rgba(150, 100, 255, 0.3);
-                color: #c8a0ff;
-            }
-
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-
-            /* ========== Edit Mode Styles ========== */
-            #merlin-edit-section.hidden {
-                display: none;
-            }
-
-            .edit-type-selector {
-                display: flex;
+                align-items: flex-end;
                 gap: 8px;
-                margin-bottom: 12px;
+                padding: 10px 12px;
+                background: rgba(0, 0, 0, 0.3);
+                border-top: 1px solid rgba(138, 43, 226, 0.2);
+                flex-shrink: 0;
             }
-
-            .edit-type-btn {
+            #merlin-chat-input {
                 flex: 1;
-                padding: 10px 15px;
-                background: rgba(40, 40, 80, 0.8);
-                border: 2px solid #3a3a6a;
-                border-radius: 8px;
-                color: #a0a0d0;
-                font-family: inherit;
-                font-size: 15px;
-                cursor: pointer;
-                transition: all 0.2s;
+                background: rgba(30, 30, 50, 0.6);
+                border: 1px solid rgba(138, 43, 226, 0.3);
+                border-radius: 10px;
+                padding: 8px 12px;
+                color: #ddd;
+                font-family: 'VT323', monospace;
+                font-size: 16px;
+                resize: none;
+                min-height: 36px;
+                max-height: 100px;
+                line-height: 1.3;
+                outline: none;
             }
-
-            .edit-type-btn:hover {
-                background: rgba(60, 60, 100, 0.9);
-                border-color: #5a5a9a;
-                color: #fff;
+            #merlin-chat-input:focus {
+                border-color: rgba(138, 43, 226, 0.6);
+                box-shadow: 0 0 8px rgba(138, 43, 226, 0.2);
             }
-
-            .edit-type-btn.selected {
-                background: rgba(80, 80, 140, 0.9);
-                border-color: #7a7aca;
-                color: #fff;
-                box-shadow: 0 0 10px rgba(130, 130, 200, 0.3);
-            }
-
-            .edit-selector-container {
-                background: rgba(30, 30, 60, 0.6);
-                border: 1px solid #3a3a6a;
-                border-radius: 8px;
-                padding: 10px;
-                max-height: 200px;
-                overflow-y: auto;
-            }
-
-            .edit-placeholder,
-            .edit-loading,
-            .edit-error {
+            #merlin-chat-input::placeholder {
                 color: #666;
-                font-style: italic;
-                text-align: center;
-                padding: 15px;
             }
-
-            .edit-error {
-                color: #f44336;
-            }
-
-            .edit-select-list {
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-
-            .edit-select-item {
+            .merlin-send-btn {
+                background: rgba(138, 43, 226, 0.4);
+                border: 1px solid rgba(138, 43, 226, 0.5);
+                border-radius: 50%;
+                width: 36px;
+                height: 36px;
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                padding: 8px 12px;
-                background: rgba(40, 40, 70, 0.5);
-                border: 1px solid transparent;
-                border-radius: 6px;
+                justify-content: center;
                 cursor: pointer;
+                flex-shrink: 0;
                 transition: all 0.2s;
             }
-
-            .edit-select-item:hover {
-                background: rgba(60, 60, 100, 0.6);
-                border-color: #5a5a9a;
+            .merlin-send-btn:hover:not(.disabled) {
+                background: rgba(138, 43, 226, 0.6);
+                transform: scale(1.05);
             }
-
-            .edit-select-item.selected {
-                background: rgba(80, 80, 140, 0.7);
-                border-color: #7a7aca;
+            .merlin-send-btn.disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
             }
-
-            .edit-item-icon {
+            .send-icon {
+                color: #e0d0ff;
                 font-size: 18px;
             }
 
-            .edit-item-name {
-                flex: 1;
-                color: #ccc;
-                font-size: 15px;
+            /* ======== RESPONSIVE ======== */
+            @media (max-width: 768px) {
+                #merlin-panel {
+                    width: 100%;
+                    border-left: none;
+                }
             }
-
-            .edit-item-world {
-                font-size: 14px;
-                opacity: 0.7;
-            }
-
-            .edit-preview {
-                margin-top: 12px;
-                background: rgba(40, 40, 80, 0.6);
-                border: 1px solid #5a5a9a;
-                border-radius: 8px;
-                padding: 12px;
-            }
-
-            .edit-preview.hidden {
-                display: none;
-            }
-
-            .edit-preview-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 8px;
-            }
-
-            .edit-preview-name {
-                font-size: 16px;
-                color: #fff;
-                font-weight: bold;
-            }
-
-            .edit-preview-load-btn {
-                padding: 6px 12px;
-                background: linear-gradient(180deg, #4a7c4a, #3a6a3a);
-                border: 1px solid #5a9a5a;
-                border-radius: 6px;
-                color: #fff;
-                font-family: inherit;
-                font-size: 13px;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .edit-preview-load-btn:hover {
-                background: linear-gradient(180deg, #5a8c5a, #4a7a4a);
-                transform: translateY(-1px);
-            }
-
-            .edit-preview-description {
-                color: #aaa;
-                font-size: 14px;
-                line-height: 1.4;
-            }
-
-            /* Responsive - full width on small screens */
-            @media (max-width: 600px) {
+            @media (max-width: 480px) {
                 #merlin-panel {
                     width: 100%;
                 }
-
-                .merlin-category-grid {
-                    grid-template-columns: repeat(5, 1fr);
-                }
-
-                .merlin-input-wrapper {
-                    flex-direction: column;
-                }
-
-                .merlin-start-btn {
-                    justify-content: center;
+                .merlin-welcome-chip {
+                    font-size: 12px;
+                    padding: 4px 10px;
                 }
             }
 
-            /* Medium screens */
-            @media (min-width: 601px) and (max-width: 900px) {
-                #merlin-panel {
-                    width: 320px;
-                }
-
-                .merlin-category-grid {
-                    grid-template-columns: repeat(3, 1fr);
-                }
+            /* ======== MERLIN BUTTON ======== */
+            #merlin-btn {
+                background: linear-gradient(135deg, #1a1a2e, #2a1a4e);
+                border: 2px solid rgba(138, 43, 226, 0.5);
+                border-radius: 8px;
+                padding: 6px 10px;
+                font-size: 22px;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 2px 8px rgba(138, 43, 226, 0.3);
+            }
+            #merlin-btn:hover {
+                transform: scale(1.1);
+                box-shadow: 0 4px 15px rgba(138, 43, 226, 0.5);
             }
         `;
         document.head.appendChild(style);
     }
 }
-
-// Export global reference for onclick handlers
-window.merlinPanelUI = null;

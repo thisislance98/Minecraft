@@ -1,5 +1,9 @@
 /**
- * TaskManager - Client-side task queue manager for Merlin AI
+ * @deprecated TaskManager is no longer used. The Merlin UI now uses a chat-based
+ * interface (MerlinPanelUI) connected directly to FewShotClient without TaskManager.
+ * This file is kept for reference but is not instantiated.
+ *
+ * TaskManager - Client-side task queue manager for Merlin AI (LEGACY)
  *
  * Handles task state machine: pending -> running -> completed/error
  * Manages queue with sequential execution and parallel display

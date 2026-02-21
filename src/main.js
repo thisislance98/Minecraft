@@ -48,22 +48,10 @@ window.addEventListener('load', () => {
     if (window.fewShotClient) {
         window.fewShotClient.setGame(game);
 
-        // Wire up FewShotClient to TaskManager
-        if (window.merlinClient?.taskManager) {
-            window.merlinClient.taskManager.setFewShotClient(window.fewShotClient);
-
-            // Add listener to route FewShotClient messages to TaskManager
-            window.fewShotClient.addListener((msg) => {
-                window.merlinClient.taskManager.handleMessage(msg);
-            });
-
-            console.log('[Main] FewShotClient wired to TaskManager');
-        }
-
-        // Wire up FewShotClient to MerlinPanel for model selection
+        // Wire FewShotClient directly to MerlinPanel (chat-based UI, no TaskManager needed)
         if (game.uiManager?.merlinPanel) {
             game.uiManager.merlinPanel.setFewShotClient(window.fewShotClient);
-            console.log('[Main] FewShotClient wired to MerlinPanel');
+            console.log('[Main] FewShotClient wired to MerlinPanel (chat mode)');
         }
     }
 

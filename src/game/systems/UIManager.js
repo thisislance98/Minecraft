@@ -80,15 +80,8 @@ export class UIManager {
         this.merlinPanel = new MerlinPanelUI(game);
         window.merlinPanelUI = this.merlinPanel;
 
-        // Wire up TaskManager to MerlinPanel
-        if (window.merlinClient && window.merlinClient.taskManager) {
-            this.merlinPanel.setTaskManager(window.merlinClient.taskManager);
-        }
-
-        // Wire up FewShotClient to MerlinPanel for model selection
-        if (window.fewShotClient) {
-            this.merlinPanel.setFewShotClient(window.fewShotClient);
-        }
+        // Note: FewShotClient wiring is done in main.js after game init
+        // Do NOT wire here to avoid duplicate listeners
 
         // Feedback button
         this.createFeedbackButton();
@@ -454,7 +447,7 @@ export class UIManager {
     }
 
     updateTask(taskId, status, message) {
-        // Legacy - handled by MerlinPanel TaskManager
+        // Legacy stub - no longer used (chat-based Merlin UI)
     }
 
     // ============ Cleanup ============

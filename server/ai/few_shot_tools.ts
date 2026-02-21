@@ -15,7 +15,7 @@ export function getCreatureTools() {
             type: 'function' as const,
             function: {
                 name: 'create_creature',
-                description: 'Submit the generated creature class code.',
+                description: 'Submit the generated creature class code. Set isEdit=true when modifying a previously created creature (e.g. "make it bigger", "change the color") so the old one gets replaced.',
                 parameters: {
                     type: 'object',
                     properties: {
@@ -26,6 +26,10 @@ export function getCreatureTools() {
                         code: {
                             type: 'string',
                             description: 'Complete JavaScript class that extends Animal, including createBody() with THREE.js meshes'
+                        },
+                        isEdit: {
+                            type: 'boolean',
+                            description: 'Set to true when this is a modification of a previously created creature. The old creature will be removed and replaced with this new version.'
                         }
                     },
                     required: ['className', 'code']
@@ -79,13 +83,17 @@ export function getStructureTools() {
             type: 'function' as const,
             function: {
                 name: 'create_structure',
-                description: 'Submit the generated JavaScript code that produces a blocks array.',
+                description: 'Submit the generated JavaScript code that produces a blocks array. Set isEdit=true when modifying a previously built structure (e.g. "make it taller", "add windows") so the old blocks get cleared first.',
                 parameters: {
                     type: 'object',
                     properties: {
                         code: {
                             type: 'string',
                             description: 'JavaScript code that uses playerPosition and returns an array of {x,y,z,id} block objects'
+                        },
+                        isEdit: {
+                            type: 'boolean',
+                            description: 'Set to true when this is a modification of a previously built structure. The old blocks will be cleared before placing the new ones.'
                         }
                     },
                     required: ['code']

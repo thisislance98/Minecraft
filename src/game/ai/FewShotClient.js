@@ -3,8 +3,11 @@
  *
  * This client connects to the /api/fewshot endpoint and handles
  * AI-generated creatures, items, structures, etc.
+ *
+ * Supports both legacy events (token, complete) and new chat_* events.
  */
 
+import * as THREE from 'three';
 import { auth } from '../../config/firebase-client.js';
 
 export class FewShotClient {
@@ -24,7 +27,7 @@ export class FewShotClient {
 
         // Model selection
         this.availableModels = [];
-        this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-haiku-4.5';
+        this.currentModel = localStorage.getItem('fewshot_model') || 'anthropic/claude-opus-4.6';
 
         // Settings
         this.bypassTokens = localStorage.getItem('settings_bypass_tokens') !== 'false';
@@ -173,8 +176,62 @@ export class FewShotClient {
         }
     }
 
+    /**
+     * Get player context (position, direction, target position)
+     * Moved from TaskManager.getTaskContext()
+     */
+    getContext() {
+        if (!this.game) return {};
+
+        const player = this.game.player;
+        const camera = this.game.camera;
+
+        const playerX = player?.position?.x || 0;
+        const playerY = player?.position?.y || 0;
+        const playerZ = player?.position?.z || 0;
+
+        // Get player's forward direction from camera
+        let dirX = 0, dirZ = 1;
+        if (camera) {
+            const direction = camera.getWorldDirection(new THREE.Vector3());
+            dirX = direction.x;
+            dirZ = direction.z;
+            const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+            if (len > 0.01) {
+                dirX /= len;
+                dirZ /= len;
+            }
+        }
+
+        // Calculate target position (10 blocks in front of player)
+        const targetDistance = 10;
+        const targetX = playerX + dirX * targetDistance;
+        const targetZ = playerZ + dirZ * targetDistance;
+
+        // Get terrain height at target location
+        let targetGroundY = playerY;
+        if (this.game.worldGen && this.game.worldGen.getTerrainHeight) {
+            targetGroundY = this.game.worldGen.getTerrainHeight(targetX, targetZ);
+        }
+
+        return {
+            x: playerX,
+            y: playerY,
+            z: playerZ,
+            dirX: dirX,
+            dirZ: dirZ,
+            targetX: targetX,
+            targetZ: targetZ,
+            targetGroundY: targetGroundY,
+            worldId: this.game.currentWorldId || 'global'
+        };
+    }
+
     handleMessage(msg) {
-        console.log('[FewShotClient] Message:', msg.type, msg);
+        // Reduce noise: only log non-token messages
+        if (msg.type !== 'chat_token') {
+            console.log('[FewShotClient] Message:', msg.type, msg);
+        }
 
         // Handle models list
         if (msg.type === 'models_list') {
@@ -194,28 +251,30 @@ export class FewShotClient {
             this.notifyListeners({ type: 'model_changed', model: msg.model });
         }
 
-        // Handle token streaming (for chat output)
+        // Handle new chat_* events - forward directly to listeners
+        if (msg.type.startsWith('chat_')) {
+            this.notifyListeners(msg);
+            return;
+        }
+
+        // Handle legacy events for backwards compatibility
         if (msg.type === 'token') {
             this.notifyListeners(msg);
         }
 
-        // Handle thinking indicator
         if (msg.type === 'thinking') {
             this.notifyListeners({ type: 'thinking', message: msg.message });
         }
 
-        // Handle completion
         if (msg.type === 'complete') {
             this.notifyListeners({ type: 'complete' });
         }
 
-        // Handle errors
         if (msg.type === 'error') {
             console.error('[FewShotClient] Error:', msg.message);
             this.notifyListeners({ type: 'error', message: msg.message });
         }
 
-        // Handle balance updates
         if (msg.type === 'balance_update') {
             document.dispatchEvent(new CustomEvent('token-balance-update', { detail: msg.tokens }));
         }
@@ -225,10 +284,15 @@ export class FewShotClient {
             this.handleToolRequest(msg);
         }
 
-        // Handle code messages (for displaying generated code in UI)
+        // Handle code messages (legacy)
         if (msg.type === 'code') {
             console.log('[FewShotClient] Code received:', msg.code?.substring(0, 100) + '...');
             this.notifyListeners({ type: 'code', code: msg.code, language: msg.language, description: msg.description });
+        }
+
+        // Handle cost info (legacy)
+        if (msg.type === 'cost_info') {
+            this.notifyListeners(msg);
         }
     }
 
@@ -255,6 +319,9 @@ export class FewShotClient {
                 case 'set_blocks':
                     result = await this.handleSetBlocks(args);
                     break;
+                case 'verify':
+                    result = await this.handleVerify(args);
+                    break;
                 default:
                     console.warn('[FewShotClient] Unknown tool:', name);
                     result = { error: `Unknown tool: ${name}` };
@@ -280,13 +347,11 @@ export class FewShotClient {
             return { error: 'Player not found' };
         }
 
-        // Look up the creature class from AnimalClasses (including dynamic creatures)
         const AnimalClasses = window.AnimalClasses;
         if (!AnimalClasses) {
             return { error: 'AnimalClasses registry not available' };
         }
 
-        // Try exact match first, then case-insensitive
         let AnimalClass = AnimalClasses[type];
         if (!AnimalClass) {
             const match = Object.keys(AnimalClasses).find(k => k.toLowerCase() === type.toLowerCase());
@@ -301,8 +366,6 @@ export class FewShotClient {
             return { error: `Unknown creature type: ${type}` };
         }
 
-        // Get spawn position in front of player
-        // Calculate direction from player.rotation.y (yaw)
         const yaw = player.rotation?.y || 0;
         const dir = {
             x: -Math.sin(yaw),
@@ -311,7 +374,7 @@ export class FewShotClient {
         const spawnDist = 5;
         const spawnPos = {
             x: player.position.x + dir.x * spawnDist,
-            y: player.position.y + 2, // Spawn slightly above ground
+            y: player.position.y + 2,
             z: player.position.z + dir.z * spawnDist
         };
 
@@ -322,13 +385,12 @@ export class FewShotClient {
                     x: (Math.random() - 0.5) * 4,
                     z: (Math.random() - 0.5) * 4
                 };
-                // Use spawnManager.createAnimal which is the correct API
                 const entity = this.game.spawnManager.createAnimal(
                     AnimalClass,
                     spawnPos.x + offset.x,
                     spawnPos.y,
                     spawnPos.z + offset.z,
-                    false // Don't snap to ground, we already positioned it
+                    false
                 );
                 if (entity) {
                     spawned.push(entity.id || type);
@@ -339,7 +401,17 @@ export class FewShotClient {
             }
         }
 
-        return { success: spawned.length > 0, spawned, count: spawned.length };
+        // Return position for chat_action badge
+        return {
+            success: spawned.length > 0,
+            spawned,
+            count: spawned.length,
+            position: {
+                x: Math.round(spawnPos.x),
+                y: Math.round(spawnPos.y),
+                z: Math.round(spawnPos.z)
+            }
+        };
     }
 
     async handleGiveItem(args) {
@@ -369,20 +441,298 @@ export class FewShotClient {
         }
 
         try {
+            let sumX = 0, sumY = 0, sumZ = 0;
             for (const block of blocks) {
                 const { x, y, z, id } = block;
+                sumX += x; sumY += y; sumZ += z;
                 if (id === 'air' || id === null) {
-                    // Use game.setBlock with null to remove block
                     this.game.setBlock(x, y, z, null);
                 } else {
-                    // Use game.setBlock directly (not game.world.setBlock)
                     this.game.setBlock(x, y, z, id);
                 }
             }
-            return { success: true, count: blocks.length };
+
+            // Return bounding box center for action badge
+            const center = blocks.length > 0 ? {
+                x: Math.round(sumX / blocks.length),
+                y: Math.round(sumY / blocks.length),
+                z: Math.round(sumZ / blocks.length)
+            } : null;
+
+            return { success: true, count: blocks.length, position: center };
         } catch (e) {
             console.error('[FewShotClient] Error setting blocks:', e);
             return { error: e.message };
+        }
+    }
+
+    // ── Verification handlers ──
+
+    async handleVerify(args) {
+        const { verifyType } = args;
+        console.log(`[FewShotClient] Verify request: ${verifyType}`);
+
+        switch (verifyType) {
+            case 'entities':
+                return this.verifyEntities(args);
+            case 'entity':
+                return this.verifyEntity(args);
+            case 'player':
+                return this.verifyPlayer();
+            case 'blocks':
+                return this.verifyBlocks(args);
+            case 'screenshot':
+                return this.verifyScreenshot();
+            default:
+                return { error: `Unknown verify type: ${verifyType}` };
+        }
+    }
+
+    verifyEntities(args) {
+        if (!this.game) return { error: 'Game not available' };
+
+        const player = this.game.player;
+        const camera = this.game.camera;
+        const entities = [];
+
+        // Collect entities from spawnManager
+        const spawnManager = this.game.spawnManager;
+        if (spawnManager && spawnManager.entities) {
+            const frustum = this._getCameraFrustum(camera);
+            const entityIter = spawnManager.entities instanceof Map ? spawnManager.entities.values() : spawnManager.entities;
+
+            for (const entity of entityIter) {
+                const pos = entity.position || entity.mesh?.position;
+                if (!pos) continue;
+
+                const distance = player ? Math.sqrt(
+                    (pos.x - player.position.x) ** 2 +
+                    (pos.y - player.position.y) ** 2 +
+                    (pos.z - player.position.z) ** 2
+                ) : 0;
+
+                const visible = frustum ? this._isInFrustum(frustum, pos) : null;
+
+                entities.push({
+                    type: entity.constructor?.name || entity.type || 'Unknown',
+                    id: entity.id || null,
+                    position: { x: Math.round(pos.x * 10) / 10, y: Math.round(pos.y * 10) / 10, z: Math.round(pos.z * 10) / 10 },
+                    distance: Math.round(distance * 10) / 10,
+                    visible,
+                    health: entity.health ?? null,
+                    alive: entity.isDead === undefined ? true : !entity.isDead
+                });
+            }
+        }
+
+        // Sort by distance
+        entities.sort((a, b) => a.distance - b.distance);
+
+        // Apply optional filters
+        const maxDistance = args.maxDistance || Infinity;
+        const typeFilter = args.type?.toLowerCase();
+        const filtered = entities.filter(e => {
+            if (e.distance > maxDistance) return false;
+            if (typeFilter && e.type.toLowerCase() !== typeFilter) return false;
+            return true;
+        });
+
+        return {
+            count: filtered.length,
+            entities: filtered,
+            playerPosition: player ? {
+                x: Math.round(player.position.x * 10) / 10,
+                y: Math.round(player.position.y * 10) / 10,
+                z: Math.round(player.position.z * 10) / 10
+            } : null
+        };
+    }
+
+    verifyEntity(args) {
+        if (!this.game) return { error: 'Game not available' };
+
+        const name = (args.name || '').toLowerCase();
+        if (!name) return { error: 'Missing entity name' };
+
+        const player = this.game.player;
+        const camera = this.game.camera;
+        const spawnManager = this.game.spawnManager;
+
+        if (!spawnManager || !spawnManager.entities) {
+            return { found: false, name: args.name, error: 'No spawn manager' };
+        }
+
+        const frustum = this._getCameraFrustum(camera);
+        const matches = [];
+        const entityIter = spawnManager.entities instanceof Map ? spawnManager.entities.values() : spawnManager.entities;
+
+        for (const entity of entityIter) {
+            const entityType = (entity.constructor?.name || entity.type || '').toLowerCase();
+            if (!entityType.includes(name) && name !== entityType) continue;
+
+            const pos = entity.position || entity.mesh?.position;
+            if (!pos) continue;
+
+            const distance = player ? Math.sqrt(
+                (pos.x - player.position.x) ** 2 +
+                (pos.y - player.position.y) ** 2 +
+                (pos.z - player.position.z) ** 2
+            ) : 0;
+
+            const visible = frustum ? this._isInFrustum(frustum, pos) : null;
+
+            matches.push({
+                type: entity.constructor?.name || entity.type || 'Unknown',
+                id: entity.id || null,
+                position: { x: Math.round(pos.x * 10) / 10, y: Math.round(pos.y * 10) / 10, z: Math.round(pos.z * 10) / 10 },
+                distance: Math.round(distance * 10) / 10,
+                visible,
+                health: entity.health ?? null,
+                alive: entity.isDead === undefined ? true : !entity.isDead
+            });
+        }
+
+        matches.sort((a, b) => a.distance - b.distance);
+
+        return {
+            found: matches.length > 0,
+            name: args.name,
+            count: matches.length,
+            matches,
+            anyVisible: matches.some(m => m.visible === true)
+        };
+    }
+
+    verifyPlayer() {
+        if (!this.game) return { error: 'Game not available' };
+
+        const player = this.game.player;
+        const camera = this.game.camera;
+
+        if (!player) return { error: 'Player not found' };
+
+        // Get camera direction
+        let direction = null;
+        if (camera) {
+            const dir = camera.getWorldDirection(new THREE.Vector3());
+            direction = {
+                x: Math.round(dir.x * 100) / 100,
+                y: Math.round(dir.y * 100) / 100,
+                z: Math.round(dir.z * 100) / 100
+            };
+        }
+
+        // Get inventory summary
+        let inventory = null;
+        if (player.inventory) {
+            const items = [];
+            const slots = player.inventory.slots || player.inventory.items || [];
+            for (let i = 0; i < slots.length; i++) {
+                const slot = slots[i];
+                if (slot && slot.id) {
+                    items.push({ slot: i, id: slot.id, count: slot.count || 1 });
+                }
+            }
+            inventory = { items, selectedSlot: player.inventory.selectedSlot ?? 0 };
+        }
+
+        return {
+            position: {
+                x: Math.round(player.position.x * 10) / 10,
+                y: Math.round(player.position.y * 10) / 10,
+                z: Math.round(player.position.z * 10) / 10
+            },
+            direction,
+            health: player.health ?? null,
+            inventory
+        };
+    }
+
+    verifyBlocks(args) {
+        if (!this.game) return { error: 'Game not available' };
+
+        const { x, y, z, radius = 1 } = args;
+        if (x === undefined || y === undefined || z === undefined) {
+            return { error: 'Missing x, y, z coordinates' };
+        }
+
+        const blocks = [];
+        const r = Math.min(radius, 5); // Cap radius to prevent huge queries
+
+        for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dz = -r; dz <= r; dz++) {
+                    const bx = Math.round(x) + dx;
+                    const by = Math.round(y) + dy;
+                    const bz = Math.round(z) + dz;
+
+                    let blockId = null;
+                    if (this.game.getBlock) {
+                        blockId = this.game.getBlock(bx, by, bz);
+                    }
+
+                    if (blockId !== null && blockId !== undefined && blockId !== 0) {
+                        blocks.push({ x: bx, y: by, z: bz, id: blockId });
+                    }
+                }
+            }
+        }
+
+        return {
+            center: { x: Math.round(x), y: Math.round(y), z: Math.round(z) },
+            radius: r,
+            count: blocks.length,
+            blocks
+        };
+    }
+
+    verifyScreenshot() {
+        if (!this.game) return { error: 'Game not available' };
+
+        try {
+            const renderer = this.game.renderer;
+            if (!renderer) return { error: 'Renderer not available' };
+
+            // Force a render to get the latest frame
+            if (this.game.scene && this.game.camera) {
+                renderer.render(this.game.scene, this.game.camera);
+            }
+
+            const canvas = renderer.domElement;
+            const dataUrl = canvas.toDataURL('image/png');
+
+            return {
+                success: true,
+                width: canvas.width,
+                height: canvas.height,
+                dataUrl // base64 PNG
+            };
+        } catch (e) {
+            return { error: `Screenshot failed: ${e.message}` };
+        }
+    }
+
+    // ── Frustum helpers ──
+
+    _getCameraFrustum(camera) {
+        if (!camera) return null;
+        try {
+            const frustum = new THREE.Frustum();
+            const projScreenMatrix = new THREE.Matrix4();
+            projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+            frustum.setFromProjectionMatrix(projScreenMatrix);
+            return frustum;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    _isInFrustum(frustum, position) {
+        try {
+            const point = new THREE.Vector3(position.x, position.y, position.z);
+            return frustum.containsPoint(point);
+        } catch (e) {
+            return null;
         }
     }
 

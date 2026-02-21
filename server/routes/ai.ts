@@ -8,6 +8,7 @@ import { getAllKnowledge, deleteAllKnowledge } from '../services/KnowledgeServic
 import { getItem, getAllItems, saveItem } from '../services/DynamicItemService';
 import { FewShotAI, availableModels } from '../ai/few_shot_system';
 import { unifiedExampleIndex } from '../ai/examples/UnifiedExampleIndex';
+import { FewShotSession } from '../services/FewShotSession';
 // Genesis system is on separate branch
 // import { generateScript } from '../services/GenesisService';
 
@@ -337,6 +338,147 @@ aiRoutes.post('/items/save', async (req, res) => {
     }
 });
 
+// ============================================================
+// CHAT ENDPOINT (SSE Streaming)
+// ============================================================
+
+/**
+ * Session store for chat endpoint persistence
+ */
+const chatSessions = new Map<string, { ai: FewShotAI; history: Array<{ role: 'user' | 'assistant'; content: string }>; lastActivity: number }>();
+const SESSION_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+// Clean up expired sessions periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of chatSessions) {
+        if (now - session.lastActivity > SESSION_EXPIRY_MS) {
+            chatSessions.delete(id);
+            console.log(`[AI Chat] Session ${id} expired`);
+        }
+    }
+}, 60000);
+
+/**
+ * Chat with Merlin AI via HTTP
+ * POST /api/ai/chat
+ * Body: { message: string, sessionId?: string, context?: object, model?: string }
+ * Query: ?stream=false for non-streaming JSON response
+ *
+ * Streaming response: text/event-stream with SSE events
+ * Non-streaming: JSON { content, type, code?, usage }
+ */
+aiRoutes.post('/chat', async (req, res) => {
+    try {
+        const { message, sessionId, context, model } = req.body;
+        const streamParam = req.query.stream;
+        const useStreaming = streamParam !== 'false';
+
+        if (!message || typeof message !== 'string') {
+            return res.status(400).json({ error: 'Missing or invalid message' });
+        }
+
+        const apiKey = process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' });
+        }
+
+        // Get or create session
+        const sid = sessionId || `session_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let session = chatSessions.get(sid);
+
+        if (!session) {
+            const ai = new FewShotAI({
+                apiKey,
+                model: model || process.env.FEWSHOT_MODEL || 'anthropic/claude-opus-4.6',
+                siteUrl: 'http://localhost:5173',
+                siteName: 'VoxelWorld'
+            });
+            session = { ai, history: [], lastActivity: Date.now() };
+            chatSessions.set(sid, session);
+            console.log(`[AI Chat] New session: ${sid}`);
+        } else {
+            session.lastActivity = Date.now();
+            if (model) {
+                session.ai.setModel(model);
+            }
+        }
+
+        // Add user message to history
+        session.history.push({ role: 'user', content: message });
+
+        console.log(`[AI Chat] Session ${sid}: "${message.substring(0, 60)}..." (history: ${session.history.length})`);
+
+        if (useStreaming) {
+            // SSE streaming response
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Session-Id': sid
+            });
+
+            const onToken = (text: string) => {
+                res.write(`event: token\ndata: ${JSON.stringify({ text })}\n\n`);
+            };
+
+            const result = await session.ai.processRequest(message, {
+                playerPosition: context?.position || { x: 0, y: 64, z: 0 },
+                conversationHistory: session.history.slice(-10)
+            }, 'custom', onToken);
+
+            // Send code if present
+            if (result.code) {
+                res.write(`event: code\ndata: ${JSON.stringify({ code: result.code, language: 'javascript' })}\n\n`);
+            }
+
+            // Send result type info
+            if (result.type !== 'chat' && result.type !== 'error') {
+                res.write(`event: action\ndata: ${JSON.stringify({ action: result.type, name: result.data?.className || 'Unknown' })}\n\n`);
+            }
+
+            // Send done with cost info
+            res.write(`event: done\ndata: ${JSON.stringify({
+                sessionId: sid,
+                type: result.type,
+                success: result.success,
+                cost: result.usage ? {
+                    promptTokens: result.usage.promptTokens,
+                    completionTokens: result.usage.completionTokens,
+                    totalTokens: result.usage.totalTokens
+                } : null
+            })}\n\n`);
+
+            // Add assistant response to history
+            session.history.push({ role: 'assistant', content: result.message || result.data?.className || 'Done' });
+
+            res.end();
+        } else {
+            // Non-streaming JSON response
+            const result = await session.ai.processRequest(message, {
+                playerPosition: context?.position || { x: 0, y: 64, z: 0 },
+                conversationHistory: session.history.slice(-10)
+            }, 'custom');
+
+            session.history.push({ role: 'assistant', content: result.message || result.data?.className || 'Done' });
+
+            res.json({
+                sessionId: sid,
+                success: result.success,
+                type: result.type,
+                message: result.message,
+                code: result.code,
+                data: result.data,
+                usage: result.usage,
+                error: result.error
+            });
+        }
+    } catch (error: any) {
+        console.error('[AI Chat] Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 /**
  * Genesis: Generate dynamic script
  * POST /api/ai/genesis/generate
@@ -350,4 +492,171 @@ aiRoutes.post('/genesis/generate', async (req, res) => {
         error: 'Genesis system not available on this branch',
         message: 'Switch to genesis-system branch to use Genesis features'
     });
+});
+
+// ============================================================
+// VERIFICATION ENDPOINTS
+// ============================================================
+
+/**
+ * Helper: get a connected game client session
+ */
+function getGameSession(): FewShotSession | null {
+    const session = FewShotSession.getAnySession();
+    if (!session) return null;
+    return session;
+}
+
+/**
+ * List all active game sessions
+ * GET /api/ai/verify/sessions
+ */
+aiRoutes.get('/verify/sessions', (req, res) => {
+    const sessions = FewShotSession.getAllSessions();
+    res.json({
+        count: sessions.length,
+        hasConnectedClient: sessions.length > 0
+    });
+});
+
+/**
+ * Get all entities in the game world
+ * GET /api/ai/verify/entities
+ * Query: ?type=Dragon&maxDistance=50
+ */
+aiRoutes.get('/verify/entities', async (req, res) => {
+    const session = getGameSession();
+    if (!session) {
+        return res.status(503).json({ error: 'No game client connected. Open the game in a browser first.' });
+    }
+
+    try {
+        const result = await session.requestVerification('entities', {
+            type: req.query.type as string,
+            maxDistance: req.query.maxDistance ? parseFloat(req.query.maxDistance as string) : undefined
+        });
+
+        if (result.error) {
+            return res.status(500).json({ error: result.error });
+        }
+
+        res.json(result);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Check if a specific entity exists and is visible
+ * GET /api/ai/verify/entity/:name
+ */
+aiRoutes.get('/verify/entity/:name', async (req, res) => {
+    const session = getGameSession();
+    if (!session) {
+        return res.status(503).json({ error: 'No game client connected. Open the game in a browser first.' });
+    }
+
+    try {
+        const result = await session.requestVerification('entity', {
+            name: req.params.name
+        });
+
+        if (result.error) {
+            return res.status(500).json({ error: result.error });
+        }
+
+        res.json(result);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Get player state (position, direction, inventory)
+ * GET /api/ai/verify/player
+ */
+aiRoutes.get('/verify/player', async (req, res) => {
+    const session = getGameSession();
+    if (!session) {
+        return res.status(503).json({ error: 'No game client connected. Open the game in a browser first.' });
+    }
+
+    try {
+        const result = await session.requestVerification('player');
+
+        if (result.error) {
+            return res.status(500).json({ error: result.error });
+        }
+
+        res.json(result);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Check blocks at a position
+ * GET /api/ai/verify/blocks?x=10&y=64&z=20&radius=2
+ */
+aiRoutes.get('/verify/blocks', async (req, res) => {
+    const session = getGameSession();
+    if (!session) {
+        return res.status(503).json({ error: 'No game client connected. Open the game in a browser first.' });
+    }
+
+    const x = parseFloat(req.query.x as string);
+    const y = parseFloat(req.query.y as string);
+    const z = parseFloat(req.query.z as string);
+
+    if (isNaN(x) || isNaN(y) || isNaN(z)) {
+        return res.status(400).json({ error: 'Missing or invalid x, y, z query parameters' });
+    }
+
+    try {
+        const result = await session.requestVerification('blocks', {
+            x, y, z,
+            radius: req.query.radius ? parseInt(req.query.radius as string) : 1
+        });
+
+        if (result.error) {
+            return res.status(500).json({ error: result.error });
+        }
+
+        res.json(result);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Capture a screenshot from the game
+ * GET /api/ai/verify/screenshot
+ * Returns PNG image (or JSON with base64 if ?format=json)
+ */
+aiRoutes.get('/verify/screenshot', async (req, res) => {
+    const session = getGameSession();
+    if (!session) {
+        return res.status(503).json({ error: 'No game client connected. Open the game in a browser first.' });
+    }
+
+    try {
+        const result = await session.requestVerification('screenshot');
+
+        if (result.error) {
+            return res.status(500).json({ error: result.error });
+        }
+
+        if (req.query.format === 'json') {
+            return res.json({ success: true, width: result.width, height: result.height, dataUrl: result.dataUrl });
+        }
+
+        // Return as actual PNG image
+        const base64Data = result.dataUrl.replace(/^data:image\/png;base64,/, '');
+        const imgBuffer = Buffer.from(base64Data, 'base64');
+        res.set('Content-Type', 'image/png');
+        res.set('Content-Length', String(imgBuffer.length));
+        res.send(imgBuffer);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
 });

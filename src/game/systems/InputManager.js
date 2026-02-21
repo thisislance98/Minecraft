@@ -818,13 +818,14 @@ export class InputManager {
         if (transcript && transcript.length > 0) {
             console.log('[InputManager] Sending voice task:', transcript);
 
-            // Create task via TaskManager
-            if (window.merlinClient && window.merlinClient.taskManager) {
-                window.merlinClient.taskManager.createTask(transcript, 'custom');
+            // Send voice transcript through Merlin panel chat
+            if (this.game.uiManager?.merlinPanel) {
+                this.game.uiManager.merlinPanel.show();
+                this.game.uiManager.merlinPanel.sendMessage(transcript);
 
                 // Show feedback
-                if (this.game.uiManager && this.game.uiManager.chatManager) {
-                    this.game.uiManager.chatManager.addChatMessage('system', `🎤 Task created: "${transcript}"`);
+                if (this.game.uiManager.chatManager) {
+                    this.game.uiManager.chatManager.addChatMessage('system', `🎤 Sent to Merlin: "${transcript}"`);
                 }
             }
         }
